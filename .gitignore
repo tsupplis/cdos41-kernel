@@ -1,5 +1,6 @@
 **/__pycache__/
 **/*.obj
+**/*.abs
 **/*.h86
 **/*.o
 /commands/**/*.mod
