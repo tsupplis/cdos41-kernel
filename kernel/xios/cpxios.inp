@@ -1,0 +1,8 @@
+cpxios.con = headentr[data[o[0]],m],
+	intvec, pic,  np8087, ctc, tick,
+	conout, serout, auxio, vscreen, conin, serin,
+	ssint, i3int, servar, pcmode,
+	statline, list, switch, vccb, serdata,
+	dentry, reskew, mdisk, dpbs, fdsel, fdrw, fdfmt, hdisk
+
+

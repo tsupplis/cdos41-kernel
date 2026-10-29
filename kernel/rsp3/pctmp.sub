@@ -1,0 +1,24 @@
+;
+;
+;       TMPPC.RSP
+;
+;
+$7rasm86.cmd    tmppc $1
+;
+$7rasm86.cmd    dispmenu $1
+;
+$7rasm86.cmd    runmenu $1
+;
+$7rasm86.cmd    rmenuio $1
+;
+$7drc.cmd       dmsubs $2
+;
+$7rasm86.cmd    wwcall $1
+;
+$7rasm86.cmd    ms1 $1
+;
+$7rasm86.cmd    ms2 $1
+;
+$7link86.cmd    pctmp[inp]
+;
+
