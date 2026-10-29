@@ -1,0 +1,148 @@
+        title 'SETENV DOS entry and environment bridge'
+; DOS EXE startup: save PSP, establish DATA and call the DR C small-model main.
+; Environment access uses PSP:002Ch and PATH's 16-byte capacity header.
+        public BDOS,ENVREAD,ENVWRITE,TAILREAD
+        extrn MAIN:near
+        dseg
+DGROUP group DATA
+psp dw 0
+env_segment dw 0
+env_capacity dw 0
+signature db 'Environ Size ='
+; DR C small model requires SS=DS so pointers to local arrays are near.
+stack_area rs 1024
+stack_top rs 0
+        cseg
+start:
+        mov bx,ds
+        mov ax,seg psp
+        mov ds,ax
+        mov es,ax
+        cli
+        mov ss,ax
+        mov sp,offset stack_top
+        sti
+        mov psp,bx
+        cld
+        call MAIN
+        mov ax,4c00h
+        int 21h
+
+TAILREAD:
+        push bp
+        mov bp,sp
+        push si
+        push di
+        push es
+        mov es,psp
+        xor cx,cx
+        mov bx,80h
+        mov cl,es:[bx]
+        cmp cx,127
+        jbe tail_ok
+        mov cx,127
+ tail_ok:
+        mov ax,cx
+        mov di,4[bp]
+        inc bx
+        jcxz tail_done
+ tail_copy:
+        mov dl,es:[bx]
+        mov [di],dl
+        inc bx
+        inc di
+        loop tail_copy
+ tail_done:
+        mov byte ptr [di],0
+        pop es
+        pop di
+        pop si
+        pop bp
+        ret
+
+; Return capacity (2..1024) or zero for an unsupported environment. Read-only
+; until the portable editor has validated the terminators and prepared an edit.
+ENVREAD:
+        push bp
+        mov bp,sp
+        push si
+        push di
+        push es
+        mov env_capacity,0
+        mov es,psp
+        mov bx,2ch
+        mov ax,es:[bx]
+        or ax,ax
+        jz unsupported
+        mov env_segment,ax
+        dec ax
+        mov es,ax
+        xor di,di
+        mov si,offset signature
+        mov cx,14
+        repe cmpsb
+        jne unsupported
+        mov ax,es:[di]
+        cmp ax,2
+        jb unsupported
+        cmp ax,1024
+        ja unsupported
+        mov env_capacity,ax
+        mov cx,ax
+        mov es,env_segment
+        xor bx,bx
+        mov di,4[bp]
+read_bytes:
+        mov al,es:[bx]
+        mov [di],al
+        inc bx
+        inc di
+        loop read_bytes
+        mov ax,env_capacity
+        jmps read_done
+unsupported:
+        xor ax,ax
+read_done:
+        pop es
+        pop di
+        pop si
+        pop bp
+        ret
+
+ENVWRITE:
+        push bp
+        mov bp,sp
+        push si
+        push di
+        push es
+        mov cx,env_capacity
+        jcxz write_done
+        mov es,env_segment
+        xor di,di
+        mov si,4[bp]
+        rep movsb
+write_done:
+        pop es
+        pop di
+        pop si
+        pop bp
+        ret
+
+; Existing C output helper interface: function 2 writes DL. Use DOS output.
+BDOS:
+        push bp
+        mov bp,sp
+        push si
+        push di
+        push es
+        mov dx,6[bp]
+        mov ah,2
+        int 21h
+        pop es
+        pop di
+        pop si
+        pop bp
+        ret
+        sseg
+        rs 1024
+        end start

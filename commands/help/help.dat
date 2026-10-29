@@ -331,7 +331,7 @@ Native commands supplied across the seven disks:
   PRINT PRINTMGR PUT RDR REN REST RMDIR SDIR SET SETPORT SETUP SHOW
   SPL STOP SUBMIT SYSDISK SYSTAT WINDOW WMENU
 
-DOS executables: COPY.EXE DATE.EXE ERASE.EXE PATH.EXE REN.EXE TIME.EXE.
+DOS executables: COPY.EXE DATE.EXE ERASE.EXE PATH.EXE REN.EXE SETENV.EXE TIME.EXE.
 LOADCCPM.COM loads Concurrent from DOS; REDOS.COM returns to DOS.
 Use an explicit extension to distinguish DATE.CMD from DATE.EXE.
 
@@ -1756,6 +1756,20 @@ A line beginning with a semicolon or period is also a comment.
     [PAGE] uses the native PCTMP message: Press any key to continue...
     Press a key for the next page, or Ctrl-C to stop. [LENGTH=n] controls
     repeated headers separately; it does not enable interactive pauses.
+
+///1SETENV
+  SETENV [NAME[=value]]
+
+  DOS SETENV.EXE manages the current console's DOS environment. With no
+  arguments it lists all variables; NAME displays one. NAME=value adds or
+  replaces a variable; NAME= removes it. Names are case-insensitive and new
+  names are stored uppercase. Values preserve case and spaces.
+
+  The environment has 1024 bytes including names, values and terminators.
+  An oversized change is rejected without changing the existing environment.
+  Changes persist for subsequent DOS programs on this console until reboot.
+  PATH edits the PATH variable in this same block. SET manages file/disk
+  attributes and is unrelated. SETENV requires Concurrent DOS 4.1.
 
 ///1SET
 SET filespec [RO|RW,DIR|SYS,ARCHIVE=ON|OFF,F1=ON|OFF,...,F4=ON|OFF]

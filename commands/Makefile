@@ -2,7 +2,7 @@
 SUBDIRS=genccpm pip asm86 gencmd submit batch chdir \
     mkdir rmdir sysdisk chset initdir help ddt86 \
     function dredix copymenu editmenu printmgr dsp dskmaint \
-    genldr loadccpm copy datetime erase path \
+    genldr loadccpm copy datetime erase path rename setenv \
     asm80 era ren systat window date sdir show hexcom print set type dir ed disk putget setport
 
 CMDS=genccpm/genccpm.cmd asm86/asm86.cmd ddt86/ddt86.cmd gencmd/gencmd.cmd submit/submit.cmd batch/batch.cmd \
@@ -14,7 +14,7 @@ CMDS=genccpm/genccpm.cmd asm86/asm86.cmd ddt86/ddt86.cmd gencmd/gencmd.cmd submi
     window/window.cmd window/wmenu.cmd date/date.cmd sdir/sdir.cmd show/show.cmd \
     hexcom/hexcom.cmd print/print.cmd set/set.cmd type/type.cmd dir/dir.cmd ed/ed.cmd \
     disk/dcopy.cmd disk/dcomp.cmd putget/put.cmd putget/get.cmd putget/rdr.cmd setport/setport.cmd
-DOS_EXES=copy/copy.exe datetime/date.exe datetime/time.exe erase/erase.exe path/path.exe
+DOS_EXES=setenv/setenv.exe copy/copy.exe datetime/date.exe datetime/time.exe erase/erase.exe path/path.exe rename/ren.exe
 
 .PHONY: all check clean
 .DELETE_ON_ERROR:

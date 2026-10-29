@@ -1,0 +1,288 @@
+        title 'PC-DOS REN'
+;
+; REN.EXE - annotated reconstruction of the Concurrent DOS 4.1 OEM binary.
+; Build: RASM86 pcren; LINK86 ren=pcren[nop]
+;
+; Syntax: REN [drive:]oldname[.ext] newname[.ext]
+; Native F_PARSE (152) supplies the 8.3 names, including wildcard expansion.
+; DOS function 17h renames through a two-name FCB. This is not REN.CMD's
+; destination=source interface. No directory/path parser is implemented here.
+; Blank names, missing second operand and invalid filespecs are diagnosed.
+; All original instructions, including unused helpers, are retained.
+;
+        cseg
+        db 'COPYRIGHT(C)1984,DIGITAL RESEARCH(05/02/84)1031-0000       '
+; OEM patch reserve: 69 genuine NOP instructions, not executable DB data.
+code_patch_area:
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+
+; Save PSP for the far return and copy its counted command tail to local DATA.
+; The parser starts at tail+1, skipping the usual initial separating space.
+start:
+        mov ax,dataseg
+        mov es,ax
+        mov es:prefix,ds
+        mov di,offset tail_length
+        mov si,80h
+        movsb
+        mov di,offset command_tail
+        xor ch,ch
+        mov cl,es:tail_length
+        rep movsb
+        mov ds,ax
+        mov dl,0ffh
+        mov cl,45                       ; native disk-error return mode
+        int 224
+        mov dx,offset rename_fcb
+        mov bx,offset command_tail+1
+        call skip_blanks
+        call parse_name
+        call at_end
+        jz missing_name
+        mov dx,offset rename_fcb+16      ; destination half of DOS rename FCB
+        call parse_name
+        cmp byte ptr rename_fcb+17,' '
+        jz missing_name
+        cmp byte ptr rename_fcb+1,' '
+        jz missing_name
+        mov ah,17h                      ; DOS FCB rename, not pathname 56h
+        mov dx,offset rename_fcb
+        int 33
+        inc al                          ; FFh means rename failed
+        jnz return_to_psp
+        mov dx,offset not_renamed
+        call print_message
+return_to_psp:
+        jmpf dword ptr home             ; PSP:0000 historical termination
+missing_name:
+        mov dx,offset missing_filename
+        call print_message
+        jmp return_to_psp
+
+; Validate an explicit one-based drive by selecting it temporarily. A zero
+; drive means the current drive. Restore the previous default on success.
+; An invalid drive terminates directly, so its saved stack need not unwind.
+validate_drive:
+        push dx
+        dec al
+        js drive_default
+        push ax
+        mov cl,25
+        int 224
+        pop dx
+        push ax
+        mov cl,14
+        int 224
+        inc al
+        jnz restore_drive
+        mov dx,offset invalid_drive
+        call print_message
+        jmp return_to_psp
+restore_drive:
+        pop dx
+        mov cl,14
+        int 224
+ drive_default:
+        pop dx
+        ret
+
+; DS:DX -> dollar-terminated message; output through the DOS personality.
+print_message:
+        mov ah,9
+        int 33
+        ret
+
+; BX advances over spaces and tabs; AL returns the first other byte.
+skip_blanks:
+        mov al,[bx]
+        cmp al,' '
+        jz skip_one_blank
+        cmp al,9
+        jz skip_one_blank
+        ret
+skip_one_blank:
+        inc bx
+        jmp skip_blanks
+
+; Test AL against the 12-byte separator table. ZF=1 on a match.
+; Preserve BX/CX/DI; ES already addresses the local data segment.
+is_separator:
+        push di
+        push cx
+        push bx
+        mov ch,0
+        mov cl,separator_count
+        mov bx,cx                       ; retained original redundant copy
+        mov di,separator_pointer
+        repne scasb
+        pop bx
+        pop cx
+        pop di
+        ret
+
+; Uncalled OEM helper: uppercase a NUL-terminated string in place.
+; Entry BX -> text, AL = first byte; preserve it as the parser input pointer.
+uppercase_name:
+        mov parse_input,bx
+uppercase_test:
+        cmp al,0
+        jnz uppercase_letter
+        ret
+uppercase_letter:
+        cmp al,'a'
+        jnc uppercase_limit
+        jmps uppercase_next
+uppercase_limit:
+        cmp al,'z'+1
+        jnc uppercase_next
+        sub byte ptr [bx],20h
+uppercase_next:
+        inc bx
+        mov al,[bx]
+        jmps uppercase_test
+
+; Parse from BX into the scratch FCB, then copy its first 16 bytes to DS:DX.
+; Native F_PARSE returns the next input address in BX; FFFFh is invalid.
+; Skip whitespace and at most one separator before returning the next token.
+; Keep the source and destination names contiguous for DOS function 17h.
+parse_name:
+        mov parse_input,bx
+        push dx
+        mov dx,parse_control_pointer
+        mov cl,152
+        int 224
+        pop dx
+        inc bx
+        jnz parsed_name
+        mov dx,offset invalid_filename
+        call print_message
+        jmp return_to_psp
+parsed_name:
+        dec bx
+        call skip_blanks
+        or bx,bx
+        jz copy_parsed_name
+        mov al,[bx]
+        call is_separator
+        jnz copy_parsed_name
+        inc bx
+copy_parsed_name:
+        push bx
+        push dx
+        mov al,parse_fcb
+        call validate_drive
+        mov bx,offset parse_fcb
+        mov cl,16
+        mov di,dx
+        mov si,bx
+        rep movsb
+        pop dx
+        pop bx
+        ret
+
+; ZF=1 if no nonblank input remains; used to require the destination operand.
+at_end:
+        call skip_blanks
+        mov al,[bx]
+        cmp al,0
+        ret
+
+stackseg sseg
+        rs 128
+stack_end rs 0
+
+dataseg dseg
+; Preserved OEM data reserve. Its first byte is zero in the reference EXE.
+data_patch_area db 0,'ATA PATCH AREA '
+        db 'DATA PATCH AREA DATA PATCH AREA DATA PATCH AREA '
+        db 'DATA PATCH AREA DATA PATCH AREA DATA PATCH AREA DATA PATCH AREA '
+home dw 0
+prefix dw 0
+tail_length db 0
+not_renamed db 'File not renamed.$'
+missing_filename db 'Missing file name.$'
+invalid_drive db 'Invalid drive specified.$'
+invalid_filename db 'Invalid file specified.$'
+rename_fcb rs 32                     ; source at +0, destination at +16
+separators db ' ,![]><=:;/',0
+separator_pointer dw offset separators
+separator_count db 12
+saved_separator_count db 12         ; retained, unreferenced OEM state
+reserved_word dw 0
+command_tail rs 128
+input_capacity db 127               ; unused DOS buffered-input workspace
+input_length db 0
+input_buffer rs 128
+parse_control_pointer dw offset parse_input
+parse_input dw 0
+parse_output dw offset parse_fcb
+parse_fcb rs 36
+        end start
