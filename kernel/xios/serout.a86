@@ -1,0 +1,357 @@
+;SEROUT.A86
+title	'Interrupt Serial Output'
+;****************************************************************
+;*								*
+;*	This module is the invariant part of an interrupt 	*
+;*	driven serial output system.                            *
+;*	Last Update: 1/14/85					*
+;*								*
+;****************************************************************
+nolist
+include flags.equ
+include	system.lib
+include chrcomm.equ
+include serdata.equ
+include popf.a86		;286 bug
+list
+;include flags.equ
+;include system.lib
+;include chrcomm.equ
+;include serdata.equ
+;include popf.a86
+
+	dseg
+
+public	dsr_check
+public	dsr_vec
+
+extrn	bit_mask_tbl:byte
+extrn	ocdesctbl:word
+extrn   icdesctbl:word
+extrn   vrtl_phy:byte
+
+	cseg
+
+public	serial_out
+public	intco
+public	dsr_start
+
+extrn	supif:near
+extrn	usart_on:near
+extrn	usart_off:near
+extrn	usart_select:near
+eject
+
+;===========
+serial_out:
+;===========
+;
+;	ENTRY:	cl = character to send out
+;		bx -> Queue control struct
+;
+;	EXIT:	the character is :
+;               1] either sent to the USART, 
+;               2] or put in the output buffer,	
+;               3] or, the process is flagwaited until there is room
+;		in the output buffer .
+
+	pushf				 
+	push	bx
+	cli				
+	push	cx			;; save the character
+	mov	cx,OMSGCNT[bx]		;; cx = number of chars in the Q
+	cmp	cx,ONMSGS		;; is there room in the Q ?
+	 jb	con1
+	or	OFLAG[bx],PROC_WAITING	;; no, set a local process-waiting flag
+	pop	cx 			        
+	pop	bx
+	popff				;; turn interrupts back on
+	push	cx			;; save the character
+	push	bx			;; save the Q ctl structure
+
+	mov	dl,OFLAGN[bx]		;; do the global flagwait
+	mov	cl,F_FLAGWAIT
+	call	supif
+	cmp	ax,ERROR		;; was there an error ?
+	 jne	con0
+	                                ;; It might have been a flag overrun.
+        mov	cl,P_DISPATCH           ;; Dispatch the process, and try again.
+        call	supif
+
+con0:
+        pop	bx			;; BX -> Q ctl structure
+        pop	cx			;; restore the char
+	jmps	serial_out
+
+con1:                                   ;; There's  room in the Xmit Q.
+	cmp	OESC_CNT[bx],0		;; Check the esc count
+	 jz	not_esc
+	push	bx
+        cmp	OESC_CNT[bx],1          ;; Are we at the end of the sequence?
+	 je	check_switch		;; Yes, see if PIN is waiting.
+
+check_xy:
+	cmp	OESC_CNT[bx],3		;; See if this is a 4-char sequence.
+	 jne	dec_esc			;; We're at first or third char.
+        pop bx ! pop ax 
+	push ax ! push bx 		;; AX -> char , BX -> Output Q ctl
+        cmp	ax,'Y'			;; ESC Y is only 4-char sequence.
+	 je	dec_esc
+
+check_switch:
+        pop bx ! pop ax 
+	mov	OESC_CNT[bx],0		;; Clear escape count.
+        call	con2			;; Send the last char in the sequence
+        xor	ah,ah			;; before doing the flag set, if any.
+        mov	al,CUR_VCON[bx]
+        mov	bx,ax
+        mov	bl,vrtl_phy[bx]		;; get the physical console #
+        xor	bh,bh
+        shl	bx,1
+        mov	bx,icdesctbl[bx]	;; get the Input Q control structure
+        test	Q_STATE[bx],SWITCH_PEND ;; Is PIN waiting for an escape
+         jz	exit 			;; sequence to end ?
+
+flag_set:
+        push bx ! push cx ! push si
+        xor	dh,dh
+        mov	dl,P_CON[bx]
+        add	dl,SWITCH_BIAS		;; Flag # = virtual console + bias
+        mov	cl,f_flagset		;; Wake up the PIN waiting to do
+        call	supif			;; a screen switch.
+        pop si ! pop cx ! pop bx
+        and	Q_STATE[bx],not SWITCH_PEND
+	jmps	exit
+not_esc:
+	pop	ax
+	call	con2
+	jmps	exit
+dec_esc:
+        pop bx  ! pop ax
+	dec	OESC_CNT[bx]
+	call	con2
+
+exit:
+	pop	bx
+	popff
+	ret
+
+con2:	                                ;; put the character in the Xmit Q
+	mov	si,OMSGOUT[bx]		;; get the output index
+	add	si,cx			;; add to it the number of chars
+	and	si,ONMSGS - 1		;; in the buffer, mod( buff size )
+	mov	OBUFFER[bx+si],al	;; put it in the Q
+	inc	cx			;; inc Q char count
+	mov	OMSGCNT[bx],cx		
+	                                ;; if 1st char in Q, start USART Xmit
+	dec	cx			;; cx = chars in Q -1 
+	 jnz	con4
+	test	OFLAG[bx],XON_XOFF_MODE ;; Is it supporting Xon/Xoff protocol ?
+	 jz	con3
+	test	OFLAG[bx],XOFF_PENDING  ;; Is there an Xoff pending ?
+	 jnz	con4                    
+	                                ;; The character is in the buffer and 
+con3:                                   ;; the usart int system is turned off.
+	call	usart_on                ;; Start the Usart's Xmitter.
+con4:
+	ret
+
+eject
+
+;===========
+dsr_stop:
+;===========
+;	This routine is called when the USART is set to acknowledge the DSR pin
+;       and the DSR line is high (i.e.,stop sending data).
+;
+;	ENTRY:	bx ->	Output Q control structure for the USART
+;	EXIT:	The dsr_vec has a bit set for this usart. 
+;               The usart transmitter interrupt system is shut down.
+;		The dsr_check flag is posted for the tick routine.
+
+	                                ; To post this usart in the dsr_vec
+	mov	al,O_BIT_MASK[bx]	; get the bit corresponding to this USART 
+        or	dsr_vec,al              ; OR  it into the DSR vector
+	mov	al,OUSART[bx]		; get the usart number
+	call	usart_off		; and stop the transmitter
+	mov	dsr_check,TRUE          ; signal the tick routine to check the
+                                        ; state of the DSR pin for this usart
+	ret
+
+;=========
+dsr_start:
+;=========
+;	Called by the tick routine when the dsr_check flag = true.
+;	It looks at the dsr vector to figure out which usart has had its 
+;       transmitter turned off (due to the DSR pin). It then reads the usart's
+;	status and tests the state of the DSR bit in the status word (bit(7)).
+;	When this bit is on ,the port we're sending to	wants more data. We 
+;       start the transmitter and remove its bit from the dsr_vector. If the
+;       dsr vector has all its bits cleared, we clear the dsr check flag.
+
+	push	ax                      ;; save the environment
+	push	bx
+	push	cx
+	push	dx
+
+dsr_test_lp:	
+	mov	al,0			
+	call	usart_select		;; select the usart
+	mov	ah,dsr_vec		;; bit vector of the off Xmitters
+dsr_lp_0:
+	mov	bx,offset bit_mask_tbl	;; byte mask for each Xmit interrupt
+	mov	cx,8			;; length of bit mask table
+dsr_lp:
+	test	ah,[bx]
+	 jz	dsr_lp_2
+	mov	al,[bx]                 ;; found the usart, AND off the bit in
+	not	al                      ;; dsr_vec
+	and	ah,al
+                                        ;; CX = USART	  
+	mov	bx,offset ocdesctbl	;; get base of Xmit Q table
+	shl	cx,1			;; times 2 ( word table )
+	add	bx,cx			;; index into the table
+	mov	bx,[bx]			;; bx -> Xmit Q ctl Structure
+	mov	al,OUSART[bx]		;; select the USART
+	call	usart_select
+	xor	dh,dh
+	mov	dl,OSTPORT[bx]		;; get USART's status port
+	in	al,dx			;; read the status
+	test	al,DSR_BIT[bx]          ;; check DSR pin - should we turn on 
+         jz	dsr_lp_1                ;; the transmitter ?
+        call	usart_on		;; yes, turn on the Usart 
+        mov	al,O_BIT_MASK[bx]	;; get the bit
+        not	al			;; make it an AND mask
+        and	dsr_vec,al	    	;; remove from bit vector
+dsr_lp_1:
+	jmps	dsr_lp_0		;; in case another usart has it's
+					;; xmitter turned off
+dsr_lp_2:
+	inc	bx			;; point to the next mask
+	loop	dsr_lp			;; check all the USARTS
+
+	cmp	dsr_vec,0               ;; if dsr_vec is empty, clear dsr_check
+         jne	dsr_st1                 ;; flag
+        mov	dsr_check,FALSE
+dsr_st1:
+	pop	dx			;; restore the environment
+	pop	cx
+	pop	bx 
+	pop	ax
+	
+	ret
+eject
+
+;;=====
+intco:                                    ;; called from ssint.a86,i3int.a86
+;;=====
+;;      
+;;	ENTRY:	bx -> Xmit Q ctl structure
+;;
+;;	OFLAG:	01h - process flag waiting (buf empty)
+;;		02h - status ready
+;;		10h - Xoff pending
+;;		20H - Xon/Xoff mode
+;;		80H - RTS protocol support
+;;
+;;      EXIT :  AX,BX used.
+;;              All other registers preserved.
+;;
+;;		Handles the interrupt side of writing a char to the console.
+;;		It runs in an interrupt context.
+
+	push	dx			;; port select register
+	xor	dh,dh			;; clear the high byte
+	mov	al,OUSART[bx]		;; get the usart number
+	cmp	al,NO_SELECT       	;; does it need a select ?
+	 je	no_sel      
+	call	usart_select
+no_sel:
+	test	OFLAG[bx],XON_XOFF_MODE ;; Is this USART supporting Xon/Xoff protocol ?
+	 jz	intco1
+        test	OFLAG[bx],XOFF_PENDING  ;; Have we received a stop request?
+	 jnz	icoexit                 ;; yes
+intco1:
+	test	OFLAG[bx],RTS_PROT      ;; Is this USART supporting RTS protocol
+         jz	intco2
+        xor	dh,dh                   ;; yes,...
+	mov	dl,OSTPORT[bx]		;; get the status port
+	in	al,dx			;; get the status
+	mov	ah,DSR_BIT[bx]		;; get the DSR bit
+	test	al,ah			;; test the DSR bit of the USART
+	 jnz	intco2			;; bit(7) = 1 if DSR* = 0 volts
+        call	dsr_stop                ;; we've gotten a request to stop
+	jmp	icoexit
+intco2:                                 
+	mov	dl,OSTPORT[bx]		;; get the status port addr
+	in	al,dx			;; get the USARTS status
+	mov	ah,XMIT_MASK[bx]	;; get the Xmit empty mask
+	test	al,ah			;; is the Xmit buffer empty ?
+	 jz	icoexit
+	                                ;; yes, are there any characters to send ?
+	push	cx			;; save the regs we're going to use 
+	push	si
+	mov	cx,OMSGCNT[bx]		
+	cmp	cx,0       		;; is there a char to send ?
+         je	icodone	    
+        mov	si,OMSGOUT[bx]		;; yes, get the output index
+	mov	al,OBUFFER[bx+si]	;; al = char to send
+	mov	dl,OIOPORT[bx]		;; get the USARTS data port
+	out	dx,al			;; send the char 
+	inc	si			;; inc the output index
+	and	si,ONMSGS - 1		;; mod the Queue size
+	mov	OMSGOUT[bx],si		;; save the output index
+	dec	cx 			;; dec the chars-to-send count
+	mov	OMSGCNT[bx],cx	        ;; If there is a proccess waiting for 
+                                        ;; room in this Q, do a flag set for 
+                                        ;; the process when the Q is half empty.
+	cmp	cx,( ONMSGS / 2 )	;; is the Q at least half empty ?
+	 ja	icodone
+        test	OFLAG[bx],PROC_WAITING	;; yes, is there a process waiting?
+	 jz	icodone			;; no,...
+        push	bx			;; save the remaining environment
+	push	bp			;; for the flag set call
+	push	di
+	push	es
+intco3:
+        mov	dl,OFLAGN[bx]	        ;; Get the flag for this Q
+	mov	cl,F_FLAGSET	        ;; do the flag set
+	push	bx			;; save the Q ptr in case of a retry
+	call	supif
+        pop	bx                   
+	cmp	ax,ERROR		;; was there an error ?
+	 jne	intco4
+        cmp	cx,FLAG_IGNORE		;; yes, was the flag ignored ?
+	 je	intco3			;; yes, try again
+intco4:
+        pop	es			;; restore the environment
+	pop	di			;; that was saved for the flag set
+	pop	bp
+	pop	bx
+        and	OFLAG[bx],not PROC_WAITING ;; clear the proc waiting flag
+icodone:
+	pop	si			;; restore the context 
+	pop	cx			       	
+	cmp	OMSGCNT[bx],0           ;; More char's to send ?
+	 jne	icoexit                 ;; yes, just return
+	mov	al,OUSART[bx]		;; no,  get the usart number
+	call	usart_off                  ;; turn off usart's transmit system
+icoexit:
+	pop	dx
+
+	ret
+eject
+
+	dseg
+
+dsr_check	db	0	; This flag = true when a USART has had its
+				; transmitter shut down due to the state of 
+				; the dsr pin.
+
+dsr_vec		db	0	; This is a bit vector of the usarts that
+				; have had their transmitter(s) shut down by
+				; a reqest from the port they're sending data
+				; to.
+
+	end
+                                                                                                                                                                                                                                                                                                                                                                                                                                  

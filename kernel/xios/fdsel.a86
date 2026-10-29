@@ -1,0 +1,800 @@
+;FDSEL.A86
+title 'FLOPPY SELECT ROUTINES'
+;****************************************
+;	FLOPPY DISK SELECTOR		*
+;	Last mod: 1 JAN 85		*
+;		JMB			*
+;****************************************
+nolist
+include	exerror.equ
+include system.lib
+include diskhdr.equ
+include fd.equ
+include dskcomn.equ
+include sysdat.lib
+list
+;include exerror.equ
+;include system.lib
+;include diskhdr.equ
+;include fd.equ
+;include dskcomn.equ
+;include sysdat.lib
+
+cgroup group code,data			;8080 model XIOS
+
+	dseg
+public	f_call, phy_drive, build_fmb, fmt, c_fmb
+
+extrn	xlts:byte, xltd1:byte, xltd2:byte, xltd3:byte
+extrn	dpbs1:byte, dpbs2:byte, dpbd1:byte, dpbd2:byte
+extrn	dpbd3:byte, dpbd4:byte, dpbd5:byte, dpbd6:byte
+extrn	dpbpc1:byte, dpbpc5:byte, dpbpc6:byte
+extrn	dph_tbl:word
+
+extrn	current_reskew:word
+extrn	re_skew_26_2:byte, re_skew_15_2:byte, re_skew_8_2:byte
+extrn	log_phy:byte, phy_log:byte
+extrn	disk_modes:byte, rw_cs:byte, stat_reg_3_tbl:byte
+
+extrn	idrive:byte, itrack:word, isector:byte
+extrn	idmaoff:word
+extrn	int_ctl:byte
+
+	cseg
+public	f_dsk_sel, build_cs, read_id
+
+extrn	p_seek:near, io_read:near, recal:near, sense_drvst:near
+extrn	send_cmd:near, int_wait:near, stat_ret:near
+eject
+
+;=========
+f_dsk_sel:				; Disk Select Entry Point
+;=========
+;	The floppy system supports 8 different CP/M disk formats.
+;	They are:
+;
+;	  1]	SD	128 bytes/sector	26 sectors/track
+;	  2]	DD	256 bytes/sector	26 sectors/track
+;	  3]	DD	512 bytes/sector	15 sectors/track
+;	  4]	DD	1024 bytes/sector	 8 sectors/track
+;	  5-8]	same as 1 - 4 with double sided disks.
+;
+;	It also supports 3 DOS formats:
+;	  1]	SD	128 byt./sector, sing. sided, 26 sectors/track
+;	(1.5]	SD	128, DS, but only one side used.)
+;	  2]	DD	1024 by./sector, sing. sided, 8 spt
+;	  3]	DD	1024 by./sector, doub. sided, 8 spt
+;
+;	On a first time select (as indicated by dl(0) = 0) :
+;	
+;	  1]	recal, homes the head
+;	  2]	read a sector ID to determine dens. of trk 0
+;		(if DD, -> DOS and build fmb)
+;	  3]	if not DOS, seek to track "SELECT_TRK"
+;	  4]	read a sector ID to determine dens.
+;	  	(if DD, -> CPM and build fmb)
+;	  5]	else build a SD fmb
+;	  6]	read the FAT ID
+;		(if > F6F6, ->DOS, else CPM... the F6F6 allows formatted,
+;		 but un-FAT-initialized disks to be recognized)
+;	  7]	set up the dph for this disk
+;
+;	on all calls it:
+;	  1]	sets up the current floppy mode byte.
+;	  2]	sets up the select specific bytes in the r/w control string
+;		N, GPL, and DTL
+;	  3]	returns the addr of the DPH
+eject
+
+;	The following image of the read write control is here for
+;	reference, so we can see what bytes in the control string 
+;	are set up when the disk select call is made.
+;
+;		   command byte
+;			|
+;		        V  D  C  H  R  N  EOT  GPL   DTL
+;	rw_cs	db	0, 0, 0, 0, 0, 0,  0,   0,    0	
+;
+;
+;	ENTRY:	cl = CDOS's logical drive
+;		dl(0) = first select request
+;			if dl(0) = 1 this is not a first call request
+;			else if dl(0) = 0 this is a first call request
+;
+;	EXIT:	Ax, Bx  = addr of the DPH if everything went OK
+;			= 0 if there was an error or if a non-supported
+;			  drive was requested.
+eject
+
+	dseg
+
+phy_drive	db	0		; current drive we're selecting
+c_fmb		db	0		; the current floppy mode byte
+save_xlt	rw	1
+f_call		rw	1		; first call select flag
+
+fat_id		rw	1		; FAT id if PC_MODE disk
+		rb	128-2		; only read SD FATs
+
+SD_FAT_ID	equ	0F6F6h		;this is the only ID we look for.
+
+; FLOPPY MODE BYTE AND TABLE:
+;
+;	7 6 5 4 3 2 1 0
+;	        \/    +	-------	set = two sided, reset = single sided
+;		 |  +----------	set = double density, reset = single density
+;	         +-------------	0 = 128 byte sectors
+;				1 = 256 byte sectors
+;				2 = 512 byte sectors
+;				3 = 1024 byte sectors
+
+fmt		rb	16		; floppy mode table
+
+					; Gap length table. Indexed by the N
+					; field read from disk sector header,
+					; Values correspond to those the FDC
+					; expects in the GPL byte of R/W ctl st
+gpl_tbl	db	07H			; SD 128 byte sectors
+	db	0EH			; DD 256 byte sectors
+	db	1BH			; DD 512 byte sectors
+	db	35H			; DD 1024 byte sectors
+
+; The addresses of the re skewing tables:
+; The table is indexed by the value in the N field of the 
+; Read Write control string.
+
+re_skew_tbl	dw	offset re_skew_26_2	; S.D. 128 bytes/sec
+		dw	offset re_skew_26_2	; D.D. 256 bytes/sec
+		dw	offset re_skew_15_2	; D.D. 512 bytes/sec
+		dw	offset re_skew_8_2	; D.D. 1024 bytes/sec
+eject
+
+	cseg
+
+;f_dsk_sel:
+;----------
+	xor	bx,bx
+	mov	bl,cl		; logical index
+	mov 	al,log_phy[bx]	; convert from concurrents logical
+				; drive to our controller drive reference
+	mov 	phy_drive,al	; stash the physical drive we are selecting
+	mov	bl,al		; put logical drive into physical floppy table
+	mov	phy_log[bx],cl
+
+;Check for this being the first call for this floppy.
+	test	dl,FIRST_CALL_FLAG
+	 jnz	nfc
+
+;This is the first call, so take care of it. (al has floppy number)
+        mov	f_call,TRUE
+
+;Call the subroutine to 1) build the fmb, 2) set the disk_mode,
+;and 3) set up the DPH.
+	call	first_call
+	cmp	al,ERROR
+	 jne	ds4
+
+;There was an error when we made the first call 
+;so set up the error code for CCP/M and return the error.
+	mov	ax,SELDSK_ERROR
+	mov	bx,ax
+	jmp	ds3			; leap to the exit point
+
+ds4:
+;We made it through the first call for this disk.
+;AL contains the current FMB (floppy mode byte).
+;DISK_MODES[] for this drive indicates DOS or CP/M.
+	mov	c_fmb, al		; set the current FMB
+
+;Put the current FMB in the FMT (floppy mode table):
+	xor	bx,bx			; clear the memory pointer register
+	mov	bl,phy_drive		; set the index into the FMT
+	mov	fmt[bx],al		; put the FMB into the FMT indexed 
+					; by the drive we're working with.
+	jmps	ds0			; leap around getting the FMB 
+					; from the FMT
+nfc:
+;We land here when this is not a first time select for
+;this disk. 
+	mov	f_call,FALSE
+	xor 	bx, bx			; clear the memory pointer
+	mov	bl, phy_drive		; index into the FMT as per the drive
+	mov	al, fmt[bx]		; get the drive's FMB
+	mov	c_fmb, al		; set our current FMB to 
+					; this drives FMB
+;Now fill out the correct fields in the read/write control string:
+ds0:
+	call	build_cs
+
+;Set up the re_skew vector:
+;In order to minimize rotation latency of any of the floppy
+;disk formats we have to re skew the order in which the sectors
+;are read from the disk.
+;There is a table of addresses of the reskew tables that
+;is indexed by the N field of the FMB.
+	xor	bh,bh
+	mov	bl,idrive
+	mov	ax,0			;prepare
+	cmp	disk_modes,1
+	 je	no_reskew
+
+	mov	bl,c_fmb		;get the FMB
+	shr	bx,1			;shift the N field into place
+	and	bx,0FEH			;to be used as an word index 
+					;(multiplied by two)
+	mov	ax,re_skew_tbl[bx]	;get the reskewing table address
+no_reskew:
+	mov	current_reskew,ax	;into the current reskewing pointer
+
+;At this point the present DPH is correct for the current disk.
+	xor	bx,bx
+	mov	bl,idrive
+	shl	bx,1
+	mov	bx,dph_tbl[bx]		; get DPH
+
+;If the dpb field in the DPH is 0, we don't support the format, so...
+	cmp	DPB[bx],0
+	 jnz	good_dsk
+	mov	bx,SELDSK_ERROR		;signify no-go
+good_dsk:
+	mov	ax,bx
+ds3:
+	ret
+eject
+
+first_call:
+;----------
+;	This routine does the following
+;	  1] calls build_fmb which:
+;	  1.1] puts this FMB in the FMT ( floppy mode table )
+;	  1.2] sets disk_mode for this drive to DOS or CPM (exc. SD)
+;	  2] set up the dpb and xlt in the dph
+;
+;	ENTRY:	al = phys. (FDC) drive to perform the first 
+;		call dance on (the drives are 0 relative)
+;
+;	EXIT:	al = the FMB ( floppy mode byte ) that was built 
+;		     for the disk specified in al.
+;		al = ERROR if there was an error
+
+	dseg
+
+fc_drv		db	0		; local drive code for first call
+
+fc_fmb		db	0		; local version of the FMB
+
+; This table contains the addresses of the skewing tables.
+; The skewing table will change for each floppy.
+; The value in the N field is used to select the proper skew table
+; to plug into the skew field of the DPH for a given floppy.
+
+xtable	DW	(Offset xlts)		;single 128
+	DW	(Offset xltd1)		;double 256
+	DW	(Offset xltd2)		;double 512
+	DW	(Offset xltd3)		;double 1024
+eject
+
+; This table is indexed by the FMB ( floppy mode byte ).
+; Each entry corresponds to a uniquie bit combination of the
+; FMB.  At each entry is the address of the DPB that concurrent
+; expects to use for the floppy with the FMB that indexed into the
+; table.  This DPB address is in turn put into the DPH that
+; corresponds to the floppy selected.
+
+dpb_tbl	dw	dpbs1		; ss,	sd,	128
+	dw	dpbs2		; ds,	sd,	128
+	dw	0
+	dw	0
+	dw	0
+	dw	0
+	dw	dpbd1		; ss,	dd,	256
+	dw	dpbd2		; ds,	dd,	256
+	dw	0
+	dw	0
+	dw	dpbd3		; ss,	dd,	512
+	dw	dpbd4		; ds,	dd,	512
+	dw	0
+	dw	0
+	dw	dpbd5		; ss,	dd,	1024
+	dw	dpbd6		; ds,	dd,	1024
+
+; same as above but for PC_MODE disks
+
+pc_dpb_tbl	dw	dpbpc1		; ss,	sd,	128
+		dw	0		; ds,	sd,	128
+		dw	0
+		dw	0
+		dw	0
+		dw	0
+		dw	0		; ss,	dd,	256
+		dw	0		; ds,	dd,	256
+		dw	0
+		dw	0
+		dw	0		; ss,	dd,	512
+		dw	0		; ds,	dd,	512
+		dw	0
+		dw	0
+		dw	dpbpc5		; ss,	dd,	1024
+		dw	dpbpc6		; ds,	dd,	1024
+eject
+
+	cseg
+
+; figure out what type of floppy is in the drive.
+	mov	fc_drv, al
+	call	build_fmb
+	cmp	al,ERROR
+	 je	fc_exit		;there must have been an error 
+				;when we attempted to build the FMB
+
+;DOS SD DS is treated just like SS, so if the disk is SD DS or SD SS,
+;fake a SS SD FMB and read the FAT.  If the mode comes back DOS, leave
+;the fmb as SD SS, if CPM, restore it to what it was.
+
+	cmp	al,1		;SS?   If so we must call the special
+	 ja	fc1		;routine to determine the mode.
+
+	push	ax		;fake a SS SD.
+	mov	al,0
+	mov	c_fmb,al	;For the R/W routines called from sssd
+	call	sssd		;this will set disk_modes[]
+	pop	ax
+
+;Now check the mode:
+	xor	bh,bh
+	mov	bl,idrive
+	cmp	disk_modes[bx],0	;CPM?
+	 je	fc1			;Then leave the original FMB
+
+	mov	al,0			;Else pretend SS
+
+fc1:
+; At this point al contains the FMB
+; stash the FMB for use later in this routine
+
+	mov fc_fmb, al
+
+;Set up the DPH ( disk parameter header ).
+;Since we are supporting 11 different types of floppies,
+;we have to dynamically change the DPHs to reflect the type of
+;floppy in the drive at first select time.
+;The fields of the DPH that have to be set up for each floppy
+;are the Skew table address, and the DPB address.
+;The DPH is determined by CDOS's logical disk number.
+
+;Get the address of the DPH for the drive passed and store in DI:
+	xor	bx,bx			;clear the table index register
+	mov 	bl,idrive		;get the logical drive
+	mov	si,bx			;save for below
+	shl 	bx,1
+	mov	di,dph_tbl[bx]		;get the dph's address
+
+;At this point, di contains the addr of the DPH we're
+;building, al contains a copy of the FMB,
+;and si contains the drive code (0-15).
+
+;FMB bit(2) and bit(3) ( bits being 0 relative )
+;contain the bytes per sector code.  This code is used
+;to index into the table of translate tables.
+	xor	bh, bh			; clear the xlate table index
+	mov	bl,al			; current FMB into index register
+	shr	bx,1			; shift the bytes/sector field
+					; into position to be used as an
+					; index into xlate table
+	and	bx,0FFFEH		; mask out the bit that was used
+					; to hold the density attribute
+	mov	ax,xtable[bx]		; get the translate table address
+	mov	save_xlt,ax
+
+; The DPB table contains an entry for each possible
+; combination of bits from the floppy mode byte
+; This code uses the current FMB to index into the DPB table
+; to select the proper DPB for the disk we found in the drive
+	xor	bh,bh			; clear index into DPB table
+	mov	bl,fc_fmb		; get the FMB
+	shl	bx,1			; times 2 for a word table index
+
+;Now check disk_modes[si], which was set up by build_fmb:
+	cmp	disk_modes[si],0	;CP/M?
+	 jne	fc_dos			;must be dos...
+
+	mov	ax,dpb_tbl[bx]		;Get the DPB's address (CP/M)
+	cmp	ax,0
+	 je	fc_err
+	mov	DPB[di],ax		;put it into the DPH we're making.
+	mov	ax,save_xlt		;get the xlate table and..
+	mov	XLT[di],ax		;put in place.
+	mov	al,fc_fmb		;Set this for our return code.
+	jmps	fc_exit
+fc_dos:
+	mov	ax,pc_dpb_tbl[bx]
+	cmp	ax,0
+	 je	fc_err
+	mov	DPB[di],ax		;put in the DPH
+	mov	XLT[di],0		;no XLAT for DOS
+	mov	al,fc_fmb
+	jmps	fc_exit
+
+fc_err:
+	mov	al,ERROR		;no-workee
+fc_exit:
+	ret
+eject
+
+build_fmb:
+;---------
+;	This routine builds the floppy mode byte from the disk.
+;
+;	ENTRY:	al = phys. (FDC) disk the FMB should be built for 
+;		( 0 relative )
+;
+;	EXIT:	al = FMB if every thing went OK
+;		al = ERROR if something went wrong while we
+;		     were building the FMB.
+;		disk_modes[x] set correctly to DOS or CPM
+;		 (except for SSSD)
+
+	dseg
+
+fmb		db	0	; this is the current floppy mode byte
+
+;	FLOPPY MODE BYTE BIT DEFINITIONS:
+;
+;	7 6 5 4 3 2 1 0
+;	        \/    +	-------	set = two sided, reset = single sided
+;		 |  +----------	set = double density, reset = single density
+;	         +-------------	0 = 128 byte sectors
+;				1 = 256 byte sectors
+;				2 = 512 byte sectors
+;				3 = 1024 byte sectors
+
+bfmb_rt		db	0	; retry counter, this is used when we're
+				; attempting to seek to track "SELECT_TRK".
+;				; ...to sample the media.
+bfmb_rt1	db	0	; retry counter 1, this is used when we're
+				; sampling the media with the read ID
+				; routine.
+
+bfmb_dsk	db	0	; this is the disk we're building
+				; the FMB for. It is initialized upon
+				; entry to this routine.
+
+; Density table.
+; This table is indexed by the N factor from the read ID status
+; string.
+
+den_tbl	db	0000b		; 128 bytes/sector
+	db	0100b		; 256 bytes/sector
+	db	1000b		; 512 bytes/sector
+	db	1100b		; 1024 bytes/sector
+eject
+
+	cseg
+
+; pre-load both retry counters used in making the query to the disk 
+	mov	bfmb_rt, RETRY_COUNT
+	mov	bfmb_rt1, RETRY_COUNT
+
+	mov	bfmb_dsk, al		;Save the disk we're working
+					;for use later in this routine.
+	mov	fmb,0			;Init.
+
+;First, recal to put the head over track 0:
+	call	recal
+	cmp	al,SUCCESS
+	 je	bfmb00		;jump if good recal
+	mov	al,ERROR
+	jmp	bfmb_e		;else show error
+bfmb00:
+;Determine the number of sides while here:
+	xor	bx,bx
+	mov	bl,bfmb_dsk		;index
+	test	stat_reg_3_tbl[bx], TWO_SIDE_BIT
+	 jz	bfmb001			;must be SS, so jmp
+	or	fmb,TWO_SIDED		;else put in fmb
+bfmb001:
+;Read an ID from track 0:
+	xor	bx,bx
+	mov	bl,bfmb_dsk
+	mov	cx,RETRY_COUNT		;try this many times
+bfmb000:
+	mov	ah,bfmb_dsk
+	mov	al,FS_READ_ID	;try single dens. first
+				;(The FDC seems to have a tendency not to
+				; come back if you instruct it to read a
+				; double density ID from a single density
+				; track which has been formatted on another
+				; machine.)
+	push	cx		;save counter
+	call	read_id
+	pop	cx
+	  mov	al,STAT0[bx]	;look at the status byte
+	  and	al,FDC_INT_CODE_MASK
+	  cmp	al,SUCCESS
+	   je	bfmb1		;jump if read successful
+	loop	bfmb000		;else loop
+;	jmps	bfmb01		;now assume trk 0 DD
+
+;Here if track 0 is probably double dens...we know that means DOS:
+;Find out sector size by reading a DD ID:
+bfmb01:
+	mov	cx,RETRY_COUNT
+bfmb015:
+	mov	ah,bfmb_dsk
+	mov	al,FD_READ_ID	;DD
+	push	cx		;save counter
+	call	read_id
+	pop	cx
+	 mov	al,STAT0[bx]	;look at the first status byte
+	 and	al,FDC_INT_CODE_MASK
+	 cmp	al,SUCCESS
+	 je	bfmb0155	;jump if read successful
+	loop	bfmb015
+
+;Here if we couldn't read SD or DD ID...return ERROR:
+	mov	al,ERROR
+	jmp	bfmb_e
+bfmb0155:	
+	or	fmb,D_DENSITY
+	mov	bl,STATUS_N_FIELD[bx]
+	xor	bh,bh
+	mov	al,den_tbl[bx]	;get the code
+	or	fmb,al		;stick it in
+;Set the disk_mode:
+	xor	bx,bx
+	mov	bl,idrive
+	mov	disk_modes[bx],1	;non-zero means DOS
+
+	mov	al,fmb
+	jmp	bfmb_e			;to exit
+
+bfmb1:
+;Here if track 0 is single dens....either DOS or CP/M.
+;Read an ID at track "SELECT_TRK", first seek:
+	mov	ah,bfmb_dsk
+	mov	al,SELECT_TRK
+	call	p_seek
+	cmp	al,SUCCESS
+	 je	bfmb3			;jump if good seek
+
+	dec	bfmb_rt			;retry
+	 jnz	bfmb1			;loop
+
+	mov	ah,SEEK_FAILED		;return a hard error
+	mov	al,ERROR
+	jmp	bfmb_e			;go to the exit	
+
+bfmb3:
+;Try to read a SD ID:
+	mov	ah,bfmb_dsk
+	mov	al,FS_READ_ID		;try SD
+	call	read_id
+
+	mov	al,STAT0[bx]		;read_id comes back w/ BX->status
+	and	al,FDC_INT_CODE_MASK	;success?
+	cmp	al,SUCCESS
+	 je	bfmb6			;jump if SD
+
+;Here if track 0 is SD and track "SELECT_TRK" is (prob) DD...that means CP/M:
+;We need to read a DD ID to get the sector size:
+	mov	ah,bfmb_dsk
+	mov	al,FD_READ_ID
+	call	read_id
+	mov	al,STAT0[bx]
+	and	al,FDC_INT_CODE_MASK
+	cmp	al,SUCCESS
+	 je	bfmb35
+
+;Cant't read SD or DD on track "SELECT_TRK"...return error:
+	mov	al,ERROR
+	jmps	bfmb_e
+
+bfmb35:
+	or	fmb,D_DENSITY		;set density bit
+	mov	bl,STATUS_N_FIELD[bx]	;get the N
+	xor	bh,bh
+	mov	al,den_tbl[bx]		;put the sector size in the fmb
+	or	fmb,al
+;Set the disk mode:
+	xor	bx,bx
+	mov	bl,idrive
+	mov	disk_modes[bx],0	;CP/M
+	mov	al,fmb
+	jmp	bfmb_e
+
+bfmb6:
+;Here if track 0 is SD and track SELECT_TRK is SD...could be either DOS or CP/M.
+;FMB says SD, maybe DS or SS.  Set disk_modes[] and return:
+	mov	al,fmb
+	test	al,TWO_SIDE_BIT		;Z if SS
+	 jz	bfmb_e			;caller knows DOS or CP/M not yet
+					;determined
+	xor	bx,bx			
+	mov	bl,idrive
+	mov	disk_modes[bx],0	;say CP/M
+;	jmps	bfmb_e
+
+bfmb_e:
+	ret
+eject
+
+build_cs:
+;-------
+;*** ENTRY POINT FOR THE TRK0_RW ROUTNE ***
+;At this point the current FMB is set up for the disk
+;that has been selected, and AL contains an image of the current
+;FMB.
+
+;Set up the N field of the Read Write control string (rw_cs).
+	and	al,N_MASK	;mask out the N field from the FMB
+	shr al,1 ! shr al,1	;move the N field into position
+	mov	(rw_cs+N),al	; for the read write control string
+
+;Set up the DTL field of the Read Write control string.
+;The DTL field is only used when the N field is zero.
+;The DTL field must be set to 0FFH if it's not used.
+;When the N field is 0 the DTL field value is the number of
+;bytes to transfer for each sector.  The FDC still reads the
+;entire sector to calculate the checksum.
+;The N field is only zero on a single density floppy.
+;At this point al contains an image of the Read Write 
+;control string N field.
+	cmp	al,0 
+	 jne	ds1
+;This must be a single density floppy.
+	mov	byte ptr(rw_cs+DTL),128
+	jmps	ds2
+ds1:
+;This must be double density floppy.
+	mov	byte ptr(rw_cs+DTL),0ffh 
+ds2:
+;Set up the GPL ( inter-record gap length ) field of the 
+;read write control string.  There is a different inter-record
+;gap depending on the size and density of the sector.  This can
+;be determined by the value of the N field.
+;At this point, AL still contains the value of the N field.
+	xor	bx,bx			;clear the memory pointer
+	mov	bl,al			;get the table index
+	mov	al,gpl_tbl[bx]		;get the GPL value
+	mov	(rw_cs+GPL),al		;initialize the control string
+					; GPL field
+	ret
+eject
+
+sssd:
+;------
+;Here if the Disk is SSSD.  Read the FAT to check the ID.
+;Enter w/ fmb in al.
+	xor	bx,bx
+	mov	bl,idrive
+	mov	disk_modes[bx],1	;say dos
+	shl	bx,1			;prepare for word table
+	mov	si,dph_tbl[bx]		;get the base of the dph
+
+	xor	bh,bh
+	mov	bl,al
+	shl	bx,1
+	mov	bx,pc_dpb_tbl[bx]	;get the edpb
+
+	mov	DPB[si],bx		;insert for the io_read
+	mov	XLT[si],0		;assume dos
+	mov	current_reskew,0
+;Read:
+	push	bx
+;	mov	al,fmb
+	call	build_cs
+	pop	bx
+
+	mov	al,idrive
+	mov	ah,1
+	push	ax			;drive and m_cnt
+	 xor	dx,dx
+	 mov	ax,FATADD[bx]
+	 div	word ptr DOS+SPT[bx]	;figure track and sector
+	 push	ax			;track
+	 push	dx			;sector
+	push	ds			;dma seg.
+	 mov	ax,offset fat_id	;dma off.
+	 push	ax
+
+	sub	sp,4			;dummy far-return address
+	call	io_read			;call the XIOS entry point
+	add	sp,14			;remove old parms.
+
+	cmp	al,0			;good read?
+	 jz	read_ok
+	mov	al,ERROR		;else error
+	jmp	sssd_e
+read_ok:
+	xor	bx,bx
+	mov	bl,idrive
+
+;Check the FAT ID:
+	mov	dx,fat_id		;get it
+	cmp	dx,SD_FAT_ID
+	 jae	sssd_e			;then it's DOS, disk_modes[] already set
+
+sssd_cpm:
+	mov	disk_modes[bx],0
+;	jmps	sssd_e
+
+sssd_e:
+	ret
+eject
+
+read_id:
+;-------
+; read ID expects the control byte and the drive/head byte
+; set up before it is called.
+; It returns with bx pointing to the returned status.
+;
+;	ENTRY:	ah = drive and head code
+;		al = FDC's command code for the density to read
+;		      the ID of.
+;
+;	EXIT:	bx = addr(rdid_ss)  ( read ID status string )
+;		al = error return code
+;			SUCCESS if the read ID status string contains
+;				the results of an attempted read ID
+;				operation
+;			ERROR if the drive was not ready.
+
+	dseg
+
+;	READ ID CONTROL STRING
+;
+rdid_cs	db	0, 0
+;		^  ^
+;		|  +---	head and drive
+;	  	+------	control byte
+
+;	READ ID STATUS STRING
+;
+;		S  S  S
+;		T  T  T
+;		0  1  2  C  H  R  N
+rdid_ss	db	0, 0, 0, 0, 0, 0, 0 
+	
+	cseg
+
+; set up the read ID control string:
+	mov	rdid_cs,al		; set up the control byte
+	mov	( rdid_cs + D ),ah	; set up the drive and head field
+
+	mov	al,ah			; sense drive status requires the
+					; drive in al
+	and	al,FLPY_CNT_MASK	; mask out the head bit
+	call	sense_drvst		; is the drive ready
+
+	cmp	al,SUCCESS
+	 je	rdid1
+
+; the drive was not ready
+; so, return a hard error:
+	mov	al,ERROR
+	jmps	rdid2
+
+rdid1:
+; the drive is on line and ready
+; so, attempt to read the first header cruising by the head
+	mov	bx,offset rdid_cs	; send the read id command
+	mov	cx,length rdid_cs
+	call	send_cmd
+	mov	int_ctl,PRDID		; set the interrupt control 
+	sti
+
+	call	int_wait		; wait for the read
+
+	mov	bx,offset rdid_ss 	; get the status
+	mov	cx,length rdid_ss
+	call	stat_ret
+
+	mov	al,SUCCESS		; we tried to read the ID
+					; so, set a kosher return code
+ 	mov	bx,offset rdid_ss	; return a pointer to the status
+					; string
+rdid2:
+	ret
+
+	end
+                                                                                                                                                                                                                                                                                                                                                                            

@@ -1,0 +1,561 @@
+;==============================================================
+;
+;             I N T E R F A C E   M O D U L E 
+;
+;		       NTRFACE.A86
+;
+;==============================================================
+
+
+; This section of code is the run-time interface between the XIOS
+;  and the FIDDs. 
+;
+; Different device types use different methods to find the proper driver
+; to call.  The sequence of events is:
+;
+;	1.  The function number requested is checked to see if it
+;	    is a FIDD-supported function.  If not, it is passed back 
+;	    to the XIOS.  Currently, all console functions, buffer flush,
+;	    screen switch, status line, and all functions numbered higher
+;  	    than io_write are passed directly back to the XIOS.
+;
+;	2.  For disk functions, the disk requested is compared to a bit map
+;	    of disks controlled by FIDDs, and then either the XIOS or the
+;	    FIDD interface is called as required.
+;
+;	3.  Similarly, printer numbers are checked against printer numbers 
+;	    controlled by FIDDs, and either FIDD or XIOS is called.
+;
+;	4.  AUX device calls are passed directly to the function whose
+;	    address is stored in the alternate function table, which will
+;	    be either back to the XIOS or to a FIDD interface.
+;
+;	The entry routine must preserve the contents of AX,BX,CX,DX, and ES.
+;
+
+
+
+include CONFIDD.EQU
+
+
+DSEG
+
+	EXTRN	DPH_offset		:WORD			;from INIT
+	EXTRN	FIDD_off		:WORD
+	EXTRN	FIDD_seg		:WORD
+	EXTRN	DPH_table		:WORD
+	EXTRN	sysdat_diff		:WORD
+	EXTRN	sdatseg			:WORD
+
+CSEG
+
+	EXTRN	Strategy_ENT		:WORD
+	EXTRN	Interrupt_ENT		:WORD
+	EXTRN	Get_entries		:NEAR
+	EXTRN	Get_RPH			:NEAR
+	EXTRN	confidd_dseg		:WORD		;from INITRSP
+	EXTRN	FIDD_disk_map		:WORD
+	EXTRN	FIDD_disk_map		:WORD
+	EXTRN	console_root_off	:WORD
+	EXTRN	console_root_seg	:WORD
+	EXTRN	aux_root_off		:WORD
+	EXTRN	aux_root_seg		:WORD
+	EXTRN	printer_root_off	:WORD
+	EXTRN	printer_root_seg	:WORD
+	EXTRN	disk_root_off		:WORD
+	EXTRN	disk_root_seg		:WORD
+	EXTRN	XIOS_Entry_Offset	:WORD
+	EXTRN	XIOS_Entry_Segment	:WORD
+	EXTRN	system_priority		:BYTE	
+	EXTRN	process_priority	:BYTE
+
+XIOS_Entry		equ	dword ptr XIOS_Entry_Offset
+
+	PUBLIC	CONFIDD_Entry
+	PUBLIC	Char_IO
+	PUBLIC	Alt_function_table
+	PUBLIC	Set_switch
+
+
+
+
+;----------------------------------------------------------
+;	CONFIDD_Entry - entry point screening routine.
+;	Entry: 	AX = function number
+;		BX = PC Mode parameter
+;		CX, DX = function parameters
+;		DS = SYSDAT
+;		ES = UDA segment
+
+CONFIDD_Entry:
+
+; test function number to see if it might be for a FIDD
+
+	cmp	al,X_CONOUT		; console I/O?
+	jbe	call_XIOS		; go to XIOS is so
+	cmp	al,X_LISTOUT		; list I/O?
+	jbe	find_printer		; see if it's for a FIDD printer
+	cmp	al,X_AUXOUT		; aux I/O?
+	jbe	find_aux      		; see if it's for a FIDD
+	cmp	al,X_STATLINE		; switch or statline?
+	jbe	call_XIOS		; go to XIOS if so
+	cmp	al,X_WRITE		; disk I/O?
+	jbe	find_disk		; see if it's for a FIDD disk
+					; otherwise just return to XIOS
+; pass control to XIOS entry routine
+
+call_XIOS:
+	jmpf	cs:XIOS_Entry		
+
+call_function:				; pass control to routine pointed to by alternate
+					; function table
+
+; shift paramter in BX to AX.  This conflicts with the documented
+; paramter passing conventions of PC Mode function 31, but it agrees
+; with the ENTRY routine in the sample IBM PC XIOS.
+	
+	xchg	ax,bx			; get function number in bx
+	xor	bh,bh
+	shl	bx,1			; convert to word index
+
+	push	ax
+	mov	al,FALSE		; set to no switch
+	call	set_switch
+	pop	ax
+
+	call	cs:alt_function_table[bx] ; call appropriate processing funct.
+
+	push	ax			; reset priority
+	mov	al, TRUE
+	call	set_switch
+	pop	ax
+
+	retf				; return far to the operating system
+
+
+; Traverse list of printer FIDDs and see if the current
+;  request is for one managed by a FIDD.  Printer number is		
+;  stored int the device type field of the FIDD header.
+
+find_printer:		
+	push	es				  ; save UDA segment
+	push	ax				  ; save function request
+	les	di,cs:dword ptr printer_root_off  ; point to first printer FIDD
+
+next_printer_FIDD:
+	mov	ax,es				; ES = FFFF when end of list reached
+	cmp	ax,0FFFFh			; end of list?
+	jz	no_printer
+	cmp	dl,es:byte ptr FH_Attributes[di]	; check printer number
+	je	found_printer_FIDD		; jump if this is our printer
+	les	di,es:FH_Next_FIDD[di]		; else get next FIDD header
+	jmp	next_printer_FIDD		; and try again
+
+found_printer_FIDD:
+	pop	ax			; recover function request
+	pop	es			; recover UDA in DI
+	jmp	call_function		; go execute FIDD function
+	
+no_printer:		
+	pop	ax			; recover function request
+	pop	es			; restore UDA to ES
+	jmp	call_XIOS		; and retreat to XIOS
+
+
+find_AUX:
+	push	es			; save UDA segment
+	les	di,cs:dword ptr aux_root_off	; point to first AUX device
+	push	ax
+	mov	ax,es			; check if any AUX device present
+	cmp	ax,0FFFFh		; ES = FFFF if no AUX device
+	pop	ax			; recover function request
+	pop	es			; recover UDA in DI
+	jz	no_AUX			; jump if not
+	jmp	call_function		; go execute FIDD function
+
+no_AUX:
+	jmp	call_XIOS		; and retreat to XIOS
+
+
+find_disk:	; compare disk requested with the bit map of disks controlled
+		; by FIDDs, and dispatch function request accordingly
+	push	ax			; save function number
+	mov	bp,sp			; point to IOBP on stack
+	push	cx			; save parameter
+	cmp	al,X_SELECT		; is this a select call?
+	je	sd_find_disk		; don't look on stack for disk if so
+	mov	cl,Selected_Disk	; get disk number
+
+sd_find_disk:
+	mov	ax,1
+	shl	ax,cl			; set bit corresponding to disk number
+	test	ax,cs:FIDD_disk_map	; is this disk driven by a FIDD?
+	pop	cx			; recover parameters
+	pop	ax
+	jz	call_XIOS		; go to XIOS if not
+	jmp	call_function		; else go to FIDD
+
+
+eject
+
+;------------------------------------------------------------------
+alt_function_table:
+	dw	offset error        	;  0 console status
+	dw	offset error		;  1 console input
+	dw	offset error		;  2 console output
+	dw	offset error		;  3 list status
+	dw	offset error		;  4 list output
+	dw	offset error		;  5 auxillary input
+	dw	offset error		;  6 auxillary out
+	dw	offset error		;  7 switch screen
+	dw	offset error		;  8 update or print new status
+	dw	offset Sel_Disk		;  9 select disk
+	dw	offset Read_disk	; 10 read logical sector
+	dw	offset Write_disk	; 11 write logical sector
+
+error:		; control passed to this area if no routine is in place
+	ret
+
+
+; ---------------------------------------------------------
+; IO_SELDSK		
+;
+; On entry:
+;	al = 09
+;	cl = drive number
+;	dl(bit 0) = if first select
+;
+; On exit:
+;	ax = offset of DPH
+;	ax = 0000 if invalid drive
+; 	bx = same as ax
+;	ALL SEGMENT REGISTERS PRESERVED.
+
+Sel_Disk:				; Select disk
+
+	push	ds			; save original data seg
+	mov	ds,confidd_dseg		; point to our local data
+	mov	bl,cl
+	mov	bh,0
+	add	bx,bx			; get word offset
+	add	bx,offset DPH_table	;
+	mov	bx,word ptr [bx]
+	add	bx,sysdat_diff		; convert to sysdat seg
+	mov	ax,bx			;
+	pop	ds			; recover original data seg
+	ret				; return to the caller
+
+
+
+; ---------------------------------------------------------
+; IO_READ    read sector
+;
+; On entry:
+;	bp ==> IOPB on stack
+;	al = 10 (0Ah)
+;
+; On exit:
+;	al = 	0  no error
+;		1  physical error
+;	     0FFh  Media changed
+;
+;	ah = 	extended error code
+;	bx = 	same as ax
+;	ALL SEGMENT REGISTERS PRESERVED
+
+
+Read_Disk:				; Read from disk
+; Convert the IOPB to RPH format
+; Pickup the pointer to the FIDD from the device chain.
+; call the strategy and interrupt routines
+;
+	
+	push	es
+	push	ds
+	mov	ds,cs:confidd_dseg	; point at local data
+	
+; locate a packet to use for call
+
+	mov	ax,0
+	call	Get_RPH		; Get the first free Request packet
+
+; build the general packet for the request
+
+	mov	es:RPH_length[bx],Plen_read	; set the packet length
+	mov	es:RPH_command[bx],C_read	; set the command
+	mov	es:RPH_status[bx],0		; clear the status	
+	jmp	RW_Common
+
+
+
+
+; ---------------------------------------------------------
+; IO_write 		 write sector.
+;
+; On entry:
+;	bp ==> IOPB on stack
+;	al = 10
+;
+; On exit:
+;	al = 	0  no error
+;		1  physical error
+;	     0FFh  Media changed
+;
+;	ah = 	extended error code
+;	bx = 	same as ax
+;	ALL SEGMENT REGISTERS PRESERVED
+
+
+
+Write_disk:				; Write to disk
+
+; Convert the IOPB to RPH format
+; Pickup the pointer to the FIDD from the device chain.
+; call the strategy and interrupt routines
+;
+	
+	push	es
+	push	ds
+	mov	ds,cs:confidd_dseg	; point at local data
+	
+; locate a packet to use for call
+
+	mov	ax,0
+	call	Get_RPH		; Get the first free Request packet
+
+; build the general packet for the request
+
+	mov	es:RPH_length[bx],Plen_write	; set the packet length
+	mov	es:RPH_command[bx],C_write	; set the command
+	mov	es:RPH_status[bx],0		; clear the status	
+	jmp	RW_Common
+
+
+
+RW_Common:
+
+	; Add the parameters specific to the read / write.
+
+
+	mov	es:RPH_media_desc[bx],000h	; the unknown media descriptor
+	mov	ax,DMA_segment			; pick up the transfer addr.
+	mov	es:RPH_tran_seg[bx],ax		; set the DTA segment
+	mov	ax,DMA_offset			; get the transfer offset
+	mov	es:RPH_tran_off[bx],ax		; set the DTA offset
+	mov	al,Multi_sector_count		; get the sector count
+	mov	ah,0				; convert byte to word
+	mov	es:RPH_sec_count[bx],ax		; set ms-dos sector count
+	mov	ax,Selected_track		; get the track
+
+; accurate sectors/track cannot be calculated from BPB so set to 1
+
+	add	ax,Selected_sector		; ax = logical sector
+	mov	es:RPH_sec_start[bx],ax		; set the logical sector
+
+; set the segments into memory for the current fidd
+	mov	al,selected_disk		; get the disk number
+	mov	cl, al				; al = number of fidd drive
+	mov	ch, 0				; cx = number of  all drives.
+	inc	cx				; adjust for loop
+	mov	dx,cs:Fidd_disk_map		;
+test_drive:
+	test	dx,1				; is this our drive?
+	jnz	test_bottom			; BR if so
+count_this_one:
+	dec	al				; adjust for system drives
+test_bottom:
+	shr	dx, 1
+	loop	test_drive
+
+; search for fidd
+	push	ds
+	mov	si,cs:disk_root_off
+	mov	ds,cs:disk_root_off+2
+check_for_next:
+	cmp	al,FH_no_units[si]
+	jb	found_FIDD
+	sub	al,FH_no_units[si]
+	lds	si,ds:[si]			; load the next fidd
+	jmp	check_for_next
+found_FIDD:
+; this is the fidd
+	mov	dx,ds				;dx:si = fidd addr
+	pop	ds
+	mov	FIDD_off,si
+	mov	FIDD_seg,dx
+
+	mov	es:RPH_unit[bx],al
+	jmp	setup_call
+setup_call:
+	call	Get_entries			; set up the call segments
+	push	ds				; save our data
+	mov	ds,word ptr Strategy_ENT+2	; point at FIDD's data
+	
+	callf	Dword ptr Strategy_ENT		; call the strategy
+	callf	Dword ptr Interrupt_ENT		; execute the command
+
+	pop	ds				; recover our data seg
+	
+	test	es:RPH_status[bx],S_error	; was there any error
+	jz	no_error
+	mov	ax,es:RPH_status[bx]		; load the status word
+
+errors:
+	and	ax,S_Any_Error			; clear all non error bits
+	cmp	ax,S_General_Failure		; is error in range
+	jbe	no_range_error
+	mov	ax,0ch
+no_range_error:
+	add	ax,ax				; double for word values
+	add	ax,offset error_table		; index into error table
+	mov	bx,ax
+	mov	bx,[bx]
+	mov	ax,bx				; get the error
+	jmp	exit
+No_error:
+	mov	ax,0
+	mov	bx,0
+exit:
+	pop	ds
+	pop	es
+
+	ret		
+	
+
+
+
+
+; =========================================================
+;    Character I/O emulator
+; =========================================================
+
+;----------------------------------------------------------
+;	Char_IO  --  entry point for character IO directed
+;	    at MS-DOS. This routine is necessary because
+;	    the emulator isn't loaded until an MS-DOS program
+;	    is loaded.
+;	Entry:	AH = FUNCTION NUMBER
+;		DH = CHARACTER OR 
+;		DX = STRING
+;-------------------------------
+; valid functions are 1,2,6,9
+
+word1	dw	0
+word2	dw	0
+
+Char_IO:
+	push	bx
+	push	cx		; save the new function register
+	cmp	ah,1
+	je	good_call
+	cmp	ah,2
+	je	good_call
+	cmp	ah,6
+	je	OK_call
+	cmp	ah,9
+	je	good_call
+
+bad_call:
+OK_return:
+	pop	cx
+	pop	bx
+	IRET			; just return
+good_call:
+	mov	cl,ah
+	int	0E0h		; call the BDOS
+	jmp	OK_return
+OK_call:
+	cmp	dl,0FEh		; is it a special call (input)
+	jb	good_call	; handle it normally
+	je	odd_character	; if it is an FE to be output
+	mov	cl,ah
+	int	0E0h
+	cmp	al,0		; if 0 then set the zero flag
+	jne	OK_return
+	pop	cx
+	pop	bx
+	pop	CS:word1
+	pop	CS:word2
+	popf	
+	cmp	al,al
+	pushf
+	push	CS:word2
+	push	CS:word1
+	IRET
+odd_character:
+	and	dl,not 80h	; clear the high bit
+	jmp	good_call
+
+
+;------------------------------------------
+; S E T   S W I T C H 
+;	al = TRUE  - switching allowed
+;	   = FALSE - no switching allowed
+;	DS = SYSDAT segment
+;
+
+set_switch:
+	push	bx
+	push	cx
+	push	dx
+	cmp	al,TRUE			; is it true?
+	jne	no_switch
+	mov	al,cs:process_priority
+	jmp	set_priority
+no_switch:
+					; save our current priority
+	push	bx			; and  set to a higher priority
+	mov	bx,68h
+	mov	bx, [bx]
+	mov	al,byte ptr 05[bx]
+	mov	cs:process_priority,al
+	pop	bx
+	mov	al,cs:system_priority	; get the system priority
+set_priority:
+	mov	ah,0
+	mov	dx,ax			; get the priority
+	mov	cl,P_PRIORITY	
+	int	BDOS			; call the system and set the priority
+
+	pop	dx
+	pop	cx
+	pop	bx
+	ret
+
+
+; 	Data living in the code segment for the ENTRY routine
+
+
+
+eject
+
+;==========================================================
+;
+;        	D A T A   A R E A 
+;
+;==========================================================
+
+		DSEG
+
+error_table	dw	00302h
+		dw	00101h
+		dw	08001h
+		dw	00101h
+		dw	01001h
+		dw	00101h
+		dw	04001h
+		dw	00301h
+		dw	00401h
+		dw	0ff00h
+		dw	01001h
+		dw	00201h
+		dw	08001h
+
+
+
+
+
+	end
+
+	
+                                                                                                                                                                                                                                     

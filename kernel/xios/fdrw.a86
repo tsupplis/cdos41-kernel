@@ -1,0 +1,1345 @@
+;FDRW.A86
+title 'FLOPPY R/W DRIVERS'
+;****************************************
+;	FLOPPY DISK MODULE		*
+;	Last changed : 4/25/85		*
+;	JMB				*
+;****************************************
+
+nolist
+include exerror.equ
+include system.lib
+include popf.a86		;286 bug
+include diskhdr.equ
+include fd.equ
+include dskcomn.equ
+list
+;include exerror.equ
+;include system.lib
+;include popf.a86		;286 bug
+;include diskhdr.equ
+;include fd.equ
+;include dskcomn.equ
+
+cgroup	group	code, data		;8080 XIOS model
+
+	cseg
+public	read, write
+public	fdc_init, flint
+
+extrn	dispatch:word, sysdat:word
+extrn	doorop:byte, supif:near
+extrn	read_write:near, io_read:near, build_cs:near, build_fmb:near
+extrn	read_id:near
+
+	dseg
+
+extrn	current_reskew:word
+extrn	xlts:byte, xltd1:byte, xltd2:byte, xltd3:byte
+extrn	dpbs1:byte, dpbs2:byte, dpbd1:byte, dpbd2:byte, dpbd3:byte
+extrn	dpbd4:byte, dpbd5:byte, dpbd6:byte
+extrn	dpbpc1:byte, dpbpc5:byte, dpbpc6:byte
+
+extrn	re_skew_26_2:byte, re_skew_15_2:byte, re_skew_8_2:byte
+extrn	log_phy:byte, phy_log:byte
+extrn	disk_modes:byte
+extrn	dph_tbl:word
+
+;In FDSEL.A86:
+extrn	c_fmb:byte, phy_drive:byte, f_call:word, fmt:byte
+
+;For FDSEL.A86:
+public	stat_ret, stat_reg_3_tbl, p_seek, send_cmd
+public	rw_cs, recal, int_ctl, sense_drvst, int_wait
+
+extrn	idrive:byte, itrack:word, isector:byte
+extrn	idmaoff:word
+eject
+
+type_disk_error	db	0		; error log byte
+
+fdc_op		db	0		; operation byte that read or write
+					; will pass to phys_rw
+
+tburn		dw	0		; FDC needs 12 us between each read
+					; of the master status port.This is the 
+					; the counter we use for it in process 
+					; context.
+
+iburn		dw	0		; The counter for use in interrupt
+					; context.
+
+int_drv_flpy	db	TRUE		; turns on the interrupt drive for
+					; the floppies
+	cseg
+eject
+
+;==========
+flint:					; Floppy Disk Interrupt Entry
+;==========
+;	ENTRY:	interrupt entry
+;
+;	EXIT:	leap to the system dispatcher.
+;	NOTE:	this interrupt handler expects an 8080 mode IO system
+
+	push	ds			; set up a local stack
+	mov	ds,sysdat
+	mov	flpy_int_ssreg,ss
+	mov	flpy_int_spreg,sp
+	mov	ss,sysdat
+	mov	sp,offset flpy_int_tos
+
+	push	ax			; save the registers we need
+	push	bx			; in interrupt context
+
+	call flpy_fork_r
+
+	pop	bx			; restore the registers used
+	pop	ax			; by the interrupt handler
+
+	mov	ss,flpy_int_ssreg	; restore the pre-interrupt stack 
+	mov	sp,flpy_int_spreg
+	pop	ds			; now the pre-interrupt data segment
+
+	jmpf cs:dword ptr dispatch	; go to the system dispatcher
+
+flpy_fork_r:
+;-----------
+; 	This takes care of the FDC interrupt request
+; 	It detects a door-open interrupt from the FDC
+;
+;	ENTRY:	from the flint
+;
+;	EXIT:	none
+;
+	dseg
+
+int_ctl		db	0		; Interrupt Control Byte. Routine that
+					; initiated the IO must set this .
+fsb		db	0		; 1st status byte read from FDC's status
+					; stack when handling a R/W or Read ID
+					; when processing a read/write
+					; interrupt.
+
+fdc_interrupt_stat	db	0, 0	; returned status from an interrupt
+;				^  ^
+;				|  +---	present cylinder number
+;				+------	fdc status byte 0
+
+last_main_status	db	0	; last read from FDC's main status port
+					; when FDC had a request for the master
+mstr_lc		dw	0		; Master Status Port Loop Counter
+					; Used to find out if we have to wait
+					; for FDC to become ready for command
+					; or Status transfers after it sends us
+					; an interrupt.
+
+ffrc0		dw	0		; Incremented if int handler is entered
+					; and FDC wants a Sense Int Status Cmd,
+					; and Int Code shows this interrupt is
+					; not from a change in a FDC ready line.
+
+ffrc1		dw	0		; loop counter for the FDC when
+					; FDC gets ready to give us status
+
+ffrc2		dw	0		; loop counter for the FDC when
+					; establishing the data direction
+					; from the FDC to the CPU.
+
+	cseg
+
+ffr0:
+
+	push cx ! push dx		; Make sure FDC is ready for either a
+	push di ! push si		; a Command or Status Transfer
+	push bp ! push es
+ffr1:
+	in	al,FDCS 		; Is FDC ready for data transfer ?
+	test	al,MSTR_RQM 		
+	 jnz	ffr2			; Yes
+	inc	mstr_lc			; inc the master port loop count
+	jmps	ffr1			; query the port again.
+
+ffr2:					; FDC ready for data transfer
+	mov	last_main_status,al	; save the main status register image
+	test	al,MSTR_IO_DIRECTION 	; Does FDC want a command ? 
+         jz	ffr18			; Yes
+	jmp	ffr3			; No, it wants status (or a truffle).
+
+ffr18:					; Send Sense Interrupt Status command.
+	mov	al,F_RSTS		; Removes the FDC's pending interrupt.
+	out	FDCD,al		
+	call	pic_reset		; Reset the FDC's PIC IR line
+	push	cx			; Read the FDC's interrupt status
+	mov	cx,length fdc_interrupt_stat
+	mov	bx,offset fdc_interrupt_stat	
+
+ffr9:					; Wait for FDC to be ready for status rd
+	call	ibrn
+	in	al,FDCS
+	test	al,MSTR_RQM
+	 jnz	ffr14
+	inc	ffrc1
+	jmps	ffr9
+ffr14:
+	test	al,MSTR_IO_DIRECTION
+	 jnz	ffr15
+	call	ibrn
+	in	al,FDCS
+	inc	ffrc2
+	jmps	ffr14
+ffr15:
+	in	al,FDCD			; get the data byte
+	mov	[bx],al			; save the data byte
+	inc	bx			; point to next buffer position
+	loop	ffr9			; loop until the entire expected
+					; status is read
+	pop	cx			; restore counter register
+	cmp	int_ctl,PSEEK		; Expect a seek complete interrupt ?
+	 jne	ffr7			; No
+	jmps	ffr11
+ffr7:					; Check for Recal complete interrrupt
+	cmp	int_ctl,PRECAL
+	 jne	ffr8			; Don't expect one.
+ffr11:			        	; check Interrupt Code bits (6 & 7) of 
+					; STR0 for change of ready line status
+	mov	al,fdc_interrupt_stat
+	and	al,STR0_IC6 or STR0_IC7 or STR0_SE
+	cmp	al,RLC 
+         jne	ffr10			; Not due to change of status.
+	call	d_open			; Change of status, post door-open flag
+	jmps	ffre
+ffr10:					; Interrupt not due to change of ready
+					; line status and we expect a seek or
+					; or recal complete interrupt.
+	mov	int_ctl,0		; This implies the seek or recal has
+       	call	iset			; completed. Reset int_ctl & do flagset
+	jmps	ffre
+ffr8:					; Didn't expect a Seek or Recal complete
+					; interrupt. Check Int bits of STR0
+	mov	al,fdc_interrupt_stat	; for change of ready line status.
+	and	al,STR0_IC6 or STR0_IC7 or STR0_SE
+	cmp	al,RLC 
+         jne	ffr13			; Not due to change of status.
+	call	d_open			; Change of status, post door-open flag
+	jmps	ffre
+ffr13:					; No change in ready line status & we're
+					; not expecting a seek or recal complete
+					; interrupt. Record event and leave.
+	inc	ffrc0
+	jmps	ffre
+
+ffr3:					; FDC wants the CPU to read its status 
+					; Expect to handle a Read ID or R/W int
+	cmp	int_ctl,PRW		; Are we expecting a R/W complete int ?
+	 jne	ffr4			; No
+	jmps	ffr12
+
+ffr4:
+	cmp	int_ctl,PRDID		; Expecting a Read ID interrupt ?
+	 jne	ffr5			; No
+
+ffr12:
+	mov	int_ctl,0		; reset int_ctl
+	in	al,FDCD			; get the status byte
+	mov	fsb,al			; save it for the process
+	call	pic_reset		; Reset the FDC's PIC IR line
+	call	iset			; wake up the process
+	jmps	ffre	  
+
+ffr5:			        	; We should never get here.
+					; FDC wants to send us Status, but we
+					; never issued a command that should leave
+					; the FDC in a state where it wants to send
+					; us status.
+	call	stat_errf
+
+ffre:				
+	pop es ! pop bp			; restore the environment
+	pop si ! pop di
+	pop dx ! pop cx
+	ret
+eject
+
+iset:
+;----
+; INTERRUPT (flag) SET
+;
+	mov	dl,fdc_flag		; set the systems floppy flag
+	mov	cl,f_flagset
+	call	supif
+	ret
+
+pic_reset:				; Reset the floppy's PIC IR line
+;---------
+	pushf
+	cli
+	mov	al,FLPY_EOI
+	out	MASTER_PIC_PORT,al
+	popff
+	ret
+
+
+
+d_open:					; Door Open
+;------
+;	Set the global door open flag in the XIOS header.
+;	Set the media flag in the DPH of the drive that 
+;	issued the door open interrupt.
+;	Use the unit select code from status register 0 of the FDC 
+;	to figure out which drive issued the door open interrupt.
+;
+;	Also use the unit select code from STR0 to index into the DPH 
+;	table for the DPH that needs it's media flag posted.
+
+	mov	doorop,TRUE		; global door open interrupt flag
+					; post media flag in the DPH 
+	xor	bx,bx			; clear the index register
+	mov	bl,fdc_interrupt_stat	; get the physical floppy code
+	and	bl,STR0_UNIT_MASK	; mask off the irrelevant bits
+	mov	bl,phy_log[bx]		; bias the index off of the first
+					; floppy in the system.
+					; this translates from the 
+					; controller's drive number to the
+					; system drive number
+	shl	bx,1			; it's a word value table
+	mov	bx,dph_tbl[bx]		; bx = DPH of the drive that needs
+					; it's media flag set
+	mov	MF[bx],TRUE		; set the MF 
+	ret
+eject
+
+stat_errf:				; Status Error Handler
+;---------
+;	By the time we get here the FDC is expecting to have
+;	it's status read, but we never issued a command that
+;	should put the FDC is this state.
+;
+;	The FDC has an outstanding interrupt pending to the PIC.
+;	We have to clear the pending interrupt from the FDC
+;	so we can reset the PIC.
+;
+;	There is no code ready to handle this interrupt so
+;	just iret when we get back.
+
+	dseg
+
+stat_errc	dw	0		; status error counter
+stat_errb	rb	10H		; status error handler buffer
+bytes_read	dw	0		; the number of status bytes read
+
+sefs		db	0		; status error first status byte
+					; read flag
+	cseg
+
+	inc	stat_errc		; indicate we have been here
+	mov	sefs,TRUE		; initialize the first status 
+					; byte flag
+	mov	bytes_read,0		; clear the number of bytes read
+	mov	bx,0			; index into the buffer
+
+se0:
+	call	ibrn
+	in	al,FDCS			; wait for the FDC to become
+	test	al,MSTR_RQM		; ready to send us its status
+	 jz	se0
+	test	al,MSTR_IO_DIRECTION 	; Check data transfer direction
+         jz	se1
+	in	al,FDCD			; FDC still wants to send us status.
+	mov	stat_errb[bx],al	; put it in the circular buffer
+	inc	bx			; inc  the buffer pointer
+	and	bx,length ( stat_errb - 1 )
+	inc	bytes_read		; inc  the number of bytes we read
+	cmp	sefs,TRUE 		; Is this 1st status byte read ?
+         jne	se2			; No
+	call	pic_reset
+	mov	sefs,FALSE
+se2:
+	jmps	se0
+se1:
+	ret
+eject
+
+ibrn:
+;----
+;	Time Use routine used by the interrupt code to wait for the FDC.
+
+	mov 	iburn,BURN
+ibrn0:
+	dec	iburn
+	 jnz	ibrn0
+	ret
+
+fdc_init:				; FDC initialization
+;--------
+;	Sets up the values for FDC's 3 internal timers :
+;	  HUT (head unload time)	= (0fh * 16ms) [240ms]
+;	  SRT (step rate)		= (0fh - 0dh * 1ms increments) [3ms] 
+;	  HLT (head load time) 		= (31H * 2ms) [98ms]
+;
+;	Set up FDC's DMA mode:
+;	  ND ( non-dma bit )		= DMA mode [0]
+;	(See pgs.41,38 of DISK1 manual.
+;
+;	This system uses a byte per floppy as a bit vector for floppy type.
+;	It also changes the DRM field of DOS DBPs.
+;
+;	ENTRY:	none
+;
+;	EXIT:	The FDC is initialized as specified above
+
+	dseg
+
+spec_str	db	f_spec, 0dfh, 70	
+
+	cseg
+
+	mov	bx,offset spec_str	; intialize the FDC
+	mov	cx,length spec_str
+	call	send_cmd
+	sti				; Now init FMT to zeros.
+
+	push	es			; save the extra segment
+	mov	ax,ds			; set up for store string operation
+	mov	es,ax
+	xor	ax,ax
+;	mov	cx,length fmt
+	mov	cx,16
+	mov	di,offset fmt
+	rep stosb			; clear the table to 0
+	pop	es			; restore the extra segment
+	ret
+eject
+;====
+read:
+;====
+;	ENTRY:	bp = addr of IOPB
+;
+;	EXIT:	if track = 0 and mode = CP/M, disks are treated as SS SD 
+;		if track > 0	go to the read write deskewing routine 
+
+	cmp	TRACK, 0 
+         jne 	rd1
+
+	xor	bx,bx			;check mode
+	mov	bl,idrive
+	cmp	disk_modes[bx],0	;CP/M?
+	 jne	rd1			;no
+
+;else go for SD:
+	mov	fdc_op,FDC_READ		;here if trk 0 and CP/M
+	call	trk0_rw			;skewing prep.
+
+	mov	si,offset read1
+	call	read_write		;calls read1
+
+	push	ax			;save error
+	call	trk0_rw1
+	pop	ax
+	jmps	rd2
+rd1:					; Not track 0 or PCMODE
+	mov	si,offset read1
+	jmp	read_write
+rd2:
+	ret
+	
+read1:
+;-----
+	mov	fdc_op,FDC_READ
+	call	phys_rw
+	ret
+eject
+
+;=====
+write:
+;=====
+;	ENTRY:	bp = addr of IOPB
+;
+;	EXIT:	if track = 0 and CP/M, disks are treated as SS SD 
+;		if track > 0	go to the read write deskewing routine 
+
+	cmp	TRACK, 0 
+         jne	wrt0
+	xor	bx,bx
+	mov	bl,idrive
+	cmp	disk_modes[bx],0	;CP/M?
+	 jne	wrt0			;no
+
+;else do the SD trick:
+	mov	fdc_op, FDC_WRITE
+	call	trk0_rw			;skewing prep.
+
+	mov	si,offset write1
+	call	read_write		;calls write1
+
+	push	ax			;save error
+	call	trk0_rw1		;skewing de-prep.
+	pop	ax
+	jmps	wrt1
+
+wrt0:					; Not track 0 or PCMODE
+	mov	si,offset write1
+	jmp	read_write
+wrt1:
+	ret
+
+write1:
+;------
+	mov	fdc_op,FDC_WRITE	; copy current FMB
+	call	phys_rw
+	ret
+eject
+
+trk0_rw:
+;-------
+;	This is the setup for track 0 
+;
+;	ENTRY:	bp = addr of IOPB
+
+	dseg
+
+save_fmb	db	0		; temp store for current fmb
+saved_reskew	dw	0		; temp store for the current reskew
+rw_save		rb	9		; temp store for the current rw_cs
+
+	cseg
+
+	mov	f_call,FALSE		;used in f_dsk_sel
+	mov	al,c_fmb		;save the current FMB
+	mov	save_fmb,al
+	mov	ax,current_reskew	;and the current reskew index
+	mov	saved_reskew,ax
+
+;Save read-write control string:
+	pushf				; set up the flags and es
+	push	es
+	mov	ax,ds
+	mov	es,ax
+	cld
+
+	mov	cx,9			; set up the length, source, and dest
+	mov	si,offset rw_cs
+	mov	di,offset rw_save
+	rep movsb			; do the move
+
+	pop	es			; restore the environment
+	popff
+
+;Put the temp. values in place:
+	mov	ax,offset re_skew_26_2	; set the current reskew factor
+	mov	current_reskew,ax
+	xor	al,al			; set the floppy mode byte
+	mov	c_fmb,al		; fmb code for a S.S. S.D. floppy
+
+	call	build_cs		;Routine in disk select module that
+					;sets up the select-
+					;specific bytes in the rw_cs.
+	ret
+eject
+
+trk0_rw1:
+;-------
+;	This is the reset from track 0 
+;
+;	ENTRY:	bp = addr of IOPB
+
+	mov	al,save_fmb		;restore the current FMB
+	mov	c_fmb,al
+	mov	ax,saved_reskew		;and the reskew factor
+	mov	current_reskew,ax
+
+	;restore the pre-track 0 operation read-write control string:
+	pushf				; set up the flags and es
+	push	es
+	mov	ax,ds
+	mov	es,ax
+	cld
+
+	mov	cx,9			; set up the length, source, and dest
+	mov	di,offset rw_cs
+	mov	si,offset rw_save
+	rep movsb			; do the move
+
+	pop	es			; restore the environment
+	popff
+
+	ret
+eject
+
+phys_rw:				; Physical read/write
+;------
+; 	Does the actual read or write from the floppy.
+;
+;	ENTRY:	fdc_op	= FDC_READ if a read / FDC_WRITE if a write
+;		idrive	= the drive to read or write
+;		itrack	= the track to read or write from
+;		isector	= the sector to read or write from
+;		idmaoff	= the dma offset to read or write to or from
+;		idmaseg	= the dma segment to read or write to or from
+;
+;		N, GTL, and DTL in rw_cs are to be set up by io_seldsk
+;
+;	EXIT:	al = SUCCESS if everthing went OK
+;		al = RW_MEDIA_CHANGE if the media was changed
+;		al = RW_ERROR if an error other than a detectable
+;		     media change occured.
+;		al = WP_ERROR if disk has write protect notch uncovered
+
+	dseg
+
+;	           D  C  H  R  N  EOT  GPL   DTL
+rw_cs	db	0, 0, 0, 0, 0, 0,  0,   0,    0	; read_write_control_string
+
+;		S  S  S  			; r/w status return string
+;		T  T  T
+;		0  1  2  C  H  R  N
+rw_ss	db	0, 0, 0, 0, 0, 0, 0 
+
+
+last_fmb	db	0
+last_mode	db	0
+
+rw_rc		db	0		; read write recal counter
+rw_rt		db	0		; read write retry counter, used
+					; by the sense drive status code
+rw_rt1		db	0		; read write retry counter, used
+					; by the main read/write loop
+
+	cseg
+	xor	bh,bh
+	mov	bl,idrive
+	mov	al,disk_modes[bx]	;get the present mode
+	mov	last_mode,al
+
+	mov rw_rc,RW_RECAL_COUNT	; Pre-load retry counters.
+	mov rw_rt,RETRY_COUNT
+	mov rw_rt1,RETRY_COUNT
+rw1:					; Is drive on line ?
+	mov 	al,phy_drive		
+	call	sense_drvst
+	cmp	al,SUCCESS 
+         je	rw3
+	dec	rw_rt			; Drive wasn't ready.
+	 jz	rw2
+	    				; We still have have some more retries.
+	    				; Wait a while and check the ready status
+	    				; After the second try, wait 16MS longer
+	    				; than the previous attempt.
+	 mov	dx,RETRY_COUNT		; if retries > 0 then
+	 sub	dl,rw_rt		;  delay = Max retries - retries left
+	 cmp	dx,0 
+          jne	rw12	
+	 mov	dx,DELAY_16MS		;  else delay = 1
+rw12:
+	 mov	cl,F_DELAY
+	 call	supif
+	 jmps	rw1			; check the ready status again
+rw2:					; Ran out of retries while checking for
+					; the drive being ready. So, return 
+	mov 	ah,ATTA_FAILED		; a hard error.
+	mov	al,RW_ERROR
+	jmp	rw_e
+	
+rw3:					; The drive is ready and on line. Set
+					; up the read write control string
+	call	rw_preamble		; and do the seek.
+	cmp	al,SUCCESS 
+         je	rw4
+        mov	ah,SEEK_FAILED		; rw_preamble had trouble with the seek
+	mov	al,RW_ERROR		; Return an error.
+	jmp	rw_e
+rw4:
+; Some code to deal w/ an apparent problem w/ the 8272 follows.  If a READ-MFM
+; or a READ-ID-MFM command is issued to the FDC and the track in question is
+; SD-128 AND has been formatted on another machine, the FDC tends to never
+; come back...i.e., never interrupt.  The "build_fmb" routine in FDSEL.A86
+; handles the READ-ID problem by first doing READ-ID-FMs, and only switching
+; to MFM if the op. was not successful.  Track 0 seems to be the only one
+; affected.  Therefore, we'll check for a track 0 DD read here and read a
+; SD ID before the sector to confirm the media:
+
+	cmp	itrack,0		; track 0?
+	 jne	rw45
+	mov	al,rw_cs		; get the opcode
+	test	al,40h			; test the MFM bit
+	 jz	rw45			; if not set, SD and jump
+
+	mov	ah,phy_drive		; Read an SD ID
+	mov	al,FS_READ_ID
+	call	read_id
+	mov	al,STAT0[bx]
+	and 	al,FDC_INT_CODE_MASK
+	cmp	al,SUCCESS
+	 jne	rw45			; Since it wasn't SD, we'll let
+					; the R/W proceed
+	mov	al,RW_MEDIA_CHANGE
+	jmp	rw_e
+
+rw45:
+	mov	rw_rt1,RETRY_COUNT	; reset the retry count
+rw7:					; Top of the inner retry loop
+	mov	bx,offset rw_cs		; send out the command string
+	mov	cx,length rw_cs
+	call	send_cmd
+	mov	int_ctl,PRW		; set the interrupt action control
+	sti
+
+	call	int_wait		; wait for the read or write
+
+	mov	bx,offset rw_ss		; get the results of the operation
+	mov	cx,length rw_ss
+	call	stat_ret
+	mov	al,rw_ss		; get the FDC's return code
+	and	al,FDC_INT_CODE_MASK	; check for start but no end due to EOT
+	cmp	al,START_NO_END 
+         je	rw5	
+        jmps rw6			; Error other than End of Track
+rw5:					; error may have been due to EOT, check
+					; with Status register 1
+	cmp	byte ptr (rw_ss + 1),EOT_END
+	 jne	chk_wp
+	mov	al,SUCCESS		; Return code was EOT
+	jmps	rw_e
+chk_wp:					; thx HMVT
+	cmp	byte ptr (rw_ss + 1),ST1_WP ; was the disk write protected?
+	 jne	rw6
+	mov	al,WP_ERROR		; Return code
+	jmps	rw_e			; and back
+
+rw6:					; error was not an EOT, so retry.
+	dec	rw_rt1
+	 jnz	rw7			; If we haven't exhausted our retry
+					; attempts go to top of the inner loop
+	  				; Else had 10 failures to read the disk
+	  				; If no recal attempts were made,check 
+					; for a media change.
+	cmp	rw_rc,RW_RECAL_COUNT
+	 jne	rw8
+	mov	al,( rw_cs + D )	; sample the drive
+	call	build_fmb
+	cmp	al,c_fmb		; Compare it to what we thought we were
+					; reading.If not the same, it's a media
+	 jne	rw11			; change.
+	xor	bh,bh
+	mov	bl,idrive
+	mov	dl,disk_modes[bx]
+	cmp	dl,last_mode		; If dif. mode, show media change
+	 jne	rw11
+rw8:					; At this point we've made 10 retries
+					; on this sector, and media is the same
+					; as the one expected. Do recal.
+	dec	rw_rc			; decrement the recal counter
+	 jz	rw9
+	mov	al,( rw_cs + D )	; get the drive
+	call	recal			; do a recal
+	jmp	rw3			; goto the top of the recal loop
+rw9:					; We've tried 5 recals and 50 retries
+					; give up on the disk and return
+	mov	ah,ATTA_FAILED		; hard error to the BDOS.
+	mov	al,RW_ERROR
+	jmps	rw_e
+rw11:					; Media was changed.
+	mov	ah,NO_EXTD_ERR		; Return media change to the BDOS.
+	mov	al,RW_MEDIA_CHANGE
+rw_e:					; read write exit point
+	or	al,al			; set the flags on the return code
+	ret
+eject
+
+rw_preamble:
+;-----------
+; Read/write pre-amble does the following funtions
+;
+;   1] sets up D, C, H, R, and EOT fields of rw_cs
+;   2] sets up the 24 bit DMA address for the Disk1
+;   3] positions the head over the cylinder the track is on
+;      that we want to read or write.
+;
+;	ENTRY:	fdc_op	= read or write opertion
+;		idrive	= drive to prepare for the read or write
+;		itrack	= cylinder to seek to
+;		isector	= sector to read/write
+;		idmaoff	= where to get or put it
+;		idmaseg	=   "   "   "  "   "   "
+;		c_fmb   = the current floppy mode byte for this drive
+;			  it is set up by a previous BDOS call to io_seldsk
+;
+;	EXIT:	al = ERROR if there was a seek error
+;		al = SUCCESS if the seek happened OK
+;
+;	If the return code is SUCCESS the system exists in the
+;	following state:
+;
+;	  1] the command byte, D, C, H, R, and EOT fields of 
+;	  2] the R/W control string are set up
+;	  3] the dma address ( segment and offset ) is set up on the
+;	     DISK 1 controler.
+;	  4] The Head is positioned over the proper cylinder.
+;
+;	The following image of the read write control is here for
+;	reference, so we can see what bytes in the control string 
+;	are set up.
+;
+;		   command byte
+;			|
+;		        V  D  C  H  R  N  EOT  GPL   DTL
+;	rw_cs	db	0, 0, 0, 0, 0, 0,  0,   0,    0	
+
+	dseg
+
+rwp_rt		db	0		; retry counter, used by seek 
+					; code
+rwp_cyl		db	0		; rw_preambles local copy of the
+					; cylinder to seek to.
+	cseg
+
+; Set up the Read Write control string Record and End Of Track
+; fields.  The R and EOT fields are set to the same value
+; so the FDC will error out at the end of a track.  This is
+; because the Terminal count pin on the FDC is tied to ground.
+
+; The Bdos uses 0 relative sectors, but the FDC uses 1 relative
+; sectors.
+
+	mov	al,isector 	; get the sector the de-skewing/re-skewing
+				; wants returned.
+	inc	al		; translate from the BDOS's 0 relative
+				; sector reference to the FDC's 1 relative
+				; sector reference
+	mov ( rw_cs + R ),al	; stuff the read write control string's
+				; record field
+	mov ( rw_cs + EOT ),al	; and the read write control string's EOT
+				; field
+
+; set up the read or write control byte.  Use the fdc_op code to see
+;if it's a read or write.  Use density bit of FMB to see if it's 
+;single or dbl:
+	cmp	fdc_op,FDC_READ		; Is it a read ?
+	 jne	rwp2			; No
+	test	c_fmb,D_DENSITY 	; Is it double ?
+         jz	rwp1			; No
+	mov	rw_cs,F_DRDT
+	jmps	rwp4
+rwp1:					; it's a single density read
+	mov	rw_cs,F_RDAT
+	jmps	rwp4
+rwp2:					; it's a write operation
+	test	c_fmb,D_DENSITY 
+         jz	rwp3
+	mov	rw_cs,F_WRDT
+	jmps	rwp4
+rwp3:					; it's a single density write
+	mov	rw_cs,F_WRAT
+rwp4:					; FDC op code is now set
+	lea	bx,idmaoff		; set up the dma addr for DISK1
+	mov dx,2[bx]! mov ax,dx		; get the segment
+	mov cl,4! shl ax,cl		; (para to bytes) shift add to offset
+	mov cl,4! shr dh,cl		; save ms nibble
+	add ax,[bx]			; add the bytes
+	adc dh,0			; carry into msn
+
+	mov	dl,al			; send 24 bits to controller
+	mov al,dh! out F_DMA,al		; msb - lsb
+	mov al,ah! out F_DMA,al
+	mov al,dl! out F_DMA,al
+
+; Now we have to seek to the proper cylinder
+; for single sided disks the track requested is the
+; cylinder we need to put the head over.
+; For a single sided disk we always used head 0.
+; for double sided disk we have to divide the track by two
+; to derive the cylinder.  The head is selected depending on the
+; track, if were seeking to an ODD track it's head 1,
+; if it's an even track we select head 0.
+
+	mov	rwp_rt,RETRY_COUNT	; pre-load retry count
+	mov	ax,itrack		; get CCP/M's logical track
+	test	c_fmb,TWO_SIDED		; is it a two sided disk ?
+	 jz	rwp5			; No
+        shr	ax,1			; Yes, div by 2 to get cylinder
+rwp5:					; al-> cylinder we want to seek to
+	mov	rwp_cyl,al
+	mov	( rw_cs + C ),al	; Set cylinder # for R/W control string
+	mov	al,phy_drive		;Set up head/drive field of R/W ctl str
+	test	c_fmb,TWO_SIDED		; is it a double sided disk
+	 jz	rwp6			; No
+	test	itrack,1		; Check lsb for odd track.
+	 jz	rwp6			; Even track.
+	or	al,HEAD_BIT		; Set head bit in drive field of R/W
+					; ctl string for head 1
+	mov	byte ptr (rw_cs + H),1	; Now set head field for head 1
+	jmps	rwp7
+rwp6:					; it is head 0
+	mov	byte ptr ( rw_cs + H ),0
+rwp7:					; AL -> drive code with head bit OR'd in
+	mov	( rw_cs + D ),al	; Copy into R/W control string.
+rwp8:
+	mov	ah,( rw_cs + D )	; set up the drive/head parameter
+	mov	al,rwp_cyl		; set up the cylinder parameter
+	call	p_seek			; do the seek
+
+	cmp	al,SUCCESS 
+         je	rwp9 
+	dec	rwp_rt			; Seek failed, do the retry.
+	 jz	rwp10
+	mov	dx,DELAY_16MS		; Wait, and try again.
+	mov	cl,F_DELAY
+	call	supif
+	jmps	rwp8
+rwp10:					; Out of retries, return hard error
+	mov	ah,SEEK_FAILED
+	mov	al,ERROR
+rwp9:
+	or	al,al
+	ret
+eject
+
+p_seek:
+;------
+; Seek primitive.  This builds the seek command string from the 
+; parameters passed in.  It checks the drive status and tries to
+; seek.  After the seek it checks the return code from the FDC to see
+; if the FDC and the program agree on the track the head is over.
+;
+; If the drive is not ready, off line, or if the track the FDC thinks the
+; head is over is different from the track we wanted an error is returned.
+; This routine does no retries.  It is the responsibility of the caller
+; for all error recovery.
+;
+;	ENTRY:	ah = drive to seek on ( the head bit must be set up )
+;		     controler relative
+;		al = track to seek to
+;
+;	EXIT:	al = SUCCESS if everthing went OK
+;		al = ERROR if it could not find the right track
+;		     or the drive was off line
+
+	dseg
+
+seek_f_s	db	f_seek, 0, 0
+;				^  ^
+;				|  +---	new cylinder number
+;				+------	head and drive
+;
+; Refer to the fdc_interrupt_stat data structure at the beginning
+; of this program for a picture of the status returned by the FDC
+; from a seek operation.
+
+	cseg
+
+; set up the control string for a seek from the drive and
+; track passed in:
+	mov	( seek_f_s + D ),ah	; set up the drive to seek on
+	mov	( seek_f_s + C ),al	; set up the track to seek to
+
+	mov	al,ah			; parameter setup for 
+					; sense drive status
+	call	sense_drvst		; now sense the drive's ready status
+	cmp	al,SUCCESS
+	 je	ps0
+
+; the drive is not ready so return a hard error:
+	  jmps ps_e
+
+ps0:
+; the drive must be on line and ready:
+	mov	bx,offset seek_f_s	; send the seek command
+	mov	cx,length seek_f_s
+	cli
+	call	send_cmd
+	mov	int_ctl,PSEEK		; set the interrupt code
+	sti
+
+	call	int_wait		; wait for the seek
+
+	mov	al,fdc_interrupt_stat	; get status word 0
+	and	al,SEEK_MASK		; mask for the seek complete bit
+	cmp	al,VALID_SEEK
+	 je	ps1
+
+; the seek did not complete so return an error
+	mov	ah,SEEK_FAILED
+	mov	al,ERROR
+	jmps	ps_e
+
+ps1:
+; the seek completed with no error, so far
+; check the FDC's idea of the track the head is over with the
+; callers idea of the track the head is over.
+	mov	al,( seek_f_s + C )	  ; compare the cylinder we're over
+	cmp	al,( fdc_interrupt_stat + 1) ; to the one we wanted
+	mov	al,SUCCESS
+	 je	ps_e
+
+; the track the FDC thinks we are over 
+; is different from the track the caller requested.
+; so return an error.
+	mov	ah,ADR_NOT_FND
+	mov	al,ERROR 
+ps_e:
+	or al,al			; set the flags for a return code
+	ret
+eject
+
+recal:
+;-----
+; this issues the recalibrate command to a drive
+;
+;	ENTRY:	al = drive to recal. 
+;
+;	EXIT:	al = ERROR if there was an error
+;		al = SUCCESS if everything went OK
+
+	dseg
+
+rccs		db	f_reca, 0	; re-cal control string
+
+rcl_drv		db	0		; the drive recal is working with
+
+rcl_rt		db	0		; recal error count, used when
+					; sensing a drive's status.
+rcl_rt1		db	0		; recal error count 1, used when
+					; executing the recalibrate command
+	cseg
+	mov	rcl_rt,RETRY_COUNT	; pre-load retry counter 0, used
+					; by the code checks for the drive
+					; being ready and on line.
+
+	mov	rcl_rt1,RETRY_COUNT	; pre-load retry counter 1, used
+					; by code that sends the recal 
+					; command to the FDC
+
+	mov	rcl_drv,al			; stash the drive
+
+rcl0:	
+	and	al,FLPY_CNT_MASK	; mask out the head bit (drive only)
+	mov	( rccs + D ),al		; stuff the control string
+
+	call	sense_drvst		; is the drive ready ?
+	cmp	al,SUCCESS
+	 je	rcl1
+
+; no, so do the retry movie
+	dec	rcl_rt			; decrement the retry count
+	 jz	rcl5			
+; there are some more retries left
+; so wait for a little while
+	mov	dx,DELAY_16MS
+	mov	cl,F_DELAY
+	call	supif
+	mov	al,rcl_drv		; restore the drive were waiting for
+	jmps	rcl0			; goto the top of the disk error loop
+
+rcl5:
+; we ran out of retries while we were waiting
+; for the drive to become ready
+; so, return a hard error
+	mov	ah,ATTA_FAILED
+	mov	al,ERROR
+	jmps	rcl2
+
+rcl1:
+; At this point the drive must 
+; be ready and on line 
+	mov	bx,offset rccs		; send the recal command
+	mov	cx,length rccs
+	cli
+	call	send_cmd
+	mov	int_ctl,PRECAL		; set the interrupt code
+	sti
+	call int_wait			; wait for the recal to happen
+
+; the floppy interrupt routine reads
+; the FDC's interrupt sense.
+; fdc_interrupt_stat is the value read.
+
+	mov	al,fdc_interrupt_stat	; check for a kosher recal
+	and	al,RECAL_MASK
+	cmp	al,RECAL_TEST
+	 je	rcl3 			; exit if recal ok
+
+; something went wrong with 
+; the recal, do the retry movie
+	dec	rcl_rt1 
+	 jz	rcl4
+	mov	dx,DELAY_16MS		; wait for a system tick
+	mov	cl,F_DELAY
+	call	supif
+	mov	al,rcl_drv		; restore the drive we're recaling
+	jmps	rcl1	    		; goto the top of the error loop
+
+rcl4:
+; we ran out of retries
+; so, return a hard error
+	mov	ah,ATTA_FAILED
+	mov	al,ERROR
+	jmps	rcl2	
+
+rcl3:
+	mov	al,SUCCESS
+rcl2:
+	or	al,al
+	ret
+eject
+
+sense_drvst:
+;-----------
+; Sense drive status
+;
+; This routine issues the sense drive status to the FDC for
+; the drive passed in al.  It also updates the status register
+; three table for this drive.  This is the closest point to the
+; drive status query in the program.  So by updating the drive status
+; table in this routine the drive status table is as current as possible.
+;
+;	ENTRY:	al = the drive we want to query.
+;
+;	EXIT:	al = SUCCESS if the drive is on line
+;		     ERROR if the drive is not on line
+;		stat_reg_3_tbl[drive] = status register 3
+;
+	dseg
+
+sdscs	db	f_dsts, 0	; sense drive status control string
+sdsst	db	0		; sense drive status returned status
+
+; STATUS REGISTER 3 TABLE, these reflect the most current
+; status of the floppy drives.
+
+stat_reg_3_tbl	db	0	; floppy 0, ( A )
+		db	0	; floppy 1, ( B )
+		db	0	; 
+		db	0	; 
+		rb	12	; for more floppies latter...
+
+; loop counters to keep track of this routine
+
+sdsc0	dw	0
+sdsc1	dw	0
+sdsc2	dw	0
+sdsc3	dw	0
+
+	cseg
+
+; query the FDC for the FDD's current status
+
+	and	al,FLPY_CNT_MASK	; mask out any head info
+	mov	( sdscs + D ),al	; set up the sense disk stat string
+	mov	bx,offset sdscs		; use the send command routine
+	mov	cx,length sdscs		; for history it will provide
+
+sds3:
+	call	tbrn
+	in	al,FDCS			; wait for the FDC to become 
+	test	al,MSTR_RQM		; ready for data xfer
+	 jnz	sds4
+	inc	sdsc0
+	jmps	sds3
+sds4:
+	test	al,MSTR_IO_DIRECTION	; wait for the FDC to become
+	 jz	sds5			; ready to receive a command
+	call	tbrn
+	in	al,FDCS
+	inc	sdsc1
+	jmps	sds4
+sds5:
+	mov	al,[bx]			; get the command byte
+	out	FDCD,al			; send it to the FDC
+	inc	bx			; point to next byte
+	loop	sds3			; loop until the complete command is 
+					; sent.
+
+; wait for the FDC to become ready
+; to send us its status
+sds0:
+	call	tbrn
+	in	al,FDCS
+	test	al,MSTR_RQM
+	 jnz	sds6
+	inc	sdsc2
+	jmps	sds0
+sds6:
+	test	al,MSTR_IO_DIRECTION
+	 jnz	sds7
+	call	tbrn
+	in	al,FDCS
+	inc	sdsc3
+	jmps	sds6
+sds7:
+
+; it's ready, so read the status
+	in	al,FDCD
+	mov	sdsst,al
+
+; stash the byte in the status register 3 table
+	xor	bh,bh			; clear the upper byte
+	mov	bl,( sdscs + D )	; get the drive
+	mov	al,sdsst		; get status register 3
+	mov	stat_reg_3_tbl[bx],al	; put the status register 3 just
+					; read from the floppy into the
+					; table entry for this floppy
+
+; set the return code for the drive
+; being on line and ready or not.
+	test	al,STR3_READY
+	 jnz	sds1
+; the drive is not ready
+	mov	ah,ATTA_FAILED
+	mov	al,ERROR
+	jmps	sds2
+
+sds1:
+; the drive is on line and ready
+	mov	al,SUCCESS
+sds2:	
+	ret
+eject
+
+send_cmd:
+;--------
+; Send Command
+;
+;	ENTRY:	bx = addr ( command string )
+;		cx = length ( command string )
+;
+;	EXIT:	the command is sent
+;	
+;	NOTE:	just before the last byte of a command is sent
+;		to the FDC interrupts are turned off.  This is so
+;		the caller can post the proper action for the interrupt
+;		handler before an interrupt can get in.  The caller
+;		is responsible to enabling interrupts as soon as the
+;		handler has it's control byte set.
+;
+;		The FDC requires 12 us between each query of the main
+;		status port.  The time burn loops do this
+
+	dseg
+
+scc0		dw	0		; waiting for FDC ready
+scc1		dw	0		; waiting for FDC direction
+
+	cseg
+
+; poll on the fdc to be ready
+sc1:
+	call	tbrn
+	in	al,FDCS
+	test	al,MSTR_RQM
+	 jnz	sc2
+	inc	scc0
+	jmps	sc1
+sc2:
+; wait for the FDC's direction
+	test	al,MSTR_IO_DIRECTION 
+	 jz	sc3
+	call	tbrn
+	in	al,FDCS
+	inc	scc1
+	jmps	sc2
+
+sc3:
+; send the command byte
+	mov	al,[bx]
+	out	fdcd,al
+	inc	bx
+
+; when cx = 1 it means the next byte through
+; will be the last byte of the command being sent
+; to the FDC.
+	cmp	cx,1
+	 jne	scs2		; is the next byte the last ?
+; yes, the next byte is the last.
+	cli
+scs2:
+	loop sc1
+	ret
+eject
+stat_ret:
+;--------
+; STATUS RETURN
+;
+;	input	cx	number of bytes to expect from the fdc
+;		bx	addr of where to put the results
+;
+;	output		the location starting where bx was pointing
+;			for a length of cx will have the results from the 
+;			fdc result phase
+;
+;	NOTE:		The FDC requires 12 us between each query of the main
+;			status port.  The time burn loops do this
+
+	dseg
+strc0		dw	0		; waiting for FDC ready counter
+strc1		dw	0		; waiting for FDC direction counter
+
+	cseg
+
+	mov	al,fsb			; get the first status byte, that
+	mov	[bx],al			; was read by the interrupt handler
+	inc	bx			; inc  the status buffer pointer
+	dec	cx			; inc  the bytes left count
+	 jcxz	sre			; if it's a one byte worth of status
+					; skip the loop
+str1:
+; wait for the FDC to become ready to send it's status
+	call	tbrn
+	in	al,FDCS
+	test	al,MSTR_RQM
+	 jnz	str2
+	inc	strc0
+	jmps	str1
+str2:
+	test	al,MSTR_IO_DIRECTION
+	 jnz	str3
+	call	tbrn
+	in	al,FDCS
+	inc	strc1
+	jmps	str2
+
+str3:
+	in	al,FDCD			; get the FDC's status byte
+ 	mov	[bx],al			; stash the status byte
+	inc	bx			; point to the next buffer position
+	loop	str1			; loop until all the status bytes are
+					; read.
+sre:
+	ret
+eject
+
+tbrn:
+;----
+;	Time burn routine used by the interrupt code to wait for
+;	the FDC
+
+	mov	tburn,BURN
+tbrn0:
+	dec	tburn
+	 jnz	tbrn0
+	ret
+
+int_wait:
+;
+;	this routine does a flag wait on the fdc operation.
+
+	cmp	int_drv_flpy,TRUE
+	 je	real_int
+iw1:
+	in	al,ints			; poll the interrupt status
+	test	al,INT_WAIT_POLL_BIT
+	 jz	iw1
+	ret
+
+real_int:
+	mov	dl,fdc_flag
+	mov	cl,f_flagwait
+	call	supif
+	ret
+
+		rw	48
+flpy_int_tos	rw	0
+flpy_int_ssreg	rw	1
+flpy_int_spreg	rw	1
+
+	end
+                                                                                                                                                                                                  

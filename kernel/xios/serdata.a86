@@ -1,0 +1,437 @@
+;SERDATA.A86
+title	'Serial Data Structures'
+;***************************************************
+;	SERIAL IO DATA STRUCTURES MODULE           *
+;	Last changed : 2/11/85			   *
+;		JMB				   *
+;***************************************************
+ 
+nolist
+include serdata.equ
+include flags.equ
+include chrcomm.equ
+list
+;include serdata.equ
+;include flags.equ
+;include chrcomm.equ
+
+public  ciqctl
+public  icdesctbl
+;public	ci5qctl, ci7qctl
+
+public	ocdesctbl
+public	oq0desc, oq7desc, oq8desc
+;public	oq5desc
+
+;Current device assignments:
+;Device:	Where:		How out:	How in:
+;PCON 0 (4 scr)	SS		none
+;PCON 1 (2 scr)	I3 # 0		none
+;PCON 2 (1 scr) I3 # 1		none
+;PCON 3 (1 scr) I3 # 2		none
+;AUX 0		I3 # 3		X/X-DSR		DSR
+;AUX 1		I3 # 4		X/X-DSR		X/X
+;AUX 2		I3 # 5		X/X-DSR		none
+;Pr. 0		I3 # 7		X/X-DSR
+;Pr. 1		I3 # 6		X/X-DSR
+
+cgroup	group	code, data, siq_seg
+
+	cseg
+extrn	conin_0:near
+
+	dseg	
+icdesctbl	dw	ciqctl	; 0	system support usart
+		dw	ci1qctl	; 1	interfacer 3 usart 0
+		dw	ci2qctl ; 2     interfacer 3 usart 1
+		dw	ci3qctl ; 3	interfacer 3 usart 2
+		dw	ci4qctl ; 4 	interfacer 3 usart 3
+		dw	ci5qctl ; 5	interfacer 3 usart 4
+		dw	ci6qctl ; 6	interfacer 3 usart 5
+		dw	ci7qctl ; 7	interfacer 3 usart 6
+		dw	ci8qctl	; 8     interfacer 3 usart 7
+eject
+siq_seg		dseg	para
+
+; Q control structure for main system console:
+ciqctl	db	C0IN_F		; System flag
+	dw	0		; Q status
+	db	27h		; Command register image
+	dw	0		; un-processed characters
+	dw	0		; interrupt side input Q index
+	dw	0		; processes side output Q index
+	db	SS_U		; Usart number ( System support board code )
+	db	05Fh		; Usart command port
+	db	05Dh		; Usart status port 
+	db	05Ch		; Usart data port
+	db	SS_U		; transmitter interrupt mask
+	dw	0		; input escape Q index
+	dw	0		; output escape Q index
+	db	0		; last char read from Q
+	db	0		; last status byte read from Q
+	dw	conin_0		; current state for this console
+	db	0		; physical console number
+	db	0		; virtual console number
+	db	0		; error reset count
+	rb	06h		; filler
+	rb	10h		; the state machines escape Q
+	rb	INMSGS		; the usarts data Q
+	rb	INMSGS		; the usarts status Q
+eject
+
+; Q control structure for 2nd physical console (I3 UART 0)
+ci1qctl	db	C1IN_F		; system flag
+	dw	0		; Q status
+	db	27h		; Command register image
+	dw	0		; un-processed characters
+	dw	0		; interrupt side input Q index
+	dw	0		; processes side output Q index
+	db	00h		; Usart number
+	db	013h		; Usart command port
+	db	011h		; Usart status port 
+	db	010h		; Usart data port
+	db	US_0		; transmitter interrupt mask
+	dw	0		; input escape Q index
+	dw	0		; output escape Q index
+	db	0		; last char read from Q
+	db	0		; last status byte read from Q
+	dw	conin_0		; current state for this console
+	db	0		; physical console number
+	db	0		; virtual console number
+	db	0		; error reset count
+	rb	06h		; filler
+	rb	10h		; the state machines escape Q
+	rb	INMSGS		; the usarts data Q
+	rb	INMSGS		; the usarts status Q
+eject				
+
+; Q control structure for 3rd physical console (I3 UART 1):
+ci2qctl	db	C2IN_F		; system flag
+	dw	0		; Q status
+	db	27h		; Command register image
+	dw	0		; un-processed characters
+	dw	0		; interrupt side input Q index
+	dw	0		; processes side output Q index
+	db	01h		; Usart number
+	db	013h		; Usart command port
+	db	011h		; Usart status port 
+	db	010h		; Usart data port
+	db	US_1		; transmitter interrupt mask
+	dw	0		; input escape Q index
+	dw	0		; output escape Q index
+	db	0		; last char read from Q
+	db	0		; last status byte read from Q
+	dw	conin_0		; current state for this console
+	db	0		; physical console number
+	db	0		; virtual console number
+	db	0		; error reset count
+	rb	06h		; filler
+	rb	10h		; the state machines escape Q
+	rb	INMSGS		; the usarts data Q
+	rb	INMSGS		; the usarts status Q
+eject
+
+; Q control structure for 4th physical console (I3 UART 2):
+ci3qctl	db	C3IN_F		; system flag
+	dw	0		; Q status
+	db	27h		; Command register image
+	dw	0		; un-processed characters
+	dw	0		; interrupt side input Q index
+	dw	0		; processes side output Q index
+	db	02h		; Usart number
+	db	013h		; Usart command port
+	db	011h		; Usart status port 
+	db	010h		; Usart data port
+	db	US_2		; transmitter interrupt mask
+	dw	0		; input escape Q index
+	dw	0		; output escape Q index
+	db	0		; last char read from Q
+	db	0		; last status byte read from Q
+	dw	conin_0		; current state for this console
+	db	0		; physical console number
+	db	0		; virtual console number
+	db	0		; error reset count
+	rb	06h		; filler
+	rb	10h		; the state machines escape Q
+	rb	INMSGS		; the usarts data Q
+	rb	INMSGS		; the usarts status Q
+eject
+
+; Q control structure for 1st AUX device (I3 UART 3):
+ci4qctl	db	C4IN_F		; system flag
+	dw	20h		; Q status
+	db	27h		; Command register image
+	dw	0		; un-processed characters
+	dw	0		; interrupt side input Q index
+	dw	0		; processes side output Q index
+	db	03h		; Usart number
+	db	013h		; Usart command port
+	db	011h		; Usart status port 
+	db	010h		; Usart data port
+	db	US_3		; transmitter interrupt mask
+	dw	0		; input escape Q index
+	dw	0		; output escape Q index
+	db	0		; last char read from Q
+	db	0		; last status byte read from Q
+	dw	conin_0		; current state for this console
+	db	0		; physical console number
+	db	0		; virtual console number
+	db	0		; error reset count
+	rb	06h		; filler
+	rb	10h		; the state machines escape Q
+	rb	INMSGS		; the usarts data Q
+	rb	INMSGS		; the usarts status Q
+eject
+; Q control structure for 2nd AUX device (I3 UART 4, XON/XOFF):
+ci5qctl	db	C5IN_F		; system flag
+	dw	0010h		; Q status
+	db	27h		; Command register image
+	dw	0		; un-processed characters
+	dw	0		; interrupt side input Q index
+	dw	0		; processes side output Q index
+	db	04h		; Usart number
+	db	013h		; Usart command port
+	db	011h		; Usart status port 
+	db	010h		; Usart data port
+	db	US_4		; transmitter interrupt mask
+	dw	0		; input escape Q index
+	dw	0		; output escape Q index
+	db	0		; last char read from Q
+	db	0		; last status byte read from Q
+	dw	conin_0		; current state for this console
+	db	0		; physical console number
+	db	0		; virtual console number
+	db	0		; error reset count
+	rb	06h		; filler
+	rb	10h		; the state machines escape Q
+	rb	INMSGS		; the usarts data Q
+	rb	INMSGS		; the usarts status Q
+eject
+
+; Q control structure for 3rd AUX device (I3 UART 5):
+ci6qctl	db	C6IN_F		; system flag
+	dw	0		; Q status
+	db	27h		; Command register image
+	dw	0		; un-processed characters
+	dw	0		; interrupt side input Q index
+	dw	0		; processes side output Q index
+	db	05h		; Usart number
+	db	013h		; Usart command port
+	db	011h		; Usart status port 
+	db	010h		; Usart data port
+	db	US_5		; transmitter interrupt mask
+	dw	0		; input escape Q index
+	dw	0		; output escape Q index
+	db	0		; last char read from Q
+	db	0		; last status byte read from Q
+	dw	conin_0		; current state for this console
+	db	0		; physical console number
+	db	0		; virtual console number
+	db	0		; error reset count
+	rb	06h		; filler
+	rb	10h		; the state machines escape Q
+	rb	INMSGS		; the usarts data Q
+	rb	INMSGS		; the usarts status Q
+eject
+				
+; Q control structure for printer 1 (I3 UART 6, XON/XOFF, 7 data bits):
+ci7qctl db	c7IN_F
+	dw	0014h		; Q status
+	db	27h		; Command register image
+	dw	0		; un-processed characters
+	dw	0		; interrupt side input Q index
+	dw	0		; processes side output Q index
+	db	06h		; Usart number
+	db	013h		; Usart command port
+	db	011h		; Usart status port 
+	db	010h		; Usart data port
+	db	US_6		; transmitter interrupt mask
+	dw	0		; input escape Q index
+	dw	0		; output escape Q index
+	dw	0		; last char read from Q
+	db	0		; Last status byte read from Q
+	dw	conin_0		; current state for this console
+	db	0		; physical cons #
+	db	0		; virtual console #
+	db	0		; error reset count
+	rb	6h		; filler
+	rb	10h		; state machine escape Q
+	rb	INMSGS		; usart data q
+	rb	INMSGS		; usart status q
+eject
+
+; Q control structure for printer 0 (I3 UART 7, XON/XOFF, 7 data bits):
+ci8qctl	db	C8IN_F		; system flag
+	dw	0014h		; Q status
+	db	27h		; Command register image
+	dw	0		; un-processed characters
+	dw	0		; interrupt side input Q index
+	dw	0		; processes side output Q index
+	db	07h		; Usart number
+	db	013h		; Usart command port
+	db	011h		; Usart status port 
+	db	010h		; Usart data port
+	db	US_7		; transmitter interrupt mask
+	dw	0		; input escape Q index
+	dw	0		; output escape Q index
+	db	0		; last char read from Q
+	db	0		; last status byte read from Q
+	dw	conin_0		; current state for this console
+	db	0		; physical console number
+	db	0		; virtual console number
+	db	0		; error reset count
+	rb	06h		; filler
+	rb	10h		; the state machines escape Q
+	rb	INMSGS		; the usarts data Q
+	rb	INMSGS		; the usarts status Q
+eject
+
+;***********************************************************
+;                      					   *
+;       OUTPUT  DATA  CONTROL  STRUCTURES                  *
+;        					           *
+;***********************************************************
+
+cgroup    group    soq_seg
+
+          dseg
+
+ocdesctbl	dw	offset oq0desc	; 1st terminal (system support)
+		dw	offset oq1desc	; 2nd terminal
+		dw	offset oq2desc  ; 3rd terminal
+		dw	offset oq3desc  ; 4th terminal
+		dw	offset oq4desc  ; 1st aux
+		dw	offset oq5desc  ; 2nd aux
+		dw	offset oq6desc  ; 3rd aux
+		dw	offset oq7desc  ; printer 1
+		dw	offset oq8desc  ; printer 0
+
+soq_seg         dseg    para
+eject
+
+;PCON 0:
+oq0desc		db	c0out_f			; Concurrents flag #
+		db	0			; local flag byte, bit vector
+		rb	4			; char count & position
+		db	5Ch			; IO port
+		db	5Dh			; status port
+		db	NO_SELECT		; Usart number
+		db	0			; escape count
+		db	0			; output bit mask
+		db	0			; current Vcon
+		db	0			; filler
+		db	TXRDY, DSR, 0		; xmit mask, DSR bit, filler
+		rb	ONMSGS			; buffer
+
+;PCON 1:
+oq1desc		db	c1out_f			; Concurrents flag #
+		db	0			; local flag byte, bit vector
+		rb	4			; char count & position
+		db	10h			; IO port
+		db	11h			; status port
+		db	0			; Usart number
+		db	0			; escape count
+		db	US_0			; output bit mask
+		db	4			; current Vcon
+		db	0			; filler
+		db	TXRDY, DSR, 0		; xmit mask, DSR bit, filler
+		rb	ONMSGS			; buffer
+
+;PCON2:
+oq2desc		db	c2out_f			; Concurrents flag #
+		db	0			; local flag byte, bit vector
+		rb	4			; char count & position
+		db	10h			; IO port
+		db	11h			; status port
+		db	1			; Usart number
+		db	0			; escape count
+		db	US_1			; output bit mask
+		db	6			; current Vcon
+		db	0			; filler
+		db	TXRDY, DSR, 0		; xmit mask, DSR bit, filler
+		rb	ONMSGS			; buffer
+eject
+
+;PCON 3:
+oq3desc		db	c3out_f			; Concurrents flag #
+		db	0			; local flag byte, bit vector
+		rb	4			; char count & position
+		db	10h			; IO port
+		db	11h			; status port
+		db	2			; Usart number
+		db	0			; escape count
+		db	US_2			; output bit mask
+		db	7			; current Vcon
+		db	0			; filler
+		db	TXRDY, DSR, 0		; xmit mask, DSR bit, filler
+		rb	ONMSGS			; buffer
+
+;AUX 0:
+oq4desc		db	c4out_f			; Concurrents flag #
+		db	0a0h			; local flag byte, bit vector
+		rb	4			; char count & position
+		db	10h			; IO port
+		db	11h			; status port
+		db	3			; Usart number
+		db	0			; escape count
+		db	US_3			; output bit mask
+		db	0			; ;current Vcon
+		db	0			; filler
+		db	TXRDY, DSR, 0		; xmit mask, DSR bit, filler
+		rb	ONMSGS			; buffer
+
+;AUX 1:
+oq5desc		db	c5out_f			; Concurrents flag #
+		db	0A0h			; local flag byte, bit vector
+		rb	4			; char count & position
+		db	10h			; IO port
+		db	11h			; status port
+		db	4			; Usart number
+		db	0			; escape count
+		db	US_4			; output bit mask
+		dw	0			; current Vcon & filler
+		db	TXRDY, DSR, 0		; xmit mask, DSR bit, filler
+		rb	ONMSGS		 	; buffer
+eject
+
+;AUX 2:
+oq6desc		db	c6out_f			; Concurrents flag #
+		db	0A0h			; local flag byte, bit vector
+		rb	4			; char count & position
+		db	10h			; IO port
+		db	11h			; status port
+		db	5			; Usart number
+		db	0			; escape count
+		db	US_5			; output bit mask
+		dw	0			; current Vcon & filler
+		db	TXRDY, DSR, 0		; xmit mask, DSR bit, filler
+		rb	ONMSGS		 	; buffer
+
+;Printer 1:
+oq7desc		db	c7out_f			; Concurrents flag #
+		db	0A0h			; local flag byte, bit vector
+		rb	4			; char count & position
+		db	10h			; IO port
+		db	11h			; status port
+		db	6			; Usart number
+		db	0			; escape count
+		db	US_6			; output bit mask
+		dw	0			; current Vcon & filler
+		db	TXRDY, DSR, 0		; xmit mask, DSR bit, filler
+		rb	ONMSGS		 	; buffer
+
+;Printer 0:
+oq8desc		db	c8out_f			; Concurrents flag #
+		db	0A0h			; local flag byte, bit vector
+		rb	4			; char count & position
+		db	10h			; IO port
+		db	11h			; status port
+		db	7			; Usart number
+		db	0			; escape count
+		db	US_7			; output bit mask
+		dw	0			; current Vcon & filler
+		db	TXRDY, DSR, 0		; xmit mask, DSR bit, filler
+		rb	ONMSGS		 	; buffer
+
+	end
+                                                                                                                                                                                                                                                                                                                                                                                                                                    

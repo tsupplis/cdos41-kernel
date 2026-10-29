@@ -1,0 +1,333 @@
+;******************************************************************
+;
+;		Display Menu routine for Runmenu TMP interface
+;
+;		15 FEB 85...mod. by JMB to handle generic "vanilla"
+;		serial terminals.  See comments in RUNMENU.A86.
+;
+;		Equates
+;
+true		equ 0ffh
+false		equ 0
+esc		equ 01bh
+max_offset	equ 24*80*2
+
+;
+;		External References
+;
+	EXTRN	WM_PK:near	    ; peek/poke at the vc_ array
+;
+;		External Definitions
+;
+	PUBLIC	M_DISP
+
+	CSEG
+;
+;		Routine to create the menu display from compressed format
+;		input:	es:si points to compressed screen
+;			vc_segment has virtual console segment address
+;		output: al = 0ffh if error occured
+;			cur_attr contains last attribute defined
+;
+
+M_DISP:
+	mov cur_attr,07h	    ; standard IBM b & w attribute
+	mov scrn_offset,si	    ; save compressed screen offset
+	mov scrn_segment,es	    ;	   and screen segment
+	mov vc_offset,0 	    ; current offset in vc_segment
+;
+;		Determine the monitor type by looking at the cursor type
+;
+	mov mono_flag,TRUE	    ;* assume mono
+
+	cmp VC_SEG,0		    ;* serial terminal?
+	 je display_lupe	    ;* skip the next call if so
+				    ; 'C' entry protocol
+	mov ax,offset screen_type   ; where to store the results
+	push ax 		    ; on the stack
+	mov ax,62		    ; offset of screen type in vc_
+	push ax 		    ; on the stack
+	push vc_number		    ; virtual console number on the stack
+	xor ax,ax		    ; zero to ax (PEEK)
+	push ax 		    ; onto the stack
+	call WM_PK		    ; peek at it
+	add sp,8		    ; 'C' exit protocol
+;*	mov mono_flag,TRUE	    ; assume mono
+	mov ax,screen_type	    ; get type
+	and ax,00ffh		    ; just right byte
+	cmp al,mono_type	    ; and check it
+	je display_lupe 	    ; jump if yes
+	  mov mono_flag,FALSE	    ; no, set to color display
+
+display_lupe:
+	les si,scrn_addr	    ; get source offset & segment
+	lods es:byte ptr .0	    ; get next byte of compressed screen
+	test al,0ffh		    ; see if done
+	jz display_done 	    ; jmp if done
+	inc scrn_offset 	    ; increment source offset
+	mov di,offset spec_table    ; special characters table
+	mov cx,spec_table_cnt	    ; number of entries in special table
+	push ds ! pop es	    ; load es
+	repne scasb		    ; search the table
+	jne default		    ; jmp if not a special
+	  sub di,offset spec_table + 1	; make di an index
+	  shl di,1		    ; a word index
+	  jmp jmp_table[di]	    ; jump to proper routine
+
+display_done:			    ; exit point - clear rest of screen
+	mov cx,max_offset	    ; offset of last char on screen +1
+	sub cx,vc_offset	    ; subtract next to store
+	jle display_exit	    ; jump if all done
+	  shr cx,1		    ; make a word counter
+	  mov ah,cur_attr	    ; get current attribute
+	  mov al,' '		    ; a blank
+	  les di,vc_addr	    ; get where to store
+;*	  rep stosw		    ; blank rest of screen
+	  call WORD_OUT		    ;* either rep stosw or ser_rep_stosw
+display_exit:
+	xor al,al		    ; clear error flag
+	ret			    ; return to user
+
+default:			    ; not a special character, just send it
+	push ax 		    ; save character
+	call send_blanks	    ; send any extra blanks saved up
+	les di,vc_addr		    ; load virt image address
+	pop ax			    ; get character back
+	mov ah,cur_attr 	    ; get attribute char
+	cmp di,max_offset	    ; see if too far
+	jg display_abort	    ; jmp if yes
+
+;	stosw			    ; store the attr/char pair
+	mov cx,1		    ;*
+	call WORD_OUT		    ;*
+	mov vc_offset,di	    ; save output offset
+	jmp display_lupe	    ; loop for more chars
+
+case_bs:			    ; \ character - toggle reverse video
+	mov al,cur_attr 	    ; get current attribute char
+	and al,088h		    ; clear all but bright & blink
+	mov ah,cur_attr 	    ; get colors back again
+	and ah,007h		    ; isolate color
+	mov cl,4		    ; shift factor
+	shl ah,cl		    ; shift color
+	or al,ah		    ; put it back in
+	mov ah,cur_attr 	    ; get colors back again
+	and ah,070h		    ; isolate color
+	mov cl,4		    ; shift factor
+	shr ah,cl		    ; shift color
+	or al,ah		    ; put it back in
+	mov cur_attr,al 	    ; store new attribute
+	inc blank_count 	    ; increment blank count
+	jmp display_lupe	    ; loop for more
+
+case_us:			    ; under score char, toggle under score
+	inc blank_count 	    ; increment number of blank chars
+	test mono_flag,0ffh	    ; see if mono display
+	jz case_us_exit 	    ; if not mono, we are done
+	mov al,cur_attr 	    ; get current attribute
+	and al,07h		    ; get foreground
+	cmp al,01h		    ; see if underline already
+	je case_us_10		    ; jmp if yes
+	  and cur_attr,0f8h	    ; clear all but fgnd
+	  or cur_attr,01h	    ; set under line
+	  jmp display_lupe	    ; and loop for more chars
+
+case_us_10:			    ; current attr is uline, make regular
+	or cur_attr,07h 	    ; set all bits in fgnd
+case_us_exit:
+	jmp display_lupe	    ; loop for more chars
+
+case_rb:			    ; } char, toggle bright
+	inc blank_count 	    ; increment # extra blanks
+	xor cur_attr,08h	    ; toggle bright bit
+	jmp display_lupe	    ; loop for more chars
+
+case_lb:			    ; { char, toggle blink
+	inc blank_count 	    ; increment # extra blanks
+	xor cur_attr,80h	    ; toggle blink bit
+	jmp display_lupe	    ; loop for more chars
+eject
+;
+;		Abort exit point, trying to store past end of screen
+;
+display_abort1:
+	pop ax			    ; clear stack
+display_abort:
+	mov al,0ffh		    ; set error indicator
+	ret			    ; return with bad news
+
+case_vl:			    ; | - set background color
+	inc blank_count 	    ; increment # blanks
+	inc blank_count 	    ; increment # blanks
+	les si,scrn_addr	    ; get compressed screen address
+	lods es:byte ptr .0	    ; get color indicator
+	inc scrn_offset 	    ; jump over character
+	test mono_flag,0ffh	    ; see if monochrome
+	jnz case_vl_exit	    ; jmp if yes, no colors
+	  call fnd_attr 	    ; get attr char in ah
+	  jnz case_vl_10	    ; jmp if not a valid color attribute
+case_vl_05:
+	    mov cl,4		    ; shift factor
+	    shl ah,cl		    ; shift color to right spot
+	    mov al,cur_attr	    ; get current attribute
+	    and al,08fh 	    ; clear bkgd color
+	    or al,ah		    ; set new bkgnd color
+	    mov cur_attr,al	    ; store back
+case_vl_exit:
+	jmp display_lupe	    ; loop for more chars
+
+;	UNADVERTISED FEATURE - If you code the background color as an upper
+;			       case letter, the background begins after the
+;			       the sequence rather than at the start.
+
+
+case_vl_10:			    ; see if it's an upper case color
+	or al,020h		    ; turn upper case to lower case
+	call fnd_attr		    ; try convert again
+	jnz case_vl_exit	    ; nope, forget it
+	  push ax		    ; yup, save new attr
+	  call send_blanks	    ; update blanks
+	  pop ax		    ; get new attr back
+	  jmp case_vl_05	    ; join code in progress
+
+case_sl:			    ; ~ - set foreground color
+	inc blank_count 	    ; increment # blanks
+	inc blank_count 	    ; increment # blanks
+	les si,scrn_addr	    ; get compressed screen address
+	lods es:byte ptr .0	    ; get color indicator
+	inc scrn_offset 	    ; jump over character
+	test mono_flag,0ffh	    ; see if monochrome
+	jnz case_sl_exit	    ; jmp if yes, no colors
+	  call fnd_attr 	    ; get attr char in ah
+	  jne case_sl_exit	    ; jmp if not valid color
+	    mov al,cur_attr	    ; get current attribute
+	    and al,0f8h 	    ; clear fgnd color
+	    or al,ah		    ; set new fgnd color
+	    mov cur_attr,al	    ; store back
+case_sl_exit:
+	jmp display_lupe	    ; loop for more chars
+
+case_meta:			    ; repeated character
+	call send_blanks	    ; send extra blanks as required
+	les si,scrn_addr	    ; get compressed screen address
+	xor cx,cx		    ; clear counter hi byte
+	lods es:byte ptr .0	    ; get character count
+	mov cl,al		    ; move to count reg
+	lods es:byte ptr .0	    ; get character
+	mov scrn_offset,si	    ; remember source offset
+	mov ah,cur_attr 	    ; get attribute
+	les di,vc_addr		    ; get virtual screen address
+	call check_cx		    ; see if too far
+	jle case_meta_10	    ; jmp if not
+	  jmp display_abort	    ; jmp if yes, abort
+
+case_meta_10:
+;*	rep stosw		    ; store in screen
+	call WORD_OUT		    ;*
+	mov vc_offset,di	    ; remember dest offset
+	jmp display_lupe	    ; loop for more
+eject
+;
+;		Routine to send extra blanks saved up
+;		input:	blank_count has number
+;			cur_attr has current attribute character
+;
+send_blanks:
+	test blank_count,0ffffh     ; see if any
+	jz send_blanks_exit	    ; jmp if not
+	mov al,' '		    ; a blank
+	mov ah,cur_attr 	    ; current attribute character
+	les di,vc_addr		    ; get address of virtual screen
+	mov cx,blank_count	    ; number of them
+	call check_cx		    ; see if too far
+	jle send_blanks_10	    ;
+	  jmp display_abort1	    ; jmp if yes
+
+send_blanks_10:
+;*	rep stosw		    ; store them
+	call WORD_OUT		    ;*
+	mov blank_count,0	    ; zap blank counter
+	mov vc_offset,di	    ; save destination offset
+send_blanks_exit:
+	ret
+;
+;		Routine to determine correct attribute
+;		input:	al has attribute character
+;		output: ah has attribute
+fnd_attr:
+	mov cx,attr_tab_cnt	    ; table length
+	mov di,offset attr_tab	    ; the table
+	push ds ! pop es	    ; the segment
+	repne scasb		    ; search the table
+	jne fnd_attr_exit	    ; jmp if illegal color character
+	  add di,offset attr_list - offset attr_tab - 1
+	  mov ah,[di]		    ; get attribute
+	  cmp ah,ah		    ; set zero flag
+fnd_attr_exit:
+	ret			    ; return with attribute
+;
+;		See if rep stosw will go off end of screen
+;
+check_cx:
+	push di 		    ; save
+	add di,cx		    ; bytes to move
+	add di,cx		    ; words to move
+	cmp di,max_offset	    ; see if too far
+	pop di			    ; restore temp
+	ret			    ; return to caller with flags set
+
+;
+;		"CONOUT" for SQUID screens:
+;
+rep_stosw:
+	rep stosw
+	ret
+
+;
+;		Shared Data Area in Code Section
+;
+jmp_table	dw  case_bs,case_us,case_rb,case_lb
+		dw  case_vl,case_sl,case_meta		;* neater
+eject
+;
+;		Dynamic Data Area in User Data Section
+;
+		DSEG
+;
+;		External Definitions
+;
+	PUBLIC	VC_SEG
+	PUBLIC	VC_NUM
+	PUBLIC	CUR_ATTR
+	PUBLIC	MONO_FLAG
+	PUBLIC	WORD_OUT		;* gets adjusted in RUNMENU.A86
+
+databeg 	rb  0		    ; beginning of data area
+
+WORD_OUT	dw  rep_stosw	    ;* serial or SQUID vector
+
+vc_addr 	rd  0		    ; for LES instructions
+vc_offset	rw  1		    ; offset into virtual console
+VC_SEG		rw  0		    ; Same as below
+vc_segment	rw  1		    ; virtual console segment address
+blank_count	dw  0		    ; number of saved up blanks
+VC_NUM		rw  0		    ; Same as below
+vc_number	dw  0		    ; our virtual console number
+mono_type	equ 09h 	    ; contents of below if mono screen
+screen_type	dw  0		    ; vc_ word 62
+MONO_FLAG	db  TRUE	    ; true if console is mono console
+CUR_ATTR	db  0		    ; current attribute
+scrn_addr	rd  0		    ; for LES instructions
+scrn_offset	rw  1		    ; offset into source
+scrn_segment	rw  1		    ; segment address of compressed screen
+spec_table	db  '\_}{|~',esc    ; special formatting characters
+spec_table_cnt	equ 7		    ; # entries in above table
+attr_tab	db  'kbgrcmyw'	    ; color list
+attr_tab_cnt	equ 8		    ; number of colors
+attr_list	db  00h,01h,02h,04h,03h,05h,06h,07h
+
+dataend 	rb  0
+		org (((offset dataend - offset databeg)+0fh) and 0fff0h)
+dispdata	rb  0		    ; alligned on a paragraph boundry
+		end
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          

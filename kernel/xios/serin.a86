@@ -1,0 +1,336 @@
+;SERIN.A86
+title	'Serial Input module'
+;*****************************************
+;					 *
+;	SERIAL INPUT MODULE		 *
+;	Last change : 1/15/85		 *
+;					 *
+;*****************************************
+
+nolist
+include	system.lib
+include	chrcomm.equ
+include	serdata.equ
+include popf.a86		;286 bug
+list
+;include system.lib
+;include chrcomm.equ
+;include serdata.equ
+;include popf.a86
+
+	cseg
+public	serial_in
+public	store_char
+
+extrn	supif:near		;; headentr.a86
+extrn	ocdesctbl:word		;; serdata.a86
+extrn	usart_on:near
+extrn	xmit_on:near		;; servar.a86
+extrn	xmit_off:near		;; servar.a86
+extrn	set_bit:near		;; servar.a86
+extrn	clear_bit:near		;; servar.a86
+eject
+
+serial_in:
+;---------
+;	ENTRY:	bx = addr of the input Q control block
+;
+;	EXIT:	al = data from the usart's Q
+;		ah = the usarts status byte 
+
+	pushf ! cli
+
+cin2:					;; if char is available, get it
+	test	Q_STATE[bx],CHAR_AVAIL	;; else flagwait until it's available
+	 jnz	cin1
+	or	Q_STATE[bx],IPROC_WAITING;; set a loacal proc waiting flag
+	push	bx			;; save the address of Q control struc
+	mov	dl,SYS_FLAG[bx]		;; do the flag wait
+	mov	cl,F_FLAGWAIT
+	call	supif
+	cmp	ax,0ffffh
+	 jne	cin3			;; was there an error ?
+	mov	cl,P_DISPATCH		;; dispatch the process, let it try
+	call	supif			;; again later
+cin3:	
+	pop	bx			;; get back the Q control structure
+	jmps	cin2			;; just in case the flagset shouldn't
+				 	;; have happened.
+cin1:
+	push	bx			;; save the Q control structure
+	call	conin_fc		;; call the console read routine
+	pop	bx			;; restore the Q control addr
+	mov	al,LAST_CHAR[bx]	;; al = char from Q 
+	mov	ah,LAST_STAT[bx]	;; ah = status from Q
+	popff				;; turn the interrupts back on
+	ret
+eject
+
+conin_fc:
+;;--------
+;; This routine reads a character from the console input Q
+;;
+;;	ENTRY:	bx -> the Q control structure
+;;
+;;	EXIT:	LAST_CHAR[bx] = the character that was read in
+;;		LAST_STAT[bx] = the usart's status that corresponded to the
+;;				char in LAST_CHAR[bx]
+
+	push	si				;; we need an index register
+	mov	si,PROC_OUT[bx]			;; get the Q's output index
+	mov	al,D_BUFF[bx+si]		;; get the character
+	mov	LAST_CHAR[bx],al		
+	mov	al,S_BUFF[bx+si]		;; get the status byte
+	mov	LAST_STAT[bx],al	
+	inc	si				;; inc the processes output index
+	and	si,(INMSGS -1)			;; mod the size of the Q
+	mov	PROC_OUT[bx],si			;; restore the index register
+	pop	si				;; restore the extra index register
+	dec	UN_PC[bx]			;; dec un-processed char count
+	cmp	UN_PC[bx],0			;; was this the last char in the Q ?
+	 jne	cinf2		 		;; no ...
+cinf1:
+	and	Q_STATE[bx],not CHAR_AVAIL
+cinf2:					;; if sender was stopped check the receive buffer
+					;; for being half empty.When the receive buffer is half
+	test	Q_STATE[bx],SENDER_STOPPED ;; empty restart the sender
+	 jz	cinf3
+	cmp	UN_PC[bx],( INMSGS / 2 )
+	 ja	cinf3
+	call	start_sender	 	;; the Q is half empty
+cinf3:
+	ret
+eject
+
+store_char:
+;;----------
+;; This routine stores the status and data bytes from a usart in their Q's.
+;; It also handles the interrupt level Xon Xoff protocol. 
+;; If an error is detected in the status byte returned from the USART
+;; a reset error command is sent to the usart.
+;;
+;;	ENTRY:	bx -> receive Q control structure
+;;		al = the data read from the USART
+;;		ah = the status read from the USART
+;;
+;;	EXIT:	the status and data are put in the status and data Q's.
+
+	test	Q_STATE[bx],BIT8_MASK	;; are we masking off the 8th bit
+	 jz	try_xon
+	and	al,7FH
+try_xon:
+	test	Q_STATE[bx],XX_MODE	;; is this Q in Xon Xoff mode ?
+	 jz	store_now
+	cmp	al,XON
+	 jne	try_xoff		;; is the char an Xon
+	call	xmit_on			;; char was an Xon, start transmitter
+	ret				
+try_xoff:
+	cmp	al,XOFF
+	 jne	store_now
+	call	xmit_off		;; char was an Xoff, stop transmitter
+	ret				
+store_now:
+	push	si			;; use SI as an index register
+	mov	si,INT_IN[bx]	 
+	mov	D_BUFF[bx+si],al	;; store the data
+	mov	S_BUFF[bx+si],ah	;; store the status
+	inc	si				
+	and	si,(INMSGS - 1)
+	mov	INT_IN[bx],si	
+	pop	si				 
+
+	or	Q_STATE[bx],CHAR_AVAIL	;; set char avail flag
+	test ah, PARITY_ERR or OVERRUN_ERR or FRAME_ERR  ;; check for usart errs
+	 jz	no_err		 	;; if err, send error reset to usart
+	inc	ERR_CNT[bx]		;; inc the error reset counter
+	mov	ah,ERROR_RESET		;; set up the error reset bit
+	call	set_bit			;; now set it in the usarts command register
+	and	CMD_REG[bx],not ERROR_RESET ;; this is one time command
+					;; we have to reset the command
+					;; register image, so we don't
+					;; keep doing an error reset
+no_err:
+	inc	UN_PC[bx]
+	cmp	UN_PC[bx],UPPER_LIM	;; is # chars in buff >= limit ?
+	 jb	check_proc_waiting	;; no
+	call	stop_sender		;; yes, stop transmitter
+check_proc_waiting:
+	test	Q_STATE[bx],IPROC_WAITING ;; only do flagset if proc is waiting
+	 jz	no_proc_waiting		;; for a character
+	and	Q_STATE[bx],not IPROC_WAITING ;; clear the process waiting flag
+
+	push ax ! push bx ! push cx	;; this is an interrupt context
+	push dx ! push bp ! push si	;; save the environment
+	push di ! push es ! push ds
+sc2:
+	mov	dl,SYS_FLAG[bx]		;; get the flag number
+	mov	cl,F_FLAGSET		;; set the system function
+	push	bx			;; save the Q ptr in case of a retry
+	call	supif
+	pop	bx			;; restore the Q ptr
+	cmp	ax,0ffffh		;; check for an error
+	 jne	sc3 
+	cmp	cx,2aH			;; was it a flag ignore ?
+	 jne	sc3			;; if it was not an ignore just exit
+	jmps	sc2			;; else, try again
+
+sc3:
+	pop ds ! pop es ! pop di	;; restore environment
+	pop si ! pop bp ! pop dx
+	pop cx ! pop bx ! pop ax
+no_proc_waiting:
+	ret
+eject
+
+start_sender:
+;;------------
+;;	This routine tries to restart the sender.
+;;
+;;	ENTRY:	bx = addr Q control structure
+;;
+;;	EXIT:	none
+;;
+;;	NOTE:	I have assumed + 12 volts on the DSR or RTS lines means
+;;		send data.  Conversely - 12 volts means stop sending.
+;;		The DTR* pin (#24) on the 2651 is wired
+;;		to the DSR pin on the DB-25 connector ( pin 6 ),
+;;		through an inverting driver.This requires setting
+;;		the DTR bit in the command register to start the sender.
+;;
+;;		For the RTS protocol, the RTS* pin (23) on the 2651 
+;;		is wired to the Ready for Send pin on the DB-25 
+;;		connector ( pin 5 ) through an inverting driver. This 
+;;		requires setting the RTS bit in the command register
+;;		to start the sender.
+
+	test	Q_STATE[bx],DTR_MODE	;; check dtr protocol
+	 jz	try_rts1
+	mov	ah,DTR			;; force DTR* (dtr not) pin low
+	call	set_bit
+	and	Q_STATE[bx],not SENDER_STOPPED
+try_rts1:
+	test	Q_STATE[bx],RTS_MODE	;; check for RTS protocol, 
+	 jz	try_xx1
+	mov	ah,RTS			;; force the RTS* (rts not) pin low
+	call	set_bit
+	and	Q_STATE[bx],not SENDER_STOPPED
+try_xx1:
+	test	Q_STATE[bx],XX_MODE	;; check for Xon/Xoff protocol
+	 jz	no_prot
+	call	send_xon
+	and	Q_STATE[bx],not SENDER_STOPPED
+no_prot:
+	ret
+eject
+
+stop_sender:
+;;-----------
+;;This routine tries to stop the transmitter.
+;;
+;;	ENTRY:	bx = addr( Q control )
+;;
+;;	EXIT:	none
+
+	test	Q_STATE[bx],DTR_MODE
+	 jz	try_rts
+	mov	ah,DTR			;; force DTR* (dtr not) pin high
+	call	clear_bit
+	or	Q_STATE[bx],SENDER_STOPPED
+try_rts:
+	test	Q_STATE[bx],RTS_MODE	;; check for RTS protocol, 
+	 jz	try_xx
+	mov	ah,RTS			;; force the RTS* (rts not) pin high
+	call	clear_bit
+	or	Q_STATE[bx],SENDER_STOPPED
+try_xx:
+	test	Q_STATE[bx],XX_MODE	;; check for Xon/Xoff protocol
+	 jz	no_protocol
+	call	send_xoff
+	or	Q_STATE[bx],SENDER_STOPPED
+no_protocol:
+	cmp	UN_PC[bx],INMSGS	;; If at lim of buffer, adjust char
+	 jb	ss_2
+ss_0:
+	dec	UN_PC[bx]
+	cmp	INT_IN[bx],0 
+	 je	ss_1
+	dec	INT_IN[bx]
+	jmps	ss_2
+ss_1:
+	mov	INT_IN[bx],(INMSGS - 1) ;; force index to end of buffer
+ss_2:
+	ret
+eject
+
+send_xon:
+;;--------
+;;	This routine sends an Xon to the sender
+;;
+;;	ENTRY:	bx = addr of Q control sturcture
+;;
+;;	EXIT:	An Xon ( ctl q ) is sent to the sender
+
+	test	XINT_MASK[bx],SS_U	;; is this the system support board?
+	 je	sxn
+	mov	ah,XON			;; it's interfacer 3 board
+	call	send_char
+sxn:
+	ret
+
+
+send_xoff:
+;;---------
+;;	This routine sends an Xoff to the sender.
+;;
+;;	ENTRY:	bx = addr of Q control sturcture
+;;
+;;	EXIT:	An Xoff ( ctl s ) is sent to the sender
+
+	test	XINT_MASK[bx],SS_U	 ;; is this the system support board?
+	 je	sxf
+	mov	ah,XOFF		 	;; it's the interfacer 3 board
+	call	send_char
+sxf:
+	ret
+
+
+send_char:
+;;---------
+;;	This routine sends a single character to the USART in the Q ctl struct.
+;;
+;;	ENTRY:	bx = addr Q control structure
+;;		ah = char to send
+;;
+;;	EXIT:	none
+
+	push	bx			;; save the input Q control addr
+	mov	bl,U_NUMB[bx]		;; get the usart's i3 number
+	xor	bh,bh			;; clear the upper byte
+	inc	bx			;; index above the SS usart
+	shl	bx,1			;; indexing into a word table
+	mov	bx,ocdesctbl[bx]	;; bx -> Output Q control
+
+	push	cx				
+	push	si				
+
+	mov	cx,OMSGCNT[bx]		;; get the number of chars in Q
+	mov	si,omsgout[bx]		;; get the output index
+	add	si,cx			;; add to it the number of chars
+	and	si,onmsgs-1		;; in the buffer, mod( buff size )
+
+	mov	obuffer[bx+si],ah	;; put the char in the Q
+	inc	cx			;; inc the chars in Q count
+	mov	omsgcnt[bx],cx		;; update
+
+	dec	cx			;; if 1st char in Q, start Xmit int's
+	 jnz	sc1			;; cx = chars in Q - 1 
+	call	usart_on		;; start the Xmitter
+sc1:
+	pop	si				
+	pop	cx
+	pop bx				;; restore the input Q control addr
+	ret
+
+	end
+                                                                                                                                                                                                                                                                                                                                                                                 

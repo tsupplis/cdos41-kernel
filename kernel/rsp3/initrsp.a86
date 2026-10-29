@@ -1,0 +1,1762 @@
+; ============================================================= ;
+;								;
+;	 I N I T I A L I Z A T I O N      M O D U L E		;
+;								;
+; ============================================================= ; 
+
+
+
+
+; Initialization  entry point for the RSP.  This routine receives control
+; when the OS calls the RSP.  It is responsible for:
+;	1. Opening and reading CONFIG.SYS to find the FIDDs requested.
+;	2. Allocating the intial memory for each FIDD.
+;	3. Loading each FIDD into its allocated memory.
+;	4. Calling the routine in the RSP that will intialize the FIDD.
+;	5. Converting itself to a null process when all the FIDDs have
+;	   been loaded.
+;
+;	For the time being, this routine does no parsing of CONFIG.SYS.
+;	The only FIDD loaded is VDISK.SYS.
+;
+;	This code runs at a higher priority than the TMPs, so it can
+;	get first crack at the console.  It releases the console before
+;	it goes into an idle loop.
+;
+;	On entry, CS = RSP code segment
+;		  DS = ES = SS = RSP data segment
+
+NOLIST
+
+	include	confidd.equ
+
+COMMENT	equ	0
+LIST
+
+; ---------------------------------------------------------
+		DSEG
+
+
+	EXTRN	sdatseg:word
+
+
+	PUBLIC	bdisk_off
+	PUBLIC	bdisk_psh
+	PUBLIC	CKV
+	PUBLIC	DPH_offset
+	PUBLIC	DPH_table
+	PUBLIC	endbuf
+	PUBLIC	FIDD_type
+	PUBLIC  FIDD_off	
+	PUBLIC  FIDD_seg	
+	PUBLIC	mpb
+	PUBLIC	sysdat_diff	
+
+; ---------------------------------------------------------
+	CSEG
+	EXTRN	CONFIDD_Entry:near	
+	EXTRN	Char_IO:near	
+	EXTRN	Set_switch:near
+
+	PUBLIC	Build_DPB
+	PUBLIC	NEXT_COMMAND
+	PUBLIC	Disk_FIDD
+	PUBLIC	FIDD_Disk_map
+	PUBLIC  Strategy_ENT	
+	PUBLIC  Interrupt_ENT	
+	PUBLIC	Init_entry
+	PUBLIC	Get_RPH
+	PUBLIC	Get_entries
+	PUBLIC	confidd_dseg
+	PUBLIC	init_rsp
+	PUBLIC	pmsg
+	PUBLIC	FIDD_disk_map	 
+	PUBLIC	console_root_off 
+	PUBLIC	console_root_seg 
+	PUBLIC	aux_root_off	 
+	PUBLIC	aux_root_seg	 
+	PUBLIC	printer_root_off 
+	PUBLIC	printer_root_seg 
+	PUBLIC	disk_root_off	 
+	PUBLIC	disk_root_seg	 
+	PUBLIC	System_priority 
+	PUBLIC	Process_priority
+	PUBLIC	XIOS_Entry_Offset 
+	PUBLIC	XIOS_Entry_Segment 
+
+
+
+
+
+
+
+eject
+
+; RSP entry point
+
+init_rsp:
+	jmp	begin
+
+
+; ---------------------------------------------------------
+;
+;       l o c a l   d a t a   a r e a
+;
+; ---------------------------------------------------------
+
+confidd_dseg		dw	0		;data segment of CONFIDD
+
+FIDD_Disk_Map		dw	0		; bit map of FIDD disks
+
+System_priority 	db	194		; prioirity for interface
+Process_priority	db	0		; priority of calling process
+
+Paras_per_process	dw	0		; paragraphs per process
+
+current_disk		dw	0		; bitmap of current initialized drive
+current_drive		db	0		; number of currently initialized drive
+
+Strategy_ENT		dw	0		; entry points
+	       		dw	0		;  to the last
+Interrupt_ENT		dw	0		;  FIDD
+        		dw	0
+
+cmd_tail_off		dw	0		; command tail for 
+cmd_tail_seg		dw	0		;  Last FIDD
+
+
+; 	roots of device chains
+console_root_off	dw	-1
+console_root_seg	dw	-1
+aux_root_off		dw	-1
+aux_root_seg		dw	-1
+printer_root_off	dw	-1
+printer_root_seg	dw	-1
+disk_root_off		dw	-1
+disk_root_seg		dw	-1
+
+; 	stored address of XIOS entry routine
+XIOS_Entry_Offset	dw	0		; pointer to XENTRY
+XIOS_Entry_Segment	dw	0
+
+XIOS_Entry		equ	dword ptr XIOS_Entry_Offset
+
+			db	'This is the start of CONFID'
+
+
+eject
+
+begin:
+
+IF DEBUG
+
+	jmp	go_idle1		; special entry point
+
+
+	mov	cl,154
+	int	BDOS				; Get the sysdatseg
+	mov	sdatseg,es			; Save our sysdata segment
+ENDIF
+
+;  calculate the difference  between sysdat and our data
+	mov	bx,sdatseg		; get the system data segment
+	mov	ax,ds			; get our data segment
+	sub 	ax,bx			; find the paragraph difference
+	mov	cx,4
+	shl	ax,cl			; convert paras to bytes
+	mov	sysdat_diff,ax		; save the difference
+
+; now reset the XIOS entry point to point to our entry routine.
+	mov	es,sdatseg
+	mov	bx,0				; point at SYSDAT
+
+
+; read the XIOS entry point address and save it for later
+	mov	cs:XIOS_Entry_Segment,es	; rely on XIOS seg = SYSDAT seg
+	mov	ax,es:SD_XIOS_OFFSET[bx]	; read XIOS offset from SYSDAT
+	mov	cs:XIOS_Entry_Offset,ax		; and save it for later
+
+	mov	bx,MAX_PARAS			; set to max_para_per_process
+	mov	ax,es:word ptr 0[bx]		;  fieldx.
+	mov	cs:Paras_per_process,ax		; save the Max paras
+	mov	ax,0FFFFh			; set to 1 meg
+	mov	es:word ptr 0[bx],ax
+
+; and set our entry pointer
+	mov	bx,0				; set the pointer to 0
+	cli					; stop all interrupts
+	mov	es:SD_XIOS_OFFSET[bx],offset CONFIDD_Entry
+	mov	es:SD_XIOS_SEGMENT[bx],cs
+	sti					; allow interruptions now
+
+
+; Set the error mode so we get control of messages
+	mov	cl,F_ERRMODE
+	mov	dl,RETURN_MODE		; display no messages
+	int	BDOS
+
+; now attach to the console in case we need to print
+	mov	cl,C_ATTACH		
+	int	BDOS
+
+; save our data segment as this is a small model RSP
+	mov	cs:confidd_dseg,ds
+
+
+; Set up the entry point to Int 21h for char I/O
+	mov	di,0
+	mov	es,di			; set es to INTERRUPT table
+	mov	di,INT21_ADDR		; calculate the address of int 21h
+	mov	ax,offset Char_IO	; point to interrupt handler
+
+; Write the new INT 21H handler vector
+	cli
+	stosw				; write to the interrupt table
+	mov	ax,CS			; get the code segment
+	stosw				; write to the table
+	sti
+ 
+; Find the CONFIG.SYS file. First locate the system disk, 
+; and look for it there.
+	mov	es,sdatseg		; retrieve the SYSDAT address
+	mov	bx,SD_SYSDISK
+	mov	al,es:[bx]		; get the system disk
+	inc	al			; make disk number 1-relative
+	mov	config_sys_fcb,al	; and store in disk field of FCB
+	mov	device_fcb,al		; store it in the FIDD FCB as well
+					; pending reset if a disk specifi-
+					; cation is found in CONFIG.SYS.
+; Open CONFIG.SYS
+	mov	cl,F_OPEN
+	mov	dx,offset config_sys_fcb
+	int	BDOS
+	cmp	al,0ffh			; check for error on open
+	jne	read_config_sys		; if no error, then process config.sys
+	jmp	go_idle			;    else error, idle loop
+
+; The maximum size of config.sys is arbitrarily set at 2k because
+; it is highly unlikely CONFID.RSP could support that many commands.
+
+
+read_config_sys:			
+; Allocate memory for config.sys
+	mov	bx,offset mpb		; get the memory block
+	mov	MPB_START[bx],0		; no fixed start required
+	mov	MPB_MIN[bx],80h		; ask for atleast 2K
+	mov	MPB_MAX[bx],80h		; but no more than 2K
+	mov	dx,bx		
+	mov	cl,M_ALLOC		; 
+	int	BDOS			; call dos for memory
+
+; test for bad allocation
+	cmp	al,0
+	je	config_mem_ok
+	mov	dx,offset M_alloc_bad_msg
+	jmp	pmsg
+
+config_mem_ok:
+	mov	bx,offset mpb
+	mov	dx,mpb_start[bx]
+
+; fill CONFIG.SYS area with EOF markers
+	push	es
+	push	di
+	push	cx
+	push	ax
+	mov	es,dx
+	mov	cx,800h			; set count to 2k
+	mov	di,0
+	mov	al,1ah			; character to fill is EOF marker
+	cld
+	rep	stosb			; store 
+	pop	ax
+	pop	cx
+	pop	di
+	pop	es
+
+; Set up for the read
+	mov	cl,F_DMASEG		; set up DMA address
+	int	BDOS
+	mov	dx,0
+	mov	cl,F_DMAOFF		
+	int	BDOS
+
+; set the sector count to 2k bytes per read
+	mov	dx,16			; number of sectors in 2k
+	mov	cl,F_MULTISEC		; set multi sector count
+	int	BDOS			; call dos
+
+; now read CONFIG.SYS
+	mov	dx,offset config_sys_fcb
+	mov	cl,F_READ		; read a sector
+	int	BDOS
+	or	ah,ah			; any sectors read
+	jnz	close_config		; jmp if ok
+
+	mov	dx,offset config_read_err_msg
+	jmp	pmsg
+
+close_config:
+; now we are through with CONFIG.SYS, so close it
+	mov	dx,offset config_sys_fcb
+	mov	cl,F_CLOSE
+	int	BDOS
+
+parse_config:	
+; pick up the pointer to the begining of the file
+	mov	bx,offset mpb		; get the start of the file
+	mov	ax,MPB_START[bx]	; get the start of the memory
+	mov	es,ax			; load es with segment of config.sys
+	mov	bx,0			; offset is zero
+
+; prime  the scan loop with the pointer to the first command
+	push	es
+	push	bx			; save the pointers for config.sys
+
+; convert the file to uppercase for easier scanning
+toupper:
+	cmp	es:char[bx],1ah		; is it the EOF
+	je	done_toupper		
+	cmp	es:char[bx],00		; is it EOF without the marker?
+	je	done_toupper
+convert:	
+	cmp	es:char[bx],'a'
+	jb	not_lower
+	cmp	es:char[bx],'z'
+	ja	not_lower
+	and	es:char[bx],not 020h	; changed for readability
+not_lower:
+	inc	bx
+	jmp	toupper
+done_toupper:
+
+
+
+; Scan the Config.sys file for the next command to execute
+
+NEXT_COMMAND:
+	pop	bx
+	pop	es			; restore the pointers to config.sys
+
+; scan for the first character of the first command
+	call	scan
+	push	es
+	push	bx
+
+	cmp	dx,0
+	je	get_filesize
+	cmp	dx,1
+	jne	bad_command
+	pop	bx
+	pop	es
+	jmp	setup_XENTRY
+bad_command:
+	mov	dx,offset illegal_command
+	call	conmsg
+	jmp	next_command
+
+get_filesize:		; get size of file
+	mov	cl,F_SIZE		
+	mov	dx,offset device_fcb
+	int	BDOS			; file size returned in fcb rrec field
+	mov	bx,offset device_fcb
+	mov	ax,FCB_RREC[bx]		; get record count
+
+; now set up mpb for memory allocation
+	mov	cl,3
+	shl	ax,cl			; convert to paragraphs
+
+
+Load_FIDD:
+
+; allocate memory for the fidd.
+alloc_FIDD:
+	mov	bx,offset mpb		; get mpb
+	mov	MPB_START[bx],0		; clear start field
+	mov	MPB_MIN[bx],ax		; set minimum
+
+;	add	ax,400h			; allocate extra 16K for fidd
+	mov	ax, 0ffffh		; go for all of memory
+
+	mov	MPB_MAX[bx],ax		; and maximum fields
+	mov	dx,bx
+	mov	cl,M_ALLOC
+	int	BDOS			; and allocate memory
+	
+	cmp	al,0			; check for error
+	jz	open_FIDD		; jump on error
+
+	mov	dx,offset m_alloc_bad_msg
+	jmp	pmsg
+
+
+
+open_FIDD:
+	mov	dx,offset device_fcb	; get fcb for FIDD
+	mov	cl,F_OPEN		; and open it
+	int	BDOS
+	cmp	al,0ffh			; check for error
+	jne	set_FIDD_DMA		; jump if error occurred
+
+	mov	dx,offset FIDD_open_err_msg
+	jmp	pmsg
+
+set_FIDD_DMA:
+	mov	bx,offset mpb
+	mov	dx,mpb_start[bx]
+	mov	cl,F_DMASEG		; set up DMA address
+	int	BDOS
+	mov 	dx,0
+	mov	cl,F_DMAOFF		
+	int	BDOS
+	mov	dx,128			; set multi-sector count to maximum 
+	mov	cl,F_MULTISEC
+	int	BDOS
+
+FIDD_read:
+	mov	bx,offset device_fcb
+	mov	byte ptr 20h[bx],0	; set sector count to 0
+	mov	bx,dx			
+	mov	dx,offset device_fcb	; now do the read
+	mov	cl,F_READ
+	int	BDOS
+	cmp	al,0			; check for error or end of file
+	jz	FIDD_read		; jump back if not done yet
+	cmp	al,F_EOF		; end of file now?
+	je	close_FIDD		; jump if yes
+
+	call	free_FIDD_mem		; Couldn't read the FIDD, so deallocate 
+					;  its memory
+
+	mov	dx,offset FIDD_read_err_msg
+	jmp	pmsg
+
+
+; Close the FIDD file now
+close_FIDD:
+	mov	cl,F_CLOSE
+	mov	dx,offset device_fcb
+	int	BDOS
+
+; point at FIDD for its initialization
+	mov	bx,mpb			; get the staring paragraph
+	mov	es,bx			; segment of fidd
+	mov	bx,0			; offset of fidd in segment
+;;	push	es			; save FIDD segment for later
+
+; call the FIDD so that it may initialize the hardware and
+;  allocate any memory that it requires.
+
+	CALL	INIT_ENTRY		; Initialize this FIDD
+	
+
+; If the RPH Failed to initialize then skip all the disk table stuff
+;  and drop through to the  end of the routine.
+	call	get_RPH
+	test	es:RPH_Status[bx],S_Error	; If no initialization error
+	jz	FIDD_init_okay			;    Then FIDD okay
+						;    Else release FIDD
+
+; FIDD initialization failed.  Clean up the stack and release the 
+;  memory used by the bad FIDD.
+
+FIDD_failed:
+;;	pop	es				; balance the stack restore fidd segment
+	push	ax
+	push	dx
+	call	free_FIDD_mem		; deallocate the FIDDs memory
+	pop	dx
+	pop	ax
+	mov	dx,offset FIDD_init_err_msg
+	call	conmsg			; print an error
+	jmp	next_command		; return and parse the next command
+
+
+
+	
+; Determine the amount of memory to release.
+
+FIDD_init_okay:
+	mov	di,offset mfpb		; get mem free block
+	mov	si,offset MPB		; get mem alloc block
+	mov	ax,MPB_start[si]	; how much do we have
+	mov	MPB_start[di],ax	; that's what we'll release
+	
+	les	bx,RPH_Break_Addr[bx]	; get the break address
+	add	bx,15			; adjust bx to next highest para
+	mov	cl,4
+	shr	bx,cl			; convert to para
+	mov	cx,es
+	add	bx,cx			; add in segment
+	add	bx,0ah			; compensate for the mem descr.
+; not compatible with the new memory management
+;	mov	MPB_start[di],bx	; modify memory to this size
+
+	sub	bx,MPB_start[si]
+	mov	MPB_min[si],bx		; min is what we need + M.D.
+	mov	MPB_max[si],bx
+	mov	bx,MPB_start[si]	; get the start
+; commented out for the moment
+;	sub	bx,0ah			; move down to account for M.D.
+	mov	MPB_start[si],bx	; set the start
+	
+	mov	al,TRUE
+	call	Set_switch		; boost priority
+	mov	dx,offset mfpb
+	mov	cl,M_FREE
+	int	BDOS
+
+	mov	dx,offset MPB		
+	mov	cl,M_ALLOC
+	int	BDOS
+	mov	al,FALSE
+	call	set_switch
+
+	call	get_RPH			; gecover the RPH
+
+; test the FIDD to see if it was a disk drive.
+	cmp	es:RPH_No_units[bx],0		; how many drives is it?
+	jne	Disk_FIDD
+	jmp	Not_Disk_FIDD			; skip the disk initialization
+
+Disk_FIDD:
+; set the FIDD into the FIDD chain.
+	push	cs				; point the DWORD at the 
+	pop	es				;  beginning of the chain.
+	mov	di,offset disk_root_off		; get start of chain
+next_link:
+	cmp	es:word ptr [di],0ffffh		; is it the end of the chain
+	je	end_of_chain
+	les	di,es:dword ptr[di]		; get the next link
+	jmp	next_link
+end_of_chain:
+	mov	ax,FIDD_off			; get the fidd segment
+	stosw					; link offset into chain
+	mov	ax,FIDD_seg	
+	stosw					; save the segment
+
+
+; Initialize the disk tables for each drive.
+
+	call	get_RPH				; get the RPH back
+	mov	bp, 0				; initialize drive counter
+DO_next_drive:
+	inc	bp				; advance to next drive
+	mov	ax,bp				; get the count byte
+	cmp	al,es:RPH_No_units[bx]		; is there a drive left?
+	jbe	drives_left
+	jmp	Next_command			; done with fidd so exit
+
+; Find free drive in XIOS disk table
+;   ES:DI -> sysdata:disk table pointers
+drives_left:
+	mov	es,sdatseg		; point at SYSDAT
+	mov	cx,16			; 16 entries in table
+	mov	ax,0000			; test for zero entry
+	mov	di,DPH_TBL_BASE		; Point at fixed table start
+	repnz	scasw			; repeat while not cmps zero 
+	dec	di
+	dec	di			; point back to the entry
+
+	cmp	cx,0			; have we run off of the table?
+	jnz	ok	
+	cmp	ES:word ptr[di],00	; did we find a free drive?
+ 	jz	ok
+
+
+; All disk drives are taken so print a message and go to next drive
+;  The message will be printed for every drive not installed. This way
+;  the user will be able to tell how many drives have not been installed.
+
+	mov	dx,offset no_drives	
+	call	conmsg			; display the error
+	jmp	DO_NEXT_DRIVE		; branch back to do other commands 
+					; or drives.
+
+ok:
+	mov	ax,di
+	sub	ax,DPH_TBL_BASE		; get word offset into table
+	shr	ax,1			; ax = drive number (0 = A)
+					; es:di ==> slot in dph table
+
+
+; calc mask to add to internal bit-map to represent FIDD drive.
+	mov	cs:current_drive,al	; save the current drive
+	mov	cl,al			; get the drive count
+	mov	bx,01
+	shl	bx,cl			; build a bit map for the FIDD
+	mov	cs:current_disk,bx	; add to disk map later when table are set up
+
+
+; Save the pointer ot our slot in the XIOS DPH table
+	push	es 
+	push 	di			; save pointer to our slot
+
+; Get our RSP's corresponding DPH (BX -> offset)
+	sub	di,DPH_TBL_BASE		; subtract the offset
+	mov	si,DPH_table[di]	; load the DS:SI with our DPH
+	push	si			; save pointer to our DPH
+
+	mov	di,DPH_TBL_BASE		; point at first dph
+	mov	di,es:[di]		; di = system disk tables
+
+
+	push	es			; save the segment register
+	push	di			; and offset of drive A DPH
+
+; Get the Dword pointers to the DPB and BPB
+	call	get_RPH
+	les	bx,es:RPH_BPB_array[bx]	; get the pointer to the BPB table
+
+	add	bx,bp			; bp = drive+1
+	add	bx,bp			; calculate the word offset
+	sub	bx,2			;  into the drive table at bx
+
+	mov	bx, es:[bx]		; get offset of BPB
+	mov	si,DPH_DPB[si]		; get the DPB from the DPH
+
+	call	Build_DPB		; convert info and load DPB
+
+	pop	di
+	pop	es			; recover the pointer to A:'s DPH
+
+; now set up the hash table segment for FIDD disk
+
+	mov	ax,DPB_DRM[si]		; get DRM value
+					; hash tbl size is (DRM+1)/4 paras
+	inc	ax
+	shr	ax,1
+	shr	ax,1			; convert to para value
+
+	mov	si,offset impb1		; set up our local mpb
+	mov	MPB_MIN[si],ax
+	mov	MPB_MAX[si],ax
+	mov	ax,0
+	mov	MPB_START[si],ax
+	mov	MPB_PDADR[si],ax
+	mov	MPB_FLAGS[si],ax
+	mov	dx,si			; set up for allocation call
+	mov	cl,M_ALLOC
+	int 	BDOS
+
+	pop	bx			; recover dph
+	pop	di 
+	pop 	es			; recover pointer to slot in dph table
+
+	cmp	ax,0ffffh		; check for error (return of ffff)
+	je	no_memory		; jump on error
+	mov	ax,impb1		; get start of allocated area
+	mov	DPH_HASH[bx],ax		; and store in dph
+
+
+; Compute the offset of our local data from SYSDAT
+	mov	ax,ds			; get RSP data segment	
+	mov	cx,es			; get SYSDAT seg
+	sub	ax,cx			; paragraph difference
+	mov	cl,4
+	shl	ax,cl			; get byte difference
+	mov	cx,ax			; save difference in CX
+	mov	dx,DPH_DPB[bx]		; get the DPB address
+	add	ax,dx			; convert to sysdat seg
+	mov	DPH_DPB[bx],ax
+	add	bx,cx			; adjust DPH offset
+	mov	ax,bx
+	stosw				; and store in XIOS table
+	call	get_RPH			; recover the RPH
+
+; Set up the buffers for the DPH and install them
+	mov	cl,cs:current_drive	; restore the current drive
+	mov	ch,0			; clear the high byte
+	call	setup_buffers		; set up the bcbs and buffers
+
+; signal that the drive is ready for use
+	mov	ax,cs:current_disk
+	or	cs:FIDD_disk_map,ax	; add the new disk to the map	
+
+	jmp	DO_next_drive		; do the next logical drive in FIDD
+
+no_memory:
+	mov	dx,offset No_mem_mess
+	call	conmsg
+
+
+NOT_DISK_FIDD:
+; Other types of FIDDs would be installed into their FIDD chains
+;  at this point.
+	jmp	NEXT_COMMAND
+
+
+setup_XENTRY:	
+
+
+GO_IDLE:
+
+	mov	es,sdatseg			; get the system data area
+	mov	bx,Max_paras			; the number of paras in process
+	mov	ax,Paras_per_process		; load the original value
+	mov	es:word ptr 0[bx],ax		; restore the max paras field
+
+; special idle point for debugging
+IF	DEBUG
+
+GO_IDLE1:	
+
+ENDIF
+
+; first dispose of our console
+	mov	cl,C_DETACH
+	int	BDOS
+
+; Drop our priority to the minimum
+	mov	cl,P_PRIORITY
+	mov	dl,0ffh
+	int	BDOS
+
+; Drop into a permanent loop
+idle_loop:
+	mov	cl,P_DISPATCH
+	int	BDOS
+	jmp	idle_loop
+
+
+
+
+; --------------------------------------------------------------------
+;		S U P P O R T   R O U T I N E S 
+; --------------------------------------------------------------------
+
+
+
+
+;------------------------------------------------
+; On entry:
+;	DS = data segment for RSP
+;	ES:BX =  FIDD header
+; On exit:
+;	All registers preserved
+; - - - - - - - - - - - - - - - - - - - - - - - 
+; The FIDD address must be passed by the calling routine because:
+;	This routine will not know which routine to initialize if
+;       more than one FIDD resides in the Device chain root
+;-----------------------------------------------
+
+Init_entry:
+				; this is the entry for the init
+; Get the FIDD segment for the get_entries call
+	mov	FIDD_off,bx		; save the FIDD offset
+	mov	bx,ES			; get the FIDD segment
+	mov	FIDD_seg,bx		; save the FIDD segment
+					; module.
+	call	Get_entries		; get the entry points
+
+; Get a RPH to use to call the FIDD for initialization. 
+	call 	Get_RPH			; Get RPH returns es:bx = RPH
+Got_RPH:
+	push	ds
+	mov	es:RPH_length[bx],Plen_init	; set the length of packet
+	mov	es:RPH_command[bx],C_init	; command is init device
+	mov	es:RPH_status[bx],0		; clear the status
+
+; set up the command tail from the config.sys
+	mov	ax,cs:cmd_tail_off		; get the command tail 
+	mov	es:RPH_cmdtl_off[bx],ax		; for the FIDD to use
+	mov	ax,cs:cmd_tail_seg	
+	mov	es:RPH_cmdtl_seg[bx],ax
+	
+
+; The FIDD expects ES:BX to point to the RPH of the request for both
+;  Strategy and Interrupt.
+;  ALSO the ds must = the FIDD code segment
+	mov	ds,word ptr Strategy_ENT+2
+
+; Call the FIDD to initialize it. 
+;  This routine must know what type of device the FIDD is, so that
+;  it may understand the information the fidd passes back to it.
+
+	callf	cs:dword ptr Strategy_ENT	; call the Strategy entry
+	callf	cs:dword ptr Interrupt_ENT	; call the Interrupt entry
+
+	mov	al, es:RPH_no_units[bx]		; set correct number of units
+	mov	si,0
+	mov	FH_Dev_Name[si], al		; in FIDD header
+
+	pop	ds				; recover the ds
+
+	RET					; return
+
+
+
+
+; -------------------------------------
+; This routine uses the FIDD_off and FIDD_seg data to locate the 
+; Strategy and Interrupt entry points
+;--------------------------------------
+Get_entries:	
+	push	ax
+	push	bx
+	push	cx
+	push	si						
+	push	ds
+	lds	si,dword ptr FIDD_off	; point DS:SI at FIDD header
+	mov	ax,FH_Strategy[si]	; get the strategy
+	mov	bx,FH_Interrupt[si]	; get the interrupt
+	mov	cx,DS
+	pop	ds
+	mov	cs:Strategy_ENT,ax	; 
+	mov	cs:Interrupt_ENT,bx	; save the entry points
+	mov	cs:Strategy_ENT+2,cx	; build DWORD pointers to the 
+	mov	cs:Interrupt_ENT+2,cx	;  Entry routines
+	pop	si
+	pop	cx
+	pop	bx
+	pop	ax
+
+	ret				; return near to the caller
+
+
+;------------------------------------------------
+; get RPH     This routine returns the RPH
+;
+; On entry:
+; On exit:
+;	es:bx   -> RPH address
+;-----------------------------------------------
+
+Get_RPH:
+	push	ds
+	mov	ds,confidd_dseg
+	mov	bx,offset RPH
+	push	ds
+	pop	es	
+	pop	ds
+	ret
+
+
+
+;-------------------------------------------
+; Build_DPB -- build the CCP/M style table 
+;    from the MS-DOS BPB
+;
+; On entry:
+;   ES:BX -> BPB
+;   DS:SI -> empty DPB
+; On exit:
+;   ES:BX -> BPB
+;   DS:SI -> DPB
+;-------------------------------------------
+Build_DPB:
+
+	push	ax
+	push	cx
+	push	dx
+
+	mov	DOS_DPB_EXTFLAG[si],0FFFFh	; set the dos extended flag
+
+; set the number of fats
+	
+	mov	al,es:BPB_fats[bx]	
+	mov	ah,0		
+	mov	DOS_DPB_NFATS[si],ax
+
+; set the number of sectors per FAT
+
+	mov	ax,es:BPB_sect_fat[bx]
+	mov	DOS_DPB_NFATRECS[si],ax
+
+; calculate the total number of clusters on the disk
+;  The number of allocation units on disk = Total sectors
+;  less ( reserved+ (number of fats*sectors/fat)+number of directory
+;  sectors)  all divided by sectors/allocation unit.
+
+
+
+	mov	dx,es:BPB_sect_total[bx]	; get sectors on disk
+	mov	cx,es:BPB_sect_res[bx]		; get the reserved sectors
+	sub	dx,cx				; get the number of sectors used
+	mov	ax,es:BPB_sect_fat[bx]		; get sectors per fat
+	mov	cl,es:BPB_fats[bx]		; get number of fats
+	mul	cl				; ax = number of fat sectors 
+	sub	dx,ax				; update remaining sectors
+	mov	ax,es:BPB_dir_ents[bx]		; get the dir entries
+	mov	cl,5				; 
+	add	ax,31				; add to cover remainder
+	shr	ax,cl				; divide by 32
+	sub	dx,ax				; update remaining sectors
+	xchg	dx,ax
+	mov	cl,es:BPB_sect_alloc[bx]	; get sectors per cluster
+	mov	ch,0
+	mov	dx,0				; clear the high word
+	div	cx				; convert sectors to clusters
+	mov	DOS_DPB_NCLSTRS[si],ax		; set the number of clusters
+
+; calculate the cluster size
+
+	mov	ax,es:BPB_sect_size[bx]		; get the bytes/sect
+	mov	ch,0
+	mul	cx				; get the byte/alloc
+	mov	DOS_DPB_CLSIZE[si],ax		; set the cluster size (in bytes)
+
+; copy the FAT address
+
+	mov	ax,es:BPB_sect_res[bx]		
+	mov	DOS_DPB_FATADD[si],ax
+
+; sectors per track cannot be calculated from the BPB. It is
+;  arbitrarily set to sectors per allocation unit
+
+;	mov	al,es:BPB_sect_alloc[bx]	; get the allo size
+;	mov	ah,0				; clear the high byte
+	mov	ax,1				; doesn't matter. fidd only
+;						;  supports ffff sectors.
+	mov	DPB_SPT[si],ax
+
+; set the DRM
+	mov	ax,es:BPB_dir_ents[bx]
+	dec	ax
+	mov	DPB_DRM[si],ax
+
+; set the checksum vector to 8000h for fixed drives
+	mov	ax,0000			; set to zero = calculate later
+	cmp	byte ptr FIDD_type,2	; is it a FXD
+	jne	calc_it_later
+	mov	ax,8000h		; Set to Non_removable
+calc_it_later:
+	mov	DPB_CKS[si],ax		; set the CKV into the DPH
+
+; set BSH and BSM
+	mov	cx,0
+	mov	ax,DOS_DPB_CLSIZE[si]	; get the allocation size
+inc_BSH:
+	cmp	ax,128
+	je	set_BSH
+	inc	cx
+	shr	ax,1
+	jmp	inc_BSH
+set_BSH:
+	mov	DPB_BSH[si],cl		; set the BSH
+	mov	ax,1
+	shl	ax,cl
+	sub	ax,1
+	mov	DPB_BLM[si],al		; set the BLM
+
+; set PSH and PRM
+	mov	ax,es:BPB_sect_size[bx]	; get <n>
+	mov	cx,128
+	mov	dx,0			; clear high word	
+	div	cx			; prm = ( <n> /128) -1
+	dec	ax	
+	mov	DPB_PRM[si],al
+	mov	cx,0
+next_bit:
+	shr	ax,1
+	inc	cx
+	cmp	ax,0
+	jne	next_bit
+	mov	DPB_PSH[si],cl
+
+	pop	dx
+	pop	cx
+	pop	ax
+	ret
+
+
+
+
+;------------------------------------------------
+;  Setup BCBs and buffers
+; On entry:
+;	cx = drive number to setup (a:=0)
+;
+; This routine sets up the checksum vector and size for
+;  the disk drives supported by the FIDD. After allocating
+;  space for the checksum data, setup_buffer makes a second
+;  pass and allocates the BCB information for the drives.
+;-----------------------------------------------
+setup_buffers:					; near routine
+
+	push	bx				; save offset of RPH
+	push	es				; save the segment of RPH
+	push	cx				; save the drive number POPPED off is routine
+
+; find the largest drive in the system before the FIDDs
+	mov	es,sdatseg			; get the system data area
+	mov	bx,word ptr DPH_tbl_base	; get the disk-table table
+	mov	ax,bx				; ax points to current largest
+	mov	si,es:[bx]			; (find the PSH)
+	mov	si,es:DPH_DPB[si]		; get the  DPB for PSH
+psh_loop:
+	cmp	es:word ptr[bx],0		; is this the last
+	je	done_psh
+
+	mov	di,es:[bx]
+	mov	di,es:DPH_DPB[di]
+	cmp	es:DOS_DPB_EXTFLAG[di],0ffffh
+	je	dos_disk
+	sub	di,12				; compensate for CCPM disk
+dos_disk:
+	mov	cl,es:DPB_PSH[di]
+	cmp	es:DPB_PSH[si],cl		; if largest >= current
+	jae	psh_loopb			;  then  go get the next
+	mov	ax,bx				;  else largest = current
+	mov	si,di
+psh_loopb:	
+	add	bx,2
+	jmp	psh_loop
+done_psh:
+	mov	bx,ax				; get the  pointer back
+
+; es:[bx] points at the entry in the sysdata DPH table
+	mov	bx,es:[bx]		; get the actual DPH address
+	
+	sub	ax, DPH_tbl_base 	; get the true table offset
+	shr	ax,1
+
+	pop	cx			; restore our current drive number
+	push	cx
+	cmp	ax,cx			; check if same as the biggest alloc
+	je	do_our_DPH		; BR if so
+
+	mov	cx,ax			; get the drive number
+	mov	ax,1
+	shl	ax,cl			; build the bit map
+	test	ax,cs:fidd_disk_map	; is it one of ours?
+	jz	Their_DPH		; BR if not
+do_our_DPH:
+	call	Our_DPH			; allocate buffers for the current DPH
+Their_DPH:
+	pop	cx			; recover the drive number (A:=0)
+
+; we've already determined it's one of ours
+;	mov	ax,1
+;	shl	ax, cl			; make current drive vector
+;	test	cs:fidd_disk_map, ax	; check if this is one of ours
+;	jz	end_setup		; BR if not one of ours
+	mov	si, cx
+	shl	si, 1
+	mov	si, es:DPH_tbl_base[si]	; get pointer to DPH
+	mov	ax, es:DPH_dirBCB[bx]	; get directory buffer pointer
+	mov	es:DPH_dirBCB[si],ax	; and store into new DPH
+	mov	ax, es:DPH_datBCB[bx]
+	mov	es:DPH_datBCB[si],ax	; same for data buffer pointer
+	mov	di, es:DPH_DPB[si]	; get DPB pointer
+	mov	ax, es:DOS_DPB_NCLSTRS[di]
+	shr	ax,1
+	shr	ax,1
+	inc	ax			; calculate allocation vector
+	call	get_mem			; go for it
+	cmp	ax, 0
+	jne	alloc_loop1		; BR if no error
+alloc_loop_err:
+	pop	cx
+	mov	dx, offset wrapped_mess
+	jmp	pmsg
+alloc_loop1:
+	add	ax, sysdat_diff
+	mov	es:DPH_ALV[si], ax	; set allocation vector
+	test	es:DPB_CKS[di],8000h	; check if removable
+	jnz	end_setup		; BR to the bottom of the loop
+	mov	ax, es:DPB_DRM[di]
+	shr	ax,1
+	shr	ax,1
+	inc	ax
+	mov	es:DPB_CKS[di],ax	; set checksum size
+	call	get_mem
+	cmp	ax, 0
+	je	alloc_loop_err		; BR if error
+	add	ax, sysdat_diff		; normalize to sysdat segment
+	mov	es:DPH_CSV[si],ax	; set checksum vector
+end_setup:	
+	pop	es
+	pop	bx
+	ret
+
+			
+	
+;-----------------------------------------------------
+; Allocate memory for our FIDDs DPH DIRBCBs and DATBCBs
+;
+; ENTRY - ES:[bx] = address of DPH without BCBs
+; EXIT  - ES:[bx] = address of DPH with BCBs installed (sysdat relative)
+;-----------------------------------------------------
+Our_DPH:
+	mov	di,es:DPH_DPB[bx]	;
+	mov	cl,es:DPB_PSH[di]	;
+	mov	ax,128
+	shl	ax,cl			; find the sector size
+	add	ax,13h			
+	push	ax
+	call	get_mem
+	cmp	ax,0
+	jne	alloc_ok1
+	pop	ax			; balance the stack
+out_of_mem:
+	mov	dx,offset wrapped_mess
+	jmp	pmsg
+alloc_ok1:
+	call	alloc_ok2		; 
+	pop	ax
+	call 	get_mem
+	cmp	ax,0
+	je	out_of_mem
+alloc_ok2:
+	mov	di,ax
+	add	di,sysdat_diff		; convert to system data area
+	mov	es:byte ptr 3[di],-1	; set BCB(0) to uninitialized
+	lea	ax,3[di]		; get the addr of the BCB
+	mov	es:[di],ax		; point BCB header at BCB
+	lea	ax,13[di]		; get addr of buffer
+	mov	es:3[di],ax		; point BCB at the buffer
+	ret
+	
+
+;---------------------------------------------
+;get_mem:		; allocate memory from static buffer
+;
+; ENTRY - AX = number of bytes to allocate
+; EXIT  - AX = start of buffer
+;	       00h if error occurred
+;---------------------------------------------
+get_mem:		; allocate memory from static buffer
+	add	ax, ckv
+	jc	mem_err			; check for segment overflow
+	cmp	ax, offset endbuf
+	ja	mem_err			; check for buffer overflow
+	xchg	ckv, ax			; get real pointers
+	jmps	mem_end
+mem_err:
+	mov	ax, 0			; return error code
+mem_end:
+	ret
+
+
+
+
+
+;--------------------------------------------------------------
+; SCAN --searches the command line for a command and loads 
+;        "device_fcb" with the filename of the corresponding 
+;	 FIDD.
+; On entry:
+;	ES:BX => the command line
+; On exit:
+;	ES:BX => next line of commands
+;	"device_fcb"  filled with a valid filename
+;	"FIDD_type" = Command type
+;		1 - normal device command
+;		2 - fixed device command
+;		3 - printer device command
+;	DX = error status
+;		0	no error
+;		1	EOF
+;		ffff	illegal command
+;--------------------------------------------
+
+scan:
+	push	si
+	push	di
+	call	skip_blanks		; go to first printable charater
+	cmp	es:char[bx],'F'		; is it Fixed disk
+	jne	next1
+	mov	si,offset fixed_device	; point to command template
+	jmp	compare			; go to comparison routine
+next1:
+	cmp	es:char[bx],'P'		; is it a printer
+	jne	next2	
+	mov	si,offset printer_device ; point to command template
+	jmp	compare			; go to comparison routine
+next2:
+	cmp	es:char[bx],'D'
+	je	next3
+	jmp	bad_device
+next3:
+	mov	si,offset normal_device	; point to command template
+	jmp	compare			; go to comparison routine
+command_not_found:
+	jmp	bad_device		; if no command found then the
+					;  the scting found is not legal
+
+
+compare:
+; gang compare the  template with the string
+	cld
+	mov	di,bx
+	lodsb					; get the length of the string
+	mov	cl,al				; store in count
+	mov	ah,0				; zero high half of count
+	lodsb					; get the device type
+	mov	byte ptr FIDD_type,al		; save in dl
+	repz	cmpsb	
+	je	found_command
+	call	next_line			; scan to next line
+	jmp	bad_device
+
+found_command:					; command is valid
+	mov	bx,di
+	call	skip_blanks			; scan to the '='
+	mov	cs:cmd_tail_off,bx		; save this position for the
+	mov	cs:cmd_tail_seg,es		;  FIDD command tail
+	inc	bx				; move off of the '='
+	call	skip_blanks			; skip to the next non blank
+						; ES:BX => filename of FIDD
+
+; gang read the string into the Parser control block buffer
+	push	es
+	push	ds
+	mov	ax,es
+	mov	si,ds
+	mov	es,si
+	mov	ds,ax
+	mov	cx,15				; maximum filename size = 14
+	mov	di,offset filebuff
+	mov	si,bx
+	rep	movsb				; copy  the filename
+	pop	ds
+	pop	es
+
+
+; set up the parser control block for the parse
+	push	bx
+	mov	bx,offset PFCB
+	mov	PFCB_strng[bx],offset filebuff
+	mov	PFCB_FCB[bx],offset device_fcb
+	
+	mov	dx,offset PFCB
+	mov	cl,F_PARSE
+	int	BDOS			; file device fcb with filename 
+	mov	bx,offset device_fcb	; get the fcb
+	mov	byte ptr 20h[bx],0	; set the record count to 0
+
+	pop	bx			; of current fidd
+	call	next_line		; skip to next line
+	mov	di,offset device_fcb	; get the fcb
+	cmp	byte ptr 1[di],' '	; is the first byte of name blank
+	jne 	ok_parse
+	jmp	bad_device		; set flags if bad parse
+
+
+ok_parse:
+; get the system drive
+	cmp	device_fcb,0		; is file from config.sys on default drive?
+	jne	drive_spec		;    then go around this code
+	push	es
+	mov	es,sdatseg
+
+	push	bx
+	mov	bx, SD_SYSDISK
+	mov	cl,es:byte ptr [bx]	; GET THE SYSTEM DISK
+	inc	cl
+	pop	bx
+
+	mov	device_fcb,cl
+	pop	es
+drive_spec:				; The drive was specified
+	mov	dx,0			; no error
+	jmp	exit_scan
+
+bad_device:
+	cmp	es:char[bx],1Ah		; is it the end of file
+	je	end_of_file
+	cmp	es:char[bx],00		; is it a nul EOF
+	je	end_of_file
+	call	next_line		; advance to next line
+	mov	dx,0FFFFh		; bad device error
+	jmp	exit_scan
+
+end_of_file:
+	mov	dx,01			; EOF error
+exit_scan:
+	pop	di
+	pop	si
+	ret
+
+
+
+
+;--------------------------------------
+; print error message and give up
+;--------------------------------------
+pmsg:		mov	cl,C_WRITESTR
+	int	BDOS
+	
+		;make sure our files are closed
+	mov	dx,offset config_sys_fcb
+	mov	cl,F_CLOSE
+	int	BDOS
+	mov	dx,offset device_fcb
+	mov	cl,F_CLOSE
+	int	BDOS
+	jmp	go_idle
+
+
+
+;------------------------------------------
+; send a message to the console and return
+;------------------------------------------
+conmsg:
+	push	cx
+	push	bx
+	mov	cl,C_WRITESTR
+	int	BDOS
+	pop	bx
+	pop	cx
+	ret
+
+
+
+;------------------------------------------
+; Release memory allocated to FIDD after any error
+; which makes the FIDD unusable
+; assume base of FIDD memory is in the MPB_START field
+;------------------------------------------
+
+free_FIDD_mem:	
+	mov	ax,mpb			;get base of FIDD memory
+	mov	mfpb,ax			;store in mem release block
+	mov	dx,offset mfpb		; point to the mfpb
+	mov	cl,M_FREE
+	int	BDOS			;free it
+	ret				
+
+
+
+
+;----------------------------------------------
+next_line:
+	cmp	es:char[bx],0dh
+	je 	found_cr
+	cmp	es:char[bx],0ah
+	je	found_cr
+	inc	bx
+	jmp	next_line
+found_cr:
+	ret
+
+
+
+; --------------------------------------------
+; Skip blanks, scans across blanks until it finds
+;  finds a non printable character
+
+skip_blanks:
+	cmp	es:char[bx],' '		; is it a blank
+	je	skip_it
+	cmp	es:char[bx],0dh		; is it a <CR>
+	je	skip_it
+	cmp	es:char[bx],0ah		; is it a LF
+	je	skip_it
+	cmp	es:char[bx],09		; is it a tab
+	je	skip_it
+	ret
+skip_it:
+	inc	bx
+	jmp	skip_blanks
+
+
+;----------------------------------
+Error_No_RPH:
+	mov	dx,offset no_rph
+	jmp	pmsg
+
+
+eject
+	DSEG
+
+
+; **************************************************************
+; **						              **
+; **		Data area				      **
+; **						              **
+; **************************************************************
+
+
+
+FIDD_off	dw	0
+FIDD_seg	dw	0
+
+
+
+        
+
+RPH	RW	25h
+
+
+; This disk table is an example of a 9SPT single-sided IBM disk
+; DPH:
+; 	dw	0000h,0000h		;No translation
+;	dw	0000h,0000h		;Scratch Area
+; 	dw	DPB        		;Param Block
+; 	dw	0        		;Checksum vector address
+; 	dw	alloc_vec		;Alloc Vector
+; 	dw	0ffffh			;Directory Buffer C.B.
+; 	dw	0ffffh			;Data Buffer C.B.
+; 	dw	0ffffh			;Hash Table Segment
+; 
+; DPB:           	;single sided, 9sectors per track, IBM disk
+; 	dw	-1			;DOS disk flag
+; 	dw	2			;number of fats
+; 	dw	2			;sectors per fat
+; 	dw	360			;number of clusters
+; 	dw	512			;cluster size
+; 	dw	1			;first fat address
+; 	dw	9			;spt
+; 	db	0			;BSH (not used)
+; 	db	0			;BLM (not used)
+; 	db	0			;EXM (not used)
+; 	dw	360			;DSM (not used)
+; 	dw	63			;DRM
+; 	db	0			;AL0 (not used)
+; 	db	0			;AL1 (not used)
+; 	dw	08000h			;CKS
+; 	dw	0			;OFF
+; 	db	2			;PSH
+; 	db	3			;PRM
+
+
+DPH_table	dw	DPH0
+		dw	DPH1
+		dw	DPH2
+		dw	DPH3
+		dw	DPH4
+		dw	DPH5
+		dw	DPH6
+		dw	DPH7
+		dw	DPH8
+		dw	DPH9
+		dw	DPH10
+		dw	DPH11
+		dw	DPH12
+		dw	DPH13
+		dw	DPH14
+		dw	DPH15
+
+
+DPH0:
+	dw	0000h			;No translation
+	db	0,0,0			;Scratch Area
+	db	-1			;Media flag
+	dw	0000h	
+	dw	DPB0        		;Param Block
+	dw	0        		;Checksum vector address
+	dw	0			;Alloc Vector
+	dw	0ffffh			;Directory Buffer C.B.
+	dw	0ffffh			;Data Buffer C.B.
+	dw	0ffffh			;Hash Table Segment
+DPH1:
+	dw	0000h			;No translation
+	db	0,0,0			;Scratch Area
+	db	-1			;Media flag
+	dw	0000h
+	dw	DPB1        		;Param Block
+	dw	0        		;Checksum vector address
+	dw	0			;Alloc Vector
+	dw	0ffffh			;Directory Buffer C.B.
+	dw	0ffffh			;Data Buffer C.B.
+	dw	0ffffh			;Hash Table Segment
+DPH2:
+	dw	0000h			;No translation
+	db	0,0,0			;Scratch Area
+	db	-1			;Media flag
+	dw	0000h
+	dw	DPB2        		;Param Block
+	dw	0        		;Checksum vector address
+	dw	0			;Alloc Vector
+	dw	0ffffh			;Directory Buffer C.B.
+	dw	0ffffh			;Data Buffer C.B.
+	dw	0ffffh			;Hash Table Segment
+DPH3:
+	dw	0000h			;No translation
+	db	0,0,0			;Scratch Area
+	db	-1			;Media flag
+	dw	0000h
+	dw	DPB3        		;Param Block
+	dw	0        		;Checksum vector address
+	dw	0			;Alloc Vector
+	dw	0ffffh			;Directory Buffer C.B.
+	dw	0ffffh			;Data Buffer C.B.
+	dw	0ffffh			;Hash Table Segment
+DPH4:
+	dw	0000h			;No translation
+	db	0,0,0			;Scratch Area
+	db	-1			;Media flag
+	dw	0000h
+	dw	DPB4        		;Param Block
+	dw	0        		;Checksum vector address
+	dw	0			;Alloc Vector
+	dw	0ffffh			;Directory Buffer C.B.
+	dw	0ffffh			;Data Buffer C.B.
+	dw	0ffffh			;Hash Table Segment
+DPH5:
+	dw	0000h			;No translation
+	db	0,0,0			;Scratch Area
+	db	-1			;Media flag
+	dw	0000h
+	dw	DPB5        		;Param Block
+	dw	0        		;Checksum vector address
+	dw	0			;Alloc Vector
+	dw	0ffffh			;Directory Buffer C.B.
+	dw	0ffffh			;Data Buffer C.B.
+	dw	0ffffh			;Hash Table Segment
+DPH6:
+	dw	0000h			;No translation
+	db	0,0,0			;Scratch Area
+	db	-1			;Media flag
+	dw	0000h
+	dw	DPB6        		;Param Block
+	dw	0        		;Checksum vector address
+	dw	0			;Alloc Vector
+	dw	0ffffh			;Directory Buffer C.B.
+	dw	0ffffh			;Data Buffer C.B.
+	dw	0ffffh			;Hash Table Segment
+DPH7:
+	dw	0000h			;No translation
+	db	0,0,0			;Scratch Area
+	db	-1			;Media flag
+	dw	0000h
+	dw	DPB7        		;Param Block
+	dw	0        		;Checksum vector address
+	dw	0			;Alloc Vector
+	dw	0ffffh			;Directory Buffer C.B.
+	dw	0ffffh			;Data Buffer C.B.
+	dw	0ffffh			;Hash Table Segment
+DPH8:
+	dw	0000h			;No translation
+	db	0,0,0			;Scratch Area
+	db	-1			;Media flag
+	dw	0000h
+	dw	DPB8        		;Param Block
+	dw	0        		;Checksum vector address
+	dw	0			;Alloc Vector
+	dw	0ffffh			;Directory Buffer C.B.
+	dw	0ffffh			;Data Buffer C.B.
+	dw	0ffffh			;Hash Table Segment
+DPH9:
+	dw	0000h			;No translation
+	db	0,0,0			;Scratch Area
+	db	-1			;Media flag
+	dw	0000h
+	dw	DPB9        		;Param Block
+	dw	0        		;Checksum vector address
+	dw	0			;Alloc Vector
+	dw	0ffffh			;Directory Buffer C.B.
+	dw	0ffffh			;Data Buffer C.B.
+	dw	0ffffh			;Hash Table Segment
+DPH10:
+	dw	0000h			;No translation
+	db	0,0,0			;Scratch Area
+	db	-1			;Media flag
+	dw	0000h
+	dw	DPB10        		;Param Block
+	dw	0        		;Checksum vector address
+	dw	0			;Alloc Vector
+	dw	0ffffh			;Directory Buffer C.B.
+	dw	0ffffh			;Data Buffer C.B.
+	dw	0ffffh			;Hash Table Segment
+DPH11:
+	dw	0000h			;No translation
+	db	0,0,0			;Scratch Area
+	db	-1			;Media flag
+	dw	0000h
+	dw	DPB11        		;Param Block
+	dw	0        		;Checksum vector address
+	dw	0			;Alloc Vector
+	dw	0ffffh			;Directory Buffer C.B.
+	dw	0ffffh			;Data Buffer C.B.
+	dw	0ffffh			;Hash Table Segment
+DPH12:
+	dw	0000h			;No translation
+	db	0,0,0			;Scratch Area
+	db	-1			;Media flag
+	dw	0000h
+	dw	DPB12        		;Param Block
+	dw	0        		;Checksum vector address
+	dw	0			;Alloc Vector
+	dw	0ffffh			;Directory Buffer C.B.
+	dw	0ffffh			;Data Buffer C.B.
+	dw	0ffffh			;Hash Table Segment
+DPH13:
+	dw	0000h			;No translation
+	db	0,0,0			;Scratch Area
+	db	-1			;Media flag
+	dw	0000h
+	dw	DPB13        		;Param Block
+	dw	0        		;Checksum vector address
+	dw	0			;Alloc Vector
+	dw	0ffffh			;Directory Buffer C.B.
+	dw	0ffffh			;Data Buffer C.B.
+	dw	0ffffh			;Hash Table Segment
+DPH14:
+	dw	0000h			;No translation
+	db	0,0,0			;Scratch Area
+	db	-1			;Media flag
+	dw	0000h
+	dw	DPB14        		;Param Block
+	dw	0        		;Checksum vector address
+	dw	0			;Alloc Vector
+	dw	0ffffh			;Directory Buffer C.B.
+	dw	0ffffh			;Data Buffer C.B.
+	dw	0ffffh			;Hash Table Segment
+DPH15:
+	dw	0000h			;No translation
+	db	0,0,0			;Scratch Area
+	db	-1			;Media flag
+	dw	0000h
+	dw	DPB15        		;Param Block
+	dw	0        		;Checksum vector address
+	dw	0			;Alloc Vector
+	dw	0ffffh			;Directory Buffer C.B.
+	dw	0ffffh			;Data Buffer C.B.
+	dw	0ffffh			;Hash Table Segment
+
+                                                              
+
+DPB0:           	
+ 	dw	-1			;DOS disk flag
+	rb	27
+
+DPB1:           	
+ 	dw	-1			;DOS disk flag
+	rb	27
+
+DPB2:           	
+ 	dw	-1			;DOS disk flag
+	rb	27
+
+DPB3:           	
+ 	dw	-1			;DOS disk flag
+	rb	27
+
+DPB4:           	
+ 	dw	-1			;DOS disk flag
+	rb	27
+
+DPB5:           	
+ 	dw	-1			;DOS disk flag
+	rb	27
+
+DPB6:           	
+ 	dw	-1			;DOS disk flag
+	rb	27
+
+DPB7:           	
+ 	dw	-1			;DOS disk flag
+	rb	27
+
+DPB8:           	
+ 	dw	-1			;DOS disk flag
+	rb	27
+DPB9:           	
+ 	dw	-1			;DOS disk flag
+	rb	27
+                                            
+DPB10:           	
+ 	dw	-1			;DOS disk flag
+	rb	27
+                                            
+DPB11:           	
+ 	dw	-1			;DOS disk flag
+	rb	27
+                           
+DPB12:           	
+ 	dw	-1			;DOS disk flag
+	rb	27
+
+DPB13:           	
+ 	dw	-1			;DOS disk flag
+	rb	27
+        
+DPB14:           	
+ 	dw	-1			;DOS disk flag
+	rb	27
+                                                                                                                            
+DPB15:           	
+ 	dw	-1			;DOS disk flag
+	rb	27
+
+ 
+
+
+
+
+
+; *********************************************************
+
+filebuff	rb	15		; buffer area for PFCB
+PFCB		dw	0,0
+FIDD_type	db	0
+
+normal_device	db	6,1,'DEVICE'
+fixed_device	db	12,2,'FIXED-DEVICE'
+printer_device	db	7,3,'PRINTER'
+		;file control block for CONFIG.SYS
+config_sys_fcb	db	0
+		db	'CONFIG  SYS'
+		dw	0,0,0,0,0,0,0,0,0,0,0,0,0
+
+          		;file control block for FIDD currently being loaded
+device_fcb	db	0
+		db	'TGTBIO  COM'
+		dw	0,0,0,0,0,0,0,0,0,0,0,0,0
+
+    			;memory parameter block for allocating FIDD memory
+mpb	dw	0		;start
+	dw	0		;min
+	dw	0		;max
+	dw	0		;pdadr
+	dw	0		;flags
+
+    			;memory free parameter block for deallocating FIDD mem
+mfpb	dw	0		;start
+	dw	0		;reserved
+
+
+
+
+
+
+; Memory allocation parameter blocks for local use
+;  for FIDD
+impb	dw	0			;start
+	dw	0			;minimum
+	dw	0			;maximum
+	dw	0			;process descriptor address
+	dw	0			;flags
+;  for other allocations
+impb1	dw	0			;start
+	dw	0			;minimum
+	dw	0			;maximum
+	dw	0			;process descriptor address
+	dw	0			;flags
+
+
+DPH_offset	dw	0		;address of our DPH relative to SYSDAT
+					;used by SELDISK substitute
+bdisk_off	dw	0
+bdisk_psh	db	0
+
+sysdat_diff	dw	0
+
+
+;	error message strings
+config_read_err_msg	db	'Error: Reading CONFIG.SYS ',0dh,0ah,'$'
+FIDD_open_err_msg	db	'Error: Opening FIDD File ',0dh,0ah,'$'
+m_alloc_bad_msg		db	'Error: Allocating Memory To Load FIDD',0dh,0ah,'$'
+FIDD_read_err_msg	db	'Error: Reading FIDD File ',0dh,0ah,'$'
+FIDD_init_err_msg	db	'Error: Initializing FIDD ',0dh,0ah,'$'
+bad_addit_alloc_msg	db	'Error: Allocating Extra Memory For FIDD',0dh,0ah,'$'
+no_mem_mess		db	'Error: Allocating Memory For Disk Hash Tables',0dh,0ah,'$'
+wrapped_mess		db	'Error: Allocating System Memory',0dh,0ah,'$'
+illegal_command		db	'Error: Unrecognized Command In CONFIG.SYS',0dH,0aH,'$'
+no_drives		db	'Error: No Drives Available For FIDD',0dh,0ah,'$'
+no_rph			db	'Error: No RPH Available For I/O Call',0dh,0ah,'$'
+
+
+CKV	dw	offset CKV + 2			; last byte of memory before 
+	rb	2000h				; reserve 8 k for tables
+
+endbuf	db	0				; extra byte 
+
+
+
+end
+
+                                                                                                                                                                                                                                                                                        

@@ -1,0 +1,471 @@
+title	'Xios Header and Entry'
+
+
+;********************************************************
+;********************************************************
+;							*
+;	     CONCURRENT   CP/M 3.3			*
+;							*
+;	      SAMPLE XIOS FOR THE		  	*
+;							*
+;	        COMPUPRO  86/87.			*
+;							*
+;		     					*
+;							*
+;							*
+;	     Copyright (c) 1984				*
+;	     Digital Research, Inc.			*
+;	     Box 579, Pacific Grove			*
+;	     California, 93950				*
+;							*
+;							*
+;	     BY : JN, FB, GP, WD, MB		  	*
+;				 	  		*
+;	This XIOS  (Extended I/O System) was   		*
+;	written as a sample . Whenever a choice		*
+;       had to be made between clarity and 		*
+;	efficiency, clarity was chosen. Many of		*
+;	the modules could be made more efficient.	*
+;							*
+;							*
+;       To assemble and link the relocatable modules,   *
+;	refer to the CPROXIOS.SUB file. The format of   *
+;	XIOS.INP is as follows :			*
+;							*
+;							*
+;        xios =	headentr[data[o[0]],m],			*
+;	        intvec, pic,  np_8087, ctc, tick,	*	
+;	        conout, serout, auxio, vscreen, conin,	*
+;	        serin, ssint, i3int, servar, pcmode,	*
+;	        statline, list, switch, vccb, serdata,	*
+;	        dentry, reskew, mdisk, dpbs,		*
+;		fdrw, fdsel, fdfmt, hdisk		*
+;							*
+;							*
+;	Last mod. of this module:  2/6/85  JMB		*
+;********************************************************
+eject
+
+;include system.lib
+;include sysdat.lib
+nolist
+include system.lib
+include sysdat.lib
+list
+
+cgroup	group code, data	; this group definition forces an 8080
+				; model when used with a link command
+				; of xios = mod[data[o[0]]],mod2,mod3,...
+
+;---------------------------------------------------------------------
+;                    CONDITIONAL     ASSEMBLY     SWITCHES
+;---------------------------------------------------------------------
+
+NP_8087              equ      1        ; does xios handle 8087
+                                       ; 1 = yes, 0 = no
+DEBUG		     equ      0        ; debug switch
+
+;----------------------------------------------------------------------
+;                    END   CONDITIONAL    SWITCHES
+;----------------------------------------------------------------------
+eject
+
+	dseg
+
+public	sysdat, dispatch
+
+public	dph_tbl
+public	doorop
+public	supervisor
+public	debugflag
+public  stoppoll
+public  mem_alloc
+
+extrn	vccb0:byte, lcb0:byte, auxccb0:byte
+
+extrn	dph1:byte, dph2:byte, dph3:byte
+extrn	dph4:byte, dph5:byte, dpe5:byte
+
+	cseg
+
+public  supif
+public  intdisp
+
+extrn	io_const:near		; public in conin
+extrn	io_conin:near		; public in conin
+extrn	io_conout:near		; public in conout
+extrn	io_listst:near		; public in list
+extrn	io_list:near		; public in list
+extrn	io_auxin:near		; public in auxio
+extrn	io_auxout:near		; public in auxio
+extrn	io_auxstatin:near	; public in auxio
+extrn	io_auxstatout:near	; public in auxio
+extrn	io_switch:near		; public in switch
+extrn	io_statline:near	; public in statline
+
+extrn	io_seldsk:near 		; public in dentry
+extrn	io_read:near		; public in dentry
+extrn	io_write:near		; public in dentry
+extrn	io_flushbuf:near	; public in dentry
+extrn	io_format:near		; public in fdfmt
+
+
+;*******
+;		PC_MODE SUPPORT
+;
+extrn	io_screen:near		; public in pcmode
+extrn	io_video:near		; public in pcmode
+extrn	io_keybd:near		; public in pcmode
+extrn	io_shft:near		; public in pcmode
+extrn	io_eqck:near		; public in pcmode
+extrn	io_int13_read:near	; public in pcmode
+extrn	io_int13_write:near	; public in pcmode
+
+;*******
+;             INIT SUPPORT
+;
+extrn   int_init:near           ; in intvec
+extrn   pic_init:near           ; in pic
+extrn   hard_int_vec:near       ; in pic
+extrn   int_enable:near         ; in pic
+extrn   ctc_init:near           ; in ctc
+extrn   char_init:near          ; in chrinit
+extrn   vs_init:near            ; in vscreen
+extrn   fdc_init:near           ; in fd
+extrn   h_init:near             ; in hdisk
+extrn   np_8087_test:near       ; in np_8087
+
+extrn   pmsg:near               ; in conout
+eject
+
+;----------------------------------------------------------------------
+;               XIOS    ORIGIN    AT    C00
+;                BEGIN    XIOS    HEADER
+;------------------------------------------------------------------------
+
+	org	0c00h		; This org forces the XIOS to start at
+				; offset 0C00H in the system data area.
+
+	jmp init		; Hardware and I/O system initialization
+	jmp entry		; xios entry point
+
+sysdat		dw	0	; Sysdat Segment
+supervisor	rw	2
+
+
+; Location specific data structures defined by DRI
+
+	org	0c0ch
+
+tick		db	false		; tick enable flag
+ticks_sec	db	60		; # of ticks per second
+doorop		db	0		; global door open interrupt flag
+nauxccb		db	3		; number of auxiliary devices
+npcns		db	NPCONS		; number of physical consoles
+nvcns		db	NVCONS		; number of virtual consoles
+nccb		db	8		; total number of ccbs
+nlcb		db	2		; number of list devices
+ccb		dw	offset vccb0	; offset of the first ccb
+lcb		dw	offset lcb0	; offset of first lcb
+
+; disk parameter header offset table. Location defined by DRI.
+
+dph_tbl		dw	offset dph3	;A:	hard   #0
+		dw	offset dph4	;B:		1
+		dw	offset dph5	;C:	        2
+		dw	offset dph1	;D:  	floppy #0
+		dw	offset dph2	;E:		1
+		dw	0,0,0		;F:,G:,H:
+		dw	0,0,0		;I:,J:,K:
+		dw	0		;L:
+		dw	offset dpe5	;M:
+		dw	0,0,0		;N:,O:,P:
+
+mem_alloc	dw	0800H 		; buffer space for 8 virtual consoles
+
+auxccb		dw	offset auxccb0	; first ACB
+
+;----------------------------------------------------------------------
+;               END     XIOS     HEADER
+;----------------------------------------------------------------------
+eject
+
+;----------------------------------------------------------------------
+;               BEGIN    MISC     DEFINITIONS
+;----------------------------------------------------------------------
+
+dispatch	rw	2		; used by the I/O system as the entry 
+                                        ; into the dispatcher.Intialized by
+					; the XIOS init code.
+
+debugflag	db	DEBUG		; 001h = clock tick not enabled
+					; 002h = interrupt 3 not set to
+					;   the interrupt trap code.
+
+;----------------------------------------------------------------------
+;               END   MISC    DEFINITIONS
+;----------------------------------------------------------------------
+eject
+
+;------------------------------------------------------------------------
+;               BEGIN    XIOS    ENTRY    POINT
+;------------------------------------------------------------------------
+
+entry:		
+
+;	All calls to the XIOS routines enter through here
+;	with a CALLF.  Must return with a RETF
+;
+;       ENTRY:	AL = function number
+;		CX = parameter
+;		DX = 2nd parameter
+;		DS = system data
+;		ES = user data area
+;
+;       EXIT:	AX = BX = return
+;
+	cld			
+	xor ah,ah 
+
+	cmp	al,39			; *3.2*9*
+	 jb	ok
+
+illegal:
+	mov	ax,0ffffh
+	jmp	exit
+
+ok:
+	shl ax,1		;call routine
+	mov bx,ax 
+	call functab[bx]
+
+exit:
+	mov bx, rlr		
+	mov es, P_UDA[bx]
+
+	mov bx,ax		;BX=AX
+	retf			;All Done
+
+reserved:
+	mov	ax,0ffffh
+	ret
+
+;----------------------------------------------------------------------
+;               END    XIOS    ENTRY    POINT
+;----------------------------------------------------------------------
+
+eject
+
+;----------------------------------------------------------------------
+;	        XIOS   FUNCTION   TABLE
+;----------------------------------------------------------------------
+
+        dseg
+
+functab	dw	io_const	; 0 - console status
+	dw	io_conin	; 1 - console input
+	dw	io_conout	; 2 - console output 
+	dw	io_listst	; 3 - list status
+	dw	io_list		; 4 - list output
+	dw	io_auxin	; 5 - auxiliary input
+	dw	io_auxout	; 6 - auxiliary output
+	dw	io_switch	; 7 - switch screen
+	dw	io_statline	; 8 - display status line
+	dw	io_seldsk  	; 9 - select disk
+	dw	io_read		;10 - read
+	dw	io_write	;11 - write
+	dw	io_flushbuf	;12 - flush buffer
+	dw	io_polldev	;13 - poll device
+	dw	io_retvers	;14 - return special XIOS version number
+	dw	io_format	;15 - format (floppy) track
+	dw	reserved	;16 - not presently used
+	dw	reserved	;17 - not presently used
+	dw	reserved	;18 - not presently used
+	dw	reserved	;19 - not presently used
+	dw	reserved	;20 - not presently used
+	dw	reserved	;21 - not presently used
+	dw	reserved	;22 - not presently used
+	dw	reserved	;23 - not presently used
+	dw	reserved	;24 - not presently used
+	dw	reserved	;25 - not presently used
+	dw	reserved	;26 - not presently used
+	dw	reserved	;27 - not presently used
+	dw	reserved	;28 - not presently used
+	dw	reserved	;29 - not presently used
+	dw	io_screen	;30 - get/set screen mode
+	dw	io_video	;31 - video i/o
+	dw	io_keybd	;32 - keyboard info
+	dw	io_shft		;33 - shift status
+	dw	io_eqck		;34 - equipment check
+	dw	io_int13_read	;35 - read DOS disk
+	dw	io_int13_write	;36 - write DOS disk
+	dw	io_auxstatin	;37 - auxiliary status input	*3.2*9*
+	dw	io_auxstatout	;38 - auxiliary status output	*3.2*9*
+
+
+stoppoll        db       0
+eject
+
+;--------------------------------------------------------------------------
+;               BEGIN    SUPERVISOR    INTERFACE
+;--------------------------------------------------------------------------
+       cseg
+
+supif:		; Supervisor Interface
+;
+;	ENTRY:	CX = function #
+;		DX = parameter
+;		DS = parameter segment if address
+;		ES = user data area
+;	EXIT:	BX = AX = return
+;		CX = error code for RTM functions
+;		ES = return segment if address
+
+	push es 
+	mov bx,rlr
+	mov es,p_uda[bx]
+	xor ch,ch
+	callf cs:dword ptr supervisor
+	pop es
+	ret
+
+;---------------------------------------------------------------------------
+;              END    SUPERVISOR    INTERFACE
+;---------------------------------------------------------------------------
+eject
+
+;---------------------------------------------------------------------------
+;              BEGIN    XIOS     INITIALIZATION 
+;---------------------------------------------------------------------------
+
+	cseg
+
+;====
+init:		; CCP/M's XIOS initialization entry point
+;====
+;	
+	cli			;disable interrupts
+	mov sysdat,ds		; save sysdat for sysdat access
+        mov ax,supmod           ; place copy of SUPMOD in data segment
+	mov supervisor,ax       ; into Code Segment (supervisor)
+	mov ax,supmod+2
+	mov supervisor+2,ax
+
+	mov ax,dispatcher       ; Make copy of Interrupt Routines' access
+	mov dispatch,ax         ; point to dispatcher 
+	mov ax,dispatcher+2
+	mov dispatch+2,ax
+
+	mov int_ssreg,ss        ; establish the stack
+	mov int_spreg,sp
+	cld			; set forward direction
+	mov ax, ds		; ES = SS = DS
+	mov es, ax
+	mov ss, ax		; establish a stack for init
+	mov sp,offset int_tos
+
+	call int_init		; paint all the interrupt vectors
+				; and poke the NMI and BREAK vectors
+				; ( int 2 and int 3 )
+
+	call hard_int_vec	; initialize the hardware interrupt vectors
+
+	call char_init		; initialize the char I/O system
+
+	call pic_init		; initialize the interrupt system hardware 
+
+	call ctc_init		; initialize the counter timer
+
+        call vs_init            ; initialize the virtual screens
+
+	call int_enable		; turn on the interrupt system masks in the PIC's
+
+	sti			; turn on the CPU's interrupt system
+
+	call fdc_init		; initialize the floppy disk system
+
+	call h_init		; initialize the hard disk system
+
+if NP_8087
+	call np_8087_test	; checks if 8087 is present
+endif
+
+	call signon		
+	mov ss,int_ssreg	; restore stack for the far return
+	mov sp,int_spreg
+	mov bx, rlr		; restore ES
+	mov es, P_UDA[bx]
+	retf			; back to CCP/M's init process
+
+	dseg
+
+
+		rw	48		; initialzation stack
+int_tos		rw	0
+int_ssreg	rw	1
+int_spreg	rw	1
+
+;-----------------------------------------------------------------------
+;               END    XIOS    INITIALIZATION
+;-----------------------------------------------------------------------
+eject
+
+;-----------------------------------------------------------------------
+;              BEGIN    MISC    ROUTINES
+;-----------------------------------------------------------------------
+
+         cseg
+
+;-------
+intdisp:
+;-------
+	jmpf	cs:dword ptr dispatch
+
+;==========
+io_polldev:	; Function 13:  Poll Device
+;==========
+;
+;	ENTRY:	DL = device number
+;
+;	EXIT:	AL = 000h if not ready
+;		   = 0ffh if ready
+;----------
+	ret
+
+;==========
+io_retvers:	; Function 14:  Return special XIOS version number
+;==========
+	mov	ax,XIOS_VERSION
+	ret
+
+ptch:
+;-----
+	nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop
+
+
+signon:
+	mov bx, offset signon_m
+	call pmsg
+	ret
+
+        dseg
+
+signon_m db	1Bh,'E'
+	 db	'CompuPro/Z29 '
+if DEBUG
+	 db	'DEBUG '
+endif
+	 db	'XIOS of 2/6/85',0Ah,0Dh,0FFh
+
+;-----------------------------------------------------------------------
+;             END    MISC    ROUTINES
+;-----------------------------------------------------------------------
+
+	end
+;End of HEADENTR.A86
+
+                                                                                                                                                                                 

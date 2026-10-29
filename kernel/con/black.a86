@@ -1,0 +1,2970 @@
+
+
+pnamsiz	equ	8
+
+include pd.def
+
+TRUE	equ	0ffffh
+FALSE	equ	0
+
+include	popf286.mac
+
+FAT12		equ	00fffh		; 12 bit fat	*3.2*19*
+FAT16		equ	0ffffh		; 16 bit fat	*3.2*19*
+
+DRIVEN		equ	0dh		; (0 rel)
+DRIVEP		equ	0fh		; (0 rel)
+
+
+fxi40	equ	1bh
+dskmap	equ	16
+
+PUL		equ	ds:word ptr .05ch
+RLR		equ	ds:word ptr .068h
+THRDRT		equ	ds:word ptr .072h
+TOD		equ	ds:byte ptr .07Eh
+THRD_SPB	equ	0aah
+
+include	modfunc.def
+
+; struct pcfcb
+
+drive	equ	0		;drive
+fname	equ	1		;file name & type
+extent	equ	12		;extent (0 - 31)
+chksum	equ	13		;checksum
+module	equ	14		;module (0 - 63)
+				; 0x80 - file extended flag
+				; 0x40 - file write flag
+rcdcnt	equ	15		;record count (0 - 128)
+pcfcb1	equ	16		;PCDOS fcb flag byte
+				; 0x1f - high byte of file's dcnt
+				; 0x20 - hidden
+				; 0x40 - sub-directory
+				; 0x80 - always one
+pcfcb2 	equ	17		;same as pcfcb1
+lowdcnt	equ	18		;low byte of file's dcnt
+cbflag	equ	19		;current block flag
+cblock	equ	20		;current block (2 bytes)
+cblkidx equ	22		;current block index (2 bytes)
+time	equ	22		;time (hhhhhmmmmmmsssss)
+date	equ	24		;date (yyyyyyymmmmddddd)
+block1	equ	26		;first block in file
+csize	equ	28		;current file size
+cr	equ	32		;current record
+rr0	equ	33		;random record field (byte 0)
+rr1	equ	34		;random record field (byte 1)
+rr2	equ	35		;random record field (byte 2)
+
+
+; struct dirfcb
+
+dname	equ	0		;file name & type
+datts	equ	11		;PCDOS attributes
+				; 0x01 - read/only
+				; 0x02 - hidden
+				; 0x04 - system
+				; 0x08 - volume label
+				; 0x10 - sub-directory
+				; 0x20 - archive
+				; 0x40 - not used
+				; 0x80 - not used 
+datts2	equ	12		;CP/M attributes
+				; 0x80 - f1' modify default open rules
+				; 0x40 - f2' partial close default
+				; 0x20 - f3' ignore close checksum errors
+				; 0x10 - f4' disable checksums
+drsrv	equ	13		;reserved area
+dtime	equ	22		;time (hhhhhmmmmmmsssss)
+ddate	equ	24		;date (yyyyyyymmmmddddd)
+dblock1	equ	26		;first block in file
+dsize	equ	28		;current file size
+
+;struct pctod
+
+pcyr	equ	0		;year since 1980
+pcmon	equ	1		;month (1 - 12)
+pcday	equ	2		;day (1 - 31)
+pchr	equ	3		;hour (0 - 23)
+pcmin	equ	4		;minute (0 - 59)
+pcsec	equ	5		;seconds/2 (0 - 29)
+
+;struct cpmtod
+
+cpmdays	equ	0		;days since jan 1, 1978
+cpmhr	equ	2		;BCD hours (0 - 23)
+cpmmin	equ	3		;BCD minutes (0 - 59)
+cpmsec	equ	4		;BCD seconds (0 - 59)
+
+;struct hds
+
+hdrv	equ	0		;drive (A - M)
+mseq	equ	1		;media sequence #
+PBLK	equ	word ptr 2	;parent block
+pdcnt	equ	4		;parent dcnt
+HBLK	equ	word ptr 6	;1st block of directory
+prcnt	equ	8		;creating PD address
+
+cat	equ	02eh
+
+	DSEG
+
+	EXTRN	arecord:BYTE
+	EXTRN 	attributes:BYTE
+	EXTRN	bdrwflg:BYTE
+	EXTRN	blk:WORD
+	EXTRN	blkcnt:WORD
+	EXTRN	blkidx:WORD
+	EXTRN	blkoffset:WORD
+	EXTRN	byteoff:WORD
+	EXTRN	chdblk:WORD
+	EXTRN	check_fcb_ret:BYTE
+	EXTRN	chksiz:WORD
+	EXTRN  	cdrmaxa:WORD
+	EXTRN	clsize:WORD
+	EXTRN	common_dma:BYTE
+	EXTRN	comp_fcb_cks:BYTE
+	EXTRN	cpm_tod:BYTE
+	EXTRN	curdsk:BYTE
+	EXTRN	cur_dma:WORD
+	EXTRN	cur_dma_seg:WORD
+	EXTRN	dir_bcba:WORD
+	EXTRN	dir_cnt:BYTE
+	EXTRN	dirmax:WORD
+	EXTRN	dcnt:WORD
+	EXTRN	dirp:WORD
+	EXTRN	dma_ofst:WORD
+	EXTRN	dma_seg:WORD
+	EXTRN	dont_close:BYTE
+	EXTRN	dosfat:WORD
+	EXTRN	drvlbla:WORD
+	EXTRN	extcnt:WORD
+	EXTRN	fcbdsk:BYTE
+	EXTRN	fx_intrn:BYTE
+	EXTRN	hash_seg:WORD
+	EXTRN	hdirfx:BYTE
+	EXTRN	hdsaddr:WORD
+	EXTRN	hdsdir:BYTE
+	EXTRN	high_ext:BYTE
+	EXTRN	info:WORD
+	EXTRN	info_fcb:BYTE	
+	EXTRN   lock_shell:BYTE
+	EXTRN	lprvblk:WORD
+	EXTRN	lret:BYTE
+	EXTRN	make_flag:BYTE
+	EXTRN	mon_days:WORD
+	EXTRN 	mult_cnt:BYTE
+	EXTRN	mult_num:BYTE
+	EXTRN 	nclstrs:WORD
+	EXTRN	parlg:BYTE
+	EXTRN 	pc_cr:BYTE
+	EXTRN	pc_ext:BYTE
+	EXTRN	pc_module:BYTE
+	EXTRN	pc_tod:BYTE
+	EXTRN	phymsk:BYTE
+	EXTRN	physhf:BYTE
+	EXTRN	preread:BYTE
+	EXTRN	prvblk:WORD
+	EXTRN	rd_dir_flag:BYTE
+	EXTRN	sdcnt:WORD
+	EXTRN	searchl:BYTE
+	EXTRN	seldsk:BYTE
+	EXTRN	update_rc:BYTE
+	EXTRN	usrcode:BYTE
+
+
+eject
+
+	CSEG
+
+	EXTRN	check_fcb1:NEAR
+	EXTRN	check_fcb3:NEAR
+	EXTRN	checkwrite:NEAR
+	EXTRN	chk_olist:NEAR
+	EXTRN	chk_wild:NEAR
+	EXTRN	chk_wild0:NEAR
+	EXTRN	ckrofile:NEAR
+	EXTRN	close021:NEAR
+	EXTRN	conv_rr:NEAR
+	EXTRN	copy_user_no:NEAR
+	EXTRN	get_item:NEAR
+	EXTRN	dblockio:NEAR
+	EXTRN	directio:NEAR
+	EXTRN	discard_data:NEAR
+	EXTRN	flush:NEAR
+	EXTRN	flushx:NEAR
+	EXTRN	get_atts:NEAR
+	EXTRN	init_wzf:NEAR
+	EXTRN	lret_eq_ff:NEAR
+	EXTRN	mpmif:NEAR
+	EXTRN	openx1a:NEAR
+	EXTRN	pack_sdcnt:NEAR
+	EXTRN	patch:NEAR
+	EXTRN	pc_make_test:NEAR
+	EXTRN	rd_pcdir:NEAR
+	EXTRN	rdbuff:NEAR
+	EXTRN	reset_checksum_fcb:NEAR
+	EXTRN	roferror:NEAR
+	EXTRN	search_olist:NEAR
+	EXTRN	seek:NEAR
+	EXTRN	setcdr:NEAR
+	EXTRN	setenddir:NEAR
+	EXTRN	set_aret:NEAR
+	EXTRN	set_lret1:NEAR
+	EXTRN	test_lock:NEAR
+	EXTRN	tst_olist:NEAR
+	EXTRN	update_fat:NEAR
+	EXTRN	wrbuff:NEAR
+	EXTRN	wrdir:NEAR
+	
+	PUBLIC bdosrw
+	PUBLIC chk_pcfcb
+	PUBLIC closef
+	PUBLIC compfs
+	PUBLIC deletef
+	PUBLIC extsize
+	PUBLIC getnblk
+	PUBLIC getphy
+	PUBLIC getspace
+	PUBLIC makef
+	PUBLIC openf
+	PUBLIC opn0a
+	PUBLIC pc_chkrec
+	PUBLIC pcsearch
+	PUBLIC renamef
+	PUBLIC setattsf
+	PUBLIC setstamp
+	PUBLIC truncatef
+	PUBLIC xfcb
+
+pcsearch:
+;	entry:	Z flag (on stack) = 1 for search, 0 for searchn
+;		CL = searchl
+;
+					;if (first)
+	popf286 b286		; Make Iret do the pop flags
+	pushf
+	jnz pcs1			;{
+	call setenddir			;  dcnt = 0xffff;
+	mov extcnt,0			;  extcnt = 0;
+pcs1:					;}
+	cmp cl,0			;if (srchl)
+	jz pcs2				;{
+	mov bx,offset info_fcb+extent	;  if (infop->extent == '?')    
+	cmp byte ptr [bx],'?'		;    srchl = 2;
+	mov cl,2			;  else
+	je pcs2				;  {
+	mov cl,3			;    srchl = 3;
+	mov al,[bx]			;    extcnt = infop->extent & 0x1f;
+	xor ah,ah			;  }
+	mov extcnt,ax			;}
+pcs2:					;
+	cmp cl,3			;if (srchl < 3 && extcnt) dcnt--;
+	jae pcs3
+	test extcnt,0ffffh		
+	jz pcs3				
+	dec dcnt
+pcs3:
+	; CL = getdir searchl parameter (0,1,2,3) 
+	; getdir sets dirp and returns dirp in AX
+
+	mov searchl,cl
+pcs4:
+	mov cl,searchl			;do
+	xor ch,ch			; CH = info_fcb offset, CL = searchl
+	call getdir			;{ 
+	or ax,ax			;  if (!dirp = getdir(offset,searchl)))
+	jnz pcs5			;     return(0xff);
+	    				;}
+	popf286 b286		; Make Iret do the pop flags
+
+	jmp lret_eq_ff
+pcs5:
+
+;start			*3.2*
+;
+;     We will only return directory entries if the high bit of the drive
+;  field in the fcb is on.  (NOTE the calling program must turn it on before
+;  each search first AND search next.)
+;
+	cmp	searchl,2		;if (searchl >=2 &&
+	jb	pcs5a
+	mov	bx,ax
+	test	byte ptr datts[bx],010h	;    DIRP->DATTS=010h
+	jz	pcs5a
+	test	hdirfx,0ffh		;    !hdirfx)
+	jz	pcs4			;	goto pcs4;
+pcs5a:
+;end			*3.2*
+
+	cmp searchl,3			;while(srchl == 3 && 
+	jne pcs6			;      extsize() == 0xffff);
+	call extsize
+	cmp ax,0ffffh
+	jz pcs4	
+pcs6:
+	popf286 b286		; Make Iret do the pop flags
+	push es
+	mov es,dma_seg
+	mov di,dma_ofst
+
+	jnz pcs6a			;if (first && !srchl)
+	cmp searchl,0			;
+	jne pcs6a			;{
+	mov al,20h			;  p = dmaptr;
+	stosb				;  *p++ = 0x20;
+	test byte ptr datts[bx],08h	;  if (dirp->datts & 0x08)
+	jz pcs60			;  {
+	lea si,dname[bx]		;    for (i = 0; i < 11; i++)
+	mov cx,11			;      *p++ = dirp->dname[i];
+	rep movsb			;  }
+	jmps pcs61			;  else
+pcs60:					;  {
+	mov cx,11			;    for (i = 0; i < 11; i++)
+	rep stosb			;      *p++ = 0x20;
+pcs61:					;  }
+	mov al,21h
+	stosb				;  *p++ = 0x21;
+	xor al,al
+	mov cx,2			;  zero(p,2);
+	rep stosb
+	mov al,80h
+	stosb				;  *p++ = 0x80;
+	stosb				;  *p++ = 0x80;
+	stosb				;  *p++ = 0x80;
+	xor ax,ax
+	mov cx,39			;  zero(p,78);
+	rep stosw			;  *p++ = 0x21;
+	mov al,21h
+	stosb
+	xor al,al			;  zero(p,31);
+	mov cx,31
+	rep stosb
+	test byte ptr datts[bx],08h	;  if (!(dirp->datts & 0x08))
+	jnz pcs9			;    dcnt = 0xffff;
+	call setenddir
+	jmps pcs9			;}
+pcs6a:					;else
+	mov bx,dirp			;if (dirp->dname[0] == 0 ||
+	cmp byte ptr dname[bx],0	;    dirp->dname[0] == 0xe5)
+	je pcs6b
+	cmp byte ptr dname[bx],0e5h	;{
+	jne pcs8			;  zero(dmaptr,128);
+pcs6b:
+	mov al,0e5h    			;  *dmaptr = 0xe5;
+	stosb    			;}
+	xor ax,ax
+	mov cx,127
+	rep stosb
+	jmps pcs9
+pcs8:					;else
+	call extsize			;{
+	xor bx,bx			;  i = extsize();
+	push bx				;  copydir(dmaptr,i,FALSE);
+	push ax				;  zero(dmaptr+32,64);
+	push di				;  setsfcb();
+	call copydir			;  extcnt++;
+	pop di				;  if (extsize() == 0xffff) extcnt = 0;
+	pop bx				;}
+	pop ax
+	add di,32
+	mov cx,32
+	rep stosw 
+	call setsfcb			;es:di -> sfcb
+	inc extcnt
+	call extsize
+	cmp ax,0ffffh
+	jne pcs9
+	mov extcnt,0
+pcs9:
+	pop es
+	ret				;return(0);
+
+fcb_extsize:
+	xor ah,ah			;extcnt = pc_module << 5 + pc_ext;
+	mov al,pc_module
+	mov cl,5
+	shl ax,cl
+	or al,pc_ext
+	mov extcnt,ax
+	mov ax,word ptr info_fcb+csize
+	mov dx,word ptr info_fcb+csize+2 ;AX,DX = infop->csize
+	jmps extsize1
+
+extsize:
+	mov bx,dirp
+	mov ax,dsize[bx]		;AX,DX = dirp->dsize;
+	mov dx,dsize+2[bx]
+extsize1:
+	mov bx,ax			;BX = (WORD)size;
+	mov cl,14
+	call lshiftr			;AX = size >> 14; (ext)
+	and bx,03fffh			;if (!(BX &= 0x3fff))
+	or bx,bx
+	jnz exs1			;{
+	or ax,ax			;  if (AX)
+	jz exs1				;  {
+	dec ax				;     AX--;
+	mov bx,16384			;     BX = 16384;
+					;  }
+exs1:					;}
+	cmp ax,extcnt			;if (AX < extcnt) return(0xffff);
+	jae exs2
+	mov ax,0ffffh
+	ret
+exs2:					;else
+	ja exs3				;if (AX == extcnt) return(size);
+	mov ax,bx
+	ret
+exs3:					;else
+	mov ax,16384			;    return(16384);
+	ret				
+
+copydir:				;copydir(fcbp,size,fcbsw)
+					;    struct pcfcb *fcbp;
+					;    UWORD size;
+					;    BOOLEAN fcbsw;
+					;{
+	
+	push bp
+	mov bp,sp
+
+	mov di,4[bp]			; DI = fcbp
+
+	test word ptr 8[bp],0ffffh	;if (!fcbsw) fcbp->drive = user;
+	jnz cpd1
+	mov al,usrcode
+	mov es:[di],al
+cpd1:
+	xor bx,bx			; BX = i, SI = dirp, DI = fcbp
+	mov si,dirp			; AL = atts
+cpd2:
+	cmp bl,11			;for (i = 0; i < 11; i++)
+	jae cpd8			;{
+	xor al,al			;   atts = 0;
+	cmp bl,4			;   if (i < 4)
+	ja cpd3				;     att = (dirp->datts2 << i) & 0x80;
+	mov al,datts2[si]
+	mov cl,bl
+	shl al,cl
+	and al,080h
+	jmps cpd7
+cpd3:					;   else
+	cmp bl,8			;   if (i == 8 &&
+	jne cpd4			;     dirp->datts & 0x01) att = 0x80;
+	test byte ptr datts[si],01h
+	jz cpd7
+	jmps cpd6
+cpd4:					;   else
+	cmp bl,9			;   if (i == 9 &&
+	jne cpd5			;     dirp->datts & 0x04) att = 0x80;
+	test byte ptr datts[si],04h
+	jz cpd7
+	jmps cpd6
+cpd5:					;   else
+	cmp bl,10			;   if (i == 10 &&
+	jne cpd7			;    !(dirp->datts & 0x20)) att = 0x80;
+	test byte ptr datts[si],20h
+	jnz cpd7
+cpd6:
+	mov al,080h
+cpd7:
+	mov dl,dname[si+bx]		;   fcbp->fname[i] = (dirp->dname[i]
+	and dl,07fh			;          & 0x7f) | att;
+	or dl,al
+	mov es:fname[di+bx],dl
+	inc bx
+	jmps cpd2
+cpd8:					;}
+	mov ax,extcnt
+	and ax,1fh			;fcbp->extent = extcnt & 0x1f;
+	mov es:extent[di],al
+	
+	mov ax,6[bp]			;bc = size & 0x7f;
+	mov dl,al			;rc = size >> 7;
+	and dl,7fh			;if (bc) rc++;
+	shl ax,1
+	mov al,dl			; AL = bc, AH = rc
+	or al,al
+	jz cpd9
+	inc ah
+cpd9:
+	test word ptr 8[bp],0ffffh	;if (!fcbsw) fcbp->chksum = bc;
+	jnz cpd10
+	mov es:chksum[di],al
+cpd10:	
+	mov bx,extcnt			;fcbp->module = extcnt >> 5;
+	mov cl,5
+	shr bx,cl
+	mov es:module[di],bl
+	mov es:rcdcnt[di],ah		;fcbp->rcdcnt = rc;
+	mov al,80h			;i = 0x80;
+	test byte ptr datts[si],10h	;if (dirp->datts & 0x10) i |= 0x40;
+	jz cpd10a
+	or al,40h
+cpd10a:
+	test byte ptr datts[si],02h	;if (dirp->datts & 0x02) i |= 0x20;
+	jz cpd10b
+	or al,20h
+cpd10b:
+	mov bx,dcnt			;i |= dcnt >> 8;
+	or al,bh
+	mov es:pcfcb1[di],al		;fcbp->pcfcb1 = i;
+	mov es:pcfcb2[di],al		;fcbp->pcfcb2 = fcbp->pcfcb1;
+	mov es:lowdcnt[di],bl		;fcbp->lowdcnt = dcnt & 0xff;
+	xor ax,ax
+	mov es:cbflag[di],al		;zero(&fcbp->cbflag,3);
+	mov es:cblock[di],ax
+	lea di,time[di]			;move(&dirp->dtime,&fcbp->time,10);
+	lea si,dtime[si]
+	mov cx,5
+	rep movsw
+	mov sp,bp
+	pop bp
+	ret
+
+setsfcb:				
+;	entry ES:DI = dmaptr + 96
+
+	mov al,021h			;*dmap++ = 0x21;
+	stosb
+
+	mov bx,dirp			;if (!(dirp->ddate | dirp->dtime))
+	mov ax,ddate[bx]		;{
+	mov bx,dtime[bx]		;  zero(dmap,31);
+	or ax,bx			;  return;
+	jnz sfcb1			;}
+	mov cx,31
+	rep stosb
+	ret
+sfcb1:
+	call getpcd			;getpcd();
+	call cnvpcd			;cnvpcd();
+
+					;ES,DI = dmap
+	xor ax,ax			;zero(dmap,4);
+	mov cx,2			;dmap += 4;
+	rep stosw
+	mov cx,2			;move(&cpm_tod,dmap,4);
+	mov si,offset cpm_tod		;dmap += 4;
+	rep movsw
+	mov cx,21			;zero(dmap,21);
+	rep stosb
+	ret
+
+getpcd:
+
+	mov bx,dirp			;pc_tod.pcday = (i = dirp->ddate)
+	mov ax,ddate[bx]		;			& 0x1f;
+	mov dl,al			;AX = i
+	and dl,1fh
+	mov pc_tod+pcday,dl
+	mov cl,5			;i >>= 5;
+	shr ax,cl
+	mov dl,al			;pc_tod.pcmon = i & 0x0f;
+	and dl,0fh
+	mov pc_tod+pcmon,dl
+	mov cl,4			;i >>= 4;
+	shr ax,cl
+	mov pc_tod+pcyr,al		;pc_tod.pcyr = i;
+
+                    			;pc_tod.pcsec = (i = dirp->dtime)
+	mov ax,dtime[bx]		;			& 0x1f;
+	mov dl,al			;AX = i
+	and dl,1fh
+	mov pc_tod+pcsec,dl
+	mov cl,5			;i >>= 5;
+	shr ax,cl
+	mov dl,al			;pc_tod.pcmon = i & 0x3f;
+	and dl,3fh
+	mov pc_tod+pcmin,dl
+	mov cl,6			;i >>= 6;
+	shr ax,cl
+	mov pc_tod+pchr,al		;pc_tod.pchr = i;
+	
+	ret
+
+setpcd:
+	mov bx,dirp			;dirp->ddate =
+	mov al,pc_tod+pcyr		;  (((pc_tod.pcyr << 4) +
+	mov cl,4			;  pc_tod.pcmon) << 5) +
+	shl ax,cl			;  pc_tod.pcday; 
+	add al,pc_tod+pcmon
+	mov cl,5
+	shl ax,cl
+	add al,pc_tod+pcday
+	mov ddate[bx],ax
+
+	mov al,pc_tod+pchr		;dirp->dtime =
+	mov cl,6			;  (((pc_tod.pchr << 6) +
+	shl ax,cl			;  pc_tod.pcmin) << 5) +
+	add al,pc_tod+pcmin		;  pc_tod.pcsec;
+	mov cl,5
+	shl ax,cl
+	add al,pc_tod+pcsec
+	mov dtime[bx],ax
+
+	ret
+
+cnvpcd:
+	
+	xor bx,bx			;cpm_tod.cpmdays =
+	mov bl,pc_tod+pcmon
+	dec bx
+	add bx,bx
+	mov ax,mon_days[bx]		;  mon_days[pc_tod.pcmon-1] +
+	push ax
+	xor ah,ah
+	mov al,pc_tod+pcyr		;  365 * (pc_tod.pcyr + 2) +
+	inc ax
+	inc ax
+	mov bx,365			
+	mul bx
+	pop bx
+	add ax,bx
+	xor bx,bx
+	mov bl,pc_tod+pcday		;  pc_tod.pcday +
+	add ax,bx
+	push ax
+	mov bl,pc_tod+pcmon		;  leapdays(pc_tod.pcyr + 4,
+	xor bh,bh			;                 pc_tod.pcmon) + 1;
+	mov al,pc_tod+pcyr
+	add al,4
+	xor ah,ah			; AX = leapdays param 1
+	call leapdays			; BX = leapdays param 2
+	pop bx
+	add ax,bx
+	mov word ptr cpm_tod+cpmdays,ax
+
+	mov al,pc_tod+pchr		;cpm_tod.cpmhr = bcd(pc_tod.pchr);
+	call bcd			; AL = bcd(AL)
+	mov cpm_tod+cpmhr,al	
+
+	mov al,pc_tod+pcmin		;cpm_tod.cpmmin = bcd(pc_tod.pcmin);
+	call bcd			; AL = bcd(AL)
+	mov cpm_tod+cpmmin,al
+
+	ret
+
+cnvcpd:
+	mov si,offset tod		;move(&tod,&cpm_tod,5);
+	mov di,offset cpm_tod
+	mov cx,5
+	rep movsb
+cnvcpdx:
+
+					; CX = year, BX = days, DX = yl
+
+	mov cx,78			;year = 78;
+	mov bx,word ptr cpm_tod+cpmdays	;days = cpm_tod.cpmdays - 1;
+	dec bx
+
+cnvc1:					;FOREVER
+					;{
+	mov dx,365			;  yl = 365;
+	test cl,3			;  if (!(yl & 3)) yl = 366;
+	jnz cnvc2
+	inc dx
+cnvc2:
+	cmp bx,dx			;  if (days <= yl) break;
+
+;	jbe cnvc3
+	jb cnvc3
+
+	sub bx,dx			;  days -= yl;
+	inc cx				;  year++;
+	jmps cnvc1			;}
+cnvc3:
+					; DX = leapbias, SI = month
+	xor dx,dx
+	test cl,3			;if (!(year & 3) && days > 59)
+	jnz cnvc4			;  leapbias = 1;
+	cmp bx,59			;else
+	jbe cnvc4			;  leapbias = 0;
+	mov dx,1
+cnvc4:
+	mov si,24			;month = 12;
+cnvc5:	
+	dec si				;while(--month)
+	dec si
+	or si,si			;{
+	jz cnvc6			;  if ((mon_days[month] + leapbias)
+	mov ax,mon_days[si]		;         < days) break;
+	add ax,dx			;}
+	cmp ax,bx
+
+;	jae cnvc5
+	ja cnvc5
+
+cnvc6:
+	sub cx,80			;pc_tod.pcyr = year - 80;
+	mov pc_tod+pcyr,cl
+	mov ax,si
+	shr al,1
+	inc al
+	mov pc_tod+pcmon,al		;pc_tod.pcmon = month + 1;
+	mov ax,mon_days[si]
+	sub bx,ax
+	sub bx,dx
+	inc bl
+	mov pc_tod+pcday,bl		;pc_tod.pcday = days -
+	mov al,cpm_tod+cpmhr		;               mon_days[month] -
+	call bin			;		leapbias;
+	mov pc_tod+pchr,al		;pc_tod.pchr = bin(cpm_tod.cpmhr);
+	mov al,cpm_tod+cpmmin
+	call bin
+	mov pc_tod+pcmin,al		;pc_tod.pcmin = bin(cpm_tod.cpmmin);
+	mov al,cpm_tod+cpmsec
+	call bin
+	shr al,1			;pc_tod.pcsec = bin(cpm_tod.cpmsec)
+	mov pc_tod+pcsec,al		;		  >> 1;
+	ret
+
+leapdays:				;UWORD leapdays(year,month)
+;	entry AX = year, BX = month
+
+	mov dx,ax			;rv = year >> 2;
+	shr ax,1
+	shr ax,1
+	test dx,3			;if (!(year & 3) && 
+	jnz lpdy1			;    (mon_days[month-1] < 59)) rv--;
+	dec bx
+	add bx,bx
+	mov bx,mon_days[bx]
+	cmp bx,59
+	jae lpdy1
+	dec ax
+lpdy1:
+	ret				;return(rv);
+
+bcd:
+;	entry: AL = binval		; AL = bcd(AL);
+
+	xor ah,ah			;i = 0;
+bcd1:					;while (binval >= 10)
+	cmp al,10			;{
+	jb bcd2
+	sub al,10			;   binval -= 10;
+	add ah,16			;   i += 16;
+	jmps bcd1
+bcd2:					;}
+	add al,ah
+	ret				;return(i + binval);
+
+bin:
+;	entry: AL = bcdval		; AL = bin(AL);
+
+	xor ah,ah			;i = 0;
+bin1:					;while (bcdval >= 16)
+	cmp al,16			;{
+	jb bin2
+	sub al,16			;   bcdval -= 16;
+	add ah,10			;   i += 10;
+	jmps bin1
+bin2:					;}
+	add al,ah
+	ret				;return(i + bcdval);
+
+getdir:
+;	entry: CH = info_fcb offset
+;	entry: CL = search length (0,1,2,3)
+;	returns: AX,dirp = offset of directory entry, or zero if
+;		 no match or end of directory
+
+					;struct dirfcb *getdir(offset,srchl);
+
+					;FOREVER
+					;{
+	push cx				;  if (!(dirp = rd_pcdir()))
+					;    return(NULL);
+	call rd_pcdir			;
+	pop cx				;
+	mov dirp,ax
+	mov bx,ax
+	or ax,ax
+	jz gtd4b
+gtd1:
+	cmp cl,0			;  if (srchl == 0) return(dirp);
+	jne gtd3
+gtd2:
+	mov ax,bx
+	ret				;  else
+gtd3:
+	cmp cl,1			;  if (srchl == 1)
+	jne gtd4			;  {
+	mov al,byte ptr dname[bx]	;    if (!dirp->dname[0] ||
+	or al,al! jz gtd2		;        dirp->dname[0] == 0xe5)
+	cmp al,0e5h			;      return(dirp);
+	jz gtd2				;  }
+	jmps gtd6			;  else
+gtd4:					;  {
+	test hdsaddr,0ffffh		     
+	jnz gtd5
+	mov ax,dcnt
+	mov si,cdrmaxa			;    if (dcnt >= dphptr->cdrmax)
+	cmp ax,[si]			;      return(NULL);
+	jb gtd5
+gtd4a:
+	xor ax,ax
+	mov dirp,ax
+gtd4b:
+	ret
+gtd5:
+	mov al,byte ptr dname[bx]	;    if (!dirp->dname[0]) return(NULL);
+	or al,al
+	jz gtd4a
+	cmp al,0E5h			;    if (dirp->dname[0] == 0xe5) 
+	jz gtd6 			;      continue;
+	test byte ptr datts[bx],08h	;    if (dirp->datts & 0x08)
+	jnz gtd6			;      continue;
+	call match			;    if (match(offset)) return(dirp);
+	or al,al
+	jz gtd6
+	mov ax,dirp
+	ret
+gtd6:					;  }
+	jmp getdir			;}
+
+match:					;BOOLEAN match()
+;	entry: BX = dirp
+;	       CH = info_fcb offset
+;	exit: TRUE if name match
+
+	mov al,ch
+	push cx
+	xor ah,ah
+	mov si,offset info_fcb+1	;p(SI) = (UBYTE *)infop+1+offset
+	add si,ax
+					;q(BX) = dirp;
+	mov cx,11			;i = 11;
+mat1:					;do
+					;{
+	mov al,[si]			;  if ((*p ^ *q) & 0x7f &&
+	xor al,[bx]			
+	test al,7fh			
+	jz mat2				
+	mov al,[si]			;      (*p ^ '?') & 0x7f)
+	xor al,'?'			  
+	test al,7fh			
+	jz mat2				
+	xor al,al			;     return(FALSE);
+	pop cx
+	ret
+mat2:
+	inc si				;  p++;
+	inc bx				;  q++;
+	loop mat1			;} while(--i);
+	or al,1
+	pop cx
+	ret				;return(TRUE);
+
+lshiftl:
+;	Entry:	DX,AX = long value to shift left
+;		CL = shift count
+
+	xor ch,ch
+lshiftl_1:
+	shl ax,1
+	rcl dx,1
+	loop lshiftl_1
+	ret
+
+lshiftr:
+;	Entry:	DX,AX = long value to shift right
+;		CL = shift count
+
+	xor ch,ch
+lshiftr_1:
+	shr dx,1
+	rcr ax,1
+	loop lshiftr_1
+	ret
+
+mul_32:
+;	Entry:	BX,AX = long multiplicand
+;		CX = word multiplier
+;	Exit:	BX,AX = long result
+;		CX = preserved
+;		DX = used
+
+	mul cx
+	push dx
+	xchg ax,bx
+	mul cx
+	pop dx
+	add ax,dx
+	xchg ax,bx
+	ret
+
+div_32:
+;	Entry:	BX,AX = long dividend
+;		CX = word divisor
+;	Exit:	DX,AX = long result
+;		CX = remainder
+
+	jcxz div0			;divide by 0
+	cmp cx,1 ! jne not_div1		;divide by 1
+	  mov dx,bx
+	  xor cx,cx
+	  ret
+not_div1:
+	xor dx,dx			;extend AX to long value
+	xchg ax,bx			;low in BX, high in DX,AX
+	push ax				;save ax
+	div cx				;divide high part
+	mov di,ax			;save result
+	mul cx				;AX = even divisor part
+	pop dx				;old high in DX
+	sub dx,ax			;eliminate even part
+	mov ax,bx			;AX = old low part
+	div cx				;low part in AX
+	mov cx,dx			;CX = remainder
+	mov dx,di			;high result in DX
+	ret
+
+div0:
+	mov ax,-1
+	mov dx,ax
+	ret
+
+openf:
+	mov cl,0c0h
+	call get_omode			;get_omode(0xc0);
+
+	call setenddir			;dcnt = 0xffff;
+	mov cx,2			;
+	call getdir			;if (!(dirp = getdir(0,2))
+	or ax,ax			;{
+	jnz opn1
+	test hdirfx,0ffh		;  if (hdirfx & 0xff)
+	jz opn0				;  {
+	mov bx,hdsaddr			;    if (!(hdsaddr & 0xffff) ||
+	or bx,bx
+	jz opn0a
+	test HBLK[bx],0ffffh		;        !hdsaddr->hblk)
+	jnz opn0
+opn0a:					;    {
+	cmp info_fcb+1,02eh		;      if (info_fcb+1 == 0x2e &&
+	jne opn0
+	cmp info_fcb+2,020h		;          info_fcb+2 == 0x20)
+	jne opn0			;      {
+opn0b:
+	mov ax,offset info_fcb+2	;        dirp = AX = &info_fcb+1;
+	mov dirp,ax		
+	mov byte ptr info_fcb+datts+2,010h  ;    dirp->datts = 0x10;
+	mov word ptr info_fcb+block1+2,0    ;    dirp->block1 = 0;
+	jmps opn1			;      }
+					;    }
+					;  }
+opn0:					;  else else else
+					;  {
+	call reset_checksum_fcb		;    reset_checksum_fcb();
+	jmp lret_eq_ff			;    return(0xff);
+					;  }
+opn1:					;}
+	test hdirfx,0ffh		;if (hdirfx)
+	jnz $+5
+	jmp opn1d			;{
+	xor bx,bx			;  if ((BX = infop->extent) > 3)
+	mov bl,info_fcb+extent		;    return(0xff);
+	cmp bl,4
+	jnb opn0
+	mov di,ax			;  DI = AX;
+	test byte ptr datts[di],010h	;  if (!(datts[DI] & 0x10)) 
+	jz opn0				;    return(0xff);
+	or bl,bl			;  if (BX)
+	jz opn1aa
+	add bl,12			;    BX += 12;
+	jmps opn1ac
+opn1aa:					;  else
+					;  {
+	cmp hdsaddr,0			;    if (hdsaddr)
+	je opn1abc			; was opn1ab	*G*3.3*85*06*
+	mov bl,hdsdir			;      BX = hdsdir;
+	jmps opn1ac			;    else
+
+;start			*G*3.3*85*06*
+opn1abc:
+	mov	bl,fcbdsk		; Get the orginal drive (1 rel)
+	sub	bl,1			; Make (0 rel) and Is it default drive?
+					; Dec does not set Carry
+	jnc	opn1abd			; NO
+	mov	di,rlr
+	mov	bl,p_dsk[di]		; Get defualt drive number(0 rel)
+	jmps	opn1aca
+opn1abd:
+	and	bl,00011111b		; Get rid of non drive bits(over kill)
+	cmp	bl,DRIVEN		; Is it a floating drive(FD)?
+	jb	opn1ab			; NO
+	cmp	bl,DRIVEP		; Is it a FD?
+	jbe	opn1ac			; YES
+;end			*G*3.3*85*06*
+
+opn1ab:
+	mov bl,seldsk			;      BX = seldsk;
+opn1ac:					;  }
+			; BX has disk number (0 rel)
+	mov di,rlr			;  DI = rlr;
+			; BX has disk number (0 rel)
+			; DI ready list root
+opn1aca:
+	mov si,02eh[di]			;  SI = DI->cataddr;
+	or si,si
+	mov dx,si
+	jz opn1ac0			;  if (!(DX = SI) || *(SI+32) != 1)
+	cmp word ptr 32[si],1
+	je opn1ae			;  {
+	dec word ptr 32[si]		;    if (SI) *(SI+32)--;
+opn1ac0:
+	pushf
+	cli				;    turn off interrupts
+	mov si,pul			;    if (!SI = pul)
+	or si,si			;    {
+	jnz opn1ad			;      restore interrupts
+					;      AH = 11;
+	popf286 b286		; Make Iret do the pop flags
+	jmps opn1ba			;      goto set_aret;
+					;    }
+opn1ad:
+	mov ax,0[si]			;    AX = SI->p_link;
+	mov pul,ax			;    pul = AX;
+	popf286 b286		; Make Iret do the pop flags
+	mov 02eh[di],si			;    DI->cataddr = SI;
+	or dx,dx			;    if (DX)
+	jz opn1ad0			;    {
+	mov bp,si			;      BP = SI;
+	mov di,si			;      DI = SI;
+	mov si,dx			;      SI = DX;
+	mov cx,18			;      movsw(DI,SI,18);	*3.2*
+	rep movsw
+	mov si,bp			;      SI = BP;
+	jmps opn1ad1			;    }
+opn1ad0:				;    else
+	xor ax,ax			;    {
+	mov di,si			;      zero(DI=SI,32);
+	mov cx,18			;    }			*3.2*
+	rep stosw
+opn1ad1:
+	mov word ptr 32[si],1		;    *(SI+32) = 1;
+opn1ae:					;  }
+	mov di,dirp			;  DI = dirp;
+	add bx,bx
+	add si,bx			;  SI += 2*BX;
+	mov bx,[si]			;  if (!(BX = *SI) ||
+	or bx,bx
+	jz opn1a
+	dec word ptr prcnt[bx]
+	jz opn1b                      	;      --BX->prcnt)
+opn1a:					;  {
+	push si
+	call get_item			;    if (!(BX = get_item())
+	pop si
+	jnz opn1b			;    {
+opn1ba:
+	mov ah,11			;      AH = 11;
+	jmp set_aret			;      goto set_aret;
+opn1b:					;    }
+	mov [si],bx			;    *SI = BX;
+opn1c:					;  }
+	mov al,curdsk			;  BX->hdrv = curdsk;
+	mov hdrv[bx],al
+	mov si,drvlbla			;  BX->mseq = *(drvlbla + 2);
+	mov al,2[si]
+	mov mseq[bx],al
+	mov dx,block1[di]		;  DX = DI->block1;
+	cmp dx,chdblk			;  if (DX == chdblk && /* name=="." */
+	jnz opn1c1			;  
+	mov si,hdsaddr			;     (SI = hdsaddr))
+	or si,si			;
+	jz opn1c1			;  {
+	mov ax,PBLK[si]			;    AX = SI->pblk;
+	mov cx,pdcnt[si]		;    CX = SI->pdcnt;
+	jmps opn1c2			;  }
+opn1c1:					;  else
+					;  {
+	mov ax,chdblk			;    AX = chdblk;
+	mov cx,dcnt			;    CX = dcnt;
+opn1c2:					;  }
+	mov PBLK[bx],ax			;  BX->pblk = AX;
+	mov pdcnt[bx],cx		;  BX->pdcnt = CX;
+	mov HBLK[bx],dx			;  BX->hblk = DX;
+	mov word ptr prcnt[bx],1	;  BX->prcnt = 1;
+	ret				;  return;
+opn1d:					;}
+	mov bx,ax			;if (dirp->datts & 0x10)
+	test byte ptr datts[bx],10h	;{
+	jz $+5				;  reset_checksum_fcb();
+	jmp opn0			;  return(0xff);
+					;}
+	cmp attributes,080h		;if (attributes == 0x80 &&
+	jne opn1e
+	test byte ptr datts[bx],01h	;    dirp->datts & 0x01)
+	jz opn1e
+	mov attributes,020h		;  attributes = 0x20;
+opn1e:
+	mov al,info_fcb+extent		;extcnt = infop->extent & 0x1f;
+	and al,01fh
+	xor ah,ah
+	mov extcnt,ax
+	call extsize	
+	cmp ax,0ffffh			;if ((size = extsize()) == 0xffff)
+
+;start		*G*3.2*4*
+	jnz $+3
+	inc ax				; set record count to zero
+;end		*G*3.2*4*
+
+	push ax
+	call set_sdcnt			;set_sdcnt();
+	mov ch,5			;if (search_olist(5) && check_fcb1())
+	call search_olist		;{
+	jnz opn2
+
+	mov bx,offset opn1f
+	push bx
+	mov check_fcb_ret,TRUE
+	call check_fcb1
+	pop bx	
+	pop ax
+	cmp info_fcb+cr,0ffh		;  if (infop->cr == 0xff)
+	jne opn4			;    infop->cr = infop->csize & 0x7f;
+	mov al,info_fcb+csize
+	and al,07fh
+	mov info_fcb+cr,al
+	jmp opn4
+opn1f:
+	call setenddir			; restore dcnt & dirp!!!
+	mov cx,2			; they can be destroyed by check_fcb1
+	call getdir
+					;}
+opn2:					;else
+	pop ax				;{
+	mov bx,0ffffh		
+	push bx				;  copydir(infop,size,TRUE);
+	push ax
+	mov bx,offset info_fcb
+	push bx
+	call copydir
+	add sp,6
+	call reset_checksum_fcb		;  reset_checksum_fcb();
+	cmp info_fcb+cr,0ffh		;  if (infop->cr == 0xff)
+	jne opn3			;    infop->cr = dirp->dsize & 0x7f;
+	mov bx,dirp
+	mov al,dsize[bx]
+	and al,07fh
+	mov info_fcb+cr,al
+opn3:
+	or info_fcb+module,080h		;  infop->module |= 0x80;
+opn4:					;}
+	mov make_flag,TRUE
+	jmp openx1a
+
+set_sdcnt:
+	mov si,dcnt			;sdcnt = dcnt;
+	mov sdcnt,si			;pack_sdcnt();
+	jmp pack_sdcnt			;return;
+
+get_omode:				;VOID get_omode(mask)
+;	entry:	CL = (0x80 0r 0xc0) open mode mask
+
+;					; AL = atts
+	push cx
+	call get_atts			;atts = get_atts;
+	pop cx
+	and al,cl			;atts &= mask;
+	cmp al,0c0h			;if (atts == 0xc0) atts = 0x40;
+	jne gom1
+	  mov al,040h
+gom1:
+	mov high_ext,al			;high_ext = atts;
+	shr al,1			;atts >>= 1;
+	jnz gom2			;if (atts == 0) atts = 0x80;
+	  mov al,080h
+gom2:
+	mov attributes,al		;attributes = atts;
+	ret
+
+closef:
+	test hdirfx,0ffh		;if (hdirfx && (BX = hdsaddr))
+	jz cls0a			;{
+	mov bx,hdsaddr			;  BX->hblk = 0; /*This comment does
+					; not match the code*/
+	or bx,bx			;  return;
+	jz cls0a0			;}
+	xor	bl,bl
+	mov	info_fcb+extent,bl
+	jmp	opn0b
+cls0a0:
+	ret
+cls0a:
+	test byte ptr chksiz+1,80h	;if (chksiz & 0x8000) 
+	jnz cls0b			;  rd_dir_flag = 0f0h;
+	mov rd_dir_flag,0f0h
+cls0b:
+	call setenddir			;dcnt = 0xffff;
+	mov cx,2
+	call getdir			;if (!(dirp = getdir(0,2)))
+	or ax,ax			;  return(0xff);
+	jnz cls1
+	jmp lret_eq_ff	
+cls1:
+	test info_fcb+module,080h	;if (!(infop->module & 0x80))
+	jnz cls2			;  update_fat();
+	call update_fat
+cls2:
+	call set_sdcnt			;sdcnt = dcnt;
+	test info_fcb+module,040h	;if (infop->module & 0x40)
+	jz cls3				;{
+	call closedir			;  closedir();
+	call flush			;  flush();
+cls3:					;}
+	and info_fcb+module,03fh	;infop->module &= 0x3f;
+	or info_fcb+module,080h		;infop->module |= 0x80;
+	jmp close021
+
+makef:
+	mov cl,080h	
+	call get_omode			;get_omode(0x80);
+	call setenddir			;dcnt = 0xffff;
+	mov cx,2			;
+	call getdir			;if (dirp = getdir(0,2))
+	or ax,ax			;  exterr(0x08ff);
+	jz mak1
+	mov ah,8
+	jmp set_aret
+mak1:
+	call setenddir			;dcnt = 0xffff;
+	mov cx,1
+	call getdir			;if (!(dirp = getdir(0,1)))
+	or ax,ax			;{
+	jnz mak2
+	mov bx,hdsaddr			;  if (!(BX = hdsaddr)) return(0xff);
+	or bx,bx
+	jz mak1c
+	mov ax,HBLK[bx]			;  if (!(AX = BX->hdblk)) return(0xff);
+	or ax,ax
+	jz mak1c
+mak1a:
+	cmp ax,nclstrs			;  while(AX < dpbptr->nclstrs)
+	jae mak1b			;  {
+	push ax				;    push(AX);
+	call getnblk			;    AX = getnblk(AX);
+        pop bx				;    BX = pop();
+	jmps mak1a			;  }
+mak1b:
+	mov prvblk,bx			;  prvblk = BX;
+	mov ax,bx
+	call alloc			;  AX = alloc(AX = BX);
+	mov blk,ax			;  blk = AX;
+	mov bx,ax			;  BX = AX;
+	or ax,ax			;  if (!AX) return(0xff);
+	jz mak1c
+	mov ax,prvblk			;  AX = prvblk;
+	call fixfat			;  fixfat(AX,BX);
+	mov ax,blk			;  AX = blk;
+;	mov bx,0fffh			; 			*3.2*19*
+	mov bx,dosfat			; 12 or 16 bit fat	*3.2*19*
+	call fixfat			;  fixfat(AX,0xfff);
+	call update_fat			;  update_fat();
+	mov ax,blk			;  AX = blk;
+	call zeroblk			;  zeroblk(AX);
+        call setenddir			;  setenddir();
+	mov cx,1
+	call getdir			;  if (!(dirp = getdir(0,1))) 
+	or ax,ax			;    return(0xff);
+	jnz mak2			;}
+mak1c:
+	jmp lret_eq_ff
+mak2:
+	xor bx,bx
+	mov si,dirp			;SI = dirp;
+mak3:
+	cmp bl,11			;for (i = 0; i < 11, i++)
+	jae mak4			;{
+	mov al,info_fcb+fname[bx]	;  SI->dname[i] = infop->fname[i] &
+	and al,07fh			;        	  0x7f;
+	mov dname[si+bx],al		;}
+	inc bl
+	jmps mak3
+mak4:
+	xor ax,ax
+	mov di,dirp			;zero(dirp->datts2,20);
+	add di,datts2
+	mov cx,10
+	rep stosw
+
+	call cnvcpd			;cnvcpd();
+	call setpcd			;setpcd();
+	mov si,dirp			;SI = dirp;
+
+	test hdirfx,0ffh		;if (hdirfx)
+	jnz $+5
+	jmp mak4e			;{
+	mov byte ptr datts[si],010h	;  SI->datts = 0x10;
+	xor ax,ax
+	call alloc			;  AX = alloc(0);
+	or ax,ax
+	jz mak1c			;  if (!AX) return(0xff);
+	mov blk,ax			;  blk = AX;
+	mov si,dirp			;  SI = dirp;
+	mov block1[si],ax		;  SI->block1 = AX;
+;	mov bx,0fffh			;			*3.2*19*
+	mov bx,dosfat			; 12 or 16 bit fat	*3.2*19*
+	call fixfat			;  fixfat(AX,BX);
+	call update_fat			;  update_fat();
+	call wrdir			;  wrdir();
+	test hdsaddr,0ffffh		;  if (!hdsaddr) setcdr();
+	jnz $+5
+	call setcdr
+	mov ax,blk			;  AX = blk;
+	call zeroblk			;  zeroblk(AX);
+	mov ax,blk			;  AX = blk;
+	xor bx,bx			;  BX = 0;
+	call getphy			;  getphy(AX,BX);
+	call init_wzf			;  init_wzf();
+	mov si,cur_dma			;  SI = cur_dma;
+	mov byte ptr dname[si],02eh	;  SI->dname[0] = 0x2e;
+	xor bx,bx
+mak4a:
+	cmp bl,10			;  for (BX = 0; BX < 10; BX++)
+	jae mak4b			;    SI->dname[BX+1] = 0x20;
+	mov byte ptr dname+1[si+bx],020h
+	inc bl
+	jmps mak4a
+mak4b:
+	mov byte ptr datts[si],010h	;  SI->datts = 0x10;
+	mov ax,blk			;  AX = blk;
+	mov block1[si],ax		;  SI->block1 = AX;
+	mov dirp,si			;  dirp = SI;
+	call setpcd			;  setpcd();
+
+	mov si,cur_dma			;  SI = cur_dma
+	add si,32			;  SI++;
+	mov byte ptr dname[si],02eh	;  SI->dname[0] = 0x2e;
+	mov byte ptr dname+1[si],02eh	;  SI->dname[1] = 0x2e;
+	xor bx,bx
+mak4c:
+	cmp bl,9			;  for (BX = 0; BX < 9; BX++)
+	jae mak4d			;    SI->dname[BX+2] = 0x20;
+	mov byte ptr dname+2[si+bx],020h
+	inc bl
+	jmps mak4c
+mak4d:
+	mov byte ptr datts[si],010h	;  SI->datts = 0x10;
+;start		*3.2*G*8*
+;	mov ax,chdblk			;  AX = chdblk
+	xor	ax,ax
+	mov	di,hdsaddr
+	test	di,di			; if no hdsaddr are parent is DR ROOT
+	jz	mak4d1
+	mov	ax,HBLK[di]
+mak4d1:
+;end		*3.2*G*8*
+	mov block1[si],ax		;  SI->block1 = AX:
+	mov dirp,si			;  SI = dirp;
+	call setpcd			;  setpcd();
+	call seek			;  seek();
+	xor cx,cx
+	call wrbuff			;  wrbuff(0);
+	ret				;  return;
+					;}
+mak4e:
+	mov byte ptr datts[si],020h	;dirp->datts = 0x20;
+
+	call set_sdcnt			;set_sdcnt();
+	mov al,attributes		;AL = attributes
+	call pc_make_test		;pc_make_test(AL);
+
+;start			*G*3.3*85*09*
+
+		; Do we need to update the High Water Mark(HWM)?
+
+	test	hdsaddr,0ffffh		; Do we have a HDS?
+	jz	mak4f			; NO (ie we are at the root)
+	mov	bx,hdsaddr		; Get HDS
+	cmp	HBLK[bx],0		; Is our blk # zero? (0 implies root)
+	jne	mak4g			; NO (ie  we are in a subdirectory)
+mak4f:
+		; We only update the High Water Mark(HWM) if we are at the
+		; root as we have no HWM for subdirectories.
+
+	call setcdr			; Update HWM(cdrmaxa) if needed
+;end			*G*3.3*85*09*
+
+mak4g:
+	call wrdir			;wrdir();
+
+	mov extcnt,0			;extcnt = 0;
+	mov bx,0ffffh		
+	push bx				;copydir(infop,0,TRUE);
+	inc bx
+	push bx
+	mov bx,offset info_fcb
+	push bx
+	call copydir
+	add sp,6
+	call reset_checksum_fcb		;reset_checksum_fcb();
+	or info_fcb+module,080h		;infop->module |= 0x80;
+	mov al,make_flag
+	mov attributes,al
+	jmp openx1a
+
+deletef:
+
+	call get_atts			;get_atts();
+					;AH = found, AL = i
+	xor ax,ax			;found = FALSE;
+del1:					;for (i = 0; i < 2; i++);
+	cmp al,2			;{
+	jb far1
+	    jmp del6
+far1:
+	push ax
+	call setenddir			;  dcnt = 0xffff;
+del2:
+	mov cx,2			;  while (dirp = getdir(0,2))
+	call getdir			;  {
+	or ax,ax
+	pop ax
+	jne far2
+	    jmp del5
+far2:
+	test attributes,80h		;     if (attributes & 80h) return(0);
+	jz $+3
+	ret
+	mov ah,TRUE			;     found = TRUE;
+	or al,al			;     if (!i)
+	jnz del3			;     {
+	push ax
+	call tst_olist			;       tst_olist();
+	mov bx,dirp			;       if (dirp->datts & 0x03)
+	test byte ptr datts[bx],003h	;	   exterr(0x03ff);
+	jz $+5
+del25:
+	jmp roferror
+	mov bx,offset info_fcb		;       if (!wild()) i = 1;
+	call chk_wild
+	pop ax
+	jz del3				; YES fcb is wild
+	inc al
+	jmps del30
+del3:
+;	mov bx,dirp
+;	test byte ptr datts[bx],010h
+;	jnz del32
+
+del30:					;     }
+	cmp al,1			;     if (i)
+	jne del4			;     {
+	push ax	
+	mov bx,dirp			;       if (dirp->datts & 0x10)
+	test byte ptr datts[bx],010h	;	{
+	jz del34			;          do
+
+	push	bx
+	mov	bx,offset info_fcb
+	call	chk_wild
+	pop	bx
+	jz	del2			; Is a wild delete, so skip DIRS
+	test	hdirfx,0ffh		; Is this a hdir delete?
+	jz	del32			; NO	report could not find
+
+					;          {
+	mov ax,dblock1[bx]		;            AX = dirp->dblock1;
+	mov cx,2			;	     CX = 2;
+del31:
+	mov	bx,ax
+	push	ax
+	call tstempty			;            if (!tstempty(AX,CX))
+	pop	ax
+	jz del32			;              return(0xff);
+	call getnblk			;            AX = getnblk(AX);
+	xor cx,cx			;            CX = 0;
+	cmp ax,nclstrs			;	   } while (AX < dpb->nclstrs);
+	jb del31
+	jmps del33
+
+del32:
+		; Return file not found
+	pop ax
+	jmp lret_eq_ff
+del33:
+	call chkpds			;   	   if (chkpds()) return(0xff);
+	jnz del32
+	dec dcnt			;	   dcnt--;
+	mov cx,2
+	mov	chdblk,0		; *3.2*G*13*
+	call getdir			;	   if (!(dirp = getdir(0,2)))
+	or ax,ax			;            return(0xff);
+	jz del32
+	jmps del35			;        }
+del34:
+	call chk_olist			;	 else chk_olist();
+del35:
+	mov bx,dirp
+	mov byte ptr[bx],0e5h		;        dirp->dname[0] = 0xe5;
+	mov ax,dblock1[bx]
+	push bx
+	call delfat			;	 delfat(dirp->dblock1);
+	pop bx
+	mov word ptr dblock1[bx],0	;	 dirp->dblock1 = 0;
+	call wrdir			;        wrdir();
+	mov bx,offset info_fcb
+	call chk_wild			;        if (!wild()) break break;
+	pop ax
+	jnz del6			;     }
+del4:						
+	push ax
+	jmp del2			;   }
+
+del5:	or ah,ah			;   if (!found) return(0xff);
+	jnz $+5
+	jmp lret_eq_ff
+	inc al
+	jmp del1			;}
+del6:
+	jmp update_fat
+
+
+;start			*G*3.3*85*10*
+
+;
+;	If ANY process is currently pointing to the subdirectory that we
+;    wish to delete we will return an error.
+;
+
+chkpds:
+	mov	bx,THRD_SPB		; Lock up THREAD link
+	mov	cx,f_sync
+	call	mpmif
+	mov	bx,dirp
+	mov	cx,block1[bx]		; block number of directory to delete
+
+	mov	si,thrdrt		; Link list of all Processes
+	jmps	chkloop2
+
+chkloop1:
+		; SI -> link list of PD's
+		; CX    BLK number of directory to delete
+
+	mov	si,02[si]
+
+chkloop2:
+;
+;	Check out next process.
+;
+	cmp	si,0			; Are there anymore processes to check?
+	je	dirfree			; NO
+	mov	di,word ptr cat[si]	; grap CAT offset
+	cmp	di,0			; Is there a CAT?
+	je	chkloop1		; NO (All logical drives are at roots)
+	mov	al,curdsk		; get the drive the subdir is in(0 rel)
+
+tryfloats:
+;
+;	Any logical drive can be a floating drive, so check all logical drives
+;    to see if ANY point to the subdirectory we wish to delete.
+;
+		; DI -> CAT array
+		; AL    (0 rel) drive that rmdir will take place in
+		; SI -> PD
+		; CX    BLK number of directory to delete
+
+	mov	dx,0fffeh		; Set up of proper index into CAT array
+nxtfloat:
+	inc	dx
+	inc	dx
+	cmp	dx,32			; Have we checked all logical Drives?
+	je	chkloop1		; YES
+	mov	bx,di
+	add	bx,dx
+	mov	bx,[bx]			; bx -> hds of logical drives
+	cmp	bx,0			; Does this drive have a HDS?
+	je	nxtfloat		; NO (ie We are not in a subdirectory)
+	cmp	cx,HBLK[bx]		; do block numbers match?
+	jne	nxtfloat		; NO
+	cmp	al,HDRV[bx]		; do physical drives match?
+	jne	nxtfloat		; NO
+
+		; Someone is pointing at the directory, so no deleting it
+dirinuse:
+	inc	cx			; block number can not be 0ffffh so
+					; this clears the zero flag
+
+dirfree:
+	pushf
+	mov	bx,THRD_SPB		; lets free up the thread sync
+	mov	cx,f_unsync
+	call	mpmif
+	popf286 b286		; Make Iret do the pop flags
+
+	ret
+
+;end			*G*3.3*85*10*
+
+
+;start			*3.2*
+
+tstempty:
+
+;	ENTRY
+;		CX	->	first fcb to check if empty(0 rel)
+;		AX	->	block number of directory
+;
+;
+;	EXIT
+;		zf	->	off if all empty else on
+;
+
+	mov	blkcnt,cx		; tmp location only
+	xor	bx,bx
+	call	getphy			; calulate ARECORD from block number
+
+; dup in pcbdos under zeroblk:
+	mov	di,DIR_BCBA
+	sub	di,12
+
+fill00:
+	mov	di,12[di]
+	cmp	word ptr 12[di],0
+	jnz	fill00
+
+	mov	byte ptr [di],0ffh
+	mov	di,10[di]
+	mov	cur_dma,di
+	mov	cur_dma_seg,ds		; now have buffer for a physical record
+	xor	al,al
+	rep	stos	al
+; end dup
+
+	mov	al,PHYMSK
+	xor	ah,ah
+	inc	ax			; # log records in a phy rcord
+	mov	blkidx,ax		; tmp location only
+	shl	ax,1
+	shl	ax,1			; # of directories per phy. record
+	mov	blkoffset,ax		; tmp location only
+
+	mov bx,clsize
+	mov cl,7
+	add cl,physhf			;BX = clsize >> (physhf + 7);
+	shr bx,cl
+
+lzero1:					;while(BX--)
+	push bx
+	call 	seek			;  seek();
+	call	rdbuff
+
+		; Now lets see if all the fcbs in this block are empty
+	pop	bx			; number of phy records yet to read
+
+	mov	cx,blkcnt		; start fcb
+	mov	dx,blkoffset		; # fcb in phy. rec
+	sub	dx,cx
+	mov	si,cur_dma
+tstloop1:
+	cmp	cx,0
+	je	tst1a
+		add	si,32
+		dec	cx
+		jmps	tstloop1
+tst1a:
+	mov	blkcnt,cx
+tstnext1:
+	dec	dx
+	jl	bempty			; OK to exit as zero flag is off
+	mov	al,[si]
+	cmp	al,0
+	je	tst1		
+	cmp	al,0e5h
+	jne	fndone
+
+tst1:			; test next fcb
+	add	si,32
+	jmps	tstnext1
+	
+fndone:
+	xor	ax,ax			; set zero flag
+	ret
+	
+bempty:
+		; This record is all empty
+
+	mov	ax,blkidx		; # log rec in a phy rec
+	add word ptr arecord,ax		;  arecord += AX;
+	adc arecord+2,0
+
+	dec bx
+	jnz 	lzero1			;}
+	inc	bx			; turn off zero flag
+	ret
+
+;end			*3.2*
+
+renamef:
+	call copy_user_no		;(UBYTE *)infop += 16;
+	mov dl,1
+	call chk_wild0			;if (wild()) exterr(0x09ff);	
+	mov ah,9
+	jz ren0
+	call setenddir			;dcnt = 0xffff;
+	mov cx,01002h			
+	call getdir			;if (getdir(16,2)) exterr(0x08ff);
+	or ax,ax
+	jz ren1
+	mov ah,8
+ren0:
+	add info,dskmap
+	mov parlg,0
+	jmp set_aret
+ren1:
+	call setenddir			;dcnt = 0xffff;
+	mov cx,2
+	call getdir			;if (getdir(0,2)) return(0xff);
+	or ax,ax
+	jnz ren2
+	jmp lret_eq_ff
+ren2:
+	mov bx,ax
+	test byte ptr datts[bx],11h	;if (dirp->datts & 0x01) 
+	jz ren3				;  exterr(0x03ff);
+	jmp roferror
+ren3:
+	call chk_olist			;chk_olist();
+	xor bx,bx
+	mov si,dirp
+ren4:
+	cmp bl,11			;for (i = 0; i < 11, i++)
+	jae ren5			;{
+	mov al,info_fcb+fname+16[bx]	;  dirp->dname[i] = infop->fname[i] &
+	and al,07fh			;        	    0x7f;
+	mov dname[si+bx],al		;}
+	inc bl
+	jmps ren4
+ren5:
+	jmp wrdir			;wrdir();
+	
+setattsf:
+
+	call setenddir			;dcnt = 0xffff;
+	mov cx,2
+	call getdir			;if (!(dirp = getdir(0,2)))
+	or ax,ax			;  return(0xff);
+	jnz set1
+	jmp lret_eq_ff
+set1:
+	call get_atts			;if ((get_atts() & 0x40) &&
+	test al,40h
+	jz set2	
+	mov cl,info_fcb+cr		;    (CL = infop->cr & 0x7f) &&
+	and cl,07fh
+	or cl,cl
+	jz set2
+	mov bx,dirp
+	mov ax,word ptr dsize[bx]	;    dirp->dsize)
+	mov dx,word ptr dsize+2[bx]
+	or ax,dx				
+	jz set2				;{
+	test al,07fh			;  if (dirp->dsize & 0x7f)
+	jz set1a
+	and al,7fh			;    dirp->dsize &= ~(LONG)0x7f;
+	jmps set1b
+set1a:					;  else
+	sub ax,080h			;    dirp->dsize -= 0x80;
+	sbb dx,0
+set1b:
+	xor ch,ch			;  dirp->dsize += CL;
+	add ax,cx
+	adc dx,0
+	mov word ptr dsize[bx],ax
+	mov word ptr dsize+2[bx],dx
+set2:					;}
+	call chk_olist			;chk_olist();
+	xor bx,bx
+	mov si,dirp
+set3:					;for (i = 0; i < 11; i++)
+	cmp bl,11			;{
+	jae set10
+	mov ah,info_fcb+fname[bx]	;  set = infop->fname[i] & 0x80;
+	and ah,080h			
+	cmp bl,4			;  if (i < 4)
+	jae set4			;  {
+	lea di,datts2[si]		;    p = &dirp->datts2;
+	mov al,080h			;    mask = 0x80 >> i;
+	mov cl,bl			;  }
+	shr al,cl
+	jmps set7
+set4:					;  else
+	cmp bl,8			;  if (i <  8) continue;
+	jb set9				;  else
+	lea di,datts[si]		;  {
+	cmp bl,8			;     p = &dirp->datts;
+	jne set5			;     if (i == 8) mask = 0x01;
+	mov al,01h			;     else
+	jmps set7
+set5:					;     if (i == 9) mask = 0x04;
+	cmp bl,9			;     else
+	jne set6			;     {
+	mov al,04h
+	jmps set7
+set6:						
+	mov al,020h			;       mask = 0x20;
+	xor ah,80h			;       set = !set;
+set7:					;     }
+	test ah,80h			;  }
+	jz set8				;  if (set)
+	or byte ptr [di],al		;    *p |= mask;
+	jmps set9			;  else
+set8:					
+	not al				;    *p &= ~mask;
+	and byte ptr [di],al
+set9:
+	inc bl
+	jmps set3			;}
+set10:
+	jmp wrdir			;wrdir();
+
+truncatef:
+	
+	call get_atts			;get_atts();
+	test info_fcb+rr2,0fch		;if (infop->rr2 & 0xfc) return(0xff);
+	jz tru2
+tru1:
+	jmp lret_eq_ff
+tru2:
+	call setenddir			;dcnt = 0xffff;
+	mov cx,2
+	call getdir			;if (!(dirp = getdir(0,2)))
+	or ax,ax			;  return(0xff);
+	jz tru1
+	call chk_olist			;chk_olist();
+	mov si,dirp
+	test byte ptr datts[si],011h	;if (dirp->datts & 0x11)
+	jz $+5				;  exterr(0x03ff);
+	jmp roferror
+	mov ax,word ptr info_fcb+rr0	;size = infop->rr2;
+	mov dl,info_fcb+rr2		;size = size << 8 + infop->rr1;
+	xor dh,dh			;size = size << 8 + infop->rr0;
+	mov cl,7			;size <<= 7;
+	call lshiftl
+	add ax,0080h			;size += 0x80;
+	adc dx,0
+	cmp dx,dsize+2[si]		;if (size >= dirp->dsize)
+	ja tru1				;  return(0xff);
+	jb tru3
+	cmp ax,dsize[si]
+	jae tru1
+tru3:
+	mov dsize[si],ax		;dirp->dsize = size;
+	mov dsize+2[si],dx
+	or byte ptr datts[si],020h	;dirp->datts |= 0x20
+	sub ax,1
+	sbb dx,0
+	         			; AX = nblks
+	mov cx,clsize			;nblks = divide(--size,dpbptr->clsize,
+	div cx     			;		&dontcare);
+	mov bx,dblock1[si]		; BX = bl1
+	or bx,bx			;if (!(bl1 = dirp->dblock1) ||
+	jnz tru5			;    bl1 >= dpbptr->nclstrs)
+tru4:
+	jmp lret_eq_ff			;    return(0xff);
+tru5:
+	cmp bx,nclstrs			;while (nblks--)
+	jae tru4			;{
+	or ax,ax
+	jz tru6
+	dec ax
+	push ax
+	mov ax,bx			;  bl1 = getnblk(bl1);
+	call getnblk			; AX = bl1
+	mov bx,ax
+	pop ax
+	jmps tru5			;  if (bl1 >= dpbptr->nclstrs)
+tru6:					;    return(0xff);
+					;}
+	mov ax,bx			;if ((bl2 = getnblk(bl1)) < 
+	push bx				;     dpbptr->nclstrs)
+	call getnblk			;{
+	pop bx
+	cmp ax,nclstrs
+	jae tru7
+	push bx				; AX = bl2
+	call delfat			;  delfat(bl2);
+	pop ax
+;	mov bx,0fffh			;			*3.2*19*
+	mov bx,dosfat			; 12 or 16 bit fat	*3.2*19*
+	call fixfat			;  fixfat(bl1,dosfat);
+	call update_fat			;  update_fat();
+tru7:					;}
+	call cnvcpd			;cnvcpd();
+	call setpcd			;setpcd();
+	jmp wrdir			;wrdir();
+	
+xfcb:
+	call setenddir			;dcnt = 0xffff;
+	mov cx,2
+	call getdir			;if (!(dirp = getdir(0,2))
+	or ax,ax			;  return(0xff);
+	jnz xfcb1
+	jmp lret_eq_ff
+xfcb1:
+	mov di,offset info_fcb+extent	;p = &infop->extent
+	mov cx,4			;zero(p,8);
+	xor ax,ax
+	rep stosw
+	call getpcd			;getpcd();
+	call cnvpcd			;cnvpcd();
+	mov si,offset cpm_tod		;move(&cpm_tod,p+8,4);
+	mov di,offset info_fcb+20
+	mov cx,2
+	rep movsw
+	ret
+
+setstamp:
+	call setenddir			;dcnt = 0xffff;
+	mov cx,2
+	call getdir			;if (!(dirp = getdir(0,2))
+	or ax,ax			;  return(0xff);
+	jnz stmp1
+	jmp lret_eq_ff
+stmp1:
+	mov si,offset common_dma+4	;move(&cpm_tod,&common_dma+4,4);
+	mov di,offset cpm_tod
+	movsw
+	movsw
+	xor al,al
+	stosb
+	call cnvcpdx			;cnvcpdx();
+	call setpcd			;setpcd();
+	
+	call set_sdcnt			;set_sdcnt();
+	mov ch,5			;if (BX = search_olist(5))
+	call search_olist		;  *(BX+2) |= 0x10;
+	jnz stmp2
+	or byte ptr 2[bx],10h
+stmp2:
+	jmp wrdir			;wrdir();
+
+compfs:
+	mov dx,0ffffh			;size |= 0ffff0000h;
+	push ax
+	push dx
+
+	call setenddir			;dcnt = 0xffff;
+cmp1:
+	mov cx,2
+	call getdir			;while(dirp = getdir(0,2))
+	or ax,ax			;{
+	jz cmp4
+	mov si,ax			; DX,AX = size
+	pop dx
+	pop ax
+	cmp dx,0ffffh			;   if ((size & 0xffff0000) ==
+	je cmp2				;	             0xffff0000 ||
+	cmp dx,dsize+2[si]		;        size < dsize)
+	jb cmp2
+	ja cmp3
+	cmp ax,dsize[si]
+	jae cmp3
+cmp2:
+	mov ax,dsize[si]		;      size = dirp->dsize;
+	mov dx,dsize+2[si]
+cmp3:
+	push ax
+	push dx
+	jmps cmp1
+cmp4:					;}
+	pop dx
+	pop ax
+	cmp dx,0ffffh			;if ((size & 0xffff0000) ==
+	jne cmp5			;			0xffff0000)
+	jmp lret_eq_ff			;     return(0xff);
+cmp5:
+	mov di,offset info_fcb+rr0
+	;jmp cnvsize			;cnvsize(&infop->rr0,size);
+
+cnvsize:
+;       entry DX,AX = size 
+;	entry ES:DI = random record field pointer
+
+					; ES:DI = rrptr
+
+	test al,07fh			;if (size & 0x7f) size += 0x80;
+	jz cnv1
+	and al,80h
+	add ax,0080h
+	adc dx,0
+cnv1:					;*rrptr++ = (size >>= 7) & 0xff;
+	mov cx,7
+	call lshiftr
+	mov es:[di],al
+	mov es:1[di],ah			;*rrptr++ = (size >>= 8) & 0xff;
+	mov es:2[di],dl			;*rrptr++ = size >>= 8; 
+	ret
+
+getnblk:				;UWORD getnblk(blk);
+;	entry: AX = blk
+;	exit: AX = next FAT block index
+
+	push ax
+	call getblk			;i = getblk(blk);
+	pop bx
+	or ax,ax			;if (!i) fixfat(blk,i = dosfat);
+	jnz gnb1
+;	mov ax,0fffh			;			*3.2*19*
+	mov ax,dosfat			; 12 or 16 bit fat	*3.2*19*
+	push ax
+	xchg ax,bx			;AX = blk, BX = i
+	call fixfat
+	pop ax
+gnb1:
+	ret
+
+getblk:					;UWORD getblk(blk);
+;	entry: AX = blk
+;	exit: AX = FAT[blk]
+
+	mov di,ax			;DI = AX * 1.5
+;start		*3.2*19*
+	cmp	dosfat,FAT16
+	je	get16
+;end		*3.2*19*
+	shr di,1
+	add di,ax
+	mov es,hash_seg			;DX = FAT[DI]
+	mov dx,es:[di]
+	test ax,1			;if (AX & 1)
+	jz gtb1 
+	mov cl,4			;  DX >>= 4;
+	shr dx,cl
+	jmps gtb2
+;start		*3.2*19*
+get16:
+	shl	di,1
+	mov	es,hash_seg
+	mov	dx,es:[di]
+	jmps	gtb2
+;end		*3.2*19*
+gtb1:					;else
+	and dx,0fffh			;  DX &= 0xfff;
+gtb2:
+	mov ax,ds			;restore ES
+	mov es,ax
+	mov ax,dx			;return value in AX
+	ret
+
+fixfat:					;FAT[AX] = BX
+;	entry: AX = FAT index to update
+;	       BX = new FAT value
+
+	mov di,ax
+;start		*3.2*19*
+	cmp	dosfat,FAT16
+	je	fix16
+;end		*3.2*19*
+	shr di,1
+	add di,ax			;DI = AX * 1.5
+	test ax,1			;if (AX & 1)
+	jz fix1
+	mov cl,4			;{
+	shl bx,cl			;  BX >>= 4;
+	mov ax,0fh			;  AX = 0xf;
+	jmps fix2			;}
+
+;start		*3.2*19*
+fix16:
+	shl	di,1
+	mov	es,hash_seg
+	mov	es:[di],bx
+	jmps	ff_exit
+;end		*3.2*19*
+
+fix1:					;else
+	mov ax,0f000h			;  AX = 0f000h;
+fix2:
+	mov es,hash_seg
+	and es:[di],ax			;FAT[DI] &= AX;
+	or es:[di],bx			;FAT[DI] |= BX;
+ff_exit:
+	mov ax,ds
+	mov es,ax			;restore ES
+	ret
+
+delfat:
+;	entry: AX = 1st block to delete
+
+	or ax,ax			;while(blk && blk < dpbptr->nclstrs)
+	jz delf1
+	cmp ax,nclstrs
+	jae delf1			;{
+	push ax				;  i = getblk(blk);
+	call getblk
+	pop bx
+	push ax
+	mov ax,bx
+	xor bx,bx
+	call fixfat			;  fixfat(blk,0);
+	pop ax				;  blk = i;
+	jmps delfat			;}
+delf1:
+	ret
+
+getspace:				;VOID getspace();
+
+	xor cx,cx			;blkcnt = 0;
+	mov ax,2			; CX = blkcnt, AX = i
+gtsp1:					;for(i = 2; i < dpbptr->nclstrs; i++)
+	cmp ax,nclstrs			;{
+	jae gtsp3
+	push ax
+	push cx
+	call getblk			;   if (!getblk(i)) blkcnt++;
+	pop cx
+	or ax,ax
+	jnz gtsp2
+	inc cx
+gtsp2:	
+	pop ax
+	inc ax
+	jmps gtsp1			;}
+gtsp3:
+	mov ax,cx
+	mul clsize			;size = blkcnt * dpbptr->nclsize;
+	mov es,dma_seg
+	mov di,dma_ofst
+	call cnvsize			;cnvsize(dmaptr,size);
+	mov ax,ds
+	mov es,ax			;restore ES
+	ret
+
+bdosrw:
+;	entry CL bit 0 on - reading
+;		 bit 1 on - random
+
+	mov	attributes,0		; set first alloc cluster flag *3.2*21*
+	mov update_rc,FALSE		;update_rc = FALSE;
+	mov bdrwflg,cl
+	test cl,1			;if (!reading)
+	jnz bdrw1			;{
+	mov ah,3
+	test high_ext,040h		;  if (high_ext & 0x40)
+	jz $+5				;    exterr(0x03ff);
+	jmp set_aret
+	mov bx,offset info_fcb		;  ckrofile();
+	call ckrofile
+	call checkwrite			;  checkwrite();
+	or info_fcb+module,040h		;  infop->module |= 0x40;
+bdrw1:					;}
+	test bdrwflg,2			;if (random)
+	jz bdrw3			;{
+	test info_fcb+rr2,0fch		;  if (infop->rr2 & 0xfc) return(6);
+	jz bdrw2
+	mov lret,6
+	ret
+bdrw2:
+	call conv_rr			;  CH,CL,DL = module,extent,cr
+	mov ah,info_fcb+module
+	and ah,03fh			;  if (CH != infop->module & 0x3f ||
+	cmp ah,ch			;      CL != infop->extent)
+	jne bdrw2a
+	cmp cl,info_fcb+extent
+	je bdrw5
+bdrw2a:
+	mov update_rc,TRUE		;    update_rc = TRUE;
+	jmps bdrw5			;}
+bdrw3:					;else
+	mov ch,info_fcb+module		;  CH = infop->module & 0x3f;
+	and ch,3fh
+	mov cl,info_fcb+extent		;  CL = infop->extent;
+	mov dl,info_fcb+cr		;  DL = infop->cr;
+	cmp dl,080h
+	jb bdrw5			;  if (DL >= 0x80)
+	cmp cl,01fh			;  {
+	jnz bdrw4			;    if (CL == 0x1f && CH == 0x3f)
+	cmp ch,3fh			;      return(1);
+	jne bdrw4
+	mov lret,1
+	ret
+bdrw4:
+	mov update_rc,TRUE		;    update_rc = TRUE;
+	xor dl,dl			;    DL = 0;
+	inc cl				;    if (++CL == 0x20)
+	cmp cl,020h			;    {
+	jnz bdrw5			
+	xor cl,cl			;       CL = 0;
+	inc ch				;       CH++;
+					;    }
+					;  }
+bdrw5:					;}
+	mov pc_module,ch		;pc_module = CH;
+	mov pc_ext,cl			;pc_ext = CL;
+	mov pc_cr,dl			;pc_cr = DL:
+
+      					;byteoff = pc_module & 0x3f
+	xor ax,ax			;byteoff <<= 6;
+	mov ah,dl			;byteoff += pc_ext & 0x1f;
+	shr ax,1			;byteoff <<= 5;
+
+	; AX = 00rrrrrr r0000000
+
+	xor bx,bx			;byteoff += pc_cr;
+	mov bh,cl			;byteoff <<= 7;
+	mov cl,2
+	shr bx,cl
+
+	; BX = 00000eee ee000000
+
+	or ah,bl
+	xor dx,dx
+	mov dl,ch
+	mov cl,3
+	shl dx,cl
+
+	; DX = 0000000m mmmmmm000
+
+	or dl,bh
+	mov byteoff,ax			; AX = eerrrrrr r0000000
+	mov byteoff+2,dx		; DX = 0000000m mmmmmeee
+
+	cmp fx_intrn,fxi40		;if (fx > F_WRITEZF) return;
+	jbe $+3
+	ret
+
+	mov bx,dx			;blkidx = divide(byteoff,
+	mov cx,clsize			;	dpbptr->clsize,&blkoffset);
+	call div_32
+
+	or dx,dx			;if (blkidx >= dpbptr->nclstrs-1)
+	jnz bdrw5a			;{   
+	inc ax
+	cmp ax,nclstrs
+	jb bdrw5c
+bdrw5a:
+	mov al,2			;  AL = 2;
+	test bdrwflg,1			;  if (bdrwflg & 1) AL = 1;
+	jz bdrw5b
+	dec al
+bdrw5b:
+	mov lret,al			;  lret = AL;
+	ret				;  return;
+bdrw5c:					;}
+	dec ax
+
+	mov blkidx,ax
+	mov blkoffset,cx
+
+;start			*3.2*G*6
+	test	bdrwflg,1		;Are we trying to read
+	jz	bdrw5c1			;NO
+	mov	bx,rlr
+	test	p_sflag[bx],PSF_MPMLOCK	;Is process in MP/M lock record mode
+	jnz	$+5			;YES
+bdrw5c1:
+;end			*3.2*G*6
+
+	call test_lock			;test_lock();
+
+	mov dont_close,0ffh		;dont_close = 0xff;
+	cmp info_fcb+cbflag,0dbh
+	je bdrw5d
+	mov info_fcb+cbflag,0dbh
+	mov word ptr info_fcb+cblkidx,0
+	mov word ptr info_fcb+cblock,0
+bdrw5d:
+	mov dx,word ptr info_fcb+cblkidx ;if (blkidx != infop->cblkidx ||
+	mov ax,blkidx
+	cmp ax,dx
+	jnz bdrw6a			;    !infop->cblock)
+	cmp word ptr info_fcb+cblock,0
+	jz bdrw6a
+	jmp bdrw16
+bdrw6a:					;{
+	mov comp_fcb_cks,0ffh		;  comp_fcb_cks = 0xff;
+	cmp ax,dx			;  if (blkidx >= infop->cblkidx &&
+	jb bdrw6a1
+	cmp word ptr info_fcb+cblock,0	;      infop->cblock)
+	jz bdrw6a1			;  {
+	sub ax,dx			;    blkcnt = blkidx - infop->cblkidx;
+	mov blkcnt,ax
+	mov ax,word ptr info_fcb+cblock	;    lprvblk = prvblk = infop->cblock;
+	mov prvblk,ax
+	mov lprvblk,ax
+	call getnblk			;    blk = getnblk(prvblk);
+	mov blk,ax
+	jmps bdrw7			;  }
+bdrw6a1:				;  else
+					;  {
+	mov word ptr info_fcb+cblock,0	;    infop->cblock = 0;
+	inc ax				
+	mov blkcnt,ax			;    blkcnt = blkidx + 1;
+	mov ax,word ptr info_fcb+block1	;    blk = infop->block1;
+	mov blk,ax
+	or ax,ax			;    if (!blk)
+	jnz bdrw6b			;    {
+	call testfile			;      testfile();
+	mov ax,word ptr info_fcb+block1	;      blk = infop->block1;
+	mov blk,ax			;    }
+bdrw6b:
+
+;start		*3.2*21*
+	or	ax,ax			;    if (blk) attributes = 0x80;
+	jnz	bdrw6c
+	mov	attributes,080h		;    /* flag if first allocation */
+bdrw6c:
+;end		*3.2*21*
+
+	mov prvblk,0			;    prvblk = lprvblk = 0;
+	mov lprvblk,0			;  }
+bdrw7:
+	test blkcnt,0ffffh		;  while(blkcnt--)
+	jnz $+5
+	jmp bdrw15
+	dec blkcnt			;  {
+	mov ax,blk			;    if (!blk ||
+	or ax,ax			;        blk >= dpbptr->nclstrs)
+	jz bdrw7a
+	cmp ax,nclstrs
+	jae bdrw7a			;    {
+	jmp bdrw13
+bdrw7a:
+	test bdrwflg,1			;      if (reading) return(1);
+	jz $+5
+	jmp set_lret1
+	mov ax,prvblk			;      if (blk = alloc(prvblk))
+	call alloc
+	or ax,ax
+	jz bdrw10			;      {
+	mov blk,ax
+	mov bx,ax
+	and info_fcb+module,07fh	;        infop->module &= 0x7f;
+	mov ax,prvblk			;        if (prvblk)
+ 	         			;          fixfat(prvblk,blk);
+	or ax,ax
+	jz bdrw8			
+	call fixfat
+	jmps bdrw9
+bdrw8:					;   	 else
+	mov word ptr info_fcb+block1,bx	;	   infop->block1 = blk;
+bdrw9:					; 
+	mov ax,blk			;        fixfat(blk,0xfff);
+;	mov bx,0fffh			;			*3.2*19*
+	mov bx,dosfat			; 12 or 16 bit fat	*3.2*19*
+	call fixfat
+	cmp fx_intrn,fxi40		;        if (fx == F_WRITEZF)
+	jne bdrw14			;	   zeroblk(blk);
+	mov ax,blk
+	call zeroblk
+	jmp bdrw14			;      }
+					;      else
+bdrw10:					;      {
+	mov ax,lprvblk			;        if (lprvblk)
+	or ax,ax			;        {
+	jz bdrw11
+
+	call getnblk			;          if ((i = getnblk(lprvblk))
+	cmp ax,nclstrs			;		< dpbptr->nclstrs)
+					;          {
+	         			;            delfat(i);
+	jae bdrw12
+	call delfat
+	mov ax,lprvblk			;            fixfat(lprvblk,0xfff);
+;	mov bx,0fffh			;	   }		*3.2*19*
+	mov bx,dosfat			; 12 or 16 bit fat	*3.2*19*
+
+	call fixfat
+	jmps bdrw12			;        }
+					;        else
+bdrw11:					;        {
+	mov ax,word ptr info_fcb+block1	;	   delfat(infop->block1);
+	call delfat
+	mov word ptr info_fcb+block1,0	;	   infop->block1 = 0;
+bdrw12:					;        }
+	mov lret,2			;        return(2);
+	ret				;      }
+					;    }
+bdrw13:					;    else lprvblk = blk;
+	mov ax,blk			;	*3.2*
+	mov lprvblk,ax
+bdrw14:					;    prvblk = blk;
+	mov ax,blk
+	mov prvblk,ax
+	call getnblk			;    blk = getnblk(blk);
+	mov blk,ax
+	jmp bdrw7			;  }	
+
+bdrw15:
+	mov ax,prvblk
+	mov word ptr info_fcb+cblock,ax ;  infop->cblock = prvblk;
+	mov ax,blkidx
+ 	mov word ptr info_fcb+cblkidx,ax ; infop->cblkidx = blkidx;
+	jmps bdrw16a
+bdrw16:					;}
+					;else prvblk = infop->cblock;
+	mov ax,word ptr info_fcb+cblock
+	mov prvblk,ax
+bdrw16a:
+
+	xor ch,ch			;CH = result
+	mov ax,byteoff+2		;result = byteoff >= 
+					;		infop->csize ? 1 : 0;
+	cmp ax,word ptr info_fcb+csize+2
+	ja bdrw17
+	jb bdrw18
+	mov ax,byteoff
+	cmp ax,word ptr info_fcb+csize
+	jb bdrw18
+bdrw17:
+	mov ch,TRUE
+bdrw18:
+	or ch,ch			;if (result)
+	jz bdrw18a			;{
+	call testfile			;  if (testfile()) goto bdrw16a;
+	or ax,ax			;}
+	jnz bdrw16a
+	mov ch,TRUE
+bdrw18a:
+	test bdrwflg,1			;if (!reading)
+	jnz bdrw20			;{
+	cmp fx_intrn,fxi40		;  if (fx != F_WRITEZF && 
+	je bdrw19			;   
+	or ch,ch			;      result &&
+	jz bdrw19
+	mov al,phymsk			;      (!(byteoff & (phymsk << 7)) ||
+	xor ah,ah
+	mov cl,7
+	shl ax,cl
+	test ax,byteoff
+	jz bdrw18b
+	mov ax,byteoff			;       !((byteoff >> (psh+7)) -
+	mov dx,byteoff+2		;	 (infop->csize >> (psh+7)))))
+	mov cl,physhf			;	
+	add cl,7
+	push cx
+	call lshiftr
+	pop cx
+	push ax
+	push dx
+	mov ax,word ptr info_fcb+csize
+	mov dx,word ptr info_fcb+csize+2
+	call lshiftr
+	pop cx
+	pop bx
+	sub bx,ax
+	sbb cx,dx
+	or bx,cx
+	jz bdrw19
+bdrw18b:
+	mov preread,FALSE		;    preread = FALSE;
+	jmps bdrw21			;  
+bdrw19:					;  else
+	mov preread,TRUE		;    preread = TRUE;
+	jmps bdrw21			;}
+bdrw20:					;else
+	or ch,ch			;if (result) return(1);  
+	jz bdrw21
+	jmp set_lret1
+bdrw21:
+
+;	getphy sets arecord to the 128 byte record number
+;	getphy references both parameters directly.
+
+	mov ax,prvblk
+	mov bx,blkoffset
+	call getphy			;getphy(prvblk,blkoffset);
+
+;	checknpr references all parameters directly	
+;	and returns returns result in AX
+
+	call checknpr			;if ((result = checknpr(reading,
+;					        prvblk,blkoffset,byteoff,
+;						infop->csize)) != 0xffff)
+;	if (result == 0) blocking/deblocking required
+;	else result contains the # of physical records to transfer
+
+	cmp ax,0ffffh
+	je bdrw22
+
+;	rw references reading and preread directly and gets result from AX
+
+	call rw_rtn			;  rw_rtn(reading,preread,result);
+	jmps bdrw24
+bdrw22:					;else
+
+;	if (result < 0) a multi-sector request has been performed 
+;       and the file system is catching up with the I/O system.    
+
+	test bdrwflg,1			;if (!reading &&
+	jnz bdrw24
+	test phymsk,0ffh		;   (!dpbptr->pc.psm ||
+	jz bdrw23
+	mov al,arecord			;    !(arecord[0] & dpbptr->pc.psm)))
+	test al,phymsk
+	jnz bdrw24
+bdrw23:
+	call discard_data		;  discard_data();
+bdrw24:
+	add byteoff,080h		;byteoff += 0x80;
+	adc byteoff+2,0
+bdrw24a:
+	mov ax,byteoff+2
+	cmp ax,word ptr info_fcb+csize+2
+	ja bdrw25			;if (byteoff > infop->csize)
+	jb bdrw27			;{
+	mov ax,byteoff
+	cmp ax,word ptr info_fcb+csize
+	jbe bdrw27
+bdrw25:
+	call testfile			;  if (testfile()) got bdrw24a;
+	or ax,ax
+	jnz bdrw24a
+	test bdrwflg,1			;  if (reading)
+	jz bdrw26			;  {
+	mov ax,byteoff+2
+	sub ax,word ptr info_fcb+csize+2 ;    i = (byteoff - infop->csize);
+	mov ax,byteoff
+	sbb ax,word ptr info_fcb+csize
+	mov bx,080h
+	sub bx,ax
+	mov di,dma_ofst
+	add di,bx
+	mov es,dma_seg
+	mov cx,ax
+	xor al,al
+	rep stosb			;    zero(dmaptr + 0x80 - i,i);
+	mov ax,ds
+	mov es,ax
+	jmps bdrw27			;  }
+bdrw26:					;  else
+					;  {
+	mov ax,byteoff			;    infop->csize = byteoff;
+	mov word ptr info_fcb+csize,ax  ;    comp_fcb_cks = 0xff;
+	mov update_rc,TRUE		;    update_rc = TRUE;
+	mov ax,byteoff+2		;    extendf();
+	mov word ptr info_fcb+csize+2,ax
+	mov comp_fcb_cks,0ffh		;  }
+	call extendf
+bdrw27:					;}
+	mov al,info_fcb+module		;infop->module = infop->module & 0xc0 |
+	and al,0c0h			;                pc_module;
+	or al,pc_module
+	mov info_fcb+module,al
+	mov al,pc_ext			;infop->extent = pc_ext;
+	mov info_fcb+extent,al		
+	mov al,pc_cr			;infop->cr = pc_cr;
+	mov info_fcb+cr,al
+	test update_rc,0ffh		;if (update_rc)
+	jz bdrw27c			;{
+	call fcb_extsize		;  AX = fcb_extsize();
+	cmp ax,0ffffh			;  if (AX == 0xffff)
+	jne bdrw27a			;    AL = 0;
+	xor al,al
+	jmps bdrw27b
+bdrw27a:				;  else
+	mov cl,7			;  {
+	shr ax,cl			;    AX >>= 7;
+bdrw27b:				;  }
+	mov info_fcb+rcdcnt,al		;  infop->rc = AL;
+bdrw27c:				;}
+	test bdrwflg,2			;if (!random) infop->cr++;
+	jnz bdrw28
+	inc info_fcb+cr
+bdrw28:
+
+;start		*3.2*21*
+	test	attributes,080h		; Is this the 1st cluster in file?
+	jz	bdrw29			; No
+	; YES force out FATS and directory entry for better file security
+	call	closef			; Note this uses attributes
+	cmp	lret,0ffh		; check error
+	jnz	bdrw29
+	mov	ah,10			; return fcb error
+	jmp	set_aret
+bdrw29:
+;end		*3.2*21*
+
+	ret				;return(0);
+
+checknpr:	;UWORD checknpr(reading,prvblk,blkoffset,
+;					byteoff,infop->csize)	
+	
+	cmp dir_cnt,1			;if (dir_cnt > 1)
+	jbe cnpr1			;{
+	dec dir_cnt			;  dir_cnt--;
+	mov ax,-1			;  return(-1);
+	ret				;}
+cnpr1:
+	mov al,phymsk			;if (arecord[0] & dpbptr->pc.psm ||
+	and al,arecord
+	jnz cnpr2
+	cmp mult_num,2			;    mult_num < 2 ||
+	jb cnpr2
+	test high_ext,080h		;    high_ext & 0x80 ||
+	jnz cnpr2
+	cmp fx_intrn,fxi40		;    fx == F_WRITEZF)
+	jne cnpr4
+cnpr2:					;{
+	xor ax,ax
+	test phymsk,0ffh		;  if (dpbptr->pc.psm) return(0);
+	jnz cnpr3
+	mov al,1			;  else return(1);
+cnpr3:					;}
+	ret
+cnpr4:
+	mov ax,prvblk			;i = prvblk; /* i = AX */
+	xor cx,cx			;cnt = 0;    /* cnt = CX */
+cnpr5:
+	push ax				;while ((j = getnblk(i)) == i++) cnt++;
+	push cx
+	call getnblk
+	pop cx
+	pop bx
+	inc bx
+	cmp ax,bx
+	jne cnpr6
+	inc cx
+	jmps cnpr5
+cnpr6:					;if (!reading && j > 0xff7)
+	test bdrwflg,1
+	jnz cnpr8
+	cmp ax,0ff7h
+	jbe cnpr8			;{
+cnpr7:					;  while(!getblk(i) && 
+	push bx				;        i < dpbptr->nclstrs)
+	push cx
+	mov ax,bx
+	call getblk
+	pop cx
+	pop bx
+	or ax,ax
+	jnz cnpr8
+	cmp bx,nclstrs
+	jae cnpr8			;  {
+	inc bx				;    i++;
+	inc cx				;    cnt++;
+	jmps cnpr7			;  }
+cnpr8:					;}
+	mov ax,clsize			;space = cnt * dpbptr->clsize;
+	mul cx
+	mov bx,clsize			;space += dpbptr->clsize - blkoffset;
+	sub bx,blkoffset
+	add ax,bx
+	adc dx,0
+	or dx,dx			;if (space > 0x4000) space = 0x4000;
+	jnz cnpr9
+	cmp ax,04000h
+	jb cnpr10
+cnpr9:
+	mov ax,04000h
+	xor dx,dx
+cnpr10:
+	test bdrwflg,1			;if (reading)
+	jz cnpr13			;{
+	mov bx,word ptr info_fcb+csize	;  room = (size > byteoff) ? 
+ 					;		size - byteoff : 0;
+	sub bx,byteoff		
+	mov cx,word ptr info_fcb+csize+2
+	sbb cx,byteoff+2
+	jnc cnpr11
+	xor bx,bx			;  BX,CX = room
+	xor cx,cx	
+cnpr11:
+	cmp cx,dx			;  if (room < space) space = room;
+	ja cnpr13
+	jb cnpr12
+	cmp bx,ax
+	jae cnpr13
+cnpr12:
+	mov ax,bx
+	mov dx,cx
+cnpr13:					;}
+	mov cl,7
+	call lshiftr			;AL = space >>= 7;
+	cmp al,mult_num			;if (AL > mult_num)
+	jbe cnpr14
+	mov al,mult_num			;  AL = mult_num;
+cnpr14:
+	mov bl,al			;BL = AL;
+	mov cl,physhf			;
+	shr al,cl			;AL >>= dpbptr->pc.psh;
+	         			;dir_cnt = BL & ~dpbptr->pc.psm;
+	mov dl,phymsk
+	not dl
+	and bl,dl
+	mov dir_cnt,bl
+	push ax				;if (AL && reading) flushx();
+	or al,al
+	jz cnpr15
+	test bdrwflg,1
+	jz cnpr15
+	call flushx
+cnpr15:
+	pop ax				;return(AL);
+	ret
+
+alloc:
+;	entry: AX = last allocated blk	;UWORD alloc(AX)
+
+	or ax,ax			;if (!AX) AX = 1;
+	jnz alloc1
+	mov ax,1
+alloc1:
+	mov bx,ax
+	inc bx				;BX = AX + 1;
+	dec ax				;AX--;
+alloc2:					;do
+					;{
+	cmp bx,nclstrs			;  if (BX < dpbptr->nclstrs)
+	jae alloc4			;  {
+	push ax
+	push bx
+	mov ax,bx
+	call getblk			;    if (!getblk(BX) return(BX);
+	pop bx
+	or ax,ax
+	pop ax
+	jnz alloc3
+	mov ax,bx
+	ret
+alloc3:
+	inc bx				;    BX++;
+alloc4:					;  }
+	cmp ax,2			;  if (AX > 2)
+	jbe alloc6			;  {
+	push ax
+	push bx
+	call getblk			;    if (!getblk(AX) return(AX);
+	pop bx
+	or ax,ax
+	pop ax
+	jnz alloc5
+	ret	
+alloc5:
+	dec ax				;    AX--;
+alloc6:					;  }
+	cmp ax,2			;} while (AX > 2 ||
+	ja alloc2
+	cmp bx,nclstrs			;   	  BX < dpbptr->nclstrs);
+	jb alloc2
+	xor ax,ax			;return(0);
+	ret
+
+rw_rtn:
+;	entry: AX = # of physical records
+	       
+	mov cl,bdrwflg			;CL = reading
+	and cl,1
+	or ax,ax			;if (AX)
+	jz rw2				;{
+	or cl,cl			;  if (!reading)
+	jnz rw1
+	push ax
+	call discard_data		;    discard_data();
+	pop ax
+	xor cl,cl
+rw1:
+	jmp directio			;  directio(CL,AX);
+rw2:					;}
+	mov ch,preread			;else
+	jmp dblockio			;  dblockio(CH,CL);
+
+getphy:					;AX = blk
+					;BX = blkoffset
+	             			;byteoff = (blk -= 2) * dpbptr->clsize;
+	dec ax
+	dec ax
+	mul clsize
+	add ax,bx			;byteoff += blkoffset;
+	adc dx,0
+	mov cl,7			;byteoff >>= 7;
+	call lshiftr
+	mov bx,dirmax			;dsize = (dpbptr->pc.drm + 4) >> 2;
+	add bx,4
+	mov cl,2
+	shr bx,cl
+	test bl,phymsk			;if (dsize & phymsk)
+	jz gph1				;{
+	mov cl,phymsk
+	xor ch,ch
+	not cx		
+	and bx,cx			;  dsize &= ~phymsk;
+	not cx
+	add bx,cx			;  dsize += phymsk + 1;
+	inc bx
+gph1:					;}
+	add ax,bx			
+	adc dx,0			;byteoff += dsize;
+	mov arecord,al			;arecord[0] = AL;
+	mov arecord+1,ah		;arecord[1] = AH;
+	mov arecord+2,dl		;arecord[2] = DL;
+	ret
+
+zeroblk:				;AX = blk
+
+	xor bx,bx
+	call getphy			;getphy(blk,0);
+	call init_wzf			;AX = init_wzf();
+	          			;(AX == phymsk + 1)
+	mov bx,clsize
+	mov cl,7
+	add cl,physhf			;BX = clsize >> (physhf + 7);
+	shr bx,cl
+	mov preread,0			;preread = FALSE;
+zero1:					;while(BX--)
+	push ax				;{
+	push bx
+	call discard_data		;  discard_data();
+	call seek			;  seek();
+	xor cl,cl
+	call wrbuff			;  wrbuff();
+	pop bx
+	pop ax
+	add word ptr arecord,ax		;  arecord += AX;
+	adc arecord+2,0
+	dec bx
+	jnz zero1			;}
+	ret
+
+testfile:
+	xor al,al			;if (!dont_close) return(0);
+	xchg dont_close,al		;dont_close = 0;
+	or al,al
+	jz tstf3
+	test high_ext,080h		;if (!(high_ext & 0x80)) return(0);
+	jz tstf3
+	cmp mult_cnt,1			;if (mult_cnt > 1 && 
+	jbe tstf0			;    mult_cnt != mult_num) return(0);
+	mov al,mult_num
+	cmp al,mult_cnt
+	jne tstf3
+tstf0:
+	mov al,info_fcb+lowdcnt		;dcnt = fcbp->lowdcnt +
+	mov ah,info_fcb+pcfcb1		;       ((fcbp->pcfcb1 & 0x1f) << 8) -
+	and ah,01fh			;       1;
+	dec ax
+	mov dcnt,ax
+	mov cx,2
+	call getdir			;if (!(dirp = getdir(0,2))) reterr(11);
+	or ax,ax
+	jnz tstf1
+	pop bx				;discard return address
+	mov lret,11			;return from bdosrw with error(11)
+	ret
+tstf1:
+	mov comp_fcb_cks,0ffh		;comp_fcb_cks = 0xff;
+	mov bx,ax
+	mov ax,dblock1[bx]		;infop->block1 = dirp->dblock1;
+	mov word ptr info_fcb+block1,ax
+	mov dx,dsize+2[bx]
+	cmp word ptr info_fcb+csize+2,dx ;if (infop->csize < dirp->dsize)
+	ja tstf3
+	jb tstf2
+	mov ax,dsize[bx]
+	cmp word ptr info_fcb+csize,ax
+	jae tstf3
+tstf2:					;{
+	mov word ptr info_fcb+csize,ax	;  infop->csize = dirp->dsize;
+	mov word ptr info_fcb+csize+2,dx
+	mov update_rc,TRUE		;  update_rc = TRUE;
+	mov al,1			;  return(1);
+	ret				;}
+tstf3:					;else return(0);
+	xor ax,ax
+	ret
+
+extendf:
+	cmp mult_cnt,1			;if (mult_cnt > 1) return;
+	ja exf1
+	test high_ext,080h		;if (!(high_ext & 0x80)) return;
+	jz exf1
+	jmps closedir			;closedir();
+exf1:	
+	ret
+
+closedir:
+	mov bx,dirp
+	test word ptr dblock1[bx],0ffffh
+	jnz cld1			;if (!dirp->dblock1)
+	mov ax,word ptr info_fcb+block1
+	mov dblock1[bx],ax		;  dirp->dblock1 = infop->block1;
+cld1:
+	mov ax,word ptr info_fcb+csize	;if (infop->csize > dirp->dsize)
+	mov dx,word ptr info_fcb+csize+2
+	cmp dx,dsize+2[bx]
+	ja cld2
+	jb cld3
+	cmp ax,dsize[bx]
+	jbe cld3
+cld2:
+	mov dsize[bx],ax		;  dirp->dsize = infop->csize;
+	mov dsize+2[bx],dx		
+cld3:
+	or byte ptr datts[bx],020h	;dirp->datts |= 0x20;
+	and info_fcb+fname+10,07fh	;infop->fname[10] &= 0x7f;
+
+	call set_sdcnt			;set_sdcnt();
+	mov ch,5			;if ((BX = search_olist(5)) &&
+	call search_olist		;  !(*(BX+2) & 0x10))
+	jnz cld4
+	test byte ptr 2[bx],10h
+	jnz cld4			;{
+	call cnvcpd			;  cnvcpd();
+	call setpcd			;  setpcd();
+cld4:					;}
+	jmp wrdir			;wrdir();
+	
+pc_chkrec:
+	mov	cl,3			; *3.2*G*7*
+	call bdosrw			;bdosrw();
+	; AX,DX = byteoff
+	adc ax,080h			;byteoff += 0x80;
+	adc dx,0
+	mov dont_close,0ffh		;dont_close = 0xff;
+pchk0:
+	cmp word ptr info_fcb+csize+2,dx ;if (infop->csize < byteoff)
+	ja pchk2
+	jb pchk1
+	cmp word ptr info_fcb+csize,ax
+	jae pchk2
+pchk1:
+	mov ax,offset pchk2		;{
+	push ax
+	call testfile			;  if (testfile()) goto pchk0;
+	pop bx
+	or ax,ax
+	jnz pchk0
+	mov lret,1			;  return(1);
+pchk2:					;}
+	mov lock_shell,FALSE		;else return(0);
+
+;	testfile returns directly to pchk2 if error 11 encountered.
+
+	ret
+
+chk_pcfcb:
+
+	mov al,info_fcb+lowdcnt		;dcnt = fcbp->lowdcnt +
+	mov ah,info_fcb+pcfcb1		;       ((fcbp->pcfcb1 & 0x1f) << 8) -
+	and ah,01fh			;       1;
+	push ax
+	dec ax
+	mov dcnt,ax
+	mov rd_dir_flag,0fh		;rd_dir_flag = 0fh;
+	mov cx,2
+	call getdir			;if (!(dirp = getdir(0,2)))
+	or ax,ax			;  goto check_fcb3
+	pop ax
+	jnz chk_pc1
+chk_pc0:
+	jmp check_fcb3
+
+chk_pc1:
+	cmp ax,dcnt
+	jne chk_pc0
+	call set_sdcnt			;set_sdcnt();
+	mov ch,5			;if (!search_olist(5)) goto check_fcb3
+	call search_olist
+	jnz chk_pc0
+	ret
+
+	END
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       

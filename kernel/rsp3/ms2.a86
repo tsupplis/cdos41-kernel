@@ -1,0 +1,3549 @@
+pagesize 72					; Apr 29, 1985
+						; rmdir & moveptr bugs fixed
+
+;********************************************************
+;*							*
+;*		   *****************			*
+;*		   ***  MS2.A86  ***			*
+;*		   *****************			*
+;*							*
+;*	This portion of the DOS Emulator handles	*
+;*	new Int 21 function calls for DOS ver 2.	*
+;*							*
+;*	Dec 84 - Apr 85		    Dean Ballard	*
+;*							*
+;********************************************************
+
+
+;	***  Shared Routines  ***
+
+	cseg
+	public	ms2_func_entry		; called from ms1 Int_21
+	public	ms2_terminate		; for memory and handle cleanup
+	extrn	get_data_seg:near	; shared with ms1
+	extrn	convert_date:near	; dos to cpm date
+	extrn	convert_time:near	;   and time conversion
+	extrn	find_fcb_pub:near	; match cpm to dos fcb
+
+;	***  Shared Variables  ***
+
+	dseg
+	extrn	sysdat:word		; for faster proc desc
+	extrn	ms_dmaadr:word		; this makes it easier to
+	extrn	ms_dmabase:word		;   return these in func 2F
+	extrn	cur_dsk:byte		; short cut to default drive
+	extrn	bdos_ptr:dword		; for bdos calls around int E0
+	extrn	dmd_base:word		; points to first dos mem desc
+	public	active_psp		; psp of active program
+
+
+;	***  CCPM function codes  ***
+
+f_open		equ	0Fh		; open file or directory
+f_close		equ	10h		; close file or directory
+f_sfirst	equ	11h		; search first file or dir
+f_snext		equ	12h		; search next file or dir
+f_delete	equ	13h		; delete file or directory
+f_make		equ	16h		; create file or directory
+f_dmaset	equ	1Ah		; set dma offset
+f_attrib	equ	1Eh		; set file attributes
+f_dma		equ	33h		; set dma segment
+f_dmaget	equ	34h		; get dma segment:offset
+f_timedate	equ	66h		; get file's time/date stamp
+f_setdate	equ	74h		; secret set time/date stamp
+
+;	***  DOS function codes  ***
+
+ms_select	equ	0Eh		; select default drive
+ms_open		equ	0Fh		; open file
+ms_close	equ	10h		; close file
+ms_s_first	equ	11h		; search first
+ms_s_next	equ	12h		; search next
+ms_delete	equ	13h		; delete file
+ms_s_read	equ	14h		; sequential read
+ms_s_write	equ	15h		; sequential write
+ms_create	equ	16h		; create file
+ms_rename	equ	17h		; rename file
+ms_current	equ	19h		; get default drive
+ms_setdta	equ	1Ah		; set data trans addr
+ms_alloc	equ	1Bh		; get allocation table
+ms_alloc_spec	equ	1Ch		; get specific alloc tbl
+ms_r_read	equ	21h		; random record read
+ms_r_write	equ	22h		; random record write
+ms_make_psp	equ	26h		; create program seg prefix
+ms_r_blk_read	equ	27h		; random block read
+ms_r_blk_write	equ	28h		; random block write
+ms_parse	equ	29h		; parse file name
+
+;	***  DOS error codes  ***
+
+no_function	equ	01		; invalid function number
+no_file		equ	02		; file not found
+no_path		equ	03		; path not found
+no_handle	equ	04		; too many open files
+no_access	equ	05		; file access denied
+no_h_match	equ	06		; invalid handle number
+no_dmd		equ	07		; memory descriptor destroyed
+no_memory	equ	08		; insufficient memory
+no_block	equ	09		; invalid memory block addr
+no_environ	equ	10		; invalid environment
+no_format	equ	11		; invalid format
+no_acc_code	equ	12		; invalid access code
+no_data		equ	13		; invalid data
+no_drive	equ	15		; invalid drive specified
+no_dir		equ	16		; can't remove current dir
+no_device	equ	17		; not same device
+no_room		equ	18		; no more files
+
+;	***  Process Structures  ***
+
+pd_prior	equ	byte ptr .05h	; priority byte
+pd_uda		equ	word ptr .10h	; user data area
+pd_mem		equ	word ptr .16h	; mem descriptors
+pd_parent	equ	word ptr .1Eh	; parent's pd
+pd_cat		equ	word ptr .2Eh	; cat sturcture
+
+uda_init_es	equ	word ptr .54h	; initial es value (psp)
+
+cat_ndrives	equ	16		; number of hds ptrs in a cat
+cat_pdrive	equ	word ptr .1Eh	; cat's P: hds pointer
+cat_count	equ	word ptr .20h	; cat's owner process count
+cat_nwm		equ	word ptr .22h	; cat's network mask
+
+hds_size	equ	10		; bytes per hds
+hds_count	equ	word ptr .08h	; hds's owner process count
+
+
+;	File Control Block offsets
+
+fcb_drive	equ	byte ptr .00	; drive designator
+fcb_fname	equ	byte ptr .01	; first char of name field
+fcb_ext		equ	word ptr .09	; first word and
+fcb_ext2	equ	byte ptr .11	;   third byte of ext
+fcb_float	equ	byte ptr .12	; floating drive code
+fcb_dir_attr	equ	byte ptr .12	; attribute in dos dir entry
+fcb_rec_size	equ	word ptr .14	; logical record size in bytes
+fcb_byte_size	equ	word ptr .16	; file size in bytes
+fcb_byte_size2	equ	word ptr .18	;   (high and low)
+fcb_date	equ	word ptr .20	; dos's date stamp
+fcb_time	equ	word ptr .22	; dos's time stamp
+fcb_rand_rec	equ	word ptr .33	; random record field
+fcb_rand_rec2	equ	word ptr .35	;   (high and low)
+
+;	And for extended fcb's too
+
+xfcb_attrib	equ	byte ptr 6	; file attributes
+
+
+eject
+;**************************************************
+;**************************************************
+;***						***
+;***	    DOS 2.x Function Entry Point	***
+;***						***
+;**************************************************
+;**************************************************
+
+;	***  General DOS 2.x equates  ***
+
+ms2f_first	equ	2Fh		; our first function number
+ms2f_top	equ	57h		; our last function number
+st_flags	equ	word ptr .4	; flags back up the stack
+cf_bit		equ	0001h		; carry flag is the lsb
+rlr		equ	word ptr .68h	; ready list root (our pd)
+
+
+	CSEG
+
+;	Calls to DOS 2.x functions come here from 1.x's Int_21
+;	entry:	ah = function numbers
+;		other registers = depending upon function
+
+ms2_func_entry:
+	push	ds
+	call	get_data_seg		; switch to local ds
+	pop	ms2_ds			; save for ds:dx reference
+	mov	ms2_ss,ss		; save the stack
+	mov	ms2_sp,sp
+
+	push ds ! pop ss		; local stack segment
+	mov	sp,ms2_stack		; just below ms2_ds
+	sti				; now we're clean
+
+	push	dx			; this makes the ds:dx pointer
+	push es ! push di		;   and this makes es:di
+	push si ! push bp ! push cx ! push bx ! push ax
+
+	mov	al,0			; assume no error code
+	mov	ms2_ret_ax,ax		; default return value
+	les	di,ms2_ss_sp		; clear return carry on stack
+	and	es:st_flags[di],not cf_bit
+
+	cmp	ah,ms2f_top		; make sure func is in bounds
+	jbe	ms2_func_ok		; skip if below the top
+
+	mov	ah,ms2f_top + 1		; if not, stuff an ms2_null
+ms2_func_ok:
+	sub	ah,ms2f_first		; reference to our table
+	mov bl,ah ! mov bh,0 ! shl bx,1	; index into our table
+
+	call	cs:ms2_func_table[bx]	; call our function
+
+	pop ax ! pop bx ! pop cx ! pop bp
+	pop si ! pop di ! pop es ! pop dx
+	mov	ax,ms2_ret_ax		; return value in AL
+
+	cli
+	mov	ss,ms2_ss		; restore caller's stack
+	mov	sp,ms2_sp
+	mov	ds,ms2_ds		; restore caller's ds
+	iret				; and go back home
+
+eject
+;	Here is our list of supported functions
+
+ms2_func_table	dw	ms2_get_dta	; func 2F
+		dw	ms2_get_version	; func 30
+		dw	ms2_term_keep	; func 31
+		dw	ms2_null	; func 32
+		dw	ms2_ctbr_check	; func 33
+		dw	ms2_null	; func 34
+		dw	ms2_get_intvec	; func 35
+		dw	ms2_get_dskfree	; func 36
+		dw	ms2_undoc37	; func 37
+		dw	ms2_get_intnl	; func 38
+		dw	ms2_mkdir	; func 39
+		dw	ms2_rmdir	; func 3A
+		dw	ms2_chdir	; func 3B
+		dw	ms2_f_create	; func 3C
+		dw	ms2_f_open	; func 3D
+		dw	ms2_f_close	; func 3E
+		dw	ms2_f_read	; func 3F
+		dw	ms2_f_write	; func 40
+		dw	ms2_f_delete	; func 41
+		dw	ms2_f_moveptr	; func 42
+		dw	ms2_f_chgmode	; func 43
+		dw	ms2_io_ctrl	; func 44
+		dw	ms2_dup_handle	; func 45
+		dw	ms2_force_dup	; func 46
+		dw	ms2_get_curdir	; func 47
+		dw	ms2_alloc_mem	; func 48
+		dw	ms2_free_mem	; func 49
+		dw	ms2_set_block	; func 4A
+		dw	ms2_exec	; func 4B
+		dw	ms2_term_proc	; func 4C
+		dw	ms2_get_retcode	; func 4D
+		dw	ms2_find_first	; func 4E
+		dw	ms2_find_next	; func 4F
+		dw	ms2_null	; func 50
+		dw	ms2_null	; func 51
+		dw	ms2_null	; func 52
+		dw	ms2_null	; func 53
+		dw	ms2_get_verify	; func 54
+		dw	ms2_null	; func 55
+		dw	ms2_f_rename	; func 56
+		dw	ms2_f_datetime	; func 57
+		dw	ms2_invalid	; func > 57
+
+eject
+;**************************************************
+;**************************************************
+;***						***
+;***	  Miscellaneous Isolated Functions	***
+;***						***
+;**************************************************
+;**************************************************
+
+	CSEG
+
+;	*****************************
+;	***    DOS Function 2F    ***
+;	***   Get Disk Trans Adr  ***
+;	*****************************
+
+ms2_get_dta:
+	mov	ax,ms_dmaadr		; current dma offset
+	mov	ms2_bx,ax		; return in bx
+	mov	ax,ms_dmabase		; current dma segment
+	mov	ms2_es,ax		; return in es
+	ret
+
+
+;	*****************************
+;	***    DOS Function 30    ***
+;	***   Get Version Number  ***
+;	*****************************
+
+ms2_get_version:
+	mov	ms2_ret_ax,0002h	; Now we look like 2.0
+	ret
+
+
+;	*****************************
+;	***    DOS Function 35    ***
+;	***  Get Interrupt Vector ***
+;	*****************************
+
+ms2_get_intvec:
+	sub	ax,ax
+	mov	es,ax			; es -> zero segment
+	mov	al,ms2_al		; fetch the interrupt number
+	shl ax,1 ! shl ax,1		; 4 bytes per vector
+	xchg	ax,si			; es:si -> vector
+
+	mov	ax,es:[si]
+	mov	ms2_bx,ax		; return offset
+	mov	ax,es:.2[si]
+	mov	ms2_es,ax		; return segment
+	ret
+
+
+;	*****************************
+;	***    DOS Function 36    ***
+;	***  Get Disk Information ***
+;	*****************************
+
+ms2_get_dskfree:
+	call	dskfree_alloc		; get ax, cx, dx from ms1 1Ch
+	jc	ms2_get_dskfree_done	; skip if invalid drive
+
+	call	dskfree_space		; get bx from ccpm 2Eh
+ms2_get_dskfree_done:
+	ret
+
+
+;	*****************************
+;	***    DOS Function 37    ***
+;	*** Undocumented Function ***
+;	*****************************
+
+ms2_undoc37:
+	mov	ms2_dl,2Fh		; Symphony uses this for something
+	ret
+
+
+;	*****************************
+;	***    DOS Function 38    ***
+;	***  International Info   ***
+;	*****************************
+
+ms2_get_intnl:
+	cmp	ms2_al,0		; function code must be zero
+	jnz	ms2_get_intnl_done	; skip if not
+
+	les	di,ms2_ds_dx		; point to data area
+	lea	si,intnl_info		; our information
+	push ds ! push cs ! pop ds	; data in the code seg
+	mov	cx,5			; bytes with meaning
+	cld
+	rep	movsb			; send to user
+	pop	ds
+
+ms2_get_intnl_done:
+	ret
+
+intnl_info	db	0,0,'$,.'	; USA standard
+
+
+;	*****************************
+;	***    DOS Function 44    ***
+;	***  I/O Device Control   ***
+;	*****************************
+
+ms2_io_ctrl:
+	mov	ax,ms2_ax
+	cmp	al,0			; we support only func 0
+	jnz	ms2_io_ctrl_error
+
+	mov	ax,0040h		; assume disk status
+	mov	bx,ms2_bx
+	cmp	bx,rsv_hcb		; if beyond the reserved
+	jae	ms2_io_ctrl_put		;   it must be a file
+
+	shl	bx,1
+	mov	ax,io_ctrl_table[bx]	; fetch phony device status
+
+ms2_io_ctrl_put:
+	mov	ms2_dx,ax		; return status word
+	ret
+
+ms2_io_ctrl_error:
+	mov	al,no_function
+	jmp	ms2_error_ret
+
+io_ctrl_table	dw	80D3h		; values courtesy Joe Wein
+		dw	80D3h
+		dw	80D3h
+		dw	80C0h
+		dw	80C0h
+
+
+;	*****************************
+;	***    DOS Function 54    ***
+;	***    Get Verify State   ***
+;	*****************************
+
+ms2_get_verify:
+	mov	ms2_ret_al,0		; show as always off
+	ret
+
+
+;	*****************************
+;	***      DOS Function     ***
+;	***        Internal       ***
+;	*****************************
+
+ms2_null:
+	ret				; just return to caller
+
+
+;	*****************************
+;	***      DOS Function     ***
+;	***        Invalid        ***
+;	*****************************
+
+ms2_invalid:
+	mov	ms2_ret_ax,1		; invalid function number
+	jmp	ms2_error_ret		; set carry for caller
+
+
+eject
+;************************************************
+;*						*
+;*	Miscellaneous Function Subroutines	*
+;*						*
+;************************************************
+
+
+;	***  Subroutines for get_dskfree  ***
+
+;	Now that function 1C is supported, use it.
+;	exit:	ms2_ax,cx,dx set to return values
+;		cf = 1, ms2_ax = 0FFFFh on error
+dskfree_alloc:
+	push	ds			; this function hammers ds
+	mov	dx,ms2_dx		; dl = drive code
+	mov	dskfree_drive,dl	; save for space
+	mov	ah,ms_alloc_spec
+	call	ms1_func		; this is the old version
+	pop	ds
+	cmp	al,0FFh			; if invalid drive
+	jz	dskfree_alloc_error	;   then skip
+
+	mov	ah,0			; blank the ms byte
+	mov	ms2_ret_ax,ax		; save sectors/cluster
+	mov	ms2_cx,cx		; save bytes/sector
+	mov	ms2_dx,dx		; save clusters/disk
+	clc
+	ret
+
+dskfree_alloc_error:
+	mov	ms2_ret_ax,0FFFFh	; invalid drive code
+	stc				; flag the error
+	ret
+
+
+;	Get disk free from CCPM, and translate into clusters
+;	exit:	ms2_bx set to return value
+
+dskfree_space:
+	lea	dx,disk_rec_count	; 4 byte for ccpm record count
+	call	save_set_dta		; take over dma addr temporarily
+	mov	dl,dskfree_drive	; saved from dx
+	dec	dl			; dl = drive code
+	jns	dskfree_ok		; skip if specified drive
+
+	mov	dl,cur_dsk		; else, use default drive
+dskfree_ok:
+	mov	cl,2Eh
+	call	ccpm			; get disk free space
+	call	restore_dta		; give the dma addr back
+
+	mov	ax,ms2_cx		; get bytes/sector
+	mov	cl,7			; log2 of 128 bytes per rec
+	shr	ax,cl			; ax = records per sector
+	mul	ms2_ret_al		; times sectors per cluster
+	xchg	ax,cx			; cx = records per cluster
+	mov	ax,disk_rec_count	; ls word of count
+	mov	dx,disk_rec_count2	; ms word of count
+	div	cx			; ax = cluster count
+	mov	ms2_bx,ax		; save return value
+	ret
+
+
+;	***  Common DOS 2.x Subroutines  ***
+
+;	This routine allows calls from ms2.lib into ms1.lib functions.
+;	Reentry is no problem, as long as we don't call a DOS 2.x function,
+;	because 1.x and 2.x have seperate context save areas.
+;	entry:	ax,bx,cx,dx,si,di,es,ds = depending upon function
+;	exit:	ax = return value, others preserved
+
+ms1_func:
+	int	21h			; right back in
+	ret
+
+
+;	This routine is for calls into Concurrent.  It uses MS1 pointers
+;	in case someone (GSX for instance) has hammered interrupt E0.
+
+ccpm:
+ms2_bdos:				; label for path.a86 linkage
+	pushf
+	cli				; disable ints for BDOS stack swap
+	callf cs:BDOS_PTR
+	ret
+
+
+;	This is a quick and dirty routine to get our process descriptor
+;	exit:	es:bx -> our pd
+
+get_pd:
+	mov	es,cs:sysdat		; point to system data
+	mov	bx,es:rlr		; ready list root is us
+	ret
+
+
+;	This routine allows the old ms1 interrupt entry to return
+;	the carry flag set (error) for DOS 2.x functions
+
+ms2_error_ret:
+	les	di,ms2_ss_sp		; reach into the return stack
+	or	es:st_flags[di],cf_bit	;   and set the carry bit
+	cbw
+	mov	ms2_ret_ax,ax		; save the return code
+	ret
+
+
+eject
+;****************************************
+;*					*
+;*	Miscellaneous Function Data	*
+;*					*
+;****************************************
+
+hfcb_size	equ	37		; including extended fcb
+hext_size	equ	7		; DOS fcb extension
+
+
+	DSEG
+
+data_start	rb	0		; start of our data space
+
+;	Function entry context save area
+
+	rb	80h			; stack space is here
+
+;	Registers at entry and exit
+
+ms2_ax		rw	1		; order is important here
+ms2_bx		rw	1
+ms2_cx		rw	1
+ms2_bp		rw	1
+ms2_si		rw	1
+ms2_di		rw	1		; here is es:di
+ms2_es		rw	1
+ms2_dx		rw	1		; here is ds:dx
+ms2_ds		rw	1		; ds is saved, not pushed
+
+ms2_stack	equ	offset ms2_ds	; stack set just below ms2_ds
+ms2_ds_dx	equ	dword ptr ms2_dx
+ms2_es_di	equ	dword ptr ms2_di
+ms2_al		equ	byte ptr ms2_ax	; as needed for access...
+ms2_dl		equ	byte ptr ms2_dx
+
+ms2_sp		rw	1		; save area for caller's
+ms2_ss		rw	1		;   stack pointers
+ms2_ss_sp	equ	dword ptr ms2_sp
+
+ms2_ret_al	rb	1		; for returning a value
+ms2_ret_ah	rb	1		;   to the caller
+ms2_ret_ax	equ	word ptr ms2_ret_al
+
+;	Temporary data blocks, used by numerous local functions
+
+temp_fcb_ext	db	0FFh,0,0,0,0,0	; temporary extended fcb
+temp_fcb_attr	db	0
+temp_fcb	rb	hfcb_size	; temporary normal fcb
+
+temp_dta_buf	rw	0		; temporary dma buffer
+temp_fcb2_ext	rb	hext_size	; temporary extended fcb
+temp_fcb2	rb	80h - hext_size	; full dma buffer size
+
+temp_path_buf	rb	68		; temporary path name
+
+;	Get_dskfree variables
+
+disk_rec_count	dw	0		; receives drv_space information
+disk_rec_count2	dw	0		;   from ccpm func 2Eh
+dskfree_drive	rb	2		; saves drive code + pad
+
+
+eject
+;**************************************************
+;**************************************************
+;***						***
+;***	 Directory Manipulation Functions	***
+;***						***
+;**************************************************
+;**************************************************
+
+;	***  Equates for Directory Functions  ***
+
+fcb_dir_flag	equ	80h		; or'd with drive in fcb
+
+
+	CSEG
+
+;	*****************************
+;	***    DOS Function 39    ***
+;	***    Make Directory     ***
+;	*****************************
+
+ms2_mkdir:
+	call	path_prep		; open path and parse last
+	jc	ms2_mkdir_error		; if path not found
+
+	call	make_dir		; create dir at path end
+	mov	al,no_access		; if creation fails, then
+	jc	ms2_mkdir_error		;   return access denied error
+	ret				; all is well
+
+ms2_mkdir_error:
+	jmp	ms2_error_ret
+
+
+;	*****************************
+;	***    DOS Function 3A    ***
+;	***    Remove Directory   ***
+;	*****************************
+
+ms2_rmdir:
+	call	path_prep		; open path and parse last
+	jc	ms2_rmdir_error		; if path not found
+
+	call	remove_dir		; erase dir at path end
+	mov	al,no_access		; if removal fails, then
+	jc	ms2_rmdir_error		;   return access denied error
+	ret				; all is well
+
+ms2_rmdir_error:
+	jmp	ms2_error_ret
+
+
+;	*****************************
+;	***    DOS Function 3B    ***
+;	***    Change Directory   ***
+;	*****************************
+
+ms2_chdir:
+	call	path_prep		; open path and parse last
+	jc	ms2_chdir_error		; if parse or open error
+
+	call	open_as_p		; change to last dir name
+	jc	ms2_chdir_error		; if open error
+
+	call	keep_change		; give to orig_drive and parents
+	ret				; all is well
+
+ms2_chdir_error:
+	mov	al,no_path		; path not found error
+	jmp	ms2_error_ret
+
+
+;	*****************************
+;	***    DOS Function 47    ***
+;	*** Get Current Directory ***
+;	*****************************
+
+ms2_get_curdir:
+	push ds ! pop es		; local es for clear
+	lea	di,temp_fcb
+	call	clear_fcb		; set up the temporary fcb
+
+	mov	al,ms2_dl		; get the requested drive
+	mov	fcb_drive[di],al	;   and put into fcb
+	mov	fcb_fname[di],'.'	; open to current
+	mov	fcb_float[di],3		; open as P:
+	mov	dx,di
+	call	open_directory		; now P: = requested drive
+	jc	ms2_get_cd_error	; skip if open error
+
+	lea	dx,temp_dta_buf
+	call	save_set_dta		; set to a local dta
+
+	push ds ! pop es		; local es for find_path
+	lea	bx,temp_fcb		; bx -> fcb
+	lea	dx,temp_dta_buf		; dx -> dma buffer
+	lea	di,temp_path_buf	; di -> path buffer
+	mov	al,0Fh			; use drive P:
+	call	find_path		; now a local subroutine
+
+	push	dx			; save path name pointer
+	call	restore_dta		; give the dma addr back
+	pop	si			; bring it back in si
+	test	ax,ax			; if find_path returns any error,
+	jnz	ms2_get_cd_error	;   then just give up
+
+	add	si,3			; skip over "d:\"
+	mov	es,ms2_ds
+	mov	di,ms2_si		; es:di -> user's path buf
+	mov	cx,64			; maximum path buf size
+	cld
+
+ms2_get_cd_loop:
+	lodsb				; get path char
+	stosb				;   and give to user
+	test	al,al			; if char > 0 and count < 64,
+	loopnz	ms2_get_cd_loop		;   then continue
+	ret				; all is well
+
+ms2_get_cd_error:
+	mov	al,no_drive		; only allowable error
+	jmp	ms2_error_ret
+
+
+eject
+;************************************************
+;*						*
+;*	 Directory Function Subroutines		*
+;*						*
+;************************************************
+
+
+;	Run down the path as P:, and parse final name
+;	exit:	ds:dx -> temp_fcb parsed at path end
+;		cf = 1, and al = code on any error
+
+path_prep:
+	les	di,ms2_ds_dx		; es:di -> path name
+	call	shift_string		; force to upper case
+	call	get_path_drive		; from asciiz or default
+	jc	path_prep_done		; skip if illegal drive
+
+	mov	ax,path_drive		; get the original path drive
+	mov	orig_drive,ax		;   and save it for chdir
+	mov	si,di			; es:si -> past drive
+
+path_prep_next:
+	mov	ax,path_drive ! inc ax	; al = drive (one based)
+	lea	di,temp_fcb		; use a scratch fcb
+	call	parse_path		; set up the fcb
+	jc	path_prep_done		; skip on any parse error
+
+	call	check_slash		; if terminator != '\' or '/',
+	jnz	path_prep_done		;   then we're done
+
+	call	open_as_p		; else, go in one level as P:
+	jnc	path_prep_next		; if open is good, repeat
+
+path_prep_done:
+	mov	al,no_path		; return code in case of error
+	ret				; with cf
+
+
+;	Force an ASCIIZ string to upper case
+;	entry:	es:di -> string,0
+;	exit:	es,di unchanged
+
+shift_string:
+	push	di
+	cld
+
+shift_str_loop:
+	mov	al,es:[di]		; get string character
+	test	al,al			; when char = 0,
+	jz	shift_str_done		;   we're done
+
+	cmp	al,'z'			; if above 'z'
+	ja	shift_str_ok		;   leave alone
+	cmp	al,'a'			; if below 'a'
+	jb	shift_str_ok		;   leave alone
+	sub	al,'a'-'A'		; convert to upper case
+
+shift_str_ok:
+	stosb				; if al unchanged, inc di
+	jmps	shift_str_loop		; continue until char = 0
+
+shift_str_done:
+	pop	di
+	ret
+
+
+;	Get drive from path name, or if none, use default drive
+;	entry:	es:di -> path name
+;	exit:	es:di -> past drive name
+;		cf = 1 if illegal drive name
+
+get_path_drive:
+	cmp	es:byte ptr 1[di],':'	; if the second char is ':',
+	jz	get_path_explicit	;   then drive is in pathname
+
+	mov	ah,ms_current		; get default drive code
+	call	ms1_func
+	jmps	get_path_ok		; common code from here
+
+get_path_explicit:
+	mov	al,es:[di]		; grab the drive designator
+	cmp	al,'P'			; if too large
+	ja	get_path_error		;   return error
+	sub	al,'A'			; correct offset. if too
+	jb	get_path_error		;   small, return error
+
+	inc di ! inc di			; it's ok, bump the pointer
+
+get_path_ok:
+	sub	ah,ah			; zero ah and clc
+	mov	path_drive,ax		; save for other functions
+	ret
+
+get_path_error:
+	stc				; flag the error
+	ret
+
+
+;	Parse a pathname into an fcb
+;	entry:	es:si -> asciiz string
+;		ds:di -> scratch fcb
+;		ax = drive code (one based)
+;	exit:	es:si -> next asciiz name in path
+;		dx -> fcb
+;		al = last char parsed
+;		cf = 1 if any error
+
+parse_path:
+	push ds ! push es ! pop ds ! pop es
+	mov	dx,di			; dx saves initial di
+	call	clear_fcb		; to blanks and zeros
+	stosb				; put drive into fcb
+
+parse_path_again:
+	mov	ax,[si]			; check first two chars
+	cmp	ax,'..'			; special case:  if name = '..'
+	jz	parse_path_up		;   then we parse it differently
+
+	call	check_delim		; if first char = delimeter
+	jz	parse_path_root		;   then check for slashes (root)
+
+;	filename begins with a legal char, parse it normally
+
+	call	parse_filename		; parse name.ext
+	jc	parse_path_error	; skip on any error
+
+;	push	ax			; save final character
+;	mov	di,dx
+;	mov	cx,12			; drive, file, extension
+;	mov	al,'?'			; look for these
+;	rep	scasb
+;	pop	ax
+;	jnz	parse_path_exit		; skip if no wild card
+;	mov	wildflag,true		; somehow we'll do this
+	jmps	parse_path_exit
+	
+parse_path_up:
+	movsw				; put '..' into fcb
+	lodsb				; but before you go,
+	call	check_delim		;   check the next char
+	jz	parse_path_exit		; if delimiter, all is well
+	jmps	parse_path_error	; else we've got an error
+
+parse_path_root:
+	inc	si			; point past first char
+	call	check_slash		; if char = '\' or '/', then
+	jz	parse_path_exit		;   send us to the root
+	cmp	al,0			; if null string (ie '\,0')
+	jz	parse_path_exit		;   then that's ok
+;	jmp	parse_path_error	; else, fall through to error
+
+parse_path_error:
+	stc				; flag the error
+
+parse_path_exit:
+	push ds ! push es ! pop ds ! pop es
+	ret
+
+
+;	Set up an fcb for parsing
+;	entry:	es:di -> fcb
+;	exit:	all reg's preserved
+
+clear_fcb:
+	push di ! push cx ! push ax
+	mov	al,0
+	cld  !  stosb			; zero the drive code
+
+	mov	cx,11
+	mov	al,' '
+	rep	stosb			; fill name with blanks
+
+	mov	cx,21
+	mov	al,0
+	rep	stosb			; zero the rest
+	pop ax ! pop cx ! pop di
+	ret
+
+
+;	Parse a file name
+;	entry:	ds:si -> asciiz name
+;		es:dx -> start of fcb field
+;	exit:	cf set if parse error (name too long)
+
+parse_filename:
+	mov di,dx ! inc di		; di -> fcb name field
+	mov	cx,8			; length of name field
+	call	parse_one		; parse just the name
+	jnz	parse_name_error	; error if last char != delimeter
+	cmp	al,'.'
+	jnz	parse_name_good		; skip if no extension
+
+	mov di,dx ! add di,9		; di -> fcb ext field
+	mov	cx,3			; length of ext field
+	call	parse_one		; parse just extension
+	jnz	parse_name_error	; error if last char != delimeter
+
+parse_name_good:
+	clc
+	ret
+
+parse_name_error:
+	stc
+	ret
+
+
+;	Parse a single name or extension
+;	entry:	ds:si -> asciiz name
+;		es:di -> start of fcb field
+;		cx = field size
+;	exit:	al = last char parsed
+;		zf = 1 if char is a delimeter
+;		zf = 0 if char is legal in file names
+
+parse_one:
+	lodsb				; grab asciiz char
+	cmp	al,'*'			; if char = *, then fill
+	jz	parse_one_wild		;   rest of field with '?'
+	call	check_delim		; if char is not delimiter,
+	jnz	parse_one_char		;   then move it to fcb
+	ret				; if delimeter, return
+
+parse_one_wild:
+	mov	al,'?'
+	rep	stosb			; after filling
+	jmps	parse_one_term		;   check the terminator
+
+parse_one_char:
+	stosb				; send char to fcb
+	loop	parse_one		;   and get another
+
+parse_one_term:
+	lodsb				; if name fills field, then
+;	call	check_delim		;   check the next character
+;	ret				;   by falling through
+;
+;
+;	Check for a path name delimiter
+;	entry:	al = asciiz char
+;	exit:	all registers preserved
+;		zf = 1 if char is a delimeter
+;		zf = 0 if char is legal in file names
+
+check_delim:
+	cmp	al,' '			; if any printable char,
+	ja	check_delim_char	;   then skip
+	cmp	al,al			; set zf
+	ret
+
+check_delim_char:
+	push es ! push di ! push cx
+	push cs ! pop es
+	lea	di,delim_string		; es:di -> delimeters
+	mov	cx,length delim_string
+	cld
+	repnz	scasb			; match al against the list
+	pop cx ! pop di ! pop es
+	clc				; never return cf set
+	ret				; with zf set by scasb
+
+delim_string	db	':.;,=+\<>|/"[]'	; dos delimeters
+
+
+;	Check delimeter character for '\' or '/'
+;	entry:	al = char
+;	exit:	zf = 1 if either slash
+
+check_slash:
+	cmp	al,'\'			; if first char is a backslash
+	jz	check_slash_done	;   or a frontslash, then
+	cmp	al,'/'			;   return with zf set
+check_slash_done:
+	clc				; never return cf set
+	ret
+
+
+;	Open path_drive as P: for mkdir, rmdir, or file I/O
+;	entry:	dx -> fcb
+
+open_as_p:
+	push es ! push si		; save asciiz pointer
+	cmp	path_drive,'P'-'A'	; if drive is already P:
+	jz	open_as_p_go		;   then get to it
+
+	mov	path_drive,'P'-'A'	; now path_drive is P:
+	mov	di,dx			; di -> fcb
+	mov	fcb_float[di],3		; opens P: as a floater
+	cmp	fcb_fname[di],' '	; if first char is non blank,
+	jnz	open_as_p_go		;   then leave it alone
+
+	mov	fcb_fname[di],'.'	; if blank, open to current
+	push di ! push ds
+	call	open_directory
+	pop es ! pop di
+	jc	open_as_p_done		; skip on any error
+
+	call	clear_fcb		; reblank the fcb
+	mov	fcb_drive[di],'P'-'A'+1	; now we're P:
+	mov	dx,di			; dx -> fcb
+
+open_as_p_go:
+	call	open_directory		; open path_drive as P:
+
+open_as_p_done:
+	pop si ! pop es
+	ret
+
+
+;	Open a single directory fcb.
+;	However, if the fcb name is all blanks, that means
+;	return to the root, so we do a close instead.
+;	Also, simply ignore an open of DEV\.
+;	entry:	ds:dx -> fcb ready to go
+;	exit:	cf = 1 on any open error
+
+open_directory:
+	mov	di,dx
+	or	fcb_drive[di],fcb_dir_flag
+	call	check_dev_dir		; if dir = DEV
+	jz	open_dir_done		;   then ignore it
+
+	cmp	byte ptr .1[di],' '	; if the leading char is blank
+	jz	open_dir_root		;   then do a close
+
+	mov	cl,f_open		; else do an open
+	call	ccpm			; here goes
+	jmps	open_dir_check		; check error return
+
+open_dir_root:
+	mov	cl,f_close		; if blank, then close it
+	call	ccpm			; here goes
+	cmp	ah,06h			; allow 06 errors through
+	jz	open_dir_done		;   to let ccpm roots work
+
+open_dir_check:
+	test	al,al			; check error return
+	jz	open_dir_done		; skip if all is well
+
+	stc				; else flag the error
+open_dir_done:
+	ret
+
+
+;	Check for dir = DEV\...
+;	entry:	di -> dir fcb
+;	save:	si,di
+;	exit:	zf set, cf clear if fcb = "DEV"
+
+check_dev_dir:
+	push di ! push si
+	push ds ! pop es		; local es for scan
+	lea	si,device_string
+	inc	di			; past drive code
+	mov	cx,length device_string	; name + type
+	cld
+	repz	cmpsb			; if strings match
+	pop si ! pop di
+	clc				; in case of match
+	ret
+
+
+;	Create a directory at the end of a path
+;	If the fcb name is all blanks or '..', return an error
+;	entry:	ds:dx -> fcb ready to go
+;	exit:	cf = 1 on any error
+
+make_dir:
+	mov	si,dx			; si -> fcb
+	mov	al,fcb_fname[si]	; get first char of fcb name
+	cmp	al,' '			; if the leading char is blank,
+	jz	make_dir_error		;   then don't make the root
+	cmp	al,'.'			; if leading char is '.', then
+	jz	make_dir_error		;   don't make directory above
+
+	or	byte ptr [si],fcb_dir_flag
+	mov	cl,f_make
+	call	ccpm			; create a new directory
+	test	al,al			; check error return
+	jz	make_dir_done		; skip if all is well
+
+make_dir_error:
+	stc				; else flag the error
+
+make_dir_done:
+	ret
+
+
+;	Delete a directory at the end of a path
+;	If the fcb name is all blanks or '..', return an error
+;	entry:	ds:dx -> fcb ready to go
+;	exit:	cf = 1 on any error
+
+remove_dir:
+	mov	si,dx			; si -> fcb
+	mov	al,fcb_fname[si]	; get first char of fcb name
+	cmp	al,' '			; if the leading char is blank,
+	jz	remove_dir_error	;   then don't remove the root
+	cmp	al,'.'			; if leading char is '.', then
+	jz	remove_dir_error	;   don't remove directory above
+
+	or	fcb_drive[si],fcb_dir_flag
+
+	push	dx
+	lea	dx,temp_dta_buf
+	call	save_set_dta		; set to a local dta
+
+	pop dx ! push dx		; recover fcb pointer
+	mov	cl,f_sfirst
+	call	ccpm			; search for dir entry
+	pop	dx
+	cmp	al,0FFh			; if file not found,
+	jz	remove_dir_error	;   then quit
+
+	mov	ah,32			; bytes per entry
+	mul	ah			; ax = entry index
+	lea	si,temp_dta_buf
+	add	si,ax			; si -> our entry
+	test	byte ptr .10h[si],40h
+	jz	remove_dir_error	; if not a directory, quit
+
+	mov	si,dx			; si -> fcb
+	or	byte ptr [si],fcb_dir_flag
+	mov	cl,f_delete
+	call	ccpm			; create a new directory
+	test	al,al			; check error return
+	jz	remove_dir_done		; skip if all is well
+
+remove_dir_error:
+	stc				; else flag the error
+
+remove_dir_done:
+	ret
+
+
+;	Final chdir open is a success.  Give P: directory to orig_drive,
+;	and pass it up to all ancestors with a null cat or null hds.
+
+keep_change:
+	call	get_pd			; es:bx -> our pd
+	mov	save_pd_off,bx		; save the offset for later
+	mov	si,bx			; es:si -> our proc desc
+	mov bx,orig_drive ! shl bx,1	; bx = twice the drive code
+
+	mov	di,es:pd_cat[si]	; es:di -> our cat
+	mov	es:cat_nwm[di],0FFFFh	; set network mask for all drives
+	mov	ax,es:[di+bx]		; ax = orig drive hds ptr
+	test	ax,ax			; if original drive has no hds
+	jz	keep_change_swap	;   then just swap the pointers
+
+	call	swap_hds_info		; else, swap the hds information
+	jmps	keep_change_loop	;   and pass to parents
+
+keep_change_swap:
+	xchg	ax,es:cat_pdrive[di]	; P: hds ptr = 0
+	mov	es:[di+bx],ax		; orig drive = what we just opened
+
+keep_change_loop:
+	mov	si,es:pd_parent[si]	; es:si -> a new parent
+	test	si,si			; if orphan process
+	jz	keep_change_done	;   then quit
+
+	call	give_parent		; pass the change up one
+	jmps	keep_change_loop	;   to the top of the chain
+
+keep_change_done:
+	ret
+
+
+;	Swap hds information between orig_drive and P:, leaving counts alone.
+;	This allows parents sharing the same hds ptr to receive a changed
+;	directory with a minimum of disruption.
+;	entry:	di -> our cat
+;		bx = 2 * original drive
+;	save:	si
+
+swap_hds_info:
+	push	si			; save pd ptr
+	mov	si,es:[di+bx]		; si -> original hds
+	mov	di,es:cat_pdrive[di]	; di -> P:'s hds
+	mov	cx,(hds_size/2) - 1	; stop short of count
+	cld
+
+swap_hds_info_loop:
+	mov	ax,es:[di]		; get P:
+	xchg	ax,es:[si]		; swap with orig
+	stosw				; orig to P:
+	inc si ! inc si			; di done above
+	loop	swap_hds_info_loop	; all but the count
+
+	pop	si
+	ret
+
+
+;	Copy the new directory change to a parent process
+;	entry:	es:si -> parental proc desc
+;		bx = 2 * drive code
+
+give_parent:
+	push	si
+	mov	di,save_pd_off		; es:di -> our proc desc
+	mov	di,es:pd_cat[di]	; di -> our cat
+	mov	ax,es:pd_cat[si]
+	test	ax,ax			; if parent is without a cat
+	jz	give_parent_nocat	;   then give them ours
+
+	xchg	ax,si			; si -> parent's cat
+	mov	es:cat_nwm[si],0FFFFh	; set network mask for all drives
+	mov	ax,es:[si+bx]
+	test	ax,ax			; if parent's cat already
+	jnz	give_parent_done	;   has an hds, then quit
+
+	mov	bp,es:[di+bx]		; bp -> our new hds
+	mov	es:[si+bx],bp		; give parent our new hds
+	inc	es:hds_count[bp]	; add one to its count
+	jmps	give_parent_done
+
+give_parent_nocat:
+	mov	es:pd_cat[si],di	; give parent our cat
+	inc	es:cat_count[di]	;   and keep track of owners
+
+	sub	bp,bp			; now we go through and bump
+	mov	cx,cat_ndrives		;   the owner count on each of
+give_parent_loop:			;   our cat's hds structures.
+	mov	si,es:[di+bp]		; si -> each hds
+	test	si,si			; if hds pointer = 0, then
+	jz	give_parent_nohds	;   skip the increment
+	inc	es:hds_count[si]	; add one to owner count
+give_parent_nohds:
+	inc bp ! inc bp			; next drive's hds pointer
+	loop	give_parent_loop
+
+give_parent_done:
+	pop	si			; restore parental pd
+	ret
+
+
+eject
+
+;*	    This routine was adapted from the PATH.A86 module.
+;*
+;*     FIND_PATH will return to the caller the present pathname for
+;*  the drive he specifies.  This includes CP/M media also, for which
+;*  the path will always be 'd:/'.  For drives a: thru m: the root will
+;*  always be the same, but for the three floating drives (n:, o:, p:)
+;*  the root drive can be any drive.  If a floating drive has not
+;*  been assigned by the user it will default to the default system drive.
+;*  
+;*	ENTRY:	al	==>	drive (0 to 15)
+;*		ds:bx	==>	offset of your fcb buffer (33 bytes long)
+;*		ds:dx	==>	offset of your dma buffer (128 bytes long)
+;*		ds:di	==>	offset of your path buffer(68 bytes long)
+;*		es	==>	ds
+;*
+;*	EXIT:	ax	==>	0 -> ok  else  != 0 for any error
+;*		ds,ss,cs==>	preserved
+;*		others	==>	undefined
+;*
+
+HD		equ	2eh	; offset of hd array pointer(PD)
+HDRV		equ	00h	; drive that the floater is mapped into(HDS)
+HBLK		equ	06h	; our block number(HDS)
+BLKNUM		equ	1ah	; block number file can be found in(FCB)
+DRIVE		equ	0	; drive byte(FCB)
+EXTENT		equ	0ch	; extene byte(FCB)
+DSYSDISK	equ	09dh	; default system disk(SYSDAT)
+
+CNT		equ	0
+PLEN		equ	66	; path length
+
+
+;
+;	return a directory path
+;
+find_path:
+
+;	store CALLER input
+
+	mov	byte ptr realroot,al
+	mov	byte ptr cur_drive,al
+	mov	word ptr dma_offset,dx
+	mov	word ptr fcb_offset,bx
+	mov	word ptr path_offset,di
+
+;	initialize flags
+
+	mov	needbslash,0FFh		; *BUG*1*
+
+;	initialize pathname string
+
+	mov	byte ptr PLEN+1[di],0	; place delimiter at end of string
+	mov	byte ptr CNT[di],PLEN	; initialize cnt to be a offset ptr
+
+;	lets put correct drive in the wildfcb
+
+	inc	al			; convert to 1-16
+	mov	byte ptr wildfcb,al	; force wild search to correct drive
+
+;	initialize the fcb to 	drive,'..      ','    ',0
+
+	mov	byte ptr DRIVE[bx],al
+	mov	byte ptr EXTENT[bx],0
+	inc	bx
+	mov	byte ptr [bx],'.'
+	inc	bx
+	mov	byte ptr [bx],'.'
+	inc	bx
+	mov	di,bx
+	mov	al,' '
+	mov	cx,9
+	rep	stosb			; uses es:di
+
+;
+;	2eh[PD]		->  hd array
+;
+;	0[hd array]	->  hds for A:
+;	2[hd array]	->  hds for B:
+;		    :
+;		    :
+;       30[hd array]	->  hds for P:
+;	32[hd array]	->  number of processes pointing to hd array
+;	34[hd array]	->  Network mask
+;
+;	hds
+;		hdrv	equ	0		; drive (A: - M:) (0 relative)
+;		mseq	equ	1		; media sequence
+;		pblk	equ	2		; parent block number
+;		pdcnt	equ	4		; parent dcnt
+;		hblk	equ	6		; 1st block of directory
+;		prcnt	equ	8		; process cnt
+;
+
+nextlevel:
+	call	get_pd		; es:bx -> Process Descriptor
+	mov	bx,es:HD[bx]	; now es:bx -> array of hd structures ptrs
+	cmp	bx,0		; no mapping yet for any drive
+	je	nohd
+	xor	ah,ah
+	mov	al,byte ptr cur_drive
+	add	ax,ax
+	add	bx,ax
+	mov	bx,es:[bx]	; bx ==> lock list item of current sub dir
+	cmp	bx,0		; no mapping yet for selected drive
+	je	nohd
+	mov	cl,es:HDRV[bx]	; cl is physical drive (0 relative)
+	mov	byte ptr realroot,cl
+	mov	cx,es:HBLK[bx]	; cx is parents block number
+	cmp	cx,0		; The root block number is zero
+	je	atroot
+	push	cx		
+	call	map_sub_dir	; lets do a '..      ' to go up a directory
+	pop	cx
+	cmp	ax,0
+	jne	exit		; we have an error
+
+	mov	byte ptr needbslash,0	; we have a sub-directory
+
+;
+;	Now we have our parent block number and have done a '..' so
+;	now we search for the fcb with that block number and that will
+;	give us the sub directory we were in
+;
+
+insub:
+	push	cx
+	mov	dx,offset wildfcb
+	or	byte ptr wildfcb,80h	; turn on special bit so we find dirs.
+	call	fpath_sfirst
+
+findit:
+	cmp	al,0ffh		; we should be able to find it
+	je	serror
+
+	cmp	ah,0
+	je	ok61
+
+;	can't get invalid drive so must be physical
+
+serror:
+	pop	cx		; clear stack
+	mov	al,0FFh		; signal error
+	ret			; return to caller
+
+ok61:
+	mov	bx,word ptr dma_offset
+	mov	ax,word ptr BLKNUM[bx]		; first block in file
+	pop	cx
+	cmp	cx,ax
+	jnz	skip15
+	jmp	addtopath
+
+skip15:
+	push	cx
+	or	byte ptr wildfcb,80h	; turn on special bit so we find dirs.
+	call	fpath_snext
+
+	jmps	findit
+
+exit:
+	ret				; TO CALLER
+
+
+nohd:
+	mov	al,byte ptr realroot
+	cmp	al,'N'-'A'
+	jl	atroot
+
+;	we have n,o, or p and we have no current map for it
+
+	mov	al,es:byte ptr .DSYSDISK  ; steal default sysdisk from SYSDAT
+ok12:
+	mov	byte ptr realroot,al
+atroot:
+	mov	bx,word ptr path_offset
+	mov	al,byte ptr CNT[bx]
+	cmp	al,2			; Is there enough space for 'd:'
+	jae	skip20			; NOTE:  if need room for 'd:\' we are
+
+	mov	al,0FFh			; signal error
+	ret				; return to caller
+
+skip20:
+	xor	ah,ah
+	mov	di,ax
+	add	di,bx
+
+	cmp	byte ptr needbslash,0FFh
+	jne	cont
+	mov	byte ptr [di],'\'
+	dec	di
+cont:
+	mov	byte ptr [di],':'
+	dec	di
+	mov	al,byte ptr realroot
+	add	al,'A'
+	mov	byte ptr [di],al
+	mov	dx,di
+	sub	ax,ax			; signal success
+	ret
+
+addtopath:
+	mov	bx,word ptr path_offset
+	mov	bp,bx
+	inc	bp			; marker for pathname too long
+	mov	al,byte ptr CNT[bx]
+	xor	ah,ah
+	mov	di,ax
+	add	di,bx
+	mov	bx,word ptr dma_offset
+	mov	si,bx
+	mov	dx,bx			; marker for beginning of dma
+	add	bx,9
+	add	si,12
+
+loop2:
+	dec	si
+	cmp	dx,si
+	je	addbslash
+	mov	cl,byte ptr [si]
+	and	cl,07fh			; strip off any attributes
+	cmp	cl,' '
+	je	loop2
+
+nodotyet:		
+	cmp	di,bp
+	jae	ok13
+
+	mov	al,0FFh			; signal error
+	ret				; return to caller
+
+ok13:
+	mov	byte ptr [di],cl
+	dec	di
+	cmp	si,bx			; 9th char (first in extension) is
+	jne	loop2			; not blank so need a dot
+	cmp	di,bp
+	jae	ok14
+
+	mov	al,0FFh			; signal error
+	ret				; return to caller
+
+ok14:
+	mov	byte ptr [di],'.'
+	dec	di
+	jmps	loop2
+
+addbslash:
+	cmp	di,bp
+	jae	ok15
+
+	mov	al,0FFh			; signal error
+	ret				; return to caller
+
+ok15:
+	mov	byte ptr [di],'\'
+	mov	ax,di
+	dec	al
+	mov	bx,word ptr path_offset
+	sub	ax,bx
+	mov	byte ptr [bx],al
+	jmp	nextlevel
+
+
+;
+;	Map the subdirectory
+;
+map_sub_dir:
+
+	mov	bx,word ptr fcb_offset
+	or	byte ptr [bx],80h	; turn on special bit
+	mov	dx,bx
+;	jmp	fpath_open		; fall through
+
+fpath_open:	mov cl,f_open	!  jmps fpath_bdos
+fpath_sfirst:	mov cl,f_sfirst	!  jmps fpath_bdos
+fpath_snext:	mov cl,f_snext	! ;jmps fpath_bdos
+
+fpath_bdos:	jmp ms2_bdos
+
+
+eject
+;****************************************
+;*					*
+;*       Directory Function Data	*
+;*					*
+;****************************************
+
+	DSEG
+
+path_drive	rw	1		; zero based drive code
+orig_drive	rw	1		; saved when path_drive becomes P:
+
+save_pd_off	rw	1		; temp proc desc save
+
+device_string	db	'DEV        '	; for dir scanning
+
+;	Find Path Variables
+
+dma_offset	rw	1
+fcb_offset	rw	1
+path_offset	rw	1
+cur_drive	rb	1		
+realroot	rb	1
+needbslash	db	0FFh
+wildfcb		db	0
+		db	'????????','???','?'
+		db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+
+
+eject
+;**************************************************
+;**************************************************
+;***						***
+;***	    File Input / Output Functions	***
+;***						***
+;**************************************************
+;**************************************************
+
+;	***  File I/O Equate tables  ***
+
+num_hcb		equ	20		; total num of handles
+rsv_hcb		equ	5		; first 5 are reserved
+
+;	The Handle Control Block (HCB) provides flags and pointers
+;	for each available file handle.  It is used throughout the
+;	File I/O routines to access fcb's, directory paths, counts
+;	of users, and the like.  It is defined below:
+
+;	*  Handle Control Block Format  *
+
+;	+-------+-------+-------+-------+
+;	| Flags	| Count	| Path Pointer	|	; bits, owners, our P:
+;	+-------+-------+-------+-------+
+;	|   FCB Base	|
+;	+-------+-------+
+
+hcb_flags	equ	byte ptr 0	; bit values defined below
+hcb_count	equ	byte ptr 1	; owners using this hcb
+hcb_path_ptr	equ	word ptr 2	; hds pointer for path files
+hcb_fcb_base	equ	word ptr 4	; offset of handle's local fcb
+hcb_size	equ	6		; bytes per hcb
+
+;	Bit values for hcb_flags
+
+hf_read		equ	01h		; file is opened for reading
+hf_write	equ	02h		; file is opened for writing
+hf_device	equ	04h		; character I/O device handle
+hf_dev_open	equ	08h		; char device has been opened
+
+
+	CSEG
+
+;	*****************************
+;	***    DOS Function 3C    ***
+;	***      Create File      ***
+;	*****************************
+
+ms2_f_create:
+	call	get_free_handle		; bx -> fresh hcb
+	call	swap_pdrive		; xchg hds pointers
+	jc	ms2_f_create_error	; if none available
+
+	mov	ms2_ret_ax,si		; save the handle number
+	call	file_path_prep		; open path, parse file
+	jc	ms2_f_create_error	; if parse fails
+
+	lea	dx,temp_fcb_ext		; our extended filename
+	call	create_fcb		; try to create it
+	jc	ms2_f_create_error	; if that doesn't work
+
+	mov	al,2			; 2 = r/w access code
+	call	set_up_hcb		; set up flags and pointers
+	call	swap_pdrive		; xchg hds pointers
+	ret				; successful return (cf=0)
+
+ms2_f_create_error:
+	call	swap_pdrive		; xchg hds pointers
+	jmp	ms2_error_ret		; top level error handler
+
+
+;	*****************************
+;	***    DOS Function 3D    ***
+;	***       Open File       ***
+;	*****************************
+
+ms2_f_open:
+	call	get_free_handle		; bx -> fresh hcb
+	call	swap_pdrive		; xchg hds pointers
+	jc	ms2_f_open_error	; if none available
+
+	mov	ms2_ret_ax,si		; save the handle number
+	call	file_path_prep		; open path, parse file
+	jc	ms2_f_open_error	; if parse fails
+
+	lea	dx,temp_fcb		; our parsed filename
+	call	open_fcb		; try to open it
+	jc	ms2_f_open_error	; if that doesn't work
+
+	mov	al,ms2_al		; 0 = read, 1 = write, 2 = r/w
+	call	set_up_hcb		; set up flags and pointers
+	jc	ms2_f_open_error	; if invalid access code
+	call	swap_pdrive		; xchg hds pointers
+	ret				; successful return (cf=0)
+
+ms2_f_open_error:
+	call	swap_pdrive		; xchg hds pointers
+	jmp	ms2_error_ret		; top level error handler
+
+
+;	*****************************
+;	***    DOS Function 3E    ***
+;	***      Close File       ***
+;	*****************************
+
+ms2_f_close:
+	mov	al,hf_read + hf_write	; accept either or both
+	call	get_active_handle	; bx -> our hcb
+	jc	ms2_f_close_error	; if invalid
+
+	test	hcb_flags[bx],hf_device	; if handle is for char device
+	mov	al,no_h_match		;   return invalid handle error
+	jnz	ms2_f_close_error
+
+	mov	hcb_list[si],0		; free up our handle
+	dec	hcb_count[bx]		; if we are not the final owner
+	jnz	ms2_f_close_done	;   then just quit
+
+	call	swap_pdrive		; xchg hds pointers
+	call	close_fcb		; tell the system we're through
+	call	swap_pdrive		; xchg hds pointers
+	jc	ms2_f_close_error
+
+ms2_f_close_done:
+	ret				; successful return (cf=0)
+
+ms2_f_close_error:
+	jmp	ms2_error_ret		; top level error handler
+
+
+;	*****************************
+;	***    DOS Function 3F    ***
+;	***       Read File       ***
+;	*****************************
+
+ms2_f_read:
+	mov	al,hf_read		; bit pattern for read
+	call	get_active_handle	; bx -> our hcb
+	jc	ms2_f_read_error	; if invalid or no access
+
+	mov	ms2_ret_ax,0		; initial read byte count
+	test	hcb_flags[bx],hf_device	; if this is not a character dev
+	jz	ms2_f_read_file		;   then skip
+
+	call	read_device		; handle character devices
+	jc	ms2_f_read_error	; skip on any error
+	ret				; if all is well
+
+ms2_f_read_file:
+	call	swap_pdrive		; xchg hds pointers
+	mov	ah,ms_r_blk_read	; random block read
+	call	random_blk_rw		; shared with write code
+	call	swap_pdrive		; xchg hds pointers
+	ret				; successful return
+
+ms2_f_read_error:
+	jmp	ms2_error_ret		; top level error handler
+
+
+;	*****************************
+;	***    DOS Function 40    ***
+;	***      Write File       ***
+;	*****************************
+
+ms2_f_write:
+	mov	al,hf_write		; bit pattern for write
+	call	get_active_handle	; bx -> our hcb
+	jc	ms2_f_write_error	; if invalid or no access
+
+	mov	ms2_ret_ax,0		; initial write byte count
+	test	hcb_flags[bx],hf_device	; if this is not a character dev
+	jz	ms2_f_write_file	;   then skip
+
+	call	write_device		; handle character devices
+	jc	ms2_f_write_error	; skip on any error
+	ret				; if all is well
+
+ms2_f_write_file:
+	call	swap_pdrive		; xchg hds pointers
+	mov	ah,ms_r_blk_write	; random block write
+	call	random_blk_rw		; shared with read code
+	call	swap_pdrive		; xchg hds pointers
+	ret				; successful return (cf=0)
+
+ms2_f_write_error:
+	jmp	ms2_error_ret		; top level error handler
+
+
+;	*****************************
+;	***    DOS Function 41    ***
+;	***      Delete File      ***
+;	*****************************
+
+ms2_f_delete:
+	call	file_path_prep		; open path, parse file
+	jc	ms2_f_delete_error	; if no path
+
+	call	delete_fcb		; using temp_fcb
+	jc	ms2_f_delete_error	; if file not found, error
+	ret				; successful return
+
+ms2_f_delete_error:
+	jmp	ms2_error_ret		; top level error handler
+
+
+;	*****************************
+;	***    DOS Function 42    ***
+;	***     Move Pointer      ***
+;	*****************************
+
+ms2_f_moveptr:
+	mov	al,hf_read + hf_write	; allow read or write
+	call	get_active_handle	; bx -> our hcb
+	jc	ms2_f_move_error	; if invalid
+
+	test	hcb_flags[bx],hf_device	; if handle is for char device
+	mov	al,no_h_match		;   return invalid handle error
+	jnz	ms2_f_move_error
+
+	mov	si,hcb_fcb_base[bx]	; si -> our fcb
+	mov	al,ms2_al		; get function number
+	cmp	al,0
+	jz	ms2_f_move_abs		; func = 0, absolute offset
+	cmp	al,1
+	jz	ms2_f_move_plus		; func = 1, current plus offset
+	cmp	al,2
+	jz	ms2_f_move_end		; func = 2, end plus offset
+	mov	al,no_function		; if none of the above then
+	jmps	ms2_f_move_error	;   return invalid function
+
+ms2_f_move_abs:
+	sub	cx,cx			; start with zero
+	sub	dx,dx
+	jmps	ms2_f_move_set		; skip to common code
+
+ms2_f_move_plus:
+	mov	dx,fcb_rand_rec[si]	; get the current byte pointer
+	mov	cx,fcb_rand_rec2[si]	;   into cx::dx
+	jmps	ms2_f_move_set		; skip to common code
+
+ms2_f_move_end:
+	mov	dx,fcb_byte_size[si]	; get the current file size
+	mov	cx,fcb_byte_size2[si]	;   into cx::dx
+;	jmps	ms2_f_move_set		; fall through to common code
+;
+ms2_f_move_set:
+	add	dx,ms2_dx		; add in caller's offset
+	adc	cx,ms2_cx
+	mov	fcb_rand_rec[si],dx	; set a new byte pointer
+	mov	fcb_rand_rec2[si],cx
+	mov	ms2_ret_ax,dx		; return ls word in ax
+	mov	ms2_dx,cx		;   and ms word in dx
+	ret
+
+ms2_f_move_error:
+	jmp	ms2_error_ret		; top level error handler
+
+
+;	*****************************
+;	***    DOS Function 43    ***
+;	***  Change File Attribs  ***
+;	*****************************
+
+dos_ro_bit	equ	01h		; dos dir read only
+dos_sys_bit	equ	04h		; dos dir system
+dos_arch_bit	equ	20h		; dos dir archive
+
+ms2_f_chgmode:
+	call	file_path_prep		; open path, parse file
+	jc	ms2_chgmode_error	; skip on path error
+
+	mov	bx,dx			; for fcb indexing
+	mov	ax,ms2_ax
+	cmp	al,01			; if set sub-function
+	jz	ms2_chgmode_set		;   then skip
+
+	cmp	al,00
+	mov	al,no_function		; if not get sub-func
+	jnz	ms2_chgmode_error	;   then return an error
+
+ms2_chgmode_get:
+	mov	ah,ms_s_first
+	call	ms1_func		; search for file
+	test	al,al			; check for success
+	jnz	ms2_chgmode_nofile	; skip if it fails
+
+	mov	al,fcb_dir_attr[bx]
+	mov	ah,0
+	mov	ms2_cx,ax		; return attributes
+	ret				; successfully
+
+ms2_chgmode_set:
+	mov	cx,ms2_cx		; get attributes to set
+	mov	al,80h			; msb to or with fcb bytes
+	add	bx,offset fcb_ext	; advance to first type byte
+	test	cl,dos_ro_bit		; if not read-only
+	jz	ms2_chgmode_set1	;   then skip
+
+	or	[bx],al			; else set the bit
+ms2_chgmode_set1:
+	inc	bx			; next type byte
+	test	cl,dos_sys_bit		; if not system
+	jz	ms2_chgmode_set2	;   then skip
+
+	or	[bx],al			; else set the bit
+ms2_chgmode_set2:
+	inc	bx			; next type byte
+	test	cl,dos_arch_bit		; if not archived
+	jnz	ms2_chgmode_set3	;   then skip
+
+	or	[bx],al			; else set the bit
+ms2_chgmode_set3:
+	mov	cl,f_attrib
+	call	ccpm			; use ccpm set attrib call
+	test	al,al
+	jnz	ms2_chgmode_nofile	; skip if file not found
+	ret				; else return success
+
+ms2_chgmode_nofile:
+	mov	al,no_file		; file not found code
+ms2_chgmode_error:
+	jmp	ms2_error_ret
+
+
+;	*****************************
+;	***    DOS Function 45    ***
+;	***    Duplicate Handle   ***
+;	*****************************
+
+ms2_dup_handle:
+	mov	al,hf_read + hf_write	; look for either
+	call	get_active_handle	; bx -> the active hcb
+	jc	ms2_dup_error		; skip if invalid
+
+	push	bx
+	call	get_free_handle		; find an unused handle
+	pop	bx
+	jc	ms2_dup_error		; skip if none left
+
+	mov	ms2_ret_ax,si		; return the new handle number
+	shl	si,1
+	mov	hcb_list[si],bx		; point new handle to active hcb
+	inc	hcb_count[bx]		; add one to the owner count
+	ret				; and return success
+
+ms2_dup_error:
+	jmp	ms2_error_ret		; invalid or none left
+
+
+;	*****************************
+;	***    DOS Function 46    ***
+;	***    Force Duplicate    ***
+;	*****************************
+
+ms2_force_dup:
+	mov	al,hf_read + hf_write	; look for either
+	call	get_active_handle	; bx -> the active hcb
+	jc	ms2_force_error		; skip if invalid
+
+	push bx ! push ms2_bx		; here we set up the new handle
+	mov	ax,ms2_cx		;   as if it were passed from
+	mov	ms2_bx,ax		;   outside, and attempt a close
+	call	ms2_f_close		;   just in case CX is open,
+	pop ms2_bx ! pop bx		;   ignoring any errors.
+
+	mov	si,ms2_cx		; new handle number
+	shl	si,1
+	mov	hcb_list[si],bx		; point to the active hcb
+	inc	hcb_count[bx]		; add one to the owner count
+	ret				; correct any error ret now
+
+ms2_force_error:
+	jmp	ms2_error_ret		; if active handle invalid
+
+
+;	*****************************
+;	***    DOS Function 4E    ***
+;	***    Find First Match   ***
+;	*****************************
+
+ms2_find_first:
+	call	file_path_prep		; open path, parse file
+	jc	ms2_f_first_error	; skip if erroneous parse
+
+	lea	dx,temp_dta_buf
+	call	save_set_dta		; save dta, and point to fcb2
+	mov	ax,ms2_cx		; grab the attribute
+	mov	temp_fcb_attr,al	;   and save for search
+
+	lea	dx,temp_fcb_ext
+	mov	ah,ms_s_first
+	call	ms1_func		; do an ms1 search first
+	call	restore_dta		; save ax around this
+	test	al,al			; if other than perfect
+	mov	al,no_file		;   return file not found
+	jnz	ms2_f_first_error	;   then exit with error
+
+	call	search_save		; save info to dta
+	ret				; all is well
+
+ms2_f_first_error:
+	jmp	ms2_error_ret		; for any error
+
+
+;	*****************************
+;	***    DOS Function 4F    ***
+;	***    Find Next Match    ***
+;	*****************************
+
+ms2_find_next:
+	call	search_update		; reset up temp fcb
+	lea	dx,temp_dta_buf
+	call	save_set_dta		; save dta, and point to fcb2
+
+	lea	dx,temp_fcb_ext
+	mov	ah,ms_s_next
+	call	ms1_func		; do an ms1 search next
+	call	restore_dta		; save ax around this
+	test	al,al			; if other than perfect
+	jnz	ms2_f_next_error	;   then exit with error
+
+	call	search_save		; save info to dta
+	ret				; all is well
+
+ms2_f_next_error:
+	mov	al,no_room		; return no more files
+	jmp	ms2_error_ret		;   for any error
+
+
+;	*****************************
+;	***    DOS Function 56    ***
+;	***      Rename File      ***
+;	*****************************
+
+ms2_f_rename:
+	call	file_path_prep		; parse first name into tmp
+	jc	ms2_f_rename_error	; skip on parsing error
+
+	les	di,ms2_es_di		; point to new name string
+	call	shift_string		;   and upper case it
+
+	push ds ! pop es ! push ds	; save ds, local es
+	lds	si,ms2_es_di		; point to new name string
+	cld
+	call	scan_for_name		; skip the path stuff
+
+	lea	di,temp_fcb + 11h	; point to new name field
+	mov	cx,11			; name + type
+	mov	al,' '
+	rep	stosb			; fill with blanks initially
+
+	lea	dx,temp_fcb + 10h	; one before the name
+	call	parse_filename		; parse ds:si into es:dx
+	pop	ds
+	mov	al,no_file		; if parsing error
+	jc	ms2_f_rename_error	;   return file not found
+
+	lea	dx,temp_fcb
+	mov	ah,ms_rename
+	call	ms1_func		; do the rename
+	test	al,al			; check for success
+	mov	al,no_access		; if failure
+	jnz	ms2_f_rename_error	;   return access denied
+	ret				; if success, just return
+
+ms2_f_rename_error:
+	jmp	ms2_error_ret		; set cf and exit
+
+
+;	*****************************
+;	***    DOS Function 57    ***
+;	***  Get/Set Date & Time  ***
+;	*****************************
+
+ms2_f_datetime:
+	mov	al,hf_read + hf_write	; accept either or both
+	call	get_active_handle	; bx -> our hcb
+	call	swap_pdrive		; xchg hds pointers
+	jc	ms2_f_date_error	; if invalid handle
+
+	mov	al,ms2_al		; get function number
+	cmp	al,0
+	jz	ms2_f_getdate		; func = 0, get date/time
+	cmp	al,1
+	jz	ms2_f_setdate		; func = 1, set date/time
+	mov	al,no_function		; if none of the above then
+	jmps	ms2_f_date_error	;   return invalid function
+
+ms2_f_getdate:
+	mov	si,hcb_fcb_base[bx]	; si -> active fcb
+	mov	ax,fcb_date[si]
+	mov	ms2_dx,ax		; return date in dx
+	mov	ax,fcb_time[si]
+	mov	ms2_cx,ax		; return time in cx
+	call	swap_pdrive		; xchg hds pointers
+	ret				; all is well
+
+ms2_f_setdate:
+	push ds ! pop es		; local es for find_fcb
+	mov	di,hcb_fcb_base[bx]
+	push	bx
+	call	find_fcb_pub		; look for our cpm fcb
+	pop	bx
+	jc	ms2_f_setdate_done	; if error, then something's funny
+
+	mov	cpm_fcb,si		; save the cpm fcb pointer
+	mov	ax,ms2_dx		; get DOS date code
+	call	get_cpm_date		; dos -> cpm -> dta buf
+	jc	ms2_f_setdate_done	; skip if date is illegal
+
+	lea	si,temp_dta_buf		; stamps go in the dta buffer
+	mov	[si],cx			; save access/create if ok
+	mov	.4[si],cx		;   and update too
+
+	mov	ax,ms2_cx		; get DOS time code
+	call	get_cpm_time		; dos -> cpm -> dta buf
+	jc	ms2_f_setdate_done	; skip if time is illegal
+
+	lea	si,temp_dta_buf		; stamps go in the dta buffer
+	xchg	ch,cl			; switch hours/min
+	mov	.2[si],cx		; if ok, save hours/min only
+	mov	.6[si],cx		;   into both fields
+
+	mov	dx,si
+	call	save_set_dta		; local dta buffer
+	mov	dx,cpm_fcb		; found above
+	mov	cl,f_setdate		; the secret cpm function
+	push	bx
+	call	ccpm			; set date if possible
+	pop	bx
+	call	restore_dta		; back to user's dta
+
+ms2_f_setdate_done:
+	call	swap_pdrive		; xchg hds pointers
+	ret				; ignore other errors
+
+ms2_f_date_error:
+	call	swap_pdrive		; xchg hds pointers
+	jmp	ms2_error_ret		; set cf and exit
+
+
+eject
+;****************************************
+;*					*
+;*	  File I/O Subroutines		*
+;*					*
+;****************************************
+
+;	Find an unused handle for Open and Create
+;	First search hcb_list for an unused handle, then
+;	search the hcb's for one with a zero count.
+;	exit:	bx -> fresh hcb, if available
+;		si = handle number
+;		cf = 1, al = err code, if not
+
+get_free_handle:
+	mov	si,2 * rsv_hcb		; skip over reserved hcb's
+	mov	cx,num_hcb - rsv_hcb	; cx = num of hcb's to check
+
+get_free_loop1:
+	mov	bx,hcb_list[si]		; pull an hcb from the list
+	test	bx,bx			; if it's zero, then
+	jz	get_free_hcb		;   we've found a free one
+
+	inc si ! inc si			; if not, check the next
+	loop	get_free_loop1
+	jmps	get_free_error
+
+get_free_hcb:
+	lea	bx,file_hcbs		; bx -> first file hcb
+	mov	cx,num_hcb - rsv_hcb	; cx = num of hcb's to check
+
+get_free_loop2:
+	cmp	hcb_count[bx],0		; if owner count is zero,
+	jz	get_free_good		;   then we've succeeded
+
+	add	bx,hcb_size		; bx -> next hcb
+	loop	get_free_loop2
+
+get_free_error:
+	stc				; if no more to check
+	mov	al,no_handle		;   return 'no handles left'
+	ret
+
+get_free_good:
+	shr	si,1			; if found, si = handle number
+	ret
+
+
+;	Find a previously opened handle for Read, Write, or Close
+;	entry:	al = allowable open modes (read and/or write)
+;		ms2_bx = handle number
+;	exit:	bx -> hcb, if open and allowed
+;		si = 2 * handle
+;		cf = 1, al = err code, if not
+
+get_active_handle:
+	mov	si,ms2_bx		; get passed handle number
+	cmp	si,num_hcb		; if handle number too big
+	jae	get_active_invalid	;   then exit with error
+
+	shl	si,1			; index into hcb_list
+	mov	bx,hcb_list[si]		; grab the hcb pointer
+	test	bx,bx			; if the handle is unopened
+	jz	get_active_invalid	;   then exit with error
+
+	test	hcb_flags[bx],al	; if opened correctly
+	jnz	get_active_done		;   clear carry and exit
+
+	stc				; set carry to show error
+	mov	al,no_access		; error = access denied
+get_active_done:	
+	ret
+
+get_active_invalid:
+	stc				; set carry to show error
+	mov	al,no_h_match		; error = invalid handle
+	ret
+
+
+;	Set up an hcb for Open or Create.  Init hcb values,
+;	copy temp_fcb to our fcb, and if drive = P:, get path ptr
+;	entry:	bx -> hcb
+;		al = access code
+;	exit:	hcb ready to go
+;		cf = 1, al = 12, if invalid access code
+
+set_up_hcb:
+	cmp	al,2			; check for legal value
+	ja	setup_hcb_error		; skip if not
+
+	inc	al			; bit 0 = read, bit 1 = write
+	mov	hcb_flags[bx],al	; set up the flags
+	mov	hcb_count[bx],1		; a single hcb owner
+
+	mov	si,ms2_ret_ax		; retrieve the handle number
+	shl	si,1			; word index
+	mov	hcb_list[si],bx		; set our handle to our hcb
+
+	call	set_up_fcb		; copy temp_fcb to our hcb_fcb
+	clc				; successful return
+	ret
+
+setup_hcb_error:
+	mov	al,no_acc_code		; invalid access code
+	stc
+	ret
+
+
+;	Copy temp_fcb from path_prep to hcb_fcb and set initial vars
+;	entry:	bx -> hcb
+
+set_up_fcb:
+	push ds ! pop es		; local es for move
+	lea	si,temp_fcb
+	mov	di,hcb_fcb_base[bx]
+	mov	cx,hfcb_size		; bytes per fcb
+	push	di
+	cld ! rep movsb
+	pop	di
+
+	mov	si,hcb_fcb_base[bx]	; si -> our fcb
+	sub	ax,ax			; a convenient zero
+	mov	fcb_rand_rec[di],ax	; zero the random record
+	mov	fcb_rand_rec2[di],ax
+	inc	ax
+	mov	fcb_rec_size[di],ax	; record size = 1
+	ret
+
+
+;	Run down the path as P:, and parse final file name
+;	save:	bx (hcb pointer)
+;	exit:	ds:dx -> temp_fcb parsed at path end
+;		cf = 1 , al = 3 if path not found
+
+file_path_prep:
+	push	bx			; save hcb pointer
+	call	path_prep		; just like the dir functions
+	pop	bx
+	ret				; with carry on error
+
+
+;	Read bytes from a Character I/O device
+;	entry:	bx -> hcb
+;	exit:	cf = 1, al = error code, if any error
+
+read_device:
+	test	hcb_flags[bx],hf_dev_open
+	jnz	read_dev_open		; skip if already opened
+
+	mov	dx,hcb_fcb_base[bx]	; ds:dx -> file control block
+	call	open_fcb		; just like a file
+	jc	read_dev_error		; skip if file not found
+	or	hcb_flags[bx],hf_dev_open
+
+read_dev_open:
+	les	dx,ms2_ds_dx		; caller's transfer address
+	call	save_set_dta_far
+
+	mov	si,hcb_fcb_base[bx]	; point to file control block
+	mov	ax,ms2_cx		; fetch byte read count
+	mov	fcb_rec_size[si],ax	; record size = message size
+	mov	ms2_ret_ax,ax		; assume a full return
+
+	mov	dx,si			; dx -> fcb
+	mov	ah,ms_s_read		; sequential read
+	call	ms1_func		; do it
+	call	restore_dta		; preserving ax
+	test	al,al
+	jz	read_dev_good		; skip if buffer is full
+
+	cmp	al,03			; if al = 1 or 2
+	mov	al,no_access		;   return access denied error
+	jb	read_dev_error
+
+	les	di,ms2_ds_dx		; if we have a partially filled
+	mov	cx,ms2_cx		;   buffer, then scan it for
+	mov	al,0			;   the concluding zero, and
+	cld				;   correct the return count
+	repnz	scasb
+	jnz	read_dev_good		; in case it wasn't there
+	inc	cx			; because scasb goes 1 past
+	sub	ms2_ret_ax,cx		; count is now correct
+
+read_dev_good:
+	clc
+	ret				; return success
+
+read_dev_error:
+	stc
+	ret
+
+
+;	Write bytes to a Character I/O device
+;	entry:	bx -> hcb
+;	exit:	cf = 1, al = error code, if any error
+
+write_device:
+	test	hcb_flags[bx],hf_dev_open
+	jnz	write_dev_open		; skip if already opened
+
+	mov	dx,hcb_fcb_base[bx]	; ds:dx -> file control block
+	call	open_fcb		; just like a file
+	jc	write_dev_error		; skip if file not found
+	or	hcb_flags[bx],hf_dev_open
+
+write_dev_open:
+	les	dx,ms2_ds_dx		; caller's transfer address
+	call	save_set_dta_far
+
+	mov	si,hcb_fcb_base[bx]	; point to file control block
+	mov	ax,ms2_cx		; fetch byte write count
+	mov	fcb_rec_size[si],ax	; record size = message size
+	mov	ms2_ret_ax,ax		; assume all is well
+
+	mov	dx,si			; dx -> fcb
+	mov	ah,ms_s_write		; sequential write
+	call	ms1_func		; do it
+	call	restore_dta		; preserving ax
+	test	al,al
+	jnz	write_dev_error		; skip for any error
+
+	clc
+	ret				; return success
+
+write_dev_error:
+	stc
+	ret
+
+
+;	Read or Write using the Random Block calls
+;	entry:	ah = ms1 function code
+;		bx -> hcb
+;	exit:	ms2_ret_ax = byte count
+
+random_blk_rw:
+	push	ax
+	les	dx,ms2_ds_dx		; es:dx -> user's buffer
+	call	save_set_dta_far	; set dta to user
+	pop	ax
+
+	mov	dx,hcb_fcb_base[bx]	; dx -> open fcb
+	mov	cx,ms2_cx		; cx = byte count
+	call	ms1_func		; read or write
+	mov	ms2_ret_ax,cx		; return success count
+	call	restore_dta
+	ret
+	
+
+;	Create a file from an extended fcb
+;	entry:	dx -> parsed extended fcb
+;		ms2_cx = file attributes
+;	exit:	fcb created, or
+;		cf = 1, al = 5, if no directory space
+
+create_fcb:
+	mov	di,dx			; for attribute reference
+	mov	ax,ms2_cx		; get file attribute code
+	mov	xfcb_attrib[di],al	; set attributes for create
+	mov	ah,ms_create
+	call	ms1_func		; create file
+	test	al,al			; 0 => open successful
+	jnz	create_fcb_error	; if failed, skip
+	ret
+
+create_fcb_error:
+	mov	al,no_access		; no dir space
+	stc				; flag the error
+	ret
+
+
+;	Open a pre-parsed fcb for Open
+;	entry:	dx -> fcb
+;	exit:	fcb opened, or
+;		cf = 1, al = 2, if file not found
+
+open_fcb:
+	mov	ah,ms_open
+	call	ms1_func		; open file
+	test	al,al			; 0 => open successful
+	jnz	open_fcb_error		; if failed, skip
+	ret
+
+open_fcb_error:
+	mov	al,no_file		; file not found code
+	stc				; flag the error
+	ret
+
+
+;	Delete a pre-parsed fcb for Delete
+;	exit:	fcb opened, or
+;		cf = 1, al = 2, if file not found
+
+delete_fcb:
+	lea	dx,temp_fcb		; ds:dx -> file control block
+	mov	ah,ms_delete
+	call	ms1_func		; delete file
+	test	al,al			; 0 => delete successful
+	jnz	delete_fcb_error	; if failed, skip
+	ret
+
+delete_fcb_error:
+	mov	al,no_file		; file not found code
+	stc				; flag the error
+	ret
+
+
+;	For any function that uses handles, we swap the current value
+;	of P: (its hds) with that in the handle before and after doing
+;	any file operations.  This insures that P: is current and that
+;	it won't be destroyed in subsequent operations.
+;	entry:	bx -> hcb
+;	save:	all registers and flags
+
+swap_pdrive:
+	push es ! push si ! push ax ! pushf
+
+	push	bx			; save hcb around pd call
+	call	get_pd			; es:bx -> our pd
+	mov	si,es:pd_cat[bx]	; es:si -> our cat
+	pop	bx
+
+	test	si,si			; if no cat exists
+	jz	swap_pdrive_done	;   then nothing to swap
+
+	cmp	es:cat_count[si],1	; if we aren't the sole owner
+	jnz	swap_pdrive_done	;   then skip the swap
+
+	mov	ax,hcb_path_ptr[bx]	; fetch our path pointer
+	xchg	ax,es:cat_pdrive[si]	;   give it to P:
+	xchg	ax,hcb_path_ptr[bx]	;   and save the old one
+
+swap_pdrive_done:
+	popf ! pop ax ! pop si ! pop es	; popf is ok, no critical section
+	ret
+
+
+;	Close out our fcb, forcing purge and dir write
+;	entry:	bx -> hcb
+;	exit:	fcb closed
+;		cf = 1, al = 5, if improper closure
+
+close_fcb:
+	mov	dx,hcb_fcb_base[bx]	; grab the fcb pointer
+	mov	ah,ms_close
+	call	ms1_func		; close file
+	cmp	al,00h			; if anything but perfect
+	jnz	close_fcb_error		;   then skip
+	ret				; cf is cleared if al=0
+
+close_fcb_error:
+	mov	al,no_access		; access denied code (?)
+	stc				; flag the error
+	ret
+
+
+;	Save current data transfer address, and set it to a local offset
+;	entry:	dx = local dta offset
+;	exit:	dta = ds:fcb2
+
+save_set_dta:
+	push ds ! pop es		; es -> dta segment (local)
+;	jmp	save_set_dta_far	; fall through
+
+;	Save current dta, and set to a new address
+;	entry:	es:dx -> new dta
+
+save_set_dta_far:
+	mov	ax,ms_dmaadr
+	mov	save_dta_off,ax		; save the offset
+	mov	ax,ms_dmabase
+	mov	save_dta_seg,ax		; save the segment
+
+	push ds ! push es ! pop ds	; ds = target segment
+	mov	ah,ms_setdta
+	call	ms1_func		; set transfer address
+	pop	ds			; restore our data seg
+	ret
+
+
+;	Restore the original data transfer address
+;	save:	ax may contain function return code
+
+restore_dta:
+	push ds ! push ax
+	lds	dx,save_dta_dword	; user's original
+	mov	ah,ms_setdta
+	call	ms1_func		; set transfer address
+	pop ax ! pop ds
+	ret
+
+
+;	Save the Search information into user's dta
+
+search_save:
+	les	di,dword ptr ms_dmaadr		; point to user's dta
+	mov	bx,offset search_dta_table	; counts and ptr's to fill dta
+	cld
+
+search_save_loop:
+	mov	cx,cs:[bx]		; grab the count
+	jcxz	search_save_name	; skip when list exausted
+
+	mov	si,cs:.2[bx]		; grab the source pointer
+	rep	movsb			; store infor to dta
+	add	bx,4			; to next table entry
+	jmps	search_save_loop	; continue through list
+
+search_save_name:
+	mov	si,offset temp_fcb2 + 1	; beginning of dir entry
+	mov	cx,8			; filename length
+	call	search_un_parse		; build filename
+	mov	si,offset temp_fcb2 + 9	; beginning of extension
+	cmp	byte ptr[si],' '	; if the extension is blank
+	jz	search_save_done	;   then skip the period
+
+	mov	al,'.'			; extension seperator
+	stosb
+	mov	cx,3			; extension length
+	call	search_un_parse		; build extension
+
+search_save_done:
+	mov	al,0
+	stosb				; ascii filename terminator
+	ret
+
+;	while char != space, move it
+;	entry:	cx = count
+
+search_un_parse:
+	lodsb				; get fcb character
+	cmp	al,' '			; if it's a space
+	jz	search_un_done		;   then quit
+	stosb				; else store
+	loop	search_un_parse
+search_un_done:
+	ret
+
+;	This is a list of counts and source offsets used by Search_save to
+;	fill the user's dta with appropriate information following a search.
+
+search_dta_table:
+	dw	13, offset temp_fcb - 1		; attr, drive, name, ext
+	dw	 6, offset temp_fcb + 24	; search count
+	dw	 2, search_path			; reserved for path ptr
+	dw	 1, offset temp_fcb2 + 12	; found attribute
+	dw	 4, offset temp_fcb2 + 23	; time and date
+	dw	 4, offset temp_fcb2 + 29	; file size
+	dw	 0				; done flag
+
+
+;	Update temporary fcb with dta information for a Search Next
+;	exit:	temp_fcb like it was at previous search
+
+search_update:
+	push ds ! pop es ! push ds	; local es, save ds
+	mov	di,offset temp_fcb - 1	; point to fcb attribute
+	lds	si,dword ptr ms_dmaadr	; ds:si -> user's dta
+	mov	al,0			; for coming stos's
+	cld
+
+	mov	cx,13
+	rep	movsb			; attr, drive, name, ext
+	mov	cx,12
+	rep	stosb
+	mov	cx,6
+	rep	movsb			; search count
+	mov	cx,7
+	rep	stosb
+	pop	ds
+	ret
+
+
+;	Scan ASCIIZ string for filename for Rename
+;	entry:	ds:si -> asciiz string
+;	exit:	ds:si -> filename at string end
+
+scan_for_name:
+	mov	dx,si			; default name pointer
+
+scan_for_name_loop:
+	lodsb				; fetch asciiz char
+	cmp	al,0			; if at string end
+	jz	scan_for_name_done	;   then we're through
+
+	cmp	al,'.'			; if delim = '.'
+	jz	scan_for_name_loop	;   that's ok
+
+	call	check_delim		; if no other delimiter
+	jnz	scan_for_name_loop	;   then keep going
+	jmps	scan_for_name		; if delim, save si in dx
+
+scan_for_name_done:
+	mov	si,dx			; point to last filename
+	ret
+
+
+;	Convert DOS's date code into CP/M's Rolander date
+;	entry:	ax = date, DOS format
+;	exit:	cx = Rolander date, or
+;		cf = 1 if value out of range
+;	save:	bx (hcb ptr)
+
+get_cpm_date:
+	push	bx
+	mov	dl,al
+	and	dl,1Fh			; dl = day
+	mov	cl,5
+	shr	ax,cl
+	mov	dh,al
+	and	dh,0Fh			; dh = month
+	mov	cl,4
+	shr	ax,cl
+	add	ax,1980			; correct DOS offset
+	mov	cx,ax			; cx = year
+	call	convert_date		; shared with MS1
+	pop	bx
+	ret
+
+
+;	Convert DOS's time code into CP/M's BCD time
+;	entry:	ax = time, DOS format
+;	exit:	ch = hours, cl = minutes  (all BCD)
+;		cf = 1 if value out of range
+;	save:	bx (hcb ptr)
+
+get_cpm_time:
+	push	bx
+	mov	cl,5
+	shr	ax,cl
+	mov	dl,al
+	and	dl,3Fh			; dl = minutes
+	mov	cl,6
+	shr	ax,cl
+	mov	dh,al
+	and	dh,1Fh			; dh = hours
+	mov	cx,dx
+	call	convert_time		; shared with MS1
+	pop	bx
+	ret
+
+
+eject
+;****************************************
+;*					*
+;*	     File I/O Data		*
+;*					*
+;****************************************
+
+	DSEG
+
+temp_ptr	rw	1		; for storing logical byte pointer
+temp_ptr2	rw	1		;   after it is converted to records
+cpm_fcb		rw	1		; saves pointer to cpm fcb
+match_caller	rb	1		; caller identification byte
+		rb	1		; pad
+
+save_dta_off	rw	1		; This saves the user's dta so that
+save_dta_seg	rw	1		;   we can use another for Search.
+save_dta_dword	equ	dword ptr save_dta_off
+
+search_path	rw	1		; temporarily saves path for Search
+
+;	Handle Control Block Pointers
+;	These can be rearranged by Duplicate Handle calls
+
+hcb_list	dw	hcb0,hcb1,hcb2,hcb3,hcb4
+		dw	0,0,0,0,0
+		dw	0,0,0,0,0
+		dw	0,0,0,0,0
+
+;	Handle Control Blocks
+
+hcb0		db	hf_device + hf_read,0			; input
+		dw	0,hfcb0
+hcb1		db	hf_device + hf_write,0			; output
+		dw	0,hfcb1
+hcb2		db	hf_device + hf_write,0			; error
+		dw	0,hfcb2
+hcb3		db	hf_device + hf_read + hf_write,0	; aux
+		dw	0,hfcb3
+hcb4		db	hf_device + hf_read + hf_write,0	; printer
+		dw	0,hfcb4
+
+file_hcbs	rb	0
+hcb5		dw	0,0,hfcb5
+hcb6		dw	0,0,hfcb6
+hcb7		dw	0,0,hfcb7
+hcb8		dw	0,0,hfcb8
+hcb9		dw	0,0,hfcb9
+hcb10		dw	0,0,hfcb10
+hcb11		dw	0,0,hfcb11
+hcb12		dw	0,0,hfcb12
+hcb13		dw	0,0,hfcb13
+hcb14		dw	0,0,hfcb14
+hcb15		dw	0,0,hfcb15
+hcb16		dw	0,0,hfcb16
+hcb17		dw	0,0,hfcb17
+hcb18		dw	0,0,hfcb18
+hcb19		dw	0,0,hfcb19
+
+
+;	File Control Blocks for Character I/O Devices
+
+hfcb0		db	0,'CON        '		; standard input
+		rb	hfcb_size - 11		;   includes 1 byte pad
+hfcb1		db	0,'CON        '		; standard output
+		rb	hfcb_size - 11
+hfcb2		db	0,'CON        '		; error output
+		rb	hfcb_size - 11
+hfcb3		db	0,'AUX        '		; standard auxiliary
+		rb	hfcb_size - 11
+hfcb4		db	0,'LPT1       '		; standard printer
+		rb	hfcb_size - 11
+
+;	Extended File Control Blocks for Disk Files
+
+		db	0FFh,0,0,0,0,0,0	; ext fcb header
+hfcb5		rb	hfcb_size
+		db	0FFh,0,0,0,0,0,0	; ext fcb header
+hfcb6		rb	hfcb_size
+		db	0FFh,0,0,0,0,0,0	; ext fcb header
+hfcb7		rb	hfcb_size
+		db	0FFh,0,0,0,0,0,0	; ext fcb header
+hfcb8		rb	hfcb_size
+		db	0FFh,0,0,0,0,0,0	; ext fcb header
+hfcb9		rb	hfcb_size
+		db	0FFh,0,0,0,0,0,0	; ext fcb header
+hfcb10		rb	hfcb_size
+		db	0FFh,0,0,0,0,0,0	; ext fcb header
+hfcb11		rb	hfcb_size
+		db	0FFh,0,0,0,0,0,0	; ext fcb header
+hfcb12		rb	hfcb_size
+		db	0FFh,0,0,0,0,0,0	; ext fcb header
+hfcb13		rb	hfcb_size
+		db	0FFh,0,0,0,0,0,0	; ext fcb header
+hfcb14		rb	hfcb_size
+		db	0FFh,0,0,0,0,0,0	; ext fcb header
+hfcb15		rb	hfcb_size
+		db	0FFh,0,0,0,0,0,0	; ext fcb header
+hfcb16		rb	hfcb_size
+		db	0FFh,0,0,0,0,0,0	; ext fcb header
+hfcb17		rb	hfcb_size
+		db	0FFh,0,0,0,0,0,0	; ext fcb header
+hfcb18		rb	hfcb_size
+		db	0FFh,0,0,0,0,0,0	; ext fcb header
+hfcb19		rb	hfcb_size
+
+
+eject
+;**************************************************
+;**************************************************
+;***						***
+;***	   Memory Alloc / Free Functions	***
+;***						***
+;**************************************************
+;**************************************************
+
+;	DOS Memory Descriptor definition
+
+dmd_id		equ	byte ptr .0	; id code ('M' or 'Z')
+dmd_psp		equ	word ptr .1	; owner of memory block
+dmd_len		equ	word ptr .3	; length of memory block
+idm		equ	'M'		; not last id code
+idz		equ	'Z'		; last id code
+
+
+	CSEG
+
+;	*****************************
+;	***    DOS Function 48    ***
+;	*** Allocate Memory Block ***
+;	*****************************
+
+ms2_alloc_mem:
+	mov	bx,ms2_bx		; bx = request size
+	call	search_mem		; look for block bx or bigger
+	jc	ms2_alloc_error		; skip on error
+
+	mov	ax,active_psp
+	mov	es:dmd_psp,ax		; we now own this block
+	mov	ax,es
+	inc	ax
+	mov	ms2_ret_ax,ax		; return starting segment
+	call	make_dmd		; on top of allocated mem
+	ret
+
+ms2_alloc_error:
+	mov	ms2_bx,si		; return biggest block available
+	jmp	ms2_error_ret
+
+
+;	*****************************
+;	***    DOS Function 49    ***
+;	***   Free Memory Block	  ***
+;	*****************************
+
+ms2_free_mem:
+	call	get_dmd			; es -> dmd
+	jc	ms2_free_error		; skip if block invalid
+
+	mov	es:dmd_psp,0		; block is now unowned
+	ret
+
+ms2_free_error:
+	jmp	ms2_error_ret
+
+
+;	*****************************
+;	***    DOS Function 4A    ***
+;	***   Alter Memory Block  ***
+;	*****************************
+
+ms2_set_block:
+	call	get_dmd			; es -> dmd
+	jc	ms2_setblk_error	; skip if block invalid
+
+	call	merge_mem		; pick up unallocated blocks
+	jc	ms2_setblk_error	; if dmd's destroyed
+
+	mov	bx,ms2_bx		; bx = requested size
+	mov	cx,es:dmd_len		; cx = available size
+	cmp	cx,bx			; if avail < req, then
+	mov	al,no_memory		;   return insufficient mem
+	jb	ms2_setblk_error
+
+	mov	dl,es:dmd_id		; pass our id up
+	call	make_dmd		; new block on top
+	ret
+
+ms2_setblk_error:
+	mov	cx,es:dmd_len		; get available length
+	mov	ms2_bx,cx		;   and send it back
+	jmp	ms2_error_ret
+
+eject
+;****************************************
+;*					*
+;*	Memory Function Subroutines	*
+;*					*
+;****************************************
+
+;	Search for a free memory block at least as big as bx
+;	entry:		bx = requested size
+;	success exit:	cf clear, es -> dmd
+;			cx = block size, dl = id code
+;	failure exit:	cf set, al = error code
+;			si = best size, di = best pointer
+
+search_mem:
+	call	clean_mem		; group unalloc'd blocks
+	mov	es,dmd_base		; es -> first dmd
+	sub	si,si			; si = max mem available
+	sub	di,di			; di = best dmd pointer
+
+search_mem_loop:
+	call	check_dmd_id		; if block is invalid
+	jc	search_mem_fail		;   then quit now
+
+	mov	dl,al			; dl = id code
+	cmp	es:dmd_psp,0		; if block is owned
+	jnz	search_mem_next		;   then check another
+
+	mov	cx,es:dmd_len		; cx = block length
+	cmp	bx,cx			; if it's long enough
+	jbe	search_mem_good		;   then return success
+
+	cmp	cx,si			; if it's too short, but longer
+	jbe	search_mem_next		;   than the previous best,
+	mov	si,cx			;   then save the size
+	mov	di,es			;   and the dmd pointer
+
+search_mem_next:
+	call	next_dmd		; es -> next block up
+	cmp	dl,idm			; if previous block wasn't last
+	jz	search_mem_loop		;   then keep going
+
+search_mem_fail:
+	mov	al,no_memory		; else return insufficient mem
+	stc				;   and flag the error
+	ret
+
+search_mem_good:
+	clc				; clear the error flag
+	ret
+
+
+;	Group all adjacent unallocated blocks prior
+;	to allocation for alloc_mem or call exec
+
+clean_mem:
+	mov	es,dmd_base		; start at the bottom
+
+clean_mem_loop:
+	cmp	es:dmd_id,idm		; if no more to go
+	jnz	clean_mem_done		;   then just quit
+
+	cmp	es:dmd_psp,0		; if block is owned
+	jnz	clean_mem_next		;   then leave it alone
+
+	call	merge_mem		; group with unallocated blocks
+	jc	clean_mem_done		; quit on any error
+
+clean_mem_next:
+	call	next_dmd		; point to next block
+	jmps	clean_mem_loop		; up through memory
+
+clean_mem_done:
+	ret				; ignoring errors
+
+
+;	Increase the size of the current mem block
+;	by gobbling all adjacent unallocated blocks
+;	entry:	es -> dmd
+;	exit:	cf = 1, al = 7 if chain is broken
+
+merge_mem:
+	push	es
+	cmp	es:dmd_id,idm		; if no more dmd's
+	jnz	merge_mem_done		;   then just quit
+
+	call	next_dmd
+	call	check_dmd_id		; if id is invalid
+	jc	merge_mem_quit		;   then return an error
+
+	cmp	es:dmd_psp,0		; if next dmd is owned
+	jnz	merge_mem_done		;   then done
+
+	mov	cx,es:dmd_len		; if free, grab its length
+	pop	es			; restore base dmd
+
+	mov	es:dmd_id,al		; use next's id (in case of last)
+	inc	cx
+	add	es:dmd_len,cx		; add new memory to base
+	jmps	merge_mem		;   and try again
+
+merge_mem_done:
+	clc				; clear error flag
+merge_mem_quit:
+	pop	es			; restore base dmd
+	ret				; with cf and error flag
+
+
+;	If needed, create a new dmd on top of allocated memory
+;	entry:	es -> current block
+;		bx = requested block size
+;		cx = current block size
+;		dl = current block id
+
+make_dmd:
+	cmp	bx,cx			; if request and size match
+	jz	make_dmd_done		;   then that's all we need
+
+	mov	es:dmd_len,bx		; else shrink this block
+	mov	es:dmd_id,idm		; not the last now
+	call	next_dmd
+	mov	es:dmd_id,dl		; our old id for the new dmd
+	mov	es:dmd_psp,0		; new block is free
+	sub	cx,bx
+	dec	cx
+	mov	es:dmd_len,cx		; length is whatever is left
+
+make_dmd_done:
+	ret
+
+
+;	Point to next DOS Memory Descriptor (dmd) in the chain
+;	entry:	es -> current dmd
+;	exit:	es -> next dmd
+
+next_dmd:
+	mov	ax,es
+	add	ax,es:dmd_len
+	inc	ax			; allow for dmd itself
+	mov	es,ax
+	ret
+
+
+;	Get passed value of memory block
+;	exit:	es -> dmd
+;		al = dmd_id, cf cleared if valid
+;		al = 7, cf set if invalid
+
+get_dmd:
+	mov	ax,ms2_es
+	dec	ax			; back up to dmd
+	mov	es,ax
+;	jmps	check_dmd_id		; fall through
+
+;	Check first byte in the dmd for a valid id code
+;	entry:	es -> dmd
+;	exit:	al = dmd_id, cf cleared if valid
+;		al = 7, cf set if invalid
+
+check_dmd_id:
+	mov	al,es:dmd_id
+	cmp	al,idm			; if not last
+	jz	check_dmd_done		;   then good
+	cmp	al,idz			; if last
+	jz	check_dmd_done		;   also good
+
+	mov	al,no_dmd		; mem desc destroyed
+	stc				; flag the error
+check_dmd_done:
+	ret
+
+
+eject
+;**************************************************
+;**************************************************
+;***						***
+;***	    Process Control Functions		***
+;***						***
+;**************************************************
+;**************************************************
+
+;	***  Process Control Equates  ***
+
+psp_seg_size	equ	word ptr .06h	; our size in bytes
+psp_parent	equ	word ptr .16h	; parent's psp base
+psp_env		equ	word ptr .2Ch	; current environment
+
+int_20_vec	equ	dword ptr .80h	; interrupt 20h vector location
+
+
+	CSEG
+
+;	*****************************
+;	***    DOS Function 31    ***
+;	***   Terminate and Keep  ***
+;	*****************************
+
+ms2_term_keep:
+	mov	ax,ms2_ax		; fetch return code
+	mov	ah,3			; ah = 3 for term and keep
+	mov	return_code,ax		; in case anyone asks
+
+	call	get_pd			; es:bx -> our pd
+	mov	es:pd_mem[bx],0		; disown all of our memory
+	jmp	ms2_term_common		;   and terminate as usual
+
+
+;	*****************************
+;	***    DOS Function 33    ***
+;	***  Check Control-Break  ***
+;	*****************************
+
+ms2_ctbr_check:
+	mov	ax,ms2_ax		; retrieve function code
+	cmp	al,0			; if al = 0, then
+	jz	ms2_ctbr_get		;   get current state
+	cmp	al,1			; if al = 1, then
+	jz	ms2_ctbr_set		;   set current state
+
+ms2_ctbr_error:
+	mov	al,no_function		; if illegal al value
+	jmp	ms2_error_ret		;   return an error
+
+ms2_ctbr_get:
+	mov	al,ctbr_state		; get the current state
+	mov	ms2_ret_al,al		; send it back
+	mov	ms2_dl,al		;   in both al and dl
+	ret
+
+ms2_ctbr_set:
+	mov	ax,ms2_dx		; get the new state
+	cmp	al,01h			; check for legal value
+	ja	ms2_ctbr_error		; return error if bad
+
+	mov	ctbr_state,al		; set it if good
+	mov	ms2_ret_al,al		;   and return in al
+	ret
+
+
+;	*****************************
+;	***    DOS Function 4B    ***
+;	*** Load or Execute Prog  ***
+;	*****************************
+
+ms2_exec:
+	sub	dx,dx			; dta is used all through here
+	call	save_set_dta		;   so save it right away
+	call	file_path_prep		; chain path, open last
+	jc	ms2_exec_error		; if any error, then quit
+
+	call	open_fcb		; open up exec file
+	jc	ms2_exec_error		; quit on any error
+
+	mov	bx,dx			; bx -> fcb for loaders
+	mov	ax,ms2_ax		; get subfunction code
+	cmp	al,3			; if al = 3
+	jz	ms2_exec_load_exe	;   then load .exe file only
+	cmp	al,0			; if al = 0
+	mov	al,no_function		;   then load and go
+	jnz	ms2_exec_error		; else, return an error
+
+ms2_exec_go:
+	call	com_check		; if this isn't a .com file
+	jnz	ms2_exec_go_exe		;   then skip
+
+ms2_exec_go_com:
+	call	calc_psp		; calculate new psp
+	call	com_load		; load in com file
+	jc	ms2_exec_error		; quit if no memory
+
+	call	set_up_psp		; build child's psp
+	call	set_com_regs		; set up initial registers
+	jmp	go_to_child		; goodbye!
+
+ms2_exec_go_exe:
+	call	exe_read_header		; read in the exe info
+	jc	ms2_exec_error		; if any error, quit
+
+	call	calc_psp		; returns si = di = load seg
+	call	exe_load_reloc		; load and relocate image
+	jc	ms2_exec_error		; quit if no memory
+
+	call	set_up_psp		; build child's psp
+	add	dx,10h			; dx = load seg
+	add	exe_hdr_cs,dx		; bias the code segment
+	add	exe_hdr_ss,dx		;   and the stack segment too
+	jmp	go_to_child		; goodbye!
+
+ms2_exec_load_exe:
+	call	exe_read_header		; read in the exe info
+	jc	ms2_exec_error		; if any error, quit
+
+	mov	es,ms2_es
+	mov	bp,ms2_bx		; es:bp -> load, reloc values
+	mov	si,es:[bp]		; si = reloc segment
+	mov	di,es:.2[bp]		; di = load segment
+	mov	block_top,0FFFFh	; no easy way to know this
+	call	exe_load_reloc		; load and relocate image
+	call	restore_dta		; back to user's dta
+	ret				; return to caller
+
+ms2_exec_error:
+	call	restore_dta		; always reset the dta
+	jmp	ms2_error_ret		;   then report error
+
+
+;	*****************************
+;	***    DOS Function 4C    ***
+;	***   Terminate Process	  ***
+;	*****************************
+
+ms2_term_proc:
+	mov	ax,ms2_ax		; fetch return code
+	mov	ah,0			; ah = 0 for normal termination
+	mov	return_code,ax		; in case anyone asks
+
+ms2_term_common:			; shared with term and keep
+	sub	ax,ax
+	pushf				; now we fake an interrupt
+	push	active_psp		; psp segment onto stack
+	push	ax
+	mov	es,ax			; es: = base page
+	jmpf	es:int_20_vec		; fake an int 20 (terminate)
+
+
+;	*****************************
+;	***    DOS Function 4D    ***
+;	*** Get Sub-Func Ret-Code ***
+;	*****************************
+
+ms2_get_retcode:
+	sub	ax,ax
+	xchg	ax,return_code		; fetch and set to zero
+	mov	ms2_ret_ax,ax		; back to the caller
+	ret
+
+
+;	This is called from MS1 to give us a chance to clean things up
+;	after any of the various termination calls are executed.
+;	entry:	ds -> our data segment
+;	save:	all other registers
+
+ms2_terminate:
+	push es ! push ax ! push bx ! push si
+	mov ax,active_psp
+	mov bx,ax ! mov es,ax		; for grabbing parent
+	mov ax,es:psp_parent
+	mov active_psp,ax		; parent is now active
+
+	mov es,dmd_base			; es -> first dmd
+ms2_term_mem_loop:
+	cmp es:dmd_psp,bx		; if we don't own it
+	jnz ms2_term_mem_next		;   then look for another
+	  mov es:dmd_psp,0		; else free it up
+ms2_term_mem_next:
+	cmp es:dmd_id,idm		; if there are no more
+	jnz ms2_term_handle		;   then we're finished
+	  call next_dmd			; else advance to next
+	  jmps ms2_term_mem_loop	;   and try again
+
+ms2_term_handle:
+	lea si,hcb_list + (2*rsv_hcb)	; skip over reserved hcb's
+	sub ax,ax			; a convenient zero
+ms2_term_handle_loop:
+	mov bx,[si] ! test bx,bx	; test an hcb from the list
+	jz ms2_term_handle_next		; if zero, check for another one
+	  mov [si],ax			; if not, zero the list entry
+	  mov hcb_count[bx],al		;   and the hcb count
+ms2_term_handle_next:
+	inc si ! inc si			; if not, check the next
+	cmp si,offset hcb_list + (2*num_hcb)
+	jb ms2_term_handle_loop
+
+	pop si ! pop bx ! pop ax ! pop es
+	ret
+
+
+eject
+;****************************************
+;*					*
+;*	Process Control Subroutines	*
+;*					*
+;****************************************
+
+
+;	Check exec file for .COM extension
+;	entry:	bx -> fcb
+;	exit:	zf set if .com file
+
+com_check:
+	cmp	fcb_ext[bx],'OC'
+	jnz	com_check_done
+	cmp	fcb_ext2[bx],'M'
+com_check_done:
+	ret
+
+
+;	Read the header of an EXE file into a buffer
+;	save:	bx -> file fcb
+;	exit:	if signature error, cf set and al = code
+
+exe_read_header:
+	lea	dx,exe_hdr
+	mov	ah,ms_setdta
+	call	ms1_func		; read into exe header
+
+	mov	fcb_rec_size[bx],exe_hdr_size
+	sub	ax,ax
+	mov	fcb_rand_rec[bx],ax	; zero the starting record
+	mov	fcb_rand_rec2[bx],ax	;   and the high word too
+
+	mov	dx,bx			; dx -> fcb
+	mov	ah,ms_r_read
+	call	ms1_func		; do a random read
+	cmp	exe_hdr_sig,'ZM'	; look for exec signature
+	jz	exe_read_hdr_done	; skip if it's ok
+
+	mov	al,no_format		; report format error
+	stc				; flag the error
+exe_read_hdr_done:
+	ret
+
+
+;	Calculate the new program segment prefix
+;	save:	bx -> fcb
+;	exit:	si = di -> psp + 100h
+
+calc_psp:
+	push	bx
+	mov	ax,active_psp		; get the parent's psp
+	mov	parents_psp,ax		;   and save it for later
+	mov	es,ax
+	mov	ax,es:psp_env		; get parent's environment
+	mov	parents_env,ax		;   and save for later
+
+	mov	bx,0FFFFh		; search for largest block
+	call	search_mem
+	inc	di
+	mov	new_psp,di		; this is tentative until loaded
+	add	si,di			; size + start = top
+	mov	block_top,si		; save for load
+
+	add	di,10h			; di = load segment
+	mov	si,di			; si = reloc segment
+	pop	bx
+	ret
+
+
+;	Read in the COM image
+;	entry:	bx -> fcb
+;		di = load segment
+;	save:	bx, si, di
+;	exit:	cf = 1, al = no_memory if load fails
+
+com_load:
+	sub	ax,ax
+	mov	fcb_rand_rec[bx],ax	; start record = 0
+	mov	fcb_rand_rec2[bx],ax
+	call	exec_load
+	jmp	load_done		; shared with exe load_reloc
+
+
+;	Read in and relocate the EXE image
+;	entry:	bx -> fcb
+;		di = load segment
+;		si = reloc segment
+;	exit:	cf = 1, al = no_memory if load fails
+
+exe_load_reloc:
+	mov	ax,exe_hdr_hsiz		; size of header in paragraphs
+	mov	fcb_rand_rec[bx],ax	; set starting record
+	mov	fcb_rand_rec2[bx],0	; zero high word
+	call	exec_load
+	jc	load_done		; skip if no memory
+
+	mov	cx,exe_hdr_nrel		; get number of reloc entries
+	clc				; no error flag
+	jcxz	load_done		; if none there, forget it
+
+	mov	fcb_rec_size[bx],1	; byte sized records
+	mov	ax,exe_hdr_orel		; offset of first reloc ptr
+	mov	fcb_rand_rec[bx],ax	; set starting record
+	mov	fcb_rand_rec2[bx],0	; zero high word
+
+	lea	dx,exe_reloc_ptr	; set dma address to our
+	mov	ah,ms_setdta		;   dword pointer buffer
+	call	ms1_func
+	mov	dx,bx			; restore fcb ptr
+
+exe_reloc_loop:
+	push	cx
+	mov	cx,4			; read one dword
+	mov	ah,ms_r_blk_read	; random read
+	call	ms1_func
+	pop	cx
+
+	les	bp,exe_reloc_ptr	; es:bx = reloc entry
+	mov	ax,es
+	add	ax,di			; correct segment to load seg
+	mov	es,ax
+	add	es:[bp],si		; add reloc seg into image
+	loop	exe_reloc_loop		; repeat for each entry
+	clc				; no error flag
+
+load_done:
+	pushf ! push ax			; save cf and error code
+	mov	dx,bx			; restore fcb pointer
+	mov	ah,ms_close
+	call	ms1_func		; close the com file
+	pop ax ! popf
+	ret
+
+
+;	Load a .com or .exe file for call_exec
+;	entry:	bx -> fcb
+;		di = load segment
+;	save:	bx, si, di
+;	exit:	cf = 1, al = no_memory if memory overrun
+
+exec_load:
+	push si ! push di
+	mov	ax,block_top		; top of mem avail for load
+	sub	ax,di			; ax = max mem for load
+	jbe	exec_load_error		; skip if mem top <= load
+
+	xchg	ax,si			; si = attempt load count
+exec_load_ok:
+	mov	fcb_rec_size[bx],16	; paragraph sized records
+
+exec_load_loop:
+	push	ds			; save around set dta call
+	mov	ds,di
+	sub	dx,dx			; ds:dx -> load segment
+	mov	ah,ms_setdta
+	call	ms1_func		; set data transfer address
+	pop	ds
+
+	mov	cx,400h			; 1k paragraphs
+	cmp	si,cx			; if request > 1k para
+	jae	exec_load_block		;   then just do 1k
+
+	mov	cx,si			; else, just do request
+exec_load_block:
+	add	di,cx			; bump the load segment
+	sub	si,cx			;   and dec the request count
+	mov	dx,bx			; restore fcb pointer
+	mov	ah,ms_r_blk_read
+	call	ms1_func		; try to read 16k
+	or	al,al			; if there's no more to read, then
+	jnz	exec_load_done		;   we've got it (cf always 0 here)
+
+	cmp	si,0			; if request > zero then
+	jnz	exec_load_loop		;   then read some more
+					; else, there's more file than memory
+exec_load_error:
+	mov	al,no_memory		; return a no memory error
+	stc				;   and flag it
+
+exec_load_done:
+	pop di ! pop si			; restore load, reloc
+	ret
+
+
+;	Set up a new psp for the child
+;	exit:	dx = psp segment
+
+set_up_psp:
+	les	di,ms2_ss_sp		; es:di -> parents stack
+	mov	ax,es:[di]		; get return IP
+	mov	bx,es:.2[di]		; get return CS
+	sub	cx,cx
+	mov	es,cx			; es -> base page
+	mov	di,22h * 4		; terminate vector offset
+	stosw				; IP for int 22
+	xchg	ax,bx
+	stosw				; CS for int 22
+	xchg	ax,bx
+	stosw				; IP for int 23
+	xchg	ax,bx
+	stosw				; CS for int 23
+
+	mov	ax,new_psp		; now that the load is successful
+	mov	active_psp,ax		;   we can update the active psp
+	mov	dx,ax			; save for make call
+	dec	ax
+	mov	es,ax			; es -> dmd below new psp
+	mov	es:dmd_psp,dx		; save owner in dmd
+	mov	ah,ms_make_psp
+	call	ms1_func		; do the bulk of psp setup
+
+	mov	es,ms2_es
+	mov	bx,ms2_bx		; es:bx -> param block
+	mov	si,2			; command line
+	mov	di,80h			; command dest
+	mov	cx,80h			; command len
+	call	movs_psp		; move it
+	mov	si,6			; first fcb
+	mov	di,5Ch			; first fcb dest
+	mov	cx,16			; fcb len
+	call	movs_psp		; move it
+	mov	si,10			; second fcb
+	mov	di,6Ch			; second fcb dest
+	mov	cx,16			; fcb len
+	call	movs_psp		; move it
+
+	mov	ax,es:[bx]		; fetch environment ptr
+	mov	es,dx			; es: -> psp
+	test ax,ax ! jnz set_up_env	; if env ptr is null
+	mov	ax,parents_env		;   then use parent's
+set_up_env:
+	mov	es:psp_env,ax		; store passed environment
+	mov	ax,parents_psp		; get parent's psp
+	mov	es:psp_parent,ax	;   and save it in child's psp
+
+	push ds ! push dx
+	mov	ds,dx			; ds -> psp
+	mov	dx,80h			; default dma offset
+	mov	ah,ms_setdta
+	call	ms1_func		; set child's dma address
+	pop dx ! pop ds
+	ret
+
+
+;	Move params from parent to child
+;	entry:	es:bx -> param block
+;		si = param offset
+;		dx = psp segment
+;		cx = byte count to move
+
+movs_psp:
+	push ds ! push es
+	lds	si,es:dword ptr [bx+si]	; load source pointer
+	mov	es,dx			; es:di -> psp destination
+	cld
+	rep	movsb			; move params to psp
+	pop es ! pop ds
+	ret
+
+
+;	Set up initial cs:ip and ss:sp for .com files
+;	entry:	dx = psp segment
+
+set_com_regs:
+	mov	exe_hdr_cs,dx		; set up initial cs:ip
+	mov	exe_hdr_ip,100h		;   and ss:sp for child
+	mov	exe_hdr_ss,dx
+	mov	es,dx
+	mov	bx,es:psp_seg_size	; ax = segment size in bytes
+	mov	exe_hdr_sp,bx		; save as stack ptr
+	mov	es:word ptr[bx],0	; put one zero on the stack
+	sub	bx,100h			; reserved for stack
+	mov	es:psp_seg_size,bx	; move down the ceiling
+	ret
+
+
+;	Set up registers and jmpf to child
+
+go_to_child:
+	sub bx,bx ! sub cx,cx
+	sub dx,dx ! sub bp,bp		; zero a bunch of registers
+	sub si,si ! sub di,di		;   for a clean entry
+
+	cli				;; an interrupt might be bad here
+	mov	ss,exe_hdr_ss		;; set child's stack
+	mov	sp,exe_hdr_sp		;;
+	mov	ax,exe_hdr_cs		;; set child's initial cs:ip
+	mov	cs:jmp_vec_cs,ax	;;   this is done at the last minute
+	mov	ax,exe_hdr_ip		;;   in case another process is in
+	mov	cs:jmp_vec_ip,ax	;;   this code concurrently.
+	mov	ax,active_psp		;;
+	mov	ds,ax			;; set child's initial data seg
+	mov	es,ax			;;   and extra seg to psp
+	sub	ax,ax			;; ax = 0, flags clear
+	sti				;; allow interrupts
+	jmpf	cs:jmp_vector		; transfer control to child
+
+jmp_vec_ip	rw	1		; child's initial inst ptr
+jmp_vec_cs	rw	1		; child's initial code seg
+jmp_vector	equ	dword ptr jmp_vec_ip
+
+
+eject
+;****************************************
+;*					*
+;*	  Process Control Data		*
+;*					*
+;****************************************
+
+	DSEG
+
+;	Inter process communication return code
+
+return_code	dw	0		; defaults to zero
+
+;	Control-break state
+
+ctbr_state	db	0		; currently kept but not used
+		db	0		; pad
+
+active_psp	rw	1		; saves the new psp segment
+new_psp		rw	1		; temporarily saves new psp seg
+parents_psp	rw	1		; temporarily saves parent's psp
+parents_env	rw	1		; saves parent's environment
+block_top	rw	1		; top of loadable memory
+
+exe_hdr		equ	word ptr temp_dta_buf	; saves the EXE file header
+exe_hdr_sig	equ	word ptr exe_hdr + 0	; signature word
+exe_hdr_nrel	equ	word ptr exe_hdr + 6	; number of relocation items
+exe_hdr_hsiz	equ	word ptr exe_hdr + 8	; size of header in 16b paras
+exe_hdr_ss	equ	word ptr exe_hdr + 14	; initial stack segment offset
+exe_hdr_sp	equ	word ptr exe_hdr + 16	; initial stack pointer value
+exe_hdr_ip	equ	word ptr exe_hdr + 20	; initial instruction pointer
+exe_hdr_cs	equ	word ptr exe_hdr + 22	; initial code segment offset
+exe_hdr_orel	equ	word ptr exe_hdr + 24	; offset of first reloc item
+exe_hdr_size	equ	28			; bytes in the exe header
+exe_reloc_ptr	equ	dword ptr exe_hdr + 28	; just past the header info
+
+
+	end		; of ms2.a86
+                                                                                                                                                                                                                                                             

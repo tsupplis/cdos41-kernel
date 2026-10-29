@@ -1,0 +1,597 @@
+;STATLINE.A86
+title	'Status Line module'
+;****************************************
+;	Z29 status line routine		*
+;	Last mod: 2/23/85		*
+;	JMB				*
+;****************************************
+
+nolist
+include	system.lib
+include	sysdat.lib
+include	chrcomm.equ
+include	serdata.equ
+include ccb.equ
+include popf.a86			;286 bug
+include vscreen.equ
+list
+
+; INCLUDE FILES:
+;include system.lib
+;include sysdat.lib
+;include chrcomm.equ
+;include serdata.equ
+;include ccb.equ
+;include popf.a86			;286 bug
+;include vscreen.equ
+
+GR_ON_CODE	equ	'F'		;escape codes
+GR_OFF_CODE	equ	'G'
+
+	dseg
+
+extrn	vccb_tbl:word
+extrn	ocdesctbl:word
+extrn	f30_tbl:word
+extrn	screen_image_tbl:word
+
+	cseg
+
+public	io_statline
+;public	update_stl
+
+extrn	usart_on:near
+
+eject
+;===========
+io_statline:
+;===========
+;  Kernal entry point for status line updates
+;  Entry:	DL = physical console 
+
+	mov	al,true			;Statline code being used?
+	xchg	sline_locked,al
+	test	al,al			; anybody here?
+	 jz	sl_free
+	cmp	sl_exit_value,al	; does the exit value correspond?
+	 jnz	ret_statline		; no, so return
+
+sl_free:
+;  Un-comment the following two lines for all statlines to be updated
+;  every second, instead of 1 per second:
+;	mov cx,4 ! mov dx,0
+;main_loop: push cx ! push dx
+
+; To support user-program status-line updates as in the IBM PC XIOS,
+; put the CX:BX jazz here.
+
+	push es				; save the UDA
+	mov ax,ds ! mov es,ax		; set up for string moves
+
+	xor bx, bx			; get the Xmit Q control stucture
+	mov bl, dl
+	shl bx, 1
+	mov bx, ocdesctbl[bx]		; bx -> Xmit Q control Structure
+
+	mov	bl, CUR_VCON[bx]	; bl = current Vcon for this Pcon
+	xor	bh,bh
+	shl	bx,1
+
+	mov	ax,f30_tbl[bx]
+	test	ax,0010H		; no update if in gen. graphic mode
+	jnz	no_update
+	call	update
+
+no_update:
+	pop	es
+; Un-comment the following line for statline updates every second on
+; all pcons:
+;	pop dx ! pop cx ! inc dx ! loop main_loop
+
+	mov	al,sl_exit_value
+	mov	sline_locked,al		; free the code
+
+ret_statline:
+	ret
+eject
+
+;  Going to update status line
+;  Enter w/ BX = VCON < 1, DL = pcon
+
+update:
+	mov	si,working_image	;get the working buffer space ptr.
+
+;  Don't need to flush all of it if the CX:BX option is not implemented
+;  Just the last 3 proc. names...
+	lea	di,smsg_proc2[si]
+	mov	al,' '
+	mov	cx,smsg_vcon - smsg_proc2 -1
+	cld
+	rep	stosb
+
+;  and the drive letters and cntl-keys:
+	lea	di, smsg_openvec[si]
+	mov	cx, smsg_hour - smsg_openvec -1
+	rep	stosb
+
+
+
+;-----PROCESS NAMES-----
+;  Begin loop to get process names for all vcons on this pcon:
+	mov	bx,vccb_tbl[bx]		;get ccb address
+	mov	current_ccb,bx		;save it
+sl_1:
+	sub	bx,CCB_SIZE		;go back to the one before
+	cmp	bx,vccb_tbl		;are we at the top?
+	 jb	sl_2			;
+	cmp	CCB_PCON[bx],dl		;same?
+	 jne	sl_2			;no, exit
+	jmps	sl_1
+sl_2:
+	add	bx,CCB_SIZE
+
+;  BX now has CCB address of first VCON on this PCON:
+	lea	di,smsg_proc1[si]
+	xor	ax,ax			;AX=rel. VCON on this PCON
+sl_proc_loop:
+	cmp	CCB_PCON[bx],dl		;same PCON?
+	 jne	sl_proc_loop_done
+
+;  See if this VCON is switched in
+	cmp 	bx,current_ccb		;are we at the switched-in one?
+	 jne	sl_3
+	mov	si,ax ! shl si,1	;rel. VCON
+	mov	ax,word ptr rev_list[si]
+	mov	start_stop,ax		;the ax counter is now trashed, but
+					;we've already used it
+;While here, check current attribute:
+	mov	al,CCB_VCON[bx]		;current vcon
+	xor ah,ah ! shl al,1
+	push	bx
+	 mov	bx,ax
+	 mov	bx,screen_image_tbl[bx] ;get screen structure
+	 mov	al,vs_attrib
+	pop	bx
+	mov	gr_on_off,GR_OFF_CODE	;assume no graphics mode
+	test	al,vsa_graphics		;in graphics mode?
+	 jz	not_gr
+	and	al,not vsa_graphics	;remove
+	mov	gr_on_off,GR_ON_CODE
+not_gr:
+	add	al,'0'
+	mov	orig_attrib,al	
+sl_3:
+	mov	si,CCB_OWNER[bx]
+	test	si,si			;any owner?
+	 jz	sl_no_pd		;jump if no
+	
+	test	PD_FLAG[si],PD_FLAG_SYS
+	lea	si,PD_NAME[si]		;prepare for normal proc. name
+	 jz	sl_move_pd		;skip if user proc.
+sl_no_pd:
+	mov	si,offset blank_pd	;just spaces
+sl_move_pd:
+	mov	cx,8			;8 bytes in a name
+	rep	movsb
+	inc	di			;skip space in stat line
+	add	bx,CCB_SIZE
+	inc	al			;bump rel. vcon number
+	jmps	sl_proc_loop
+
+sl_proc_loop_done:
+eject
+
+	mov	si,working_image
+	mov	bx,current_ccb		;retrieve CCB addr.
+	mov	di,CCB_OWNER[bx]
+
+;-----PRINTER NUMBER-----:
+	mov	al,PD_LIST[di]
+	add	al,'0'
+	mov	smsg_pnum[si],al	;put in statline image
+
+;-----USER NUMBER-----:
+	mov	al,PD_USER[di]
+	cmp	al,9
+	jbe	less_than_10
+	sub	al,10
+	or	al,10h
+less_than_10:
+	call	sl_ascii
+	mov	smsg_user_num[si],ax
+	mov	smsg_usrstr_1[si],'='
+	cmp	byte ptr smsg_user_num[si],'0'
+	 jne	do_def_dr
+	mov	word ptr smsg_usrstr_1[si],'=r'  ;blank the zero
+
+;-----DEFAULT DRIVE-----:
+do_def_dr:
+	mov	al,PD_DISK[di]
+	add	al,'A'
+	mov	smsg_dr_num[si],al
+
+;-----CONTROL KEYS-----;
+	mov	ax,CCB_STATE[bx]
+	
+	test	ax,CCB_STATE_CS		;control s
+	 jz	s_ctrlO
+	mov	smsg_ctrlS[si],'S^'
+	jmps	s_ctrlP
+s_ctrlO:
+	test	ax,CCB_STATE_CO		;control o
+	 jz	s_ctrlP
+	mov	smsg_ctrlS[si],'O^'
+s_ctrlP:
+	test	ax,CCB_STATE_CP		;control P
+	 jz	s_mode
+	mov	smsg_ctrlP[si],'P^'
+	mov	cl,'='
+	mov	ch,CCB_MIMIC[bx]	;also get printer number
+	add	ch,'0'
+;	mov	smsg_ctrlP_num[si],cx
+	mov	smsg_ctrlP_num[si],ch
+eject
+
+;-----OPEN VECTOR-----:
+s_mode:
+; Display the letters of the drives which contain open files:
+	push	dx			;save pcon
+	push	si			;save image ptr.
+	mov	dx,open_vector		;from SYSDAT
+	lea	di,smsg_openvec[si]
+	mov	si,offset sl_drive_list
+	mov	cx,6			;ABCDEM to check
+s_get_open1:
+	lodsw				;get test mask
+	test	dx,ax			;if bit not set, skip
+	 jz	s_get_open2
+	movsb				;else, store the letter
+	jmps	s_get_open3		;skip the pointer bump
+s_get_open2:
+	inc si ! inc di			;bump pointers
+s_get_open3:
+	loop	s_get_open1
+	pop	si			;get back image ptr.
+	pop dx				;get back pcon
+
+;-----WINDOW NUMBER-----:
+s_pcon:
+	mov	al,CCB_VCON[bx]
+;	add	al,'0'
+	add	al,'1'
+	mov	smsg_vcon_num[si],al	;called "Win" here
+eject
+
+;-----TIME_OF_DAY-----:
+	cmp	sl_clock_flag,0		;the esc sequence to support this is
+					;not implemented
+	 jz	sl_display		;skip if clock disabled
+
+; Hours:
+	mov	al,tod_hour		;from sysdat
+	mov	smsg_ampm[si],'a'	;assume morning
+	cmp	al,12h			;good assumption?
+	 jb	still_am		;jump if so
+	mov	smsg_ampm[si],'p'	;else PM
+still_am:
+	mov	bx,offset bcd_tbl	;simplest for 12-hr clock
+	xlat	al
+	call	sl_ascii
+	cmp	al,'0'
+	 jne	in_place
+	mov	al,' '			;blank leading hour
+in_place:
+	mov	smsg_hour[si],ax	;put in image
+
+; Minutes:
+	mov	al,tod_min
+	call	sl_ascii
+	mov	smsg_min[si],ax		;store it
+
+; Seconds:
+	mov	al,tod_sec
+	call	sl_ascii
+	mov	smsg_sec[si],ax		;store it
+eject
+
+;At this point:  SI = base of working image;
+;		 DL = PCON
+
+;Now compare the statline just constructed with the last one used for
+;this pcon.  First, get the word pcon index:
+	xor dh,dh ! mov bx,dx ! shl bx,1
+
+;Get the old image ptr:
+	mov	di,sl_image_tbl[bx]
+
+;Now see if the top screen on this pcon has been switched since the last
+;statline:
+	mov	al,smsg_vcon_num[si]
+	cmp	al,smsg_vcon_num[di]
+	 je	same_top
+;If not, proceed, indicating full 80 cols desired:
+	mov	cx,80			;indicate we want the whole thing
+	jmps	sl_display
+
+same_top:
+;Now scan the working string (SI) with the last copy (which is now in
+;working_image) to see the point at which we want to start sending characters:
+	mov	cx,80+1
+	repe	cmpsb
+
+;There should normally always be at least one char. which doesn't match (sec),
+;but let's check anyway, and forget the whole thing if the statline is the
+;same:
+;	jcxz	simple_ret
+	or cx,cx ! jnz at_least_one ! jmp simple_ret
+at_least_one:
+
+;At point si points to the next char. after the one that didn't match and
+;CX = the number to send.
+	dec	si			;correct the ptr.
+
+eject
+
+;    Ready to go:
+;    Send the status line to the console 
+;    At this point,	CX = the number of characters to display;
+;			SI -> first one to send
+sl_display:
+	pushf
+	cli				;;
+
+;First check to see if any of the process names have changed.  If
+;so, give up and send the whole line, since the reverse video jazz
+;must be handled.
+	cmp	cx,80 - 9*4		;;8 name chars, 1 space
+	 jb	no_proc_chg		;;
+	mov	cx,80			;;
+	mov	si,working_image	;;from the top
+no_proc_chg:
+
+;Correct the cursor positioning info. since we will most likely
+;not be sending a full line:
+	mov	al,80			;;
+	sub	al,cl			;;
+	add	al,32			;;make ASCII
+	mov	esc_curpos,al		;;
+
+; check for room in the con-out circular buffer
+; if ( omsgs - omsgcnt > st_len ) display the status line
+; also check for not being in the middle of an escape sequence
+
+; get the physical Q control structure
+
+	xor dh, dh			;; clear the high byte
+	mov bx, dx			;;
+	shl bx, 1			;;
+
+;While we have this index, switch ptrs for the next time:
+	mov	ax,working_image	;;
+	xchg	ax,sl_image_tbl[bx]	;;
+	xchg	ax,working_image	;;
+
+	mov bx, ocdesctbl[bx]		;; bx -> Xmit Queue control
+
+	mov ax, ONMSGS			;;
+	sub ax, OMSGCNT[bx]		;;
+;Enough room?:
+	push	cx			;; save the number of data chars.
+	 add	cx,PREAMBLE_SIZE + POSTAMBLE_SIZE + 4 + 1
+	 cmp	ax,cx			;;
+	  jb	get_out			;;
+	 cmp	OESC_CNT[bx],0		;;
+	  je	a_ok			;;
+get_out:
+;No room....force a COMPLETE update next time by putting a nonsense value
+;value in the window number:
+	pop	cx			;;
+	mov bl,dl ! xor bh,bh ! shl bx,1 ;;
+	mov	si,sl_image_tbl[bx]	;;
+	mov	smsg_vcon_num[si],0FFh	;;
+	jmps	stl_ret			;;
+a_ok:
+	push	si			;;
+
+;Set up the pointers for the three loops below:
+	 mov	dx,OMSGCNT[bx]		;; characters now in output Q
+	 mov	bp,OMSGOUT[bx]		;; current output pointer
+
+;First do the preamble:
+	 mov	cx,PREAMBLE_SIZE	;;
+	 mov	si,offset preamble	;;
+send_preamble:
+	 call	send_it			;;
+	 loop	send_preamble		;;
+
+;Now the status line characters:
+	pop	si			;;get back the data ptr.
+	pop	cx			;;get back the character count
+
+	cmp	cx,80			;;full line?
+	 jb	short_line		;;
+	
+	mov	cx,84			;;w/ 4 extra for reverse vid.
+
+full_line:
+; Check for the reverse video proc. name:
+	cmp	cl,stop_rev		;; at the stop point?
+	 jne	sl_full1		;;
+	mov al,'q' ! call on_off_rev	;;
+sl_full1:
+	cmp	cl,start_rev		;;
+	 jne	sl_full2		;;
+	mov al,'p' ! call on_off_rev	;;
+sl_full2:
+	call	send_it			;;
+	loop	full_line		;;
+	jmps	do_postamble		;;
+
+short_line:
+	call	send_it			;;
+	loop	short_line		;;
+
+do_postamble:
+	mov	cx,POSTAMBLE_SIZE	;;
+	mov	si,offset postamble	;;
+send_postamble:
+	call	send_it			;;
+	loop	send_postamble		;;
+
+;Tidy up:
+	mov OMSGCNT[bx], dx		;; put the updated number of chars
+					;; waiting to go out into the Q 
+					;; control structure.
+
+	call usart_on			;; start the engine ( if necessary )
+
+stl_ret:
+	popff				; 286 bug
+simple_ret:
+	ret
+eject
+
+send_it:
+	mov di, bp			; current char ptr => index reg
+	add di, dx			; add in the number of chars waiting
+	and di, (ONMSGS - 1)		; circular buffer...
+	lodsb				; get a char from the st line
+	mov OBUFFER[di+bx], al		; stuff the character
+	inc dx				; bump char waiting count
+	ret
+
+on_off_rev:
+	mov	di,bp
+	add	di,dx	
+	and	di,(ONMSGS-1)
+	mov	OBUFFER[di+bx],esc		
+	dec	cx			;counter
+	inc	dx
+	mov	di,bp
+	add	di,dx
+	and	di,(ONMSGS-1)
+	mov	OBUFFER[di+bx],al
+	dec	cx
+	inc	dx
+	ret
+
+sl_ascii:
+	mov	ah,33h
+	mov	cl,4
+	ror	ax,cl
+	ror	ah,cl	
+	ret
+eject
+
+	dseg
+
+preamble:
+	db	esc,'j'		;save cursor position
+;	db	0,0,0,0		; wait for the Z 19
+
+	db	esc,'x1'	;enable status line
+	db	esc,'Y'		;direct cursor address
+	db	31+25		; line 25
+esc_curpos rb	1		;col number set above
+	db	esc,'s0'	;normal attribute
+	db	esc,GR_OFF_CODE ;turn off graphics
+PREAMBLE_SIZE	equ	offset $ - offset preamble
+;------------------------------------------------------------------
+
+stl_0 db '                                    Wn=  Dr=  Usr   Pr=  '
+      db '               0:00:00a'
+stl_1 db '                                    Wn=  Dr=  Usr   Pr=  '
+      db '               0:00:00a'
+stl_2 db '                                    Wn=  Dr=  Usr   Pr=  '
+      db '               0:00:00a'
+stl_3 db '                                    Wn=  Dr=  Usr   Pr=  '
+      db '               0:00:00a'
+stl_w db '                                    Wn=  Dr=  Usr   Pr=  '
+      db '               0:00:00a'
+;-------------------------------------------------------------------
+
+;Definition of status-line "structure":
+
+SPACE equ 1
+COLON equ 1
+
+smsg_proc1	equ byte ptr 0
+smsg_proc2	equ byte ptr (smsg_proc1)	+ 8 + SPACE
+smsg_proc3	equ byte ptr (smsg_proc2)	+ 8 + SPACE
+smsg_proc4	equ byte ptr (smsg_proc3)	+ 8 + SPACE
+smsg_vcon	equ byte ptr (smsg_proc4)	+ 8 + SPACE
+smsg_vcon_num	equ byte ptr (smsg_vcon)	+ 3
+smsg_drstr	equ byte ptr (smsg_vcon_num)	+ 1 + SPACE
+smsg_dr_num	equ byte ptr (smsg_drstr)	+ 3
+smsg_usrstr	equ byte ptr (smsg_dr_num)	+ 1 + SPACE
+smsg_usrstr_1	equ byte ptr (smsg_usrstr)	+ 2
+smsg_user_num	equ word ptr (smsg_usrstr_1)	+ 1
+smsg_pstr	equ byte ptr (smsg_user_num)	+ 2 + SPACE
+smsg_pnum	equ byte ptr (smsg_pstr)	+ 3
+smsg_openvec	equ byte ptr (smsg_pnum)	+ 1 + SPACE
+smsg_ctrlS	equ word ptr (smsg_openvec)	+ 6 + SPACE
+smsg_ctrlO	equ word ptr (smsg_ctrlS)
+smsg_ctrlP	equ word ptr (smsg_ctrlO)	+ 2 + SPACE
+smsg_ctrlP_num	equ byte ptr (smsg_ctrlP)	+ 2
+smsg_hour	equ word ptr (smsg_ctrlP_num)	+ 1 + SPACE
+smsg_min	equ word ptr (smsg_hour)	+ 2 + COLON
+smsg_sec	equ word ptr (smsg_min)		+ 2 + COLON
+smsg_ampm	equ byte ptr (smsg_sec)		+ 2
+;------------------------------------------------------------------
+ 
+postamble:
+		db	esc,'k'		;restore cursor position
+		db	esc,'s'		;restore attribute
+orig_attrib	db	'0'
+		db	esc		;restore graphics mode
+gr_on_off	db	GR_OFF_CODE	
+		db	0,0
+POSTAMBLE_SIZE	equ	offset $ - offset postamble
+;------------------------------------------------------------------
+
+sl_image_tbl	dw	stl_0		;one for each PCON
+		dw	stl_1
+		dw	stl_2
+		dw	stl_3
+working_image	dw	stl_w
+
+current_ccb	rw	1
+
+blank_pd	db	'  ____  '	;for null procs
+
+; Test masks and drive names for get_openvec:
+sl_drive_list		db	   1,   0,'A'
+			db	   2,   0,'B'
+			db	   4,   0,'C'
+			db	   8,   0,'D'
+			db	 10h,   0,'E'
+			db	   0, 10h,'M'
+;			db	0E0h,0EFh,'*'	;everything else
+
+sline_locked		db	0		; semaphore for this code
+sl_exit_value		db	0		; restore semaphore on exit
+sl_clock_flag		db	0ffh		; show the clock?
+
+start_rev		rb	1		; first col. of rev. vid.
+stop_rev		rb	1
+start_stop equ word ptr start_rev
+
+;Start/stop rev. video col. positions for switched-in console:
+
+rev_list		db	84 - 0		;1 start
+			db	84 - 8  -2	;1 stop
+			db	84 - 9		;2 start
+			db	84 - 17 -2	;2 stop
+			db	84 - 18		;3 start
+			db	84 - 26 -2	;3 stop
+			db	84 - 27		;4 start
+			db	84 - 35 -2	;4 stop
+
+;To implement 12-hour clock:
+
+bcd_tbl	db	12h,01h,02h,03h,04h,05h,06h,07h,08h,09h, 0,0,0,0,0,0
+	db	10h,11h,12h,01h,02h,03h,04h,05h,06h,07h, 0,0,0,0,0,0
+	db	08h,09h,10h,11h,12h
+
+	end
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    

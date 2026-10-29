@@ -1,0 +1,7928 @@
+TITLE 'PC-MODE Version 1.X'
+;						Last Modified:	04/23/85
+;***********************************************************************
+;*
+;*	Generation Procedure for PCTMP.RSP:
+;*	  RASM86 tmppc
+;*	  RASM86 dispmenu
+;*	  RASM86 runmenu
+;*	  RASM86 rmenuio
+;*	  DRC    dmsubs
+;*	  RASM86 wwcall
+;*	  RASM86 ms1
+;*	  RASM86 ms2
+;*	  LINK86 pctmp.rsp = tmppc[m],dispmenu,runmenu,rmenuio,dmsubs,wwcall,
+;*			     ms1,ms2[data[max[0],origin[0]]]
+;*
+;************************************************************************
+;*
+;*	This portion of the emulator is responsible
+;*	for DOS interrupts, DOS v1.x function calls,
+;*	and for other details too numerous to mention.
+;*
+;***********************************************************************
+;*
+;*		Revision History
+;*
+;*	1/18/85 - Thomas Mason
+;*		added function 1Ch and modified to make it
+;*		readable
+;*
+;*	1/23/85 - Thomas Mason
+;*		added code to fix IAPX286 POPF problem
+;*
+;*	2/11/85 - Dean Ballard
+;*		s_first s_next now directory inclusive
+;*
+;*	2/14/85 - Thomas Mason
+;*		incorporated changes made for GEM, also coordination
+;*		of sources.
+;*
+;*	3/01/85 - Dean Ballard
+;*		added cpm_written flag for correct file sizes
+;*
+;*	3/18/85 - Dean Ballard
+;*		added term_cleanup for GEM .com file execution
+;*
+;*	3/20/85 - Me
+;*		added Aux support and Mary's critical error handler fix
+;*
+;*	4/03/85 - Me 2
+;*		added environment table and DOS memory descriptors on loads
+;*
+;*	4/08/85 - Dean Ballard
+;*		move term_cleanup into MS2, dropped some publics & extrns
+;*
+;*	4/10/85 - Me 3
+;*		Added check on int_20 to ensure psp is not made up
+;*
+;*	4/19/85 - Dean Ballard
+;*		environment moved to data segment for PATH command
+;*
+;*	4/23/85 - Thomas Mason
+;*		CONBRK/CONIN F-KEY repair
+;*
+;***********************************************************************
+;*
+;*	The MS2.A86 file now contains all DOS 2.x functions.
+;*	They are accessed via the Int_21 entry when ah
+;*	exceeds an allowable DOS 1.x value.
+;*
+;***********************************************************************
+
+CODE1	CSEG	PARA
+CGROUP	GROUP	CODE,CODE1
+
+MS2F_FIRST	equ	2Fh		; functions from 2F up belong to ms2
+
+FALSE		EQU	0
+TRUE		EQU	NOT FALSE
+
+
+	extrn	ms2_func_entry:near	; entry for all DOS 2.x functions
+	extrn	ms2_terminate:near	; cleans up ms2 variables
+	public	get_data_seg		; shared with ms2
+	public	convert_date		; msdos to cpm date
+	public	convert_time		;  and time conversion
+	public	find_fcb_pub		; match cpm fcb to dos fcb
+	public	BDOS_PTR		; entry into BDOS for MS2
+
+
+eject
+
+cstart:
+
+	db	'COPYRIGHT(C)1985,'
+	db	'DIGITAL RESEARCH(04/01/85)'
+	db	'XXXX-0000-654321'
+
+
+FDCS		equ	0C0H
+
+FJMP		equ	0EAH
+FCALL		equ	9AH
+ESC		equ	1BH
+FCB_MAX		equ	24
+CTRL_S		equ	'S'-40H
+CTRL_BRK	equ	3
+CPM		equ	0E0H
+
+A_ATTACH	equ	165
+A_DETACH	equ	167
+A_READBLK	equ	172
+A_WRITEBLK	equ	173
+
+FEXIT		equ	0
+FCONIN		equ	1
+FCONOUT		equ	2
+C_WRITE		equ	2
+FREADER		equ	3
+FPUNCH		equ	4
+FLIST		equ	5
+FRAWIO		equ	6
+C_RAWIO		equ	6
+FGET_IOBYTE	equ	7
+FSET_IOBYTE	equ	8
+FPBUF		equ	9
+FRDBUF		equ	10
+FCONST		equ	11
+FGET_VERSION	equ	12
+FRESET		equ	13
+FSELDSK		equ	14
+FOPEN		equ	15
+FCLOSE		equ	16
+FSEARCH		equ	17
+FSEARCH_NEXT	equ	18
+FDELETE		equ	19
+FREAD		equ	20
+FWRITE		equ	21
+FCREATE		equ	22
+FRENAME		equ	23
+FGET_LOGIN	equ	24
+FGET_DRIVE	equ	25	;GET DEFAULT DRIVE
+FSETDMA		equ	26
+FGET_ALLOC	equ	27
+FGET_ALV	equ	27
+FWRITE_PROTECT	equ	28
+FGET_RO		equ	29
+FSET_ATTR	equ	30	;SET FILE ATTRIBUTES
+FGET_ADDR	equ	31
+FGET_DPB	equ	31
+FUSER		equ	32
+FGET_SET_USER	equ	32
+FRREAD		equ	33
+FRWRITE		equ	34
+FSIZE		equ	35
+FSET_RAN_REC	equ	36
+FRESET_DRIVES	equ	37
+FACCESS_DRIVES	equ	38
+FFREE_DRIVES	equ	39
+FRWRITE_ZERO	equ	40
+FRWRITE_test	equ	41
+FLOCK_REC	equ	42
+FUNLOCK_REC	equ	43
+FMULTI_SECTOR	equ	44
+FSET_MODE	equ	45
+FGET_FREE_SPACE	equ	46
+FCHAIN		equ	47
+FFLUSH		equ	48
+FFLUSHBUF	equ	48
+FSYSDATA	equ	49
+FBIOS_CALL	equ	50
+S_BIOS		equ	50
+FSETDMAB	equ	51
+FGETDMAB	equ	52
+FGET_MAX_MEM	equ	53
+FGET_ABS_MAX	equ	54
+FALLOC_MEM	equ	55
+FALLOC_ABS_MEM	equ	56
+FFREE_MEM	equ	57
+FFREE_ALL_MEM	equ	58
+FLOAD		equ	59
+FTRUNC		equ	99
+FGETLABEL	equ	101
+FTIMEDATE	equ	102
+C_WRITEBLK	equ	111
+L_WRITEBLK	equ	112
+FPOLL_DEVICE	equ	131
+FP_DELAY	equ	141
+FDISPATCH	equ	142
+FPTERM		equ	143
+FPCREATE	equ	144
+FCASSIGN	equ	149
+L_DETACH	equ	159
+L_CATTACH	equ	161
+
+eject
+
+;CONDITIONAL RETURNS
+
+CODEMACRO	RETNZ
+dw	174H
+db	0C3H
+ENDM
+
+RETNE	equ	RETNZ
+
+CODEMACRO	RETNS
+dw	178H
+db	0C3H
+ENDM
+
+CODEMACRO	RETS
+dw	179H
+db	0C3H
+ENDM
+
+CODEMACRO	RETZ
+dw	175H
+db	0C3H
+ENDM
+
+RETE	equ	RETZ
+
+
+
+
+;TITLE CONDITIONAL JUMPS 7-2-82
+
+CODEMACRO	JMPNZ	Q:CW
+dw	374H
+db	0E9H
+RELW	Q
+ENDM
+
+JMPNE	equ	JMPNZ
+
+CODEMACRO	JMPZ	Q:CW
+dw	375H
+db	0E9H
+RELW	Q
+ENDM
+
+JMPE	equ	JMPZ
+
+
+
+
+;TITLE CONDITIONAL CALLS 7-2-82
+
+CODEMACRO	CALLZ	Q:CW
+dw	375H
+db	0E8H
+RELW	Q
+ENDM
+
+CALLE	equ	CALLZ
+
+
+IAPX286 	equ	TRUE	; set if O.S. will run on 286
+;
+;   The following is needed to correct a bug in the 80286 chip (A and B
+;   series) dealing with the popf instruction.
+;
+
+CodeMacro popf286  addr:Cw
+	db	0Eh		; push	cs
+	db	0E8h
+	RelW	addr		; call b286	flags,cs,ip on stack
+EndM
+
+
+eject
+
+;MSFCB
+MS_CURRENT_BLOCK 	equ	0CH
+MS_REC_SIZE		equ	0EH
+MS_FILE_SIZE		equ	10H
+MS_DATE			equ	14H
+MS_DEVICE_CODE		equ	18H
+MS_CURRENT_RECORD 	equ	20H
+MS_RAN_REC 		equ	21H
+
+;CPMFCB
+CPM_SIZE	equ	33	;3 BYTE SIZE
+
+;CPMFCB
+CPM_F6		EQU	BYTE PTR 6
+CPM_TIME	EQU	WORD PTR 22
+CPM_DATE	EQU	WORD PTR 24
+CPM_FILESIZE	EQU	WORD PTR 28
+CPM_CR		EQU	BYTE PTR 32
+CPM_RAN_REC	EQU	33
+CPM_R0		EQU	BYTE PTR CPM_RAN_REC
+CPM_R1		EQU	BYTE PTR CPM_RAN_REC+1
+CPM_R2		EQU	BYTE PTR CPM_RAN_REC+2
+CPM_R01		EQU	WORD PTR CPM_R0
+CPM_R12		EQU	WORD PTR CPM_R1
+cpm_spare	equ	byte ptr 36	; currently unclaimed
+cpm_written	equ	byte ptr 37	; true if file has been written
+cpm_hds_ptr	equ	word ptr 38	; stores p:'s hds
+CPM_ENTRY_FSIZE	EQU	40
+
+eject
+
+
+;**	Size of structures in paragraphs
+
+S_DMD	equ	01h		; DOS Memory Descriptor
+S_PD	equ	03h		; CDOS Process Descriptor
+S_PSP	equ	10h		; DOS PSP
+S_UDA	equ	18h		; CDOS User Default Area
+
+
+;
+;				 -------------------------------
+;				|				|
+;				|	UDA			|
+;				|				|
+;				 -------------------------------
+;				|				|
+;				|	PD			|
+;				|				|
+;				 -------------------------------
+;				|				|
+;				|	DMD			|
+;				|				|
+;				 -------------------------------
+;				|				|
+;				|	PSP			|
+;				|				|
+;				 -------------------------------
+;				|				|
+;				|				|
+;				|				|
+;				|	LOAD IMAGE		|
+;				|				|
+;				|				|
+;				|				|
+;				 -------------------------------
+;				|				|
+;				|	Extra Memory		|
+;				|				|
+;				|				|
+;				|				|
+;				 -------------------------------
+;
+;
+;
+;
+;
+
+eject
+
+	public	ms_init
+	public	ms_func
+
+
+ms_init:
+;======
+	mov es,sysdatseg
+	mov tod_seg,es
+	mov cs:sysdat,es	;save sysdat in code segment
+	mov ax,ds
+	mov buffer_seg,ax
+	mov cpm_fcb_seg,ax	;MAKE 32 BIT POINTER
+	mov tfcb_seg,ax
+	mov si,es:RLR
+	mov bl,es:byte ptr PD_CONSOLE[si]
+	mov console_no,bl
+	mov bh,0
+	shl bx,1			; bx = console word pointer
+	mov ms_dsegs[bx],ax		; save one dseg per console
+
+	mov ax,cs
+	mov int_21_seg,ax
+	mov ax,offset int_21
+	mov int_21_off,ax	
+
+	push ds
+	mov ax,0
+	mov ds,ax
+	mov ax,word ptr .380H
+	mov bdos_offset,ax
+	mov ax,word ptr .382H
+	mov bdos_segment,ax		;store long address of BDOS
+	pop ds			; in the code segment
+	jmp ms_cleanup
+
+
+eject
+
+ms_func:
+;------
+	pushf
+	push es ! push ds
+
+	push ds
+	call get_data_seg
+	pop cli_ds
+
+	mov ax,ds
+	mov es,ax
+	mov bl,cl ! xor bh,bh
+	shl bx,1
+	mov ax,0FFFFH
+
+	cmp cl,MS_FUNC_TBL_END ! jae ms_func_exit
+	  call ms_func_tbl[bx]
+
+ms_func_exit:
+	mov bx,ax
+	pop ds ! pop es
+
+if IAPX286
+	popf286 b286
+else
+	popf
+endif
+
+	retf
+
+
+
+
+ms_func_tbl	dw	ms_cleanup	;function 0
+		dw	ms_p_cli_func	;function 1
+		dw	ms_mem_func	;function 2
+		dw	ms_8087_func	;function 3
+		dw	ms_suspend_func	;function 4
+		dw	ms_retcode_func	;function 5
+		dw	ms_srch_order	;function 6
+		dw	ms_builtin_addr	;function 7
+		dw	ms_addmem_func	;function 8
+
+MS_FUNC_TBL_END	equ	offset $ - offset ms_func_tbl
+
+
+if IAPX286
+
+;	this is the iret which pops flags for 286
+
+b286:
+	nop
+	iret
+
+endif
+
+
+eject
+
+ms_p_cli_func:
+;------------
+	push ds
+	mov ds,cli_ds
+	mov si,dx
+	lodsw ! mov bx,ax
+	lodsw ! mov dx,ax
+	lodsw ! push ax
+	lodsw ! push ax
+	lodsb
+	mov es:cli_user0_flag,al
+
+	mov di,offset fcb
+	mov cx,36/2
+	mov si,bx
+	mov ds,dx
+	rep movsw
+	pop ds
+
+	pop si
+	mov di,offset clicb
+	mov cx,134/2
+	rep movsw
+
+	pop ds
+	mov dx,offset clicb
+	jmp ms_p_cli
+
+
+eject
+
+ms_mem_func:
+;----------
+
+	cmp dx,0FFFFH ! jne not_func2_get
+	    mov ax,ms_minmem
+	    ret
+
+not_func2_get:
+	mov ms_minmem,dx
+	ret
+
+
+eject
+
+ms_addmem_func:
+;-------------
+
+	cmp dx,0FFFFH ! jne not_func8_get
+	    mov ax,ms_addmem
+	    ret
+
+not_func8_get:
+	mov ms_addmem,dx
+	ret
+
+
+eject
+
+ms_8087_func:
+;-----------
+
+	cmp dl,0FFH ! jnz not_func3_get
+	    mov ax,0FFH
+	    mov bl,susp_8087
+	    and bl,2 ! jnz ms_8087_exit
+	  	xor ax,ax
+
+ms_8087_exit:
+	    ret
+
+not_func3_get:
+	    or dl,dl ! jnz not_func3_clear
+		and susp_8087,0FDH
+		ret
+
+not_func3_clear:
+	    or susp_8087,2
+	    ret
+
+
+eject
+
+ms_suspend_func:
+;--------------
+
+	cmp dl,0FFH ! jne not_func4_get
+	    mov ax,0FFH
+	    mov bl,susp_8087
+	    and bl,1 ! jnz ms_suspend_exit
+	  	xor ax,ax
+
+ms_suspend_exit:
+	     ret
+
+not_func4_get:
+	    or dl,dl ! jnz not_func4_clear
+		and susp_8087,0FEH	;clear suspend bit
+		ret
+
+not_func4_clear:
+		or susp_8087,1		;set suspend bit
+		ret
+
+
+eject
+
+ms_retcode_func:
+;--------------
+
+	cmp dx,0FFFFH ! jne not_func5_get
+	    mov ax,ms_retcode
+	    ret
+
+not_func5_get:
+	    mov ms_retcode,dx
+	    ret
+
+
+eject
+
+ms_srch_order:
+;------------
+
+	mov es,cli_ds	;get program ds
+	mov bx,dx
+
+	test es:byte ptr [bx],0FFH ! jz set_srch_order
+	    lea di,1[bx]			;di points to return field
+	    mov si,offset type_tbl
+	    jmps move_srch_tbl
+
+set_srch_order:
+	    lea si,1[bx]
+	    mov di,offset type_tbl
+	    push ds ! push es
+	    pop ds ! pop es
+
+move_srch_tbl:
+	mov cx,6
+	rep movsw
+	xor ax,ax
+	ret
+
+
+eject
+
+ms_builtin_addr:
+;--------------
+
+	mov dx,offset builtin_tbl
+	ret
+
+
+eject
+
+ms_cleanup:
+;---------
+
+	mov ax,m_length
+	or ax,ax ! jz dont_free_mem	;Don't free memory if none allocated
+	    mov dx,offset m_base
+	    mov cl,FFREE_MEM		;Free allocated memory
+	    call bdos
+	    mov m_length,0
+
+dont_free_mem:
+ms_cleanup1:
+	cmp pcmode,TRUE ! jne not_in_pcmode
+	    cld
+	    xor cx,cx			;restore origional interrupt vector
+	    mov es,cx
+	    mov di,10H*4
+	    mov si,offset i_vect_save_area2
+	    mov cx,5EH/2
+	    rep movsw
+
+	    mov ax,32			;set console into CP/M-mode
+	    call backdoor 		;if was in pcmode
+
+	    mov pcmode,FALSE
+
+not_in_pcmode:
+	push ds ! pop es			;es = ds = local segment
+
+	mov di,offset fcb_base
+	mov cx,(FCB_MAX * CPM_ENTRY_FSIZE) / 2
+	xor ax,ax			;FILL WITH 0
+	cld
+	rep stosw
+
+
+	mov di,offset fcb_base		;NOW FLAG ALL AS EMPTY
+	mov cx,FCB_MAX
+
+fill_FF_loop:
+	    mov byte ptr [di],0FFH
+	    add di,CPM_ENTRY_FSIZE
+	loop fill_FF_loop
+
+	mov con_buf_active,FALSE	;discard CON: buffer
+	mov con_buf_ptr,0
+
+	mov erflag,0			;discard byte deblocking buffer
+	mov buffer_writtenb,FALSE
+	mov buffer_activeb,FALSE
+	mov listcp,FALSE
+	mov in_int24_flag,FALSE
+
+	mov word ptr ros_char,0
+	mov first_write,TRUE
+
+	xor ax,ax
+	ret
+
+
+eject
+
+print_dayfile:
+	push es
+	mov es,sysdat
+	test es:byte ptr .4FH,0FFH ! jz skip_dayfile_msg
+	  les si,TOD_PTR
+	  inc si ! inc si
+	  call print_num
+	  mov dl,':'
+	  call print_char
+	  call print_num
+	  mov dl,':'
+	  call print_char
+	  call print_num
+	  mov dl,' '
+	  call print_char
+	  mov si,offset fcb
+	  lodsb
+	  or al,al ! jnz not_default_drive
+	    mov al,cur_dsk
+	    inc al
+not_default_drive:
+	  add al,'A'-1
+	  mov dl,al
+	  call print_char		;print the load drive
+	  mov dl,':'
+	  call print_char
+	  mov cx,8
+	  call direct_c_out	;print the program name
+	  add si,cx
+	  mov dl,'.'
+	  call print_char
+	  mov cx,3
+	  call direct_c_out	;print the program type
+	  mov di,offset fcb
+	  mov si,offset dayfile_msg
+	  mov cx,19
+	  test byte ptr 8[di],80H ! jnz user_0
+	    cmp cli_user0_flag,0FFH ! je user_0
+	    sub cx,9
+	    add si,9
+user_0:
+	  lods cs:al
+	  mov dl,al
+	  call print_char	;print the dayfile message
+	  loop user_0
+
+skip_dayfile_msg:	
+	pop es
+	ret
+
+direct_c_out:
+	  lodsb
+	  and al,7FH		;strip the high bit
+	  cmp al,' ' ! je xdirect_c_out
+	  mov dl,al
+	  call print_char	;print the character
+	loop direct_c_out
+	ret
+
+xdirect_c_out:
+	dec cx
+	ret
+
+
+
+
+print_char:
+	push cx
+
+	mov cl,C_WRITE
+	call bdos
+
+	mov cl,C_RAWIO		;set console back to raw mode
+	mov dl,0FFH
+	call bdos		;ignore results
+
+	pop cx
+
+	ret
+
+
+
+
+print_num:
+	lods es:al
+
+	push ax
+	mov cl,4 ! shr al,cl
+	add al,'0'
+	mov dl,al
+	call print_char
+	pop ax
+
+	and al,0FH ! add al,'0'
+	mov dl,al
+	call print_char
+
+	ret
+
+
+eject
+
+ms_p_cli:
+;=======
+;
+;
+;
+;	entry:	ds:dx points to a null preceded and
+;		                  null terminated command line
+;		fcb = open file control block
+;		cli_user0_flag = 0  load off of default user
+;			         FF load off of user 0
+;
+;	exit:	cx = return codes
+;
+
+	mov ax,ds  ! mov es,ax
+
+	inc dx			;increment past preceeding null	
+
+	mov com_addr,dx		;save the offset of the command line
+	mov cl,FGET_DRIVE
+	call bdos
+
+	mov cur_dsk,al		;intialize current disk
+	mov temp_dsk,al		; and temporary disk
+	call print_dayfile
+
+	mov si,offset fcb		;test for compatibility bits
+	mov comp_attrs,0
+
+	test byte ptr 1[si],80H ! jz not_f1	;test F1 bit
+	    or comp_attrs,80h
+
+not_f1:
+	test byte ptr 2[si],80H	! jz not_f2	;test F2 bit
+	    or comp_attrs,40h
+
+not_f2:
+	test byte ptr 3[si],80H	! jz not_f3	;test F3 bit
+	    or comp_attrs,20h
+
+not_f3:
+	test byte ptr 4[si],80H	! jz not_f4	;test F4 bit
+	    or comp_attrs,70h
+
+not_f4:
+	cmp cli_user0_flag,0FFH
+	mov cl,FUSER
+	mov dl,0FFH
+	call bdos
+
+	mov def_user,al			;preserve the default user number
+	cmp cli_user0_flag,0FFH ! jne not_user0_load
+	    xor dl,dl
+	    mov cl,FUSER
+	    call bdos			;set user 0 for file load
+
+not_user0_load:
+	mov al,byte ptr fcb+9
+	and al,7FH
+
+	cmp al,'C'		;is the open file a COM or EXE
+	    JMPE good_com_open
+
+
+eject
+
+good_exe_open:
+	push ds ! pop es
+
+	mov dx,exe_header		;READ HEADER IN HERE
+	call set_dma_ptr
+
+	mov dl,1
+	call set_multi_sector
+
+	mov si,offset fcb
+	mov dx,si
+	mov CPM_R01[si],0
+	mov CPM_R2[si],0		;READ 0
+	mov cl,FRREAD
+	call bdos
+
+	or al,al ! jz good_header
+
+bad_header:
+	    mov cx,29			;bad return from bdos read
+	    jmp ms_p_cli_err
+
+
+
+good_header:
+
+	mov bx,exe_final
+
+	cmp bx,4
+	jne not_4
+	    xor bx,bx	; Microsoft recommends we ignore a 4
+
+not_4:
+	and bx,1FFH			;ensure modulo 512
+	mov ax,exe_size	;IN 512'S
+
+	or bx,bx ! jz dont_dec_size
+	    dec ax			;adjust for add of para's in last 512byte record
+
+dont_dec_size:
+	mov cl,5
+	shl ax,cl			;convert file size into para's
+	dec cl
+	add bx,0Fh			;round byte count to next paragraph boundry
+	shr bx,cl ! add ax,bx		;adjust size by para's in last record
+	sub ax,exe_header_pars		;SIZE IN PARS
+	mov exe_par_count,ax		;SAVE IT
+	add ax,S_PD+S_UDA+S_DMD+S_PSP	; bias by PD, UDA, MD and PSP
+	add ax,exe_hi_pars		;AT END
+
+	mov bx,ax
+	mov si,offset fcb+1
+	mov di,offset builtin_tbl
+
+builtin_scan:
+	push di ! push si
+	mov cx,4
+
+builtin_comp:
+	    lodsw
+	    and ax,7F7FH		;clear high bits
+	    cmp cs:[di],ax ! jne no_match
+	    inc di ! inc di
+	loop builtin_comp
+
+no_match:
+	pop si ! pop di
+
+	or cx,cx
+	mov ax,bx
+	jz mem_ok
+	add di,8
+	cmp di,BUILTIN_TBL_END ! jne builtin_scan
+
+	    add ax,ms_addmem		;bias memory request by addmem.
+
+mem_ok:
+	push es
+	mov es,sysdat
+	push es:word ptr .4ch
+
+	cmp es:word ptr .4ch,ax ! jae skip_mem_chng1
+	    mov es:word ptr .4ch,ax	;temp change max mem/proces
+	    add es:word ptr .4ch,600h
+
+skip_mem_chng1:
+	mov M_LENGTH,ax
+	mov cl,FALLOC_MEM
+	mov dx,offset mcb
+	call bdos
+
+	pop es:word ptr .4ch		;restore max mem/process
+	pop es
+
+	or al,al ! jz exe_length_ok
+
+bad_exe_length:
+	    mov cx,3			; can't find memory
+	    jmp ms_p_cli_err
+
+exe_length_ok:
+	call setup_psp_vars
+	add ax,S_PSP			; adjust for PSP
+	mov exe_seg,ax
+	cmp exe_hi_lo,0FFFFH ! je load_exe	;LOAD LO?
+
+;LOAD HI
+	    mov ax,psp_base
+	    add ax,psp_length		;TOP
+	    sub ax,exe_par_count
+	    mov exe_seg,ax
+	    sub ax,exe_hi_lo
+	    jc load_exe			;CAN WE FIT THIS IN
+	    sub ax,10H			; Is this S_PSP
+	    jc load_exe			;TOO LOW ALSO
+		mov exe_seg,ax
+
+load_exe:	;exe_seg IS SET
+
+;FIRST SET UP STACK FOR pop sp,pop ss RETF
+
+	mov ax,exe_seg
+	add ax,exe_ss_offset
+	mov ms_ss,ax		;=ss
+	mov ax,exe_sp
+	mov ms_sp,ax		;=sp
+	mov ax,exe_cs
+	add ax,exe_seg
+	mov ms_cs,ax		;=CS
+	mov ax,exe_ip
+	mov ms_ip,ax		;=IP
+	mov com_type,FALSE		;not .COM
+	call setup_pd_uda_psp
+
+	xor dx,dx
+	mov cl,FSETDMA
+	call bdos	;ALWAYS 0
+
+	mov ax,exe_seg
+	mov next_exe_seg,ax
+	mov ax,exe_par_count
+	add ax,7
+	mov cl,3 ! shr ax,cl
+	mov exe_count_down,ax
+	mov ax,exe_header_pars
+	mov dx,10H
+	mul dx	;=BYTES
+	mov cx,512
+	div cx
+	mov cx,512/80H
+	mul cx
+	mov exe_r0,ax
+	mov exe_r2,0
+	mov dx,128
+	call set_multi_sector
+
+exe_load_loop:
+	    mov cl,FSETDMAB
+	    mov dx,next_exe_seg
+	    call bdos			;SET SEG
+
+	    mov ax,400h
+	    mov di,128
+	    cmp exe_count_down,di ! jnb not_less_than_128
+		mov di,exe_count_down
+		mov dx,di
+		call set_multi_sector
+		mov ax,di ! shl ax,1
+		shl ax,1 ! shl ax,1
+
+not_less_than_128:
+	    mov dx,offset fcb
+	    mov si,dx
+	    add next_exe_seg,ax
+	    mov ax,exe_r0
+	    mov CPM_R01[si],ax
+	    mov al,exe_r2
+	    mov CPM_R2[si],al
+	    add exe_r0,di
+	    adc exe_r2,0
+
+	    mov cl,FRREAD
+	    call bdos
+
+	    or al,al ! jz good_exe_read
+	    cmp al,1 ! je good_exe_read	;if end of file then assume good read
+		mov cx,29			;bad return from bdos read
+		jmp ms_p_cli_err
+
+good_exe_read:
+	sub exe_count_down,di ! jnz exe_load_loop
+
+	mov dx,1
+	call set_multi_sector
+
+eject
+
+;*
+;*	Fixup time
+;*
+
+;NOW SET UP TO READ HEADER
+	mov exe_r0,1			;NEXT ONE
+	mov exe_r2,0
+	mov ax,exe_first_rel
+	mov exe_rel_pointer,ax		;SET UP
+
+	mov cx,exe_rel_count ! jcxz rel_done
+
+rel_loop:
+	    push cx
+	    call get_rel_pointer	;RETURNS es:si = SEG,offset OF ITEM
+	    pop cx
+
+	    mov ax,es
+	    add ax,exe_seg
+	    mov es,ax
+	    mov ax,exe_seg
+	    add es:[si],ax		;FIX IT
+	loop rel_loop
+
+rel_done:
+	jmp goto_program
+
+get_rel_pointer:
+	mov bx,exe_rel_pointer
+	les si,dword ptr EXE_HEADER [bx]
+	add bx,4
+	cmp bx,80H ! jae read_next_header
+	    mov exe_rel_pointer,bx
+	    ret
+
+read_next_header:
+	push es ! push si		;SAVE GOOD VALUES
+	mov exe_rel_pointer,0		;START AT BEGINNING
+	push ds ! pop es
+
+	mov dx,offset buffer
+	call set_dma_ptr
+
+	mov dx,offset FCB
+	mov si,dx
+
+	mov ax,exe_r0 ! mov CPM_R01[si],ax
+	mov al,exe_r2 ! mov CPM_R2[si],al
+	add exe_r0,1 ! adc exe_r2,0
+	mov cl,FRREAD
+	call bdos
+
+	pop si ! pop es
+	or al,al ! jz next_header_ok
+	    jmp bad_header
+
+next_header_ok:
+	ret
+
+
+eject
+
+good_com_open:
+	mov com_type,TRUE
+	mov ax,ms_minmem		;get minimum memory allocation
+	mov m_length,ax
+	push es
+	mov es,sysdat
+	push es:word ptr .4ch		;save CCP/M's max mem/process
+
+	cmp es:word ptr .4ch,ax ! jae skip_mem_chng
+	    mov es:word ptr .4ch,ax	;temp change max mem/process
+	    add es:word ptr .4ch,600H
+
+skip_mem_chng:
+	mov cl,FALLOC_MEM
+	mov dx,offset mcb
+	call bdos
+
+	pop es:word ptr .4ch
+	pop es
+
+	or al,al ! jz cont_com_open
+	    mov cx,3			;can't find memory
+	    jmp ms_p_cli_err
+
+cont_com_open:
+	call setup_psp_vars
+
+	mov ms_cs,ax			;PROGRAM SEG IN es
+	mov ms_ip,100H			;START ADDRESS
+	mov ms_ss,ax			;=ss
+	call compute_length
+
+	mov ms_sp,ax			;=sp
+	call setup_pd_uda_psp
+
+	sub es:dos_call_o,100h
+	add es:dos_call_seg,10h
+	mov dx,es
+	mov cl,FSETDMAB
+	call bdos			;DONE
+
+	mov DMA_ADR,100H		;START HERE
+	mov di,offset fcb
+	mov CPM_CR[di],0		;zero current the current record field
+	mov dl,128
+	call set_multi_sector
+
+	mov di,128*128	;CCPM BLOCK SIZE
+
+read_loop:
+	    mov ax,DMA_ADR	;check FOR ROOM
+	    add ax,di
+	    cmp ax,es:dos_call_o ! jbe room_left	;SHOULD BE <=
+		mov cx,62			;not enough memory to load program error
+		jmp ms_p_cli_err
+
+room_left:
+	    mov dx,DMA_ADR
+	    mov cl,FSETDMA
+	    call bdos
+
+	    add DMA_ADR,di			;FOR NEXT
+	    mov dx,offset fcb
+	    mov cl,FREAD
+	    call bdos			;READ ONE SECTOR
+
+	or al,al ! jz read_loop		;NZ=DONE
+
+
+	push ax
+	mov dl,1	;RESET MULTI SECTOR COUNT
+	call set_multi_sector
+	pop ax
+
+	cmp al,1 ! je goto_program	;end of file start execution
+	    mov cx,29		;bad return from bdos read
+	    jmp ms_p_cli_err
+
+
+eject
+
+;NOW WE ARE READY TO ENTER MSEM WITH TPA FILLED
+
+goto_program:
+
+;PARSE THE COMMAND LINE
+;TEMPORARY BLANK FCB'S
+
+	mov cl,FFREE_DRIVES
+	mov dx,0FFFFH
+	call bdos			;free all drives
+
+	call setup_process_stack
+
+	mov es,psp_base ! mov al,' '
+	mov di,offset tfcb+1 ! mov cx,11
+	push cx
+	rep stosb
+	pop cx
+
+	mov di,offset tfcb2+1
+	rep stosb			;MAKE BLANK FCBS
+
+;NOW MOVE COMMAND LINE INTO PSP_BASE
+	mov ax,ds ! mov es,ax
+	mov si,com_addr		;FIRST char
+	mov cx,128 ! xor ax,ax
+	mov di,si
+	repne scasb 		;look for null at end of command line (es:di)
+
+	mov ax,128
+	sub ax,cx		;get number of chars in command line
+	mov cx,ax		;save number of chars for later move
+	dec cx
+	mov com_len,cl
+
+	or cl,cl ! jz skip_parse
+	    push cx
+	    mov di,offset search_fcb
+	    mov al,1
+	    call parse
+	    pop cx
+	    cmp byte ptr [si],0 ! je skip_parse
+		mov ax,si
+		sub ax,com_addr
+		sub cl,al ! jz skip_parse
+		    mov es,psp_base
+		    mov di,offset TBUF	;IN psp_base
+		    mov es:[di],cl	;LENGTH
+		    push si		;save command line start
+		    inc di
+		    rep movsb		;PUT COMMAND LINE IN TBUF
+		    mov es:byte ptr [di],CR	;place a carriage return as line terminator
+		    mov al,1
+		    pop si		;points to local command line
+		    mov di,offset tfcb
+		    call parse
+		    cmp byte ptr [si],0 ! je skip_parse
+			mov al,1
+			mov di,offset tfcb2
+			call parse
+
+skip_parse:				; EVERYTHING ELSE IS 0 ANYWAY
+	mov ms_retcode,0FFFEH		;initialize return code to indicate error
+	xor cx,cx ! mov dx,cx
+	mov cl,console_no
+	mov ax,2ch
+	mul cl
+	push es
+	mov si,0C14h		;Console Control Block Root
+	mov es,sysdat
+	mov si,es:word ptr [si]	;get first console control block address
+	add si,ax
+	test es:word ptr 0eh[si],0200h ! jz no_cntrlp	;check for cntrlp enabled
+	    mov listcp,TRUE
+	    mov al,es:byte ptr 8[si]
+	    mov list_no,al				;save list device no.
+no_cntrlp:
+	mov es,psp_base
+	mov dx,80H
+	call ms_setdma
+
+	pop es
+
+	push ds ! pop es
+	xor ax,ax ! mov ds,ax		;copy initial interrupt vector
+					;for restoration on pc program
+	mov si,10H*4			;terminate.
+	mov di,offset i_vect_save_area2
+	mov cx,5EH/2
+	rep movsw
+
+	push es ! pop ds
+	
+mstart:
+	mov pcmode,TRUE
+	mov cx,1 ! mov ax,32		;set console into pc-mode
+	call backdoor
+
+	push ds
+	mov ds,m_base		;point ds to point to PD in tpa
+	mov cl,FPCREATE
+	mov dx,UDA_LENGTH
+	call bdos
+	pop ds
+
+	or ax,ax ! jnz ms_p_cli_err
+	    mov cl,FCASSIGN
+	    mov dx,offset acb
+	    call bdos
+	    jmps tmp_ret		;return to tmp
+
+ms_p_cli_err:
+	  mov ax,0FFFFH ! mov bx,ax
+
+tmp_ret:
+	push cx
+	mov dl,def_user
+	mov cl,FUSER		;reset the default user number
+	call abdos
+	pop cx
+
+	ret
+
+eject
+
+
+;	This is used for .exe and .com files.  It sets up
+;	psp variables for both MS1 and MS2.
+;
+;	exit:	ax = psp_base
+;
+
+setup_psp_vars:
+pass1:
+	mov	ax,m_length
+	sub	ax,S_UDA+S_PD+S_DMD+S_PSP
+	mov	psp_length,ax		;adjust for uda and pd and dmd
+	mov	ax,m_base
+	add	ax,S_UDA+S_PD
+	mov	dmd_base,ax		; save off DMD segment
+	add	ax,S_DMD
+	mov	psp_base,ax		;PSP base = base of program seg prefix
+	mov	active_psp,ax		;on first load, current = this one
+	ret
+
+eject
+
+;
+;	EXIT:
+;		ES	psp_base
+;
+
+setup_pd_uda_psp:
+
+		; UDA
+
+	mov ax,m_base
+	mov es,ax
+	add ax,S_UDA			; PD is after UDA
+	mov pd_base,ax			; save PD segment
+	xor ax,ax
+	mov di,ax
+	mov cx,(S_UDA+S_PD+S_DMD+S_PSP)*8	;convert from paragraph to word
+	rep stosw			;zero the uda, pd, dmd and psp
+	mov ax,sysdatseg
+	mov es:U_AX,ax			; Y
+	mov ax,es
+	add ax,S_UDA+S_PD+S_DMD		; point segment to psp
+	mov es:U_INITES,ax		;initialize the process initial Segment
+	mov es:U_INITDS,ax		;register values
+	mov ax,ms_ss
+	mov es:U_INITSS,ax
+	mov es:U_DMA_OFST,80H		;initialize initial dma offset
+	mov ax,cs
+	mov es:U_INITCS,ax
+	mov ax,ms_sp
+	sub ax,10			;get initial stack pointer
+	cmp com_type,TRUE
+	jne not_loading_com
+	  dec ax ! dec ax
+
+not_loading_com:
+	mov es:U_STACK_SP,ax		;setup initial stack pointer
+	mov es:U_8087,3FFH		;initialize the 8087 portion
+
+		; PD
+
+	mov es,pd_base			;point segment to process descriptor
+	mov es:PD_PRIOR,200		;default priority for transients
+	test susp_8087,1 ! jz no_suspend	;check for suspend mode
+	  mov es:PD_FLAG2,1		;mark process desriptor suspend field
+
+no_suspend:
+	mov es:PD_FLAG,2040H		;mark as loaded from disk and raw console i/o
+	test susp_8087,2 ! jz no_8087	;check for 8087 mode
+	  or es:PD_FLAG,8000H		;mark process uses 8087
+
+no_8087:
+	push ds
+	mov ds,sysdat
+	mov si,RLR			;ds:si points to the running TMP process
+	mov al,PD_LIST[si] ! mov es:PD_LIST,al
+	mov al,PD_CONSOLE[si] ! mov es:PD_CONSOLE,al
+	mov cx,PD_DISKUSER[si]
+	pop ds
+	mov acb,al			;save console in acb for later assign
+	mov ch,def_user
+	mov es:PD_DISKUSER,cx
+	mov al,comp_attrs
+	mov es:PD_CMOD,al		;set compatibility attributes
+	xor di,di
+	mov si,offset fcb+1
+
+	mov cx,4				;move fcb name into MS_PD
+
+move_name_loop:
+	    lods ax ! and ax,7F7FH			;clear high bits
+	    mov es:word ptr PD_NAME[di],ax
+	    mov word ptr acb+4[di],ax
+	    inc di ! inc di
+	loop move_name_loop
+
+		; DMD
+
+pass2:
+	mov	es,dmd_base
+	xor	di,di
+	mov	al,5Ah			; Signal last DMD
+	stosb
+	mov	ax,psp_base
+	mov	bx,ax			; save off for a minute
+	stosw
+	mov	ax,psp_length
+	add	ax,S_DMD		; Get length of this memory block
+	stosw
+
+
+		; PSP
+
+	mov es,bx			; psp_base
+	xor di,di				;point to psp
+	mov ax,20CDH ! stos ax			;INT 20 at 0,1
+	mov ax,m_length	;total memory
+	add ax,m_base ! stos ax			;di=4,Setup top of memory
+	mov ah,9AH ! stos ax			;di=6,far call
+	call compute_length			;
+	stos ax					;di=8 long call local offset
+	call compute_segment ! stos ax		;long call local seg
+	mov ax,offset exit ! stos ax		;di=C
+	mov ax,cs ! stos ax			;di=E
+	mov ax,offset ctrl_break_exit ! stos ax	;di=10
+	mov ax,cs ! stos ax			;di=12
+	mov ax,offset critical_error ! stos ax	;di=14
+	mov ax,cs ! stos ax			;di=16
+
+	mov	ax,ds				; environment in data seg now
+	mov	bx,offset environment		; get offset that is on para
+	mov	cl,4				; boundry
+	shr	bx,cl				; covert to paragragh
+	add	ax,bx				; add in offset segment
+	mov	di,2ch				; offset of environment ptr
+	stosw					; store seg of env into PSP
+
+	ret
+
+
+
+
+setup_process_stack:
+	push es
+	mov es,ms_ss			;point es to new process' stack seg
+	mov si,ms_sp			;point si to new process' stack offset
+	cmp com_type,TRUE ! jne not_a_com
+	    dec si ! dec si
+	    mov es:word ptr [si],0
+
+not_a_com:
+	dec si ! dec si
+	mov ax,ms_cs ! mov es:word ptr [si],ax
+	dec si ! dec si
+	mov ax,ms_ip ! mov es:word ptr [si],ax
+	dec si ! dec si
+	mov es:word ptr [si],200H	;initial flag values interrupts enabled
+	dec si ! dec si
+	mov ax,cs ! mov es:word ptr [si],ax
+	dec si ! dec si
+	mov ax,offset init_process ! mov es:word ptr [si],ax
+	pop es
+	ret
+
+
+eject
+
+init_process:
+	mov bx,es				;save es
+	mov es,ax
+	mov si,es:RLR				;get process descriptor address
+	pushf
+	cli
+	mov es:2ah[si],cs			;point dispatch segment to intercept routine
+	mov es:28h[si],offset dispatch_intercept
+	mov es,es:PD_UDA[si]
+	mov es:U_ERROR_MODE,0FFH
+
+if IAPX286
+	popf286 b286
+else
+	popf
+endif
+
+	mov es,cx				;zero es
+	mov cx,es:word ptr .380h		;save initial INT E0 values
+	mov gsx_bdos_offset,cx
+	mov cx,es:word ptr .382h
+	mov gsx_bdos_segment,cx
+	mov cx,offset bdos_intercept
+	mov es:word ptr .380h,cx		;fix up INT E0 to point to
+	mov es:word ptr .382h,cs		;emulator
+	mov si,offset interrupt_table
+	mov cx,interrupt_table_length
+
+set_interrupt_loop:
+	  lods cs:al				;INT TYPE
+	  xor ah,ah
+	  shl ax,1 ! shl ax,1			;mult by 4
+	  xchg ax,di
+	  movs es:ax,cs:ax			;put in offset
+	  mov es:[di],cs			;segment
+	loop set_interrupt_loop
+	mov es,bx				;restore es & ds
+	xor ax,ax ! mov bx,ax ! mov cx,ax
+	mov si,ax ! mov di,ax
+	retf					;begin process execution
+
+
+eject
+
+compute_segment:
+;	entry: ax=REQUIRED offset,PSP_BASE. LENGTH SET
+;	FORMULA A = S * 16 + O	(S=SEGMENT,O=offset,A=ABSOLUTE)
+;		S = (A-O)/16 = (A/16) - (O/16)
+;	OUT->ax = SEGMENT FOR BDOS_CALL_ENTRY WHICH IS AT PARAGRAPH
+	mov dx,cs
+	mov bx,offset bdos_call_entry
+	mov cl,4
+	shr bx,cl
+	shr ax,cl
+	add bx,dx
+	sub bx,ax
+	xchg ax,bx
+	ret
+
+
+eject
+
+INT_22_LOC	equ	word ptr 22H*4
+
+terminate:
+exit:
+;=====
+;=====
+int_22:
+;=====
+;=====
+;
+;
+;
+;	entry:
+;
+;	exit:
+;
+
+	call get_data_seg		;ensure local data
+	mov ms_retcode,0		;good exit
+
+exit2:
+	call ms_cleanup1		;re-initialize the emulator
+	mov cl,FPTERM
+	mov dl,0FFH			;terminate a system process
+	jmp bdos
+
+
+eject
+
+error_exit:
+	call get_data_seg		;ensure local data
+	jmps exit2
+
+
+
+
+;SET MULTI_SECTOR COUNT FOR CCP/M
+;	entry:	dl=COUNT
+;	exit: 	0
+
+set_multi_sector:
+	mov cl,FMULTI_SECTOR
+	jmp bdos
+
+
+
+
+compute_length:
+	mov ax,m_length
+
+compute_length_ax:
+	cmp ax,1000H ! jb over_65		;over 65?
+	    mov ax,0FFF0H				;stop at one seg
+	    ret
+
+over_65:
+	    mov cl,4 ! shl ax,cl
+	    ret
+
+
+eject
+
+dispatch_intercept:
+	push ds
+	call get_data_seg
+
+	push es ! push cx
+	mov cx,5EH/2
+
+	or ax,ax ! jnz restore_vects
+	    mov si,10H*4
+	    mov di,offset i_vect_save_area
+	    mov ax,ds ! mov es,ax
+	    xor ax,ax ! mov ds,ax
+	    rep movsw
+	    mov ax,es ! mov ds,ax
+	    mov cx,5Eh/2
+	    mov si,offset i_vect_save_area2
+	    jmps restore_old_vect
+
+restore_vects:
+	    mov si,offset i_vect_save_area
+
+restore_old_vect:
+	mov di,10H*4
+	xor ax,ax ! mov es,ax
+	rep movsw
+	pop cx ! pop es ! pop ds
+	retf
+
+
+
+
+bdos_intercept:
+	cmp cl,0 ! je turn_off_flag	;we intercept INT E0 here
+	  jmpf cs:GSX_BDOS_PTR		; if not terminate continue
+
+
+
+
+turn_off_flag:
+	push ds
+	call get_data_seg
+	mov ms_retcode,0		;signal good terminate
+	push es ! push cx
+	call ms_cleanup1
+	pop cx ! pop es
+	pop ds
+	jmpf cs:GSX_BDOS_PTR		;continue with function
+
+
+
+get_data_seg:
+	push bx
+	mov ds,sysdat			;get system data segment
+	mov bx,RLR			;get pd address
+	mov bl,PD_CONSOLE[bx]
+	mov bh,0
+	shl bx,1
+	mov ds,ms_dsegs[bx]
+	pop bx
+	ret
+
+
+ms_dsegs	rw	256
+
+
+backdoor:
+	push dx ! push si
+	push es ! push ds
+	mov ds,sysdat
+	mov si,RLR			;get process address
+	mov es,PD_UDA[si]		;get process uda segment
+	cmp al,31 ! jne backdoor_c1	;special handle function 31
+	  cmp bl,6 ! je backdoor_c2
+	  cmp bl,7 ! je backdoor_c2
+	  cmp bl,9 ! je backdoor_c2
+	  cmp bl,10 ! je backdoor_c2
+	  cmp bl,11 ! je backdoor_c2
+	  cmp bl,12 ! je backdoor_c2
+	  cmp bl,13 ! je backdoor_c2
+
+backdoor_c1:
+	mov dl,PD_CONSOLE[si]		;get process default console
+
+backdoor_c2:
+	callf cs:XIOS_ENTRY		;call the XIOS entry point
+	pop ds ! pop es
+	pop si ! pop dx
+	ret
+
+
+
+
+ios_list:
+	push ax
+	push dx ! push si
+	push es ! push ds
+	mov ax,4			;io_list function
+	mov dl,list_no			;get cntrlp list device
+	mov ds,sysdat
+	mov si,RLR			;get process address
+	mov es,PD_UDA[si]		;get process uda segment
+	callf cs:XIOS_ENTRY		;call the XIOS entry point
+	pop ds ! pop es
+	pop si ! pop dx
+	pop ax
+	ret
+
+
+eject
+
+INT_10_LOC	equ	10H*4
+
+;=====
+;=====
+int_10:
+;=====
+;=====
+;
+;	Video
+;
+;	entry:	IF
+;		AH = Subfunction
+;
+;	exit:	BH=0
+;		AH=80
+;
+
+	sti
+	push ds
+	push si
+	call get_data_seg
+
+	cli
+	mov ms_ss,ss ! mov ms_sp,sp
+	mov si,ds ! mov ss,si
+	mov sp,offset stack
+	sti
+
+	push ax ! push bx ! push cx
+	push ds ! push dx ! push bp
+	push es ! push di
+
+	or ah,ah ! jnz int_10_f1	; if ah==0 {
+	    cmp al,7 ! je mono_mode
+	    cmp al,4 ! jae graph_mode
+
+mono_mode:				;	if (al==0,1,2,3,7) {
+		inc al ! inc al
+		mov cl,al
+		jmps cont_f0		;	}
+
+graph_mode:				;	else {
+		dec al ! dec al
+		shl al,1 ! shl al,1
+		shl al,1 ! shl al,1
+		mov cl,al		;	}
+
+cont_f0:
+	    mov ax,30
+	    xor ch,ch			;indicate set screen mode
+	    call backdoor
+	    jmp int_10_exit		; }
+
+int_10_f1:				; else {	/* ah != 0 */
+	    cmp ah,1 ! jne int_10_f2
+		mov al,31
+		mov bl,1
+		call backdoor
+		jmp int_10_exit
+
+int_10_f2:
+	    cmp ah,2 ! jne int_10_f3
+        	mov cx,dx
+		mov al,31
+		mov bl,2
+		call backdoor
+        	jmp int_10_exit
+
+int_10_f3:
+	    cmp ah,3 ! jne int_10_f4
+		mov al,31
+		mov bl,3
+		call backdoor
+		mov MS_DX,ax
+		xor cx,cx ! mov MS_CX,cx
+		jmp int_10_exit
+
+int_10_f4:
+	    cmp ah,5 ! jae int_10_f6
+		jmp int_10_exit
+
+int_10_f6:
+	    cmp ah,6 ! jne int_10_f7
+		mov si,61fh
+		mov bl,0
+		jmps int_10_f67
+
+int_10_f7:
+	    cmp ah,7 ! jne int_10_f8
+		mov si,71fh
+		mov bl,0
+int_10_f67:
+		xor ah,ah ! mov vid_struct_ax,ax
+	  	mov vid_struct_bx,bx
+	  	mov vid_struct_cx,cx
+	  	mov vid_struct_dx,dx
+	  	push ds
+	  	mov ds,sysdat
+	  	mov bx,RLR			;get process address
+	  	mov al,PD_CONSOLE[bx]
+	  	pop ds
+	  	mov vid_struct_vc,al
+	  	mov ax,si
+	  	mov bl,ah
+	  	mov cx,ds
+	  	mov dx,offset vid_struct
+	  	call backdoor
+	  	jmp int_10_exit
+
+int_10_f8:
+	    cmp ah,8 ! jne int_10_f9
+		mov al,31
+		mov bl,8
+		call backdoor
+		mov MS_AX,ax
+		jmp int_10_exit
+
+int_10_f9:
+	    cmp ah,9 ! jne int_10_f10
+		mov si,91fh
+		mov bh,0
+		jmps int_10_f67
+
+int_10_f10:
+	    cmp ah,10 ! jne int_10_f11
+		mov si,0a1fh
+		mov bh,0
+		jmps int_10_f67
+
+int_10_f11:
+	    cmp ah,11 ! jne int_10_f12
+	 	mov si,0b1fh
+	 	jmps int_10_f67
+
+int_10_f12:
+	    cmp ah,12 ! jne int_10_f13
+		mov si,0c1fh
+		jmps int_10_f67
+
+int_10_f13:
+	    cmp ah,13 ! jne int_10_f14
+		mov si,0d1fh
+		jmps int_10_f67
+
+int_10_f14:
+	    cmp ah,14 ! jne int_10_f15
+		mov cl,al
+		mov al,31
+		mov bl,14
+	  	call backdoor
+		jmp int_10_exit
+
+int_10_f15:
+	    cmp ah,15 ! jne int_10_exit
+		mov al,30 ! mov ch,1
+		call backdoor
+		xor bh,bh
+		cmp al,16 ! jb not_graphics
+	  	    shr al,1 ! shr al,1
+		    shr al,1 ! shr al,1
+		    add al,4
+
+not_graphics:
+		dec al ! dec al
+		mov MS_AX,ax
+		mov ms_bh,0
+
+int_10_exit:
+	pop di ! pop es ! pop bp
+	pop dx ! pop ds ! pop cx
+	pop bx ! pop ax
+
+	cli
+	mov ss,ms_ss
+	mov sp,ms_sp
+
+	pop si
+	pop ds
+	iret
+
+
+eject
+
+INT_11_LOC	equ	word ptr 11H*4
+
+;=====
+;=====
+int_11:
+;=====
+;=====
+;
+;	Return Equipment
+;
+;	entry:	None
+;
+;	exit:	AX = Bits for equipment
+;
+
+	sti
+
+	push ds
+
+	call get_data_seg
+
+	cli				; Disable INterrupts
+	mov ms_ss,ss
+	mov ms_sp,sp			; Switch to local stack
+	mov ax,ds ! mov ss,ax
+	mov sp,offset stack
+	sti				; Reenable Interupts
+
+	push bx ! push cx
+	push dx ! push di
+
+  	mov ax,34			;call XIOS equipment check
+	call backdoor
+
+	pop di ! pop dx
+	pop cx ! pop bx
+
+	cli
+	mov ss,ms_ss
+	mov sp,ms_sp			; Restore stack
+
+	pop ds
+
+	iret
+
+
+eject
+
+INT_12_LOC	equ	word ptr 12H*4
+
+;=====
+;=====
+int_12:
+;=====
+;=====
+;
+;	RETURN MEMORY SIZE
+;
+;	entry:	None
+;
+;	exit:	AX = Number of 1K blocks of RAM
+;
+
+	push ds ! push cx
+
+	call get_data_seg
+
+	mov ax,m_length
+	add ax,m_base
+
+	mov cl,6			;divide by 64
+	shr ax,cl
+
+	pop cx ! pop ds
+
+	iret
+
+
+eject
+
+DIO_13_READ_OP		equ	0
+DIO_13_WRITE_OP		equ	1
+DIO_13_VERIFY_OP	equ	2
+DIO_25_READ_OP		equ	3
+DIO_26_WRITE_OP		equ	4
+BDOS_DDIO_OP		equ	02Fh
+BDOS_ENTRY		equ	dword ptr .20h
+
+
+INT_13_LOC	equ	13H*4
+
+;=====
+;=====
+int_13:
+;=====
+;=====
+;
+;	Direct Disk I/O
+;
+;	entry:	al = number of sectors
+;		ah = 0  reset diskette system
+;		   = 1  read status of system into al
+;			 status from last operation is used
+;		   = 2  read the desired sectors into memory
+;		   = 3  write the desired sectors from memory
+;		   = 4  verify the desired sectors
+;		   = 5  format the desired track
+;		es = DMA segment
+;		bx = DMA offset
+;		cl = sector number
+;		ch = track number
+;		dl = drive number
+;		dh = head number
+;
+;	exit:	C flag = 0 if successful (ah = 0 on return)
+;		       = 1 if unsuccessful
+;		al = number of sectors actually read/written
+;		ah = status of operation
+;		bx,bp,cx,dx,ds,di,si = preserved
+;
+
+	sti
+	push bx ! push cx ! push ds ! push si
+	push di ! push bp ! push dx ! push es
+
+	call get_data_seg
+	cmp ah,2  ! jne dio_13_a
+	    mov ah,DIO_13_READ_OP
+	    jmps dio_13_d
+
+dio_13_a:
+	cmp ah,3 ! jne dio_13_b
+	    mov ah,DIO_13_WRITE_OP
+	    jmps dio_13_d
+
+dio_13_b:
+	cmp ah,4 ! jne dio_13_c
+	    mov ah,DIO_13_VERIFY_OP
+	    jmps dio_13_d
+
+dio_13_c:
+	    mov ax,0000h			;set error code
+	    clc				;set error return
+	    jmps dio_13_exit
+
+dio_13_d:
+	    mov ddio_op,ah
+	    mov ddio_drive,dl
+	    mov ddio_nsectors,al
+	    mov ddio_head,dh
+	    dec cl ! mov ddio_sector,cl
+	    mov ddio_track,ch
+	    mov ddio_dmaoff,bx
+	    mov ddio_dmaseg,es
+
+	    mov dx,offset ddio_op
+	    push ds
+	    mov es,sysdatseg
+	    mov si,es:RLR
+	    mov ax,es:PD_UDA[si]
+	    mov es,ax
+	    mov es:U_WRKSEG,ds
+	    mov ds,sysdatseg
+	    mov cl,BDOS_DDIO_OP
+	    callf dword ptr BDOS_ENTRY
+	    pop ds
+	    or al,al ! jz dio_13_exit	;carry flag = 0
+
+dio_13_exit1:
+		stc
+
+dio_13_exit:
+	pop es ! pop dx ! pop bp ! pop di
+	pop si ! pop ds ! pop cx ! pop bx
+	retf 2
+
+
+eject
+
+INT_16_LOC	equ	word ptr 16H*4
+
+;=====
+;=====
+int_16:
+;=====
+;=====
+;
+;	Keyboard Input/Output
+;
+;	entry:	AH = 0,read next char
+;		   = 1,get next char
+;		   = 2,return shift status
+;
+;	exit:	AX = char or shift status
+;
+
+	push ds
+	push bx
+	call get_data_seg		;local data segment
+
+	mov ms_ss,ss			;SAVE STUFF
+	mov ms_sp,sp
+	mov bx,ds ! mov ss,bx		;local stack
+	mov sp,offset stack
+
+	sti				;enable interrupts
+
+	push ax ! push cx ! push dx
+	push si ! push es ! push di
+
+	or ah,ah ! jz ros_get_char	;ah = 0
+	dec ah ! jz ros_get_stat	;ah = 1
+					; if (ah==2) {
+	    mov ax,33
+	    pushf
+	    call backdoor
+
+if IAPX286
+	    popf286 b286
+else
+	    popf
+endif
+
+	    mov MS_AX,ax
+	    jmps int_16_exit		; }
+
+ros_get_stat:				;else
+	    mov ax,ros_char		;	if(ha==1) {
+	    or ax,ax ! jnz return_char
+		mov MS_AX,0
+		mov cl,C_RAWIO
+		mov dl,0FFH		;get console status
+		pushf
+		call bdos
+
+if IAPX286
+		popf286 b286
+else
+		popf
+endif
+
+		or ax,ax ! jz int_16_exit
+		    mov ros_char,ax	;save the char
+		    jmps return_char	;	{
+
+ros_get_char:
+	    mov ax,ros_char
+	    mov word ptr ros_char,0
+	    or ax,ax ! jnz return_char
+		pushf
+		call get_char
+
+if IAPX286
+		popf286 b286
+else
+		popf
+endif
+
+return_char:
+	    or ax,ax
+	    mov MS_AX,ax
+
+int_16_exit:
+	pop di ! pop es ! pop si		; Restore registers
+	pop dx ! pop cx ! pop ax
+
+	cli
+	mov ss,ms_ss			; Restore stack
+	mov sp,ms_sp
+	pop bx
+	pop ds
+	sti
+
+	retf 2
+
+
+
+
+
+get_char:
+	push cx
+	mov cl,C_RAWIO
+	mov dl,0FDH			;get console character
+	call bdos
+	pop cx
+	ret
+
+
+eject
+
+INT_17_LOC	equ	word ptr 17H*4
+
+;=====
+;=====
+int_17:
+;=====
+;=====
+;
+;	Printer_IO
+;
+;	entry:
+;
+;	exit:
+;
+
+	push ds ! push bx
+	call get_data_seg		;local data segment
+
+	mov ms_ss,ss			;SAVE STUFF
+	mov ms_sp,sp
+
+	mov bx,ds ! mov ss,bx		;local stack
+	mov sp,offset STACK
+
+	push ax ! push cx ! push dx
+	push si ! push es ! push di
+
+	push ax
+	mov es,sysdat
+	mov di,es:RLR			;get process address
+	mov al,es:PD_LIST[di]		;get default list device
+	mov bfcb+3,al			;store list device in Bios Function control block
+
+	mov cl,L_CATTACH		;try to attach to the list device
+	call bdos
+
+	or al,al ! pop ax ! jz do_list_io
+	    mov ms_ah,1			;printer selected and time out
+	    jmps int_17_exit
+
+do_list_io:	
+	    or ah,ah ! jnz int_17_f1
+		mov cx,8000h			;try status 8000h times before time out
+
+try_listst_again:
+		    push cx
+		    mov bfcb,15			;get printer status
+		    mov dx,offset bfcb
+		    mov cl,S_BIOS
+		    push ax
+		    call bdos
+		    pop bx
+		    pop cx
+		test ah,80H ! jnz printer_not_busy
+		mov ax,bx
+		loop try_listst_again
+		    or ah,1H		;printer selected and time out
+		    mov ms_ah,ah
+		    jmps int_17_exit
+
+printer_not_busy:
+		mov bfcb,5
+		mov bfcb+1,bl
+		mov dx,offset bfcb
+		mov cl,S_BIOS ! call bdos
+		mov ms_ah,10H			;printer is selected
+		jmps int_17_exit
+
+int_17_f1:
+	    cmp ah,1 ! jne int_17_f2
+		mov cl,L_DETACH			;detach from printer
+		call bdos
+		xor ah,ah
+		mov ms_ah,ah
+		jmps int_17_exit
+
+int_17_f2:
+	    cmp ah,2 ! jne int_17_exit
+		mov bfcb,15			;get printer status
+		mov dx,offset bfcb
+		mov cl,S_BIOS ! call bdos
+		test ah,80H ! jnz prtr_not_busy
+		    or ah,10H		;printer busy and is selected
+		    mov ms_ah,ah
+		    jmps int_17_exit
+
+prtr_not_busy:
+		    or ah,90H			;printer not busy and is selected
+		    mov ms_ah,ah
+
+int_17_exit:
+	pop di ! pop es ! pop si
+	pop dx ! pop cx ! pop ax
+
+	cli
+	mov ss,ms_ss
+	mov sp,ms_sp
+
+	pop bx
+	pop ds
+	iret
+
+
+eject
+
+INT_20_LOC	equ	word ptr 20H*4
+
+;=====
+;=====	
+int_20:
+;=====
+;=====
+;
+;	Program Terminate
+;
+;	entry:	CS ON STACK MUST=ORIG CS SO PREFIX VALID
+;
+;	exit:	TERMINATE,CTRL BREAK,CRIT ERROR EXIT ADDRESSES RESTORED
+;		SETUP PROGRAM IN COMMAND
+;
+	push ds
+	call get_data_seg
+
+
+	push bp
+	mov bp,sp
+	push ax
+
+	mov ax,active_psp		; If the active PSP does not match
+	cmp ax,6[bp]			; the one on the stack we assume that
+	jne dif_psp			; the caller made up the PSP so do
+					; not call the following as it plays
+					; games with the PSP and active_psp
+	    mov in_int24_flag,FALSE	;in case called from INT 24 handler
+	    call ms2_terminate		;free memory and handles for DOS 2.x
+
+dif_psp:
+	pop ax
+	pop bp
+
+
+	pop ds
+
+	push bp
+	mov bp,sp
+	push ds
+	push es ! push si
+	push di ! push cx
+
+	xor si,si
+	mov es,si			;POINT TO BASE PAGE
+	mov di,offset TERMINATE_ADDRESS
+	mov si,offset TERMINATE_O	;POINT TO TERM ADDRESS
+	mov ds,4[bp]			;ds=PREFIX SEG
+
+	push di
+	cld
+	mov cx,6
+	rep movsw			;RESTORE TERM,CTRLBRK,CRIT ERROR ADDRS
+	pop di
+
+	mov si,es:[di]			;PUT ON STACK FOR iret
+	mov 2[bp],si
+	mov si,es:2[di]
+	mov 4[bp],si			;DONE
+
+	pop cx ! pop di
+	pop si ! pop es
+	pop ds ! pop bp
+
+	iret				;GOTO TERM ADDRESS
+
+eject
+
+;	ENTER WITH FUNCTION IN cl
+;	AS A "call(INTRASEG) 5" FROM THE PROGRAM
+;		sp+4=offset,sp+2=SEG,sp=JUNK
+;		CS:IP WILL BE STRANGE
+
+here:
+	ORG	(((offset here-offset cstart)+0FH) and 0FFF0H)
+
+;	PARAGRAPH BOUNDARY
+
+bdos_call_entry:			;CONVERT TO INT_ENTRY
+
+	push bp				;NOW (4[sp):(6[sp])
+	mov bp,sp
+	pushf
+	pop ax
+	xchg ax,6[bp]			;offset IN ax,FLAGS ON STACK
+	mov 2[bp],ax			;offset ON STACK
+	pop bp				;RESTORE bp
+	mov ah,cl			;FALL THRU TO INT_ENTRY
+
+;MUST SET LOCAL CS:IP
+	db	FJMP		;JUMP FAR to INT 21H handler
+
+
+eject
+
+int_21_off	dw	0	;offset of Interrupt 21h
+int_21_seg	dw	0	;segment of Interrupt 21h
+
+bdos_offset	dw	0	;offset of BDOS entry
+bdos_segment	dw	0	;segment of BDOS entry
+BDOS_PTR	equ	dword ptr bdos_offset
+
+
+gsx_bdos_offset		dw	0
+gsx_bdos_segment	dw	0
+GSX_BDOS_PTR	equ	dword ptr gsx_bdos_offset
+
+
+xios_off	dw	0C03H	;offset of XIOS entry
+sysdat		dw	0	;set by init
+XIOS_ENTRY	equ	dword ptr xios_off
+
+
+eject
+
+INT_21_LOC	equ	21H*4
+
+bdos_int_entry:
+;=====
+;=====
+int_21:
+;=====
+;=====
+;
+;	Function request
+;
+;	entry:	AH = Function number
+;
+;	exit:	Varies with function number
+;
+
+	or ah,ah ! jnz not_terminate	;SEE IF TERMINATE
+	    jmp int_20
+
+not_terminate:
+	cmp ah,MS2F_FIRST ! jb not_dos2	; if this is a DOS
+					; ver 2.x function
+	    jmp ms2_func_entry		;   then jump away
+
+not_dos2:
+	push ds ! push ds
+	call get_data_seg
+
+	mov ms_ss,ss	;SAVE STUFF
+	mov ms_sp,sp
+
+	add ms_sp,2			;point sp past second push
+	pop ms_ds_save
+
+	mov ms_ax_save,ax		;save ax and ds
+	mov ax,ds
+	mov ss,ax			;local stack
+	mov sp,offset STACK
+	mov ax,ms_ax_save		;restore ax
+
+	cmp in_int24_flag,TRUE ! jne cont_int21
+	    cmp ah,12 ! ja above_12
+		mov sp,critical_sp	;set sp to where stack was before INT 24
+		jmps cont_int21
+
+above_12:
+		mov in_int24_flag,FALSE
+
+cont_int21:
+	mov ds,ms_ds_save	;restore ds
+	sti
+	push ax ! push bx ! push cx
+	push ds ! push dx ! push si	;ds:dx POINTER
+	push es ! push di ! push bp	;es:di POINTER
+
+	mov bx,ss
+	mov ds,bx			;set up ds to local data
+
+bdos_re_entry:				;ENTER WITH ah,ds,dx SET
+
+	mov RET_AX,ax			;initialize the return code
+
+	mov bl,ah ! xor bh,bh
+	shl bx,1			;MULT BY 2
+
+	mov es,ms_ds_save
+
+	call cs:functab[bx]
+
+bdos_int_exit:
+	pop bp ! pop di ! pop es
+	pop si ! pop dx ! pop cx		;throw away first ds
+	pop cx ! pop bx ! pop ax
+
+int21_exit:
+	mov ax,RET_AX	;return value in al
+
+	cli
+	mov ss,ms_ss
+	mov sp,ms_sp
+
+	pop ds		;restore program ds
+
+	iret
+
+
+eject
+
+m_null:
+;=====
+	mov ret_al,0
+	ret
+
+
+eject
+
+INT_23_LOC	equ	word ptr 23H*4
+
+ctrl_break_exit:
+;=====
+;=====
+int_23:
+;=====
+;=====
+;
+;	CTRL_Break exit
+;
+;	entry:
+;
+;	exit:
+;
+
+	call get_data_seg
+	mov cl,CR ! call conout
+	mov cl,LF ! call conout
+	jmp error_exit
+
+
+eject
+
+check_error:
+	mov check_error_parm,ax
+	mov	count_error,10
+
+check_error_again:
+	push di
+	call bdos
+	cmp al,0FFH ! jne xcheck_error
+	  cmp ah,1 ! je check_phs_error
+	    cmp ah,2 ! jne xcheck_error
+	      push si ! push bx
+	      push cx
+	      mov ah,0			;write protect disk error
+	      jmps found_err_code
+
+check_phs_error:
+	    push si ! push bx
+	    push cx ! push es
+	    mov es,sysdat
+	    mov si,es:RLR
+	    mov es,es:PD_UDA[si]
+	    mov bl,es:U_IOEXERR		;get physical error code
+	    pop es
+	    mov si,offset error_tab
+	    mov cx,10
+
+error_loop:
+	    lods cs:ax
+	    cmp bl,al ! je found_err_code
+	      loop error_loop
+
+found_err_code:
+	    pop cx ! pop bx ! pop si
+	    mov al,ah ! xor ah,ah
+	    dec	count_error
+	    je	xcheck_error		; After 10 retrys give up
+	    mov di,ax
+	    mov ax,check_error_parm	;drive and read/write flag
+	    jmp do_critical_error ;do critical error
+	
+xcheck_error:
+	pop di
+	ret
+
+
+eject
+
+error_tab	rw	0
+		db	3,0
+		db	80h,1
+		db	20h,2
+		db	1,3
+		db	10h,4
+		db	40h,6
+		db	2,8
+		db	4,8
+		db	8,0CH
+		db	9,0CH
+
+
+eject
+
+do_critical_error:
+;
+;	entry: ERROR CODE IN ah,al
+;
+
+	push bp ! push si ! push bx
+	push ds ! push es
+
+	call get_data_seg
+
+	push RET_AX		;preserved initialized return code
+
+	cli
+	mov critical_ss,ss ! mov critical_sp,sp
+	mov ss,ms_ss ! mov sp,ms_sp	;USER STACK AFTER INT 21
+
+	sti
+
+	mov bx,ms_ss ! mov critical_ss_save,bx
+	mov bx,ms_sp ! mov critical_sp_save,bx
+
+	pop bx				;throw away user ds
+
+	push ms_es			;SET UP STACK LIKE MSDOS
+
+	push ms_ds ! push ms_bp
+	push ms_di ! push ms_si ! push MS_DX
+	push MS_CX ! push MS_BX ! push MS_AX
+
+	mov in_int24_flag,TRUE		;signal in INT 24 for stack swaps
+
+	int 24H				;DO CRITICAL ERROR
+
+	call get_data_seg
+
+	mov in_int24_flag,FALSE
+
+	pop MS_AX ! pop MS_BX ! pop MS_CX
+	pop MS_DX ! pop ms_si ! pop ms_di
+	pop ms_bp ! pop ms_ds
+
+	mov bx,critical_ss_save ! mov ms_ss,bx
+	mov bx,critical_sp_save ! mov ms_sp,bx
+
+	cli
+	mov ss,ms_ss ! mov sp,ms_sp
+
+	pop bx				;throw away user ds,could have been
+
+	push ms_ds			;corrupted.  Put user ds back on stack.
+
+	mov ss,critical_ss ! mov sp,critical_sp
+	sti
+
+	pop RET_AX
+
+	pop es ! pop ds
+	pop bx ! pop si ! pop bp
+
+	cmp al,2 ! je dont_retry
+	    pop di			;ignore is mapped into re-try
+	    jmp check_error_again		;retry the operation
+dont_retry:
+	    int 23h				;terminate the program
+	    jmp int_21
+
+
+eject
+
+INT_24_LOC	equ	word ptr 24H*4
+
+critical_error:
+;=====
+;=====
+int_24:
+;=====
+;=====
+;
+;	Critical error handler vector
+;
+;	entry: AH BIT 7=0 IF DISK ERROR,ELSE =1
+;
+;	exit:
+;
+
+	push ds ! push bx		;store register state
+	push cx ! push dx
+	push ax
+
+	call int24_crlf			;output carriage return - line feed
+	mov bx,di			;multiply error code by 2 and add 
+	xor bh,bh			;this result to the offset of the
+	shl bx,1			;top of the message address table.
+	mov si,offset crit_top
+	add si,bx
+	mov dx,cs:word ptr [si]		;cx now has address of the
+
+	push ds ! mov ax,cs ! mov ds,ax
+	call int24_print		;appropriate string
+	pop ds
+
+	pop ax
+	test ah,80h			;was it a disk error? 
+	jz disk			;no - done here - output crlf
+	call 	int24_crlf
+	jmp query			;
+
+disk:	push ax			;save drive code
+	test ah,01h			;check to see if the error occured 
+	jnz prwrite			;while reading or writing
+	mov dx,offset readmsg	;print 'reading'
+	jmps prread			;
+prwrite:
+	mov dx,offset writemsg	;print 'writing'
+prread:
+	push ds
+	mov ax,cs
+	mov ds,ax
+	call int24_print		;appropriate string
+	mov dx,offset drivemsg	;
+	call int24_print		;print 'drive d'
+	pop ds
+	pop dx			;restore drive code
+	add dl,41h			;convert drive to ascii 
+	mov ah,2			;print the drive
+	int	21h
+	call int24_crlf
+					
+query:
+	mov dx,offset ari		;output message 
+	push ds
+	mov ax,cs
+	mov ds,ax
+	call int24_print		;    "Abort or Retry? _   "
+	pop ds
+	mov ah,1
+	int	21h			;get character
+	cmp al,60h			;uppercase the character
+	jb notlow			;
+	sub al,20h			;
+
+notlow:
+	mov dl,al
+	cmp dl,'A'			;is it an 'A'
+	jnz ntabrt
+	mov al,2			;set al to abort
+	jmps term			;
+
+ntabrt:
+	push dx
+	call int24_crlf
+	pop dx
+	cmp dl,'R'			;is it an 'R'
+	jnz query			;screwed up ... get another character
+	mov al,1			;set al to retry
+
+term:
+	pop dx ! pop cx			;restore register state
+	pop bx ! pop ds
+	iret				;return from interrupt
+
+
+eject
+
+int24_crlf:
+	mov dl,CR
+	mov ah,2
+	int	21h
+	mov dl,LF
+	mov ah,2
+	int	21h
+	ret
+
+
+
+
+int24_print:
+	mov ah,9
+	int	21h
+	ret
+
+
+
+
+crit_top	rs	0
+wprotect 	dw	offset msg0		;
+unknownunit	dw	offset msg3		;
+notready	dw	offset msg2		;critical error handler
+unknowncmd	dw	offset msg3		;message address table
+dataerror 	dw	offset msg4		;
+badrequest	dw	offset msg3		;
+seekerror	dw	offset msg6		;
+badmedia	dw	offset msg7		;
+lostsector	dw	offset msg8		;
+		dw	offset msg3
+		dw	offset msg3
+		dw	offset msg3
+generalfail	dw	offset msg3
+
+
+msg0		db	'Write protect error$'	;
+msg2		db	'Not ready error$'	;these messages are used by 
+msg3		db	'I/O error$'		;the critical error handler
+msg4		db	'Data error$'		;for displaying the type
+msg6		db	'Seek error$'		;of physical error that
+msg7		db	'Bad media type$'	;occurred.
+msg8		db	'Sector not found$'	;
+
+readmsg		db	' reading$'
+writemsg	db	' writing$'
+drivemsg	db	' drive $'
+ari		db	'Abort or Retry? $'
+
+
+eject
+
+INT_25_LOC	equ	word ptr 25H*4
+
+absolute_disk_read:
+;=====
+;=====
+int_25:
+;=====
+;=====
+;
+;	Absolute Disk Read
+;
+;	entry:	al = drive number
+;		ds = DMA segment
+;		bx = DMA offset
+;		cx = number of sectors
+;		dx = beginning relative sector
+;
+;	exit:	C flag = 0 if successful
+;		       = 1 if unsuccessful
+;		ax = error code(if CF = 1)
+;		  ah physical error
+;		  al logical error
+;		User orginal flags left on stack
+;
+
+	sti
+
+	push ds ! push es
+	mov si,ds			;save ds
+	call get_data_seg
+
+	mov ddio_op,DIO_25_READ_OP
+
+int_25_26_com:
+		; Int 26 jmps in here after setting ddio_op to write
+
+	mov ddio_drive,al ! mov word ptr ddio_nsectors,cx
+	mov ddio_startrec,dx ! mov ddio_dmaoff,bx
+	mov ddio_dmaseg,si ! mov dx,offset ddio_op
+
+;	push ds
+	mov es,sysdatseg ! mov si,es:RLR
+	mov ax,es:PD_UDA[si] ! mov es,ax
+	mov es:U_WRKSEG,ds ! mov ds,sysdatseg
+
+	mov cl,BDOS_DDIO_OP
+	callf dword ptr BDOS_ENTRY
+		; Words of wisdom
+		; If al is 0 then there was no error
+		; else al indicates an error and ah is the extended error (see
+		; the system guide for exact meaning).
+
+;	pop ds
+
+	or al,al ! jz dio_25_exit	;carry flag = 0
+		; Bad news
+		; We got an error.  DOS programs will not understand our error
+		; code in al so lets convert the physical error(ah) into a
+		; logical DOS error while converting some extended errors to
+		; ones we believe DOS returns.
+
+	mov	cx,cs
+	mov	es,cx
+	mov	di,offset phy_disk_error
+	mov	al,ah			; Lets look up the DOS logical
+	mov	cx,9			; error
+	repne	scasb
+	jnz	wow			;NO match in table return general error
+		; DI pts past match
+	mov	al,es:8[di]		; get logical error number
+	cmp	cl,3			; Is this a physical error that needs
+					; to be changed?
+	jge	int25_1			; NO
+	mov	ah,es:11[di]		; convert it then
+	jmps	int25_1
+
+wow:
+	mov	ah,0ch			; return general error
+
+int25_1:
+	stc
+
+dio_25_exit:
+	pop es ! pop ds
+	retf
+
+eject
+
+INT_26_LOC	equ	word ptr 26H*4
+
+absolute_disk_write:
+;=====
+;=====
+int_26:
+;=====
+;=====
+;
+;	Absolute Disk Write
+;
+;	entry:	al = drive number
+;		ds = DMA segment
+;		bx = DMA offset
+;		cx = number of sectors
+;		dx = beginning relative sector
+;
+;	exit:	C flag = 0 if successful
+;		       = 1 if unsuccessful
+;		ax = error code(if CF = 1)
+;		  ah physical error
+;		  al logical error
+;		User orginal flags left on stack
+;
+
+	sti
+
+	push ds ! push es
+
+	mov si,ds			;save ds
+	call get_data_seg
+
+	mov ddio_op,DIO_26_WRITE_OP
+	jmps int_25_26_com
+
+
+phy_disk_error	db	02h,03h,40h,04h,80h,08h,10h,20h,01h  ; XIOS Physical
+		db	0ch,00h,06h,08h,02h,04h,04h,0ch,0ch  ; DOS Logical
+		db				08h,02h,02h  ; DOS Physical
+
+
+eject
+
+INT_27_LOC	equ	word ptr 27H*4
+
+terminate_stay:
+;=====
+;=====
+int_27:
+;=====
+;=====
+;
+;	Terminate but stay resident
+;
+;	NOT PERMITTED
+;
+;	entry:
+;
+;	exit:
+;
+
+
+	iret
+
+
+eject
+
+;
+;	CONSOLE HANDLERS
+;
+CR	equ	0dh
+LF	equ	0ah
+TAB	equ	9
+CNTRLC	equ	3
+CTLH	equ	8
+CTLU	equ	15h
+CTLR	equ	12h
+CTLS	equ	13h
+CTLQ	equ	11h
+CTLP	equ	10h
+CTLE	equ	5
+CTLX	equ	18h
+RUBOUT	equ	7FH
+
+
+
+ms_conin:
+;=======
+;
+;	Function:	01h
+;
+;	In ->	AH = 01h
+;
+;	exit:	AL = charcter		;return console char with echo
+;
+
+	call conech			;get a character
+	mov ret_al,al
+	ret
+
+
+eject
+
+ms_conout:
+;========
+;
+;	Function:	02h
+;
+;	entry:	AH = 02h
+;		DL = character to display
+;
+;	exit:	If error
+;		    C  = On
+;		    AX = error code
+
+					;write console char with TAB expansion
+	mov cl,dl
+	jmp tabout
+
+
+eject
+
+ms_auxin:
+;=======
+;
+;	Function:	03h
+;
+;	entry:	AH = 03h
+;
+;	exit:	AL = Character
+;
+
+	mov	cl,ah			; int E0 likes cl to have function no.
+	call	bdos
+	mov	ret_al,al
+
+	ret
+
+
+eject
+
+ms_auxout:
+;========
+;
+;	Function:	04h
+;
+;	entry:	AH = 04h
+;		DL = Character to output
+;
+;	exit:
+;
+
+	mov	cl,ah		; int e0 function number is the same
+	mov	al,dl		; int e0 likes al to have character to output
+	call	bdos
+
+	ret
+
+
+eject
+
+ms_list:
+;======
+;
+;	Function:	05h
+;
+;	entry:	AH = 05h
+;		DL = character to output to printer
+;
+;	exit:	If error
+;		   C = on
+;		   AX = error code
+;
+
+	mov cl,FLIST
+	call bdos
+	ret
+
+
+eject
+
+ms_rawio:
+;=======
+;
+;	Function:	06h
+;
+;	entry:	AH = 06h
+;		DL = 0FFh or Output char
+;
+;	exit:	If DL = 0FFh on input
+;		AL = Input char
+;
+;	direct console i/o
+
+	cmp dl,0FFH ! jne raw_out
+	  les si,dword ptr ms_sp
+	  or es:byte ptr 6[si],01000000B	;set zero flag
+	  call getstat ! jz dont_clear_flag	;don't set flag
+	    and es:byte ptr 6[si],10111111B	;clear zero flag
+	    call conin
+dont_clear_flag:
+	  mov ret_al,al
+	  ret	
+raw_out:
+	mov cl,dl
+	jmp putchar
+
+
+eject
+
+ms_rawin_noecho:
+;==============
+;
+;	Function:	07h
+;	get character with no echo
+;
+;	entry:	AH = 07h
+;
+;	exit:	AH = character
+;
+
+	call conin
+	mov ret_al,al
+	ret
+
+
+eject
+
+ms_conin_noecho:
+;==============
+;
+;	Function:	08h
+;	get character with no echo and check for control break
+;
+;	entry:	AH = 08h
+;
+;	exit:	AL = character
+;
+
+	call conin
+	mov ret_al,al
+	cmp al,CNTRLC ! jne xms_conin_noecho
+	int 23h				;control-break exit
+xms_conin_noecho:
+	ret
+
+
+eject
+
+ms_pbuf:
+;======
+;
+;	Function:	09h
+;	print string
+;
+;	entry:	AH = 09h
+;		DS:DX = address of character string
+;
+;	exit:	If error
+;		    C = on
+;		    AX = error code
+;
+
+	mov cx,dx			;cx = string address
+
+	push ds
+	mov ax,es ! mov ds,ax		;es = USER ds
+	call print			;output to console
+	pop ds
+
+	ret
+
+
+eject
+
+ms_rdbuf:
+;=======
+;
+;	Function:	0Ah
+;	read a buffered console line
+;
+;	entry:	AH = 0Ah
+;		DS:DX = pointer to input buffer
+;
+;	exit:	If error
+;		    C = On
+;
+;		    AX = error code
+;
+
+	mov rdbuf_dx,dx
+	jmp read
+
+
+eject
+
+ms_const:
+;=======
+;
+;	Function:	0Bh
+;	check console status
+;
+;	entry:	AH = 0Bh
+;
+;	exit:	AL = 0FFh if char available
+;		AL = 00h otherwise
+;
+
+	call conbrk
+	mov ret_al,al
+	ret
+
+
+eject
+
+conin:
+;----
+					;read console character to al
+	mov ax,ros_char
+	or ax,ax ! jz conin2
+
+	    cmp ext_char,TRUE ! je get_ext_char
+
+		or al,al ! jnz clear_ros_char
+
+		    mov ext_char,TRUE
+		    ret
+
+get_ext_char:
+		    mov al,ah
+
+clear_ros_char:
+		mov ext_char,FALSE
+		mov word ptr ros_char,0
+		ret
+
+conin2:
+	    call get_char
+	    or al,al ! jnz not_ext_char
+
+		mov ext_char,TRUE
+		mov ros_char,ax
+
+not_ext_char:
+	    ret
+
+
+eject
+
+conech:
+;-----
+				;read and echo the character
+	call conin
+	call echoc
+	jb ret0			;return if carry set
+				;echo char before return
+	push ax ! mov cl,al
+	call tabout
+	pop ax
+	ret			;return with character in al
+
+echoc:
+				;echo character if graphic
+				;CR,LF,TAB,or backspace
+	cmp al,CR ! je ret0
+	  cmp al,LF ! je ret0
+	    cmp al,TAB ! je ret0
+	     cmp al,CTLH ! je ret0
+	       cmp al,' '
+ret0:
+	ret				;carry set if not graphic
+
+
+eject
+
+conbrk:
+;-----
+					;check for character
+	call getstat ! jz conbrk_exit	;return if no character
+	    				;character ready,read it
+	 call conin
+	 cmp al,CNTRLC ! jne not_CNTRLC
+	   mov word ptr ros_char,0
+	   jmp c_term
+not_CNTRLC:				;not a terminate
+	 cmp al,CTLS ! jne conb0		;check stop screen function
+					;found CTLS,read next char
+conbrk_loop:
+	   call conin
+	   cmp al,CNTRLC ! jne not_ctrlc
+	     mov word ptr ros_char,0
+	     jmp c_term
+not_ctrlc:
+	   cmp al,CTLQ ! jne conbrk_loop
+	     xor ax,ax ! mov word ptr ros_char,0
+conbrk_exit:
+	ret
+
+conb0:
+	mov ros_char,ax
+	mov ext_char,FALSE		;* as if we were never here
+conb1:
+					;return TRUE
+	mov al,TRUE
+	ret
+
+
+eject
+
+conout:
+;-----					;compute character position/write console
+					;compcol = true if computing
+					;  column position
+
+	test compcol,0FFH ! jnz compout
+					;write the character,
+					;then compute the column
+					;write console char from cl\
+	call conbrk			;check for stop screen function
+	call putchar			;put the character to the console
+	test listcp,0FFH ! jz compout	;test for copying to list device
+	  push cx
+	  call ios_list			;output the char to the printer
+	  pop cx
+
+compout:
+	mov al,cl			;recall the character
+					;and compute column position
+					;  al = char
+	cmp al,RUBOUT ! jz ret1		;no column change if nulls
+	  inc column			;column = column + 1;
+	  cmp al,' ' ! jae ret1		;return if not a control char
+	    dec column			;not graphic reset column
+	    jz ret1			;return if at zero
+					;  not a zero,may be backspace
+					;  or end of line
+	      cmp al,CTLH ! jnz notbacksp
+		dec column		;backspace char,decrement column
+ret1:
+	ret
+notbacksp:
+					;not a backspace,eol?
+	cmp al,LF ! jnz not_eol		;return if not end of line
+	  mov column,0			;end of line column = 0
+not_eol:
+	ret
+
+
+eject
+
+ctlout:
+					;print cl char with possible preceding
+					; up - arrow
+	mov al,cl
+	call echoc			;try if not graphic or spec.
+	jae tabout			;skip if graphic or TAB,CR,LF,or CTLH
+	  push ax
+	  mov cl,'^'			;send preceding up - arrow
+	  call conout
+	  pop cx
+	  or cl,40H			;becomes graphic letter
+					;ready to print
+
+tabout:
+					;expand tabs to console
+	cmp cl,TAB ! jnz conout		;direct to console if not TAB
+tab0:
+	  mov cl,' '
+	  call conout			;another blank
+	  mov al,column
+	  and al,7 ! jnz tab0		;column mod 8 = 0?
+ret2:
+	ret
+
+backup:
+					;back up one position
+	call pctlh
+	mov cl,' '
+	call putchar
+
+pctlh:
+					;send CTLH to console without affecting
+					;column count
+	mov cl,CTLH
+	jmp putchar
+
+crlfp:
+					;print #,CR,LF,for CTLX,CTLU,CTLR
+					;function then move to starting column
+	mov cl,'#'
+	call conout
+	call crlf
+					;column = 0,move to starting column
+crlfp0:
+	mov al,column
+	cmp al,strcol ! jae ret2
+	  mov cl,' '
+	  call conout			;print blank
+	  jmps crlfp0
+
+crlf:
+					;carriage return line feed sequence
+	mov cl,CR
+	call conout
+	mov cl,LF
+	jmp conout
+
+
+eject
+
+print:
+					;print message until '$'
+	mov si,cx
+	lods al
+	cmp al,'$'
+	je ret2				;return if '$'
+					; else more to print
+	  inc cx
+	  push cx
+	  mov cl,al			;char to cl
+	  push ds ! push ss		;restore data segment
+	  pop ds
+	  call tabout			;another character printer
+	  pop ds ! pop cx
+	  jmps print
+
+
+eject
+
+read:
+	mov al,column
+	mov strcol,al			;save start for clt-x,ctl-h
+	mov bx,rdbuf_dx
+	mov cl,es:[bx]			;cl = maximum buffer length
+	inc bx				;bx = next to fill - 1
+	push bx
+	mov ch,0			;ch = current buffer length
+
+readnx:
+					;read next character,cx,bx active
+	push cx ! push bx		;blen,cmax,bx saved
+readn0:
+	call conin			;next char in al
+	pop bx ! pop cx			;reactivate counters
+	cmp al,CR ! jnz l_19
+eofre:
+	  jmp readen
+l_19:
+					;end of line
+	cmp al,LF ! je eofre		;jump to end of read if LF
+	cmp al,CTLH ! jnz noth		;backspace?
+					;do we have any chars to backspace
+	  or ch,ch ! jz readnx
+					;characters remain in buffer,backup one
+	  dec ch			;remove one char
+	  mov al,column
+	  mov compcol,al		;col > 0; compcol > 0 marks repeat as
+					;length comput
+	  jmp linelen			;uses same code as repeat
+noth:
+					;not a backspace
+	cmp al,RUBOUT ! jnz notrub	;RUBOUT char?
+	  or ch,ch ! jz readnx		;skip if len = 0
+					;buffer has char,resend last char
+	  mov al,es:[bx]		;al = last char
+	  dec ch ! dec bx		;blen=blen-1
+					;next to fill -1 decremented
+	  jmp rdech1			;act like this is an echo
+
+notrub:
+					;not a RUBOUT char,check eol
+	cmp al,CTLE ! jnz note		;physical end of line?
+					;yes,save active counters
+					;and force eol
+	  push cx ! push bx
+	  call crlf
+	  mov strcol,0			;start position = 0
+to_readn0:
+	  jmps readn0			;for another character
+
+note:
+					;not end of line list toggle?
+	cmp al,CTLP ! JMPNZ notp		;skip if not CTLP
+	  push cx ! push bx
+	  xor cx,cx ! mov bx,cx
+	  push es
+	  mov es,sysdat
+	  mov si,es:RLR
+	  mov bl,es:PD_LIST[si]		;get default list device
+	  mov list_no,bl		;save it away for later
+	  mov si,0C16h
+	  mov di,es:word ptr [si]	;get LCB root
+	  dec si ! dec si
+	  mov si,es:word ptr [si]	;get CCB root
+	  mov cl,console_no		;get default console no
+	  mov ax,2ch			;CCB length
+	  mul cl ! add si,ax		;si points to correct CCB
+	  mov ax,10			;LCB length
+	  mul bl ! add di,ax		;di points to correct LCB
+	  test listcp,0FFH ! jz setup_cntrlp
+	    mov es:word ptr [di],0	;no owner
+	    mov es:byte ptr 9[di],0FFH	;no mimic LCB
+	    mov es:byte ptr 8[si],0FFH	;no mimic CCB
+	    and es:word ptr 14[si],0FDFFH	;turn off cntrlp flag
+	    mov listcp,FALSE
+	    jmps cntrlp_exit
+
+setup_cntrlp:
+	  cmp es:word ptr [di],0	;does someone own this printer
+	  jz setup_cntrlp1		;no - then grab it
+	    mov cx,offset printer_busy_msg
+	    call print
+	    jmps cntrlp_exit
+
+setup_cntrlp1:
+	  mov es:word ptr [di],0FFFFH	;no owner
+	  mov es:byte ptr 9[di],cl	;no mimic LCB
+	  mov es:byte ptr 8[si],bl	;no mimic CCB
+	  or es:word ptr 14[si],0200H	;turn on cntrlp flag
+	  mov listcp,TRUE
+
+cntrlp_exit:
+	  pop es ! pop bx ! pop cx
+	  jmp readnx
+
+notp:
+	cmp al,CTLX ! jnz notx		;not a CTLP,line delete?
+	  pop bx			;discard start position
+					;loop while column > strcol
+backx:
+	mov al,strcol
+	cmp al,column ! jnb read_jmp
+	  dec column
+	  call backup
+	  jmps backx
+
+notx:
+				;not a CTLX,CTLU?
+	cmp al,CTLU ! jnz notu		;skip if not
+	  call crlfp
+	  pop bx
+
+read_jmp:
+	  jmp read
+
+notu:
+					;not line delete,repeat line?
+	cmp al,CTLR ! jnz notr
+
+linelen:				;repeat line,or compute line len (CTLH)
+					;if compcol > 0
+	push cx
+	call crlfp			;save line length
+	pop cx ! pop bx			;bcur,cmax active
+	push bx ! push cx		;beginning at bx
+
+rep0:
+	or ch,ch ! jz rep1		;count len to zero
+	  inc bx
+	  mov cl,es:[bx]		;next to print
+	  dec ch
+	  push cx ! push bx		;count length down
+	  call ctlout
+	  pop bx ! pop cx		;recall remaining count
+	  jmp rep0			;for the next char
+
+rep1:
+					;end of repeat,recall lengths
+					;original bx remains pushed
+	push bx				;save next to fill
+	mov al,compcol
+	or al,al ! jz backsp1		;>0 if computing length
+	  sub al,column
+	  mov compcol,al
+
+backsp:
+	call backup
+	dec compcol ! jnz backsp
+
+backsp1:
+	jmp to_readn0
+
+notr:
+	cmp al,CNTRLC ! jnz notc
+	  mov ax,ds ! mov es,ax
+	  jmp c_term
+
+notc:
+					;not a ctrl,place into buffer
+rdecho:
+	cmp ch,cl ! jae dont_echo
+	inc bx
+	mov es:[bx],al			;character placed into memory
+	inc ch
+
+rdech1:
+					;look for random contrl char
+	push cx ! push bx		;active values saved
+	mov cl,al			;ready to print
+	call ctlout			;may be up-arrow C
+	pop bx ! pop cx
+
+dont_echo:
+	jmp readnx			;go for another if no
+
+readen:
+					;end of read,store blen
+	inc bx
+	mov es:byte ptr [bx],CR
+	pop bx
+	mov es:[bx],ch
+	mov ax,ds ! mov es,ax		;restore es
+	mov cl,CR
+	jmp conout
+
+c_term:
+	mov sp,offset ms_bp		;reset stack
+	pop bp ! pop di ! pop es
+	pop si ! pop dx ! pop cx		;throw away first ds
+	pop cx ! pop bx ! pop ax
+	cli
+	mov ss,ms_ss
+	mov sp,ms_sp
+	pop ds			;restore program ds
+	sti
+	int 23h
+	jmp terminate
+
+
+
+
+getstat:
+	mov ax,ros_char
+	or ax,ax ! jnz getstat_exit
+	  push cx
+	  mov dl,0FEH
+	  mov cl,FRAWIO
+	  call bdos
+	  pop cx
+	  or al,al
+
+getstat_exit:
+	ret
+
+
+
+
+putchar:
+	push cx
+	mov dl,cl
+	mov cl,FRAWIO
+	call bdos
+	pop cx
+	ret
+
+
+eject
+
+ms_clear_in:
+;==========
+;
+;	Function:	0Ch
+;	CLEAR rawbuf,EXECUTE FUNCTION al
+;
+;	entry:	AH = 0Ch
+;		AL = 1,6,7,8 or A
+;
+;	exit:	If error
+;		    C = on
+;		    AX = error code
+;
+
+	mov raw_flag,FALSE
+	push ax
+
+drain_buf:
+	    mov cl,C_RAWIO ! mov dl,0FFh
+	    call bdos
+	or al,al ! jnz drain_buf
+
+	pop ax
+
+	cmp al,1  ! je al_OK
+	cmp al,6  ! je al_OK
+	cmp al,7  ! je al_OK
+	cmp al,8  ! je al_OK
+	cmp al,0AH ! je al_OK
+	  mov ret_al,0
+	  ret				;DO NOTHING IF BAD COMMAND
+al_OK:
+	mov ah,al
+	inc sp ! inc sp			;KILL RETURN ADDR
+	jmp bdos_re_entry
+
+
+eject
+
+ms_reset:
+;=======
+;
+;	Function:	0Dh
+;	Disk Reset
+;
+;	entry: AH = 0Dh
+;
+;	exit:	RESET DRIVES,SET DEFAULT=A,FLUSH BUFS
+;		SET DMA TO DS:80h
+;
+;
+	mov cl,FFLUSHBUF		;FLUSH BUFFERS FOR CCP/M
+	mov ax,3
+	call check_error 		;check for extended errors
+
+	mov cl,FRESET
+	call bdos
+
+	mov dx,80H
+	jmp ms_setdma
+
+
+eject
+
+ms_seldsk:
+;========
+;
+;	Function:	0Eh
+;	Select Disk
+;
+;	entry: DL = DRIVE TO SET DEFAULT (0=A)
+;
+;	exit:	AL = Number of Drives in System
+;
+
+
+		; Lets count the number of Logical drives in the system
+
+	mov es,sysdat ! mov si,0C18H	;es:si points to CCP/M DPH table
+	mov cx,16 ! xor bl,bl
+
+drv_cnt_loop:
+	    lods es:ax
+	    or ax,ax ! jz dont_inc_count
+		inc bl
+dont_inc_count:
+	loop drv_cnt_loop
+
+	mov ret_al,bl			; save of result
+
+	push dx
+	mov ah,0100b
+	mov al,dl
+	mov cl,FSELDSK
+	call check_error
+	pop dx
+
+	or al,al ! jne ms_seldsk_exit
+	    mov cur_dsk,dl		;save the default drive
+	    mov temp_dsk,dl
+
+		; al,dl,si are variables to SET_PARENTS_PD
+	    mov si,PDS_DSK
+	    mov al,1
+	    call set_parents_pd		; make the MS_SELDSK call global
+
+ms_seldsk_exit:
+
+	ret
+
+
+eject
+
+set_parents_pd:
+;
+; sets our and our parents PD field to the specified value
+;
+;	entry:	AL = 1 for byte  2 for word operations
+;		     1 byte support only at this time
+;		DX = value to give to all relatives
+;		SI = offset of location to poke with parents PD
+;
+	push	es
+	mov	es,sysdat
+	mov	bx,es:RLR		; get our PD
+next_gen:
+;*	cmp	al,1
+;*	jne	poke_word
+	mov	es:byte ptr [bx+si],dl	; poke it
+;*	jmps	s_p_p_1
+;*poke_word:
+;*	mov	es:word ptr [bx+si],dx
+;*s_p_p_1:
+	mov	bx,es:PD_PARENT[bx]	; get a relative
+	cmp	bx,0			; Do we have a relative?
+	jne	next_gen		; YES
+
+	pop	es
+
+set_parent_pd_exit:
+
+	ret
+
+
+check_for_device:
+;
+;	entry:	es:si	= ptr to unextended dos fcb
+;	exit:	ax	= 0 if not device,else device code
+;		es:si	= ptr to unextended DOS fcb
+;		es:di	= ptr to unextended DOS fcb
+;		zf	= set with relation to ax
+;
+
+	xor ax,ax
+	mov di,si
+	cmp es:byte ptr 1[si],'?' ! je device_check_exit
+	  inc si
+	  mov di,offset device_names
+cont_check:
+ 	  push di ! push si
+	  mov cx,8
+scan_name:
+	  lods es:al					;get char from ms fcb
+	  and al,7FH
+	  cmp al,'a' ! jb already_upper_case
+	    cmp al,'z' ! ja already_upper_case
+	      and al,5FH				;up case the char
+already_upper_case:
+	  cmp cs:[di],al!jne not_equal
+	    inc di
+	    loop scan_name
+not_equal:
+	  pop si
+	  or cx,cx ! jz found_device
+	    pop di
+	    add di,9
+	    cmp di,DEVICE_NAMES_END ! jne cont_check
+	    dec si
+	    mov di,si
+	    xor ax,ax
+	    jmps device_check_exit
+found_device:
+	  mov al,cs:[di]
+	  pop di
+	  dec si
+	  mov di,si
+device_check_exit:
+	mov file_device_code,al		; wtf?
+	mov es:MS_DEVICE_CODE[di],al
+	or ax,ax
+	ret
+
+
+eject
+
+ms_open:
+;======
+;
+;	Function:	0Fh
+;	Open file
+;
+;	entry:	ms_ds_dx = unopened fcb
+;		ES:DX    = unopened fcb
+;
+;	exit:	ret_al   = 000H = success
+;		         = 0FFH = error
+
+	mov ret_al,0				;initialize for success
+	call check_extended			;returns es:si,di = offset of dos fcb
+	add di,12				;di points past file type
+
+;	xor ax,ax ! mov cx,21
+
+	mov es:word ptr [di],0
+
+;	rep stosb				;zero 2 bytes after the file type
+
+	mov es:word ptr MS_REC_SIZE[si],80H	;set default record size
+	call set_def_drv_byte			;set fcb drive byte to current drive if zero
+	call check_for_device ! jz not_opening_device
+
+;	  mov es:byte ptr MS_DEVICE_CODE[di],al	;opening device
+
+	  call no_timedate_stamp
+	  mov es:MS_DATE[di],dx			;set current date in dos fcb
+	  mov es:MS_DATE+2[di],cx		;set current time in dos fcb
+	  cmp al,0FEH				; Is this an AUX open?
+	  jne noauxopen				; NO
+	  mov cl,A_ATTACH			; do an attach call for user
+	  call bdos
+
+noauxopen:
+
+	  ret
+
+not_opening_device:
+	cmp ms_ah,FCREATE ! jne opening_file
+	  push MS_AX
+	  push RET_AX
+	  call ms_delete
+	  pop RET_AX
+	  pop MS_AX
+	  jmps cont_open
+
+opening_file:
+	call find_fcb ! jnz cont_open		;found the open fcb
+	  mov bx,cpm_fcb
+	  cmp bx,buffer_fcb ! jne not_open_file_buffer
+	    mov buffer_activeb,FALSE		;discard the deblocking buffer
+	    mov buffer_writtenb,FALSE		;if re-opening file
+
+not_open_file_buffer:
+	  mov dx,bx				;move cpm fcb offset into dx
+	  push bx				;save cpm fcb offset in bx
+	  mov cl,FCLOSE
+	  mov al,[bx] ! dec al ! mov ah,0101B
+	  call check_error
+	  pop bx				;restore cpm fcb in bx
+	  mov word ptr 12[bx],0
+	  mov word ptr 14[bx],0
+	  jmps good_allocate			;ignore close errors
+
+cont_open:
+	call allocate_fcb ! JMPNZ xms_open_error2
+
+good_allocate:
+	mov bx,cpm_fcb
+	mov cl,ms_ah				;get open or create function code
+	mov byte ptr CPM_CR[bx],0		;signal return byte count from open
+	mov ah,101B				;writing to directory
+	cmp cl,FCREATE ! je dont_get_byte_cnt
+	  mov byte ptr CPM_CR[bx],0FFH		;signal return byte count from open
+	  mov ah,100B				;reading directory
+
+dont_get_byte_cnt:
+	mov dx,bx
+						;open or create the file
+	mov al,[bx] ! dec al
+	call check_error
+	mov bx,dx
+	cmp al,0FFH ! je xms_open_error1
+          mov si,cpm_fcb ! mov bx,si
+	  call check_dos_media_fcb ! jz not_hidden
+	    test byte ptr 16[si],2 ! jz not_hidden
+	      call close_file
+	      jmps xms_open_error1
+
+not_hidden:
+	  push di ! push es			;save dos fcb ptr
+	  mov ax,ds ! mov es,ax
+	  mov cx,6
+	  mov di,offset search_fcb
+	  rep movsw				;copy file name to search fcb
+	  pop es ! pop di			;restore dos fcb ptr
+	  mov si,dx				;si = offset of cpm_fcb
+	  push si				;save offset of cpm fcb
+	  call get_file_timedate
+	  mov es:MS_DATE[di],dx			;set date in dos fcb
+	  mov es:MS_DATE+2[di],cx		;set time in dos fcb
+	  pop si ! mov dx,si
+	  call get_filesize
+	  mov CPM_CR[si],0			;zero the cpm_fcb current record
+	  mov es:MS_FILE_SIZE[di],ax		;set low order word of filesize
+	  mov es:MS_FILE_SIZE+2[di],dx		;set high order word of filesize
+
+xms_open:
+	ret
+
+xms_open_error1:
+	call kill_fcb
+
+xms_open_error2:
+	mov ret_al,0FFH
+	ret
+
+
+eject
+
+get_filesize:
+;	entry:	es:di	   = address of dos fcb
+;		ds:si,dx   = address of cpm fcb
+;	exit	dx:ax	   = filesize
+	
+	mov bx,si
+	call check_dos_media_fcb ! jnz dos_media_filesize
+	  mov cl,FSIZE
+	  mov dx,offset search_fcb
+	  mov al,search_fcb
+	  dec al ! mov ah,0100b
+	  call check_error
+	  cmp al,0FFH ! je get_filesize_error
+	    push si
+	    mov si,dx
+	    mov ax,cpm_r01[si]
+	    mov dl,cpm_r2[si]
+	    xor dh,dh
+	    call rdmul128
+	    pop si
+	    mov cl,CPM_CR[si]				;get byte count
+	    cmp ms_ah,FSEARCH ! je get_dir_byte_count
+	      cmp ms_ah,FSEARCH_NEXT ! jne cont_get_filesize
+get_dir_byte_count:
+	        mov cl,byte ptr 13[si]			;get dir byte count
+cont_get_filesize:
+	    or cl,cl ! jz cpm_cr_zero
+	      mov bx,128
+	      sub bl,cl
+	      sub ax,bx ! sbb dx,0
+cpm_cr_zero:
+	    ret
+dos_media_filesize:
+	mov ax,cpm_filesize[si]
+	mov dx,cpm_filesize+2[si]
+	ret
+get_filesize_error:
+	mov al,0FFH
+	ret
+ 
+get_file_timedate:
+;	entry:	search_fcb = file to get time stamp of
+;		es:di	   = address of dos fcb
+;		ds:si,dx   = address of cpm fcb
+;	exit:	dx	   = date in dos fcb format
+;		cx	   = time in dos fcb format
+
+	mov bx,si
+	call check_dos_media_fcb ! jnz dos_media_timedate
+	  cmp ms_ah,FSEARCH_NEXT ! jz skip_get_label
+	    mov dl,search_fcb ! dec dl	;get drive
+	    mov cl,FGETLABEL
+	    mov al,dl
+	    mov ah,0100b
+	    call check_error
+	    mov label_info,al		;save the label information
+
+skip_get_label:
+	  mov cl,FTIMEDATE
+	  mov dx,offset search_fcb
+	  mov si,dx
+	  mov al,search_fcb
+	  dec al ! mov ah,0100b
+	  call check_error
+	  or al,al ! jnz no_timedate_stamp
+	    test label_info,20H ! jz try_create
+	      mov ax,28[si]			;get update date
+	      mov bx,30[si]			;get update time
+	      jmps cont_get_timedate
+
+try_create:
+	    test label_info,10H ! jz no_timedate_stamp
+	      mov ax,24[si]			;get creation date
+	      mov bx,26[si]			;get creation time
+
+cont_get_timedate:
+	    push ax
+	    or ax,bx ! pop ax ! jz no_timedate_stamp
+	      push bx				;save update time
+	      call set_MS_DATE
+	      mov  dx,ax			;store date dx
+	      pop ax				;restore update time
+	      call set_ms_time
+	      mov cx,ax				;store time in cx
+	      ret
+
+no_timedate_stamp:
+;	    push es
+;	    les si,TOD_PTR
+;	    mov ax,es:[si]			;get current cpm date
+;	    mov bx,es:2[si]			;get current cpm time
+;	    pop es
+;	    push bx				;save cpm time
+;	    call set_MS_DATE
+;	    mov  dx,ax				;store date in dx
+;	    pop ax				;restore cpm time	    
+;	    call set_ms_time
+;	    mov cx,ax				;store time in cx
+	    xor cx,cx
+	    mov dx,cx
+	    ret
+dos_media_timedate:
+	mov ax,24[si]				;get dos media date stamp
+	mov dx,ax				;store in dx
+	mov ax,22[si]				;get dos media time stamp
+	mov cx,ax				;store in cx
+	ret
+
+
+eject
+
+set_MS_DATE:
+;	entry:	ax	= cpm date
+;	exit:	ax	= dos fcb format date
+;		es:di,si preserved
+
+	push si ! push di			;save dos fcb offset
+	call trans_date
+	pop di					;restore dos fcb offset
+	sub cx,1980				;get number of years since 1980
+	xor ax,ax ! mov bx,ax
+	mov ah,cl ! shl ax,1
+	mov bl,dh ! mov cl,5 ! shl bx,cl
+	or ax,bx				;or months(bx) with years(ax)
+	xor dh,dh ! or ax,dx			;or days(dx) with years and months(ax)
+	pop si					;restore si
+	ret
+
+set_ms_time:
+;	entry	ah 	= cpm minutes
+;		al	= cpm hours
+;	exit:	ax	= dos fcb format time
+;	dx preserved
+
+	push dx ! push ax
+	call d_bcd				;convert bcd hours to binary
+	mov ah,al ! xor al,al
+	shl ah,1 ! shl ah,1 ! shl ah,1		;shift hour left 3
+	mov dx,ax				;save hours
+	pop ax ! mov al,ah			;restore update time
+	call d_bcd				;convert bcd minutes to binary
+	xor ah,ah ! mov cl,5 ! shl ax,cl		;shift minutes left 5
+	or ax,dx				;combine hours and minutes
+	pop dx
+	ret
+
+set_def_drv_byte:
+;	entry:	es:si	= dos fcb ptr
+
+	cmp es:byte ptr [si],0 ! jnz xset_def_drv_byte
+	  mov cl,FGET_DRIVE ! call bdos
+	  mov cur_dsk,al
+	  mov temp_dsk,al
+	  inc al
+	  mov es:[si],al			;place cur_disk in dos fcb drive byte
+xset_def_drv_byte:
+	ret
+
+
+eject
+
+ms_close:
+;=======
+;
+;	Function:	10h
+;	Close file
+;
+;	entry:	ms_ds_dx = opened dos fcb
+;		es:dx    = opened dos fcb
+;
+;	exit:	ret_al   = 000H = success
+;		         = 0FFH = error
+;
+
+	call check_extended			;returns es:si,di = offset of dos fcb
+ms_close2:
+	mov ret_al,0				;initialize return code to success
+	call check_file_device ! JMPNZ auxclose	;exit if device specified
+	  call find_fcb ! JMPNZ xms_close2	;exit if fcb not in table return success
+	    mov bx,cpm_fcb			;bx = offset of cpm fcb
+	    cmp bx,buffer_fcb ! jne skip_flush2
+	      push bx ! push di !push es
+	      call flush_buffer
+	      pop es ! pop di ! pop bx
+skip_flush2:
+	    test cpm_written[bx],0FFH		;if file hasn't been written
+	    jz file_not_written_to		;  then skip this stuff
+	      mov ax,es:word ptr MS_FILE_SIZE[di];di = offset of dos fcb
+	      mov dx,es:word ptr MS_FILE_SIZE+2[di]
+	      call rddiv128 ! or ch,ch ! jz skip_1a_set
+	        mov cpm_r01[bx],ax		;set low order random word
+	        mov cpm_r2[bx],dl			;set high random byte
+	        push cx ! push bx			;save remainder and cpm fcb offset
+	        call activate_buffer		;get last record of file
+	        pop bx ! pop cx			;restore cpm fcb offset and remainder
+		or al,al ! jnz xms_close_error
+	        mov buffer_writtenb,TRUE		;set buffer dirty flag
+	        mov al,ch ! xor ah,ah ! mov di,ax
+fill_1a_loop:
+	        mov byte ptr buffer[di],1AH	;fill to end of buffer with 1AH's
+	        inc di
+	        cmp di,80H ! jne fill_1a_loop
+skip_1a_set:
+	      cmp bx,buffer_fcb ! jne skip_flush	;flush the buffer if for this file
+	        push bx ! push cx
+	        call flush_buffer
+	        pop cx ! pop bx
+skip_flush:
+	      push cx				;save byte count
+	      call close_file
+	      pop cx				;restore byte count
+	      cmp al,0FFH ! je xms_close_error ;exit with error
+	        or byte ptr cpm_f6[bx],80H	;set high bit for set byte count
+	        mov byte ptr CPM_CR[bx],ch	;set byte count
+	        mov cl,FSET_ATTR
+	        				;dx = offset of cpm fcb
+		mov al,[bx] ! dec al ! mov ah,0101b
+		call check_error
+skip_set_attr:
+              jmps xms_close
+xms_close_error:
+	    mov ret_al,0FFH			;signal error
+xms_close:
+	  jmp kill_fcb				;delete fcb from FCB table
+auxclose:
+	cmp	es:byte ptr MS_DEVICE_CODE[si],0FEH ; Is this an OX?
+	jne	xms_close2			; NO
+	mov	cl,A_DETACH
+	call	bdos
+
+xms_close2:
+	ret
+
+file_not_written_to:
+	 call close_file
+	 cmp al,0FFH ! je xms_close_error
+	   jmp kill_fcb
+
+close_file:
+	mov dx,bx				;move cpm fcb offset into dx
+	push bx					;save cpm fcb offset in bx
+	mov cl,FCLOSE
+	mov al,[bx] ! dec al
+	mov ah,0101b
+	call check_error
+	pop bx					;restore cpm fcb in bx
+	ret
+
+
+eject
+
+ms_search_first:
+ms_search_next:
+;=============
+;
+;	Functions:	011h & 012h
+;	Search first/next
+;
+;	entry:	ms_ds_dx = unopened fcb
+;		es:dx    = unopened fcb
+;
+;	exit:	ret_al   = 000H = success
+;		         = 0FFH = error
+;
+
+	mov ret_al,0				;initialize for success
+	call check_extended			;returns es:si,di = offset of dos fcb
+	call setup_for_search ! jnz xsearch_error
+	cmp ms_ah,FSEARCH_NEXT ! jne no_state_restore
+	  call get_search_state
+no_state_restore:
+	mov si,offset search_fcb
+  	call check_for_device ! jnz searching_device	;es:si points to search_fcb
+	  call srch ! jnz xsearch_error
+	    inc di				;di points to search fcb+1
+	    push si				;preserve directory fcb offset
+	    inc si				;si point to directory entry+1
+	    mov cx,6				;copy 12 bytes
+	    rep movsw
+	    call copy_fcb_to_dma		;copy search fcb to dos dma
+	    call save_search_state
+	    call save_bdos_state		;preserve the BDOS state
+	    pop si ! push si			;make sure si points to dir entry
+	    call get_file_timedate		;get date and time stamps
+	    mov es:23[di],cx			;store create time in dos fcb
+	    mov es:25[di],dx			;store create date in dos fcb
+	    mov byte ptr search_fcb+20H,0
+	    pop si				;restore address of search buff fcb
+	    call get_filesize			;get the size of the file
+	    mov es:29[di],ax			;store low word of size
+	    mov es:31[di],dx			;store high word of size
+	    call restore_bdos_state		;restore the BDOS state
+	    jmps xsearch			;exit success
+searching_device:
+	  cmp ms_ah,FSEARCH ! jne xsearch_error ;if not search first then error
+	    mov dir_attr,0
+	    call copy_fcb_to_dma		;copy the search fcb to dos dma
+	    call no_timedate_stamp		;get current date and time in dos fcb format
+	    mov es:23[di],cx			;store current time in dos fcb
+	    mov es:25[di],dx			;store current date in dos fcb
+	    jmps xsearch
+xsearch_error:
+	mov ret_al,0FFH				;indicate error on search
+xsearch:
+	les dx,ms_dma_ptr
+	jmp set_dma_ptr				;restore dos dma address
+
+copy_fcb_to_dma:
+;	entry:	none
+;	exit:	es:di	= ptr to dos dma
+
+	les di,ms_dma_ptr			;get the dos dma address
+	mov si,offset search_fcb
+	cmp extended,TRUE ! jne not_ext		;if not extended skip
+	  mov ax,0FFH ! stos ax
+	  xor ax,ax ! stos ax ! stos ax
+	  mov al,attribute ! stos al
+not_ext:
+	push di					;preserve the dma offset
+	mov cx,12
+fcb_shift_loop:
+	lods al ! and al,07FH ! stos al		;clear the high bit during copy
+	loop fcb_shift_loop
+	mov al,dir_attr ! stos al
+	mov cx,19 ! xor ax,ax
+	rep stos al				;fill rest of fcb with zeroes
+	pop di					;restore the dma offset in di
+	ret
+
+setup_for_search:
+	mov ax,es ! mov bx,ds			;switch ds and es
+	mov ds,ax ! mov es,bx
+	mov di,offset search_fcb		;fcb to the search_fcb
+	call init_fcb
+	mov ax,es ! mov ds,ax			;reset ds to local data ds = es
+	mov si,offset search_fcb
+	call set_def_drv_byte
+	  call flush_buffer
+	  mov buffer_activeb,FALSE
+	  mov al,erflag
+	  test al,0FFH ! jnz setup_for_search_error
+	  mov dx,offset buffer			;set dma buffer to local area
+	  call set_dma_ptr			;ds=es
+	  xor al,al
+setup_for_search_error:
+	  or al,al
+	  ret
+
+
+;	entry -	si = unextended cpm fcb
+srch:
+	mov di,si
+	test attribute,8 ! JMPNZ srch_label
+	mov cl,ms_ah
+
+srch_loop:
+	test attribute,10h ! jz search_go
+	    or byte ptr[di],80h
+search_go:
+	call srchf
+	cmp al,0FFH ! JMPE srch_exit2
+	mov dir_attr,0
+	test byte ptr 9[si],80H ! jz not_ro	;test for read/only file
+	  or dir_attr,1
+not_ro:
+	test byte ptr 10[si],80H ! jz not_sys	;test for system file
+	  or dir_attr,4
+not_sys:
+	test byte ptr 11[si],80H ! jnz not_arch	;test for archived file
+	  or dir_attr,20H
+not_arch:
+	mov ax,word ptr 16[si]
+	cmp ah,al ! jne not_subdir
+	test al,80H ! jz not_subdir
+	  test al,20H ! jz file_not_hidden	;test for hidden file
+	    or dir_attr,2
+file_not_hidden:
+	  test al,40H ! jz not_subdir		;test for sub directry entry
+	    or dir_attr,10H
+not_subdir:
+	mov al,attribute ! and al,16H
+	cmp al,0 ! jz srch_normal
+	  mov ah,dir_attr ! and ah,16H
+
+	  not al ! and ah,al		;if normal file found then exit
+	  and ah,al ! jnz srch_again		;did we find an entry with
+						;  the correct attributes
+	     jmps srch_exit1			;no
+srch_normal:
+	test dir_attr,1EH ! jz srch_exit1	;if normal search and file has
+						;  vol lbl,or dir or sys or hidden
+						;  bits set - then search again
+srch_again:
+	  mov cl,FSEARCH_NEXT
+	  jmp srch_loop
+
+srch_exit1:
+	xor ax,ax				; got good dir entry
+
+srch_exit2:
+	or al,al
+	ret
+
+
+srch_label:
+	mov cl,FSELDSK
+	mov dl,[di] ! dec dl
+	mov temp_dsk,dl				;save drive for error handler
+	call bdos
+	mov byte ptr [di],'?'
+	mov cl,FSEARCH
+label_srch_loop:
+	call srchf
+	cmp al,0FFH ! je srch_label_exit
+	  mov cl,FSEARCH_NEXT
+	  cmp byte ptr [si],20H ! jne label_srch_loop ;check for volume label
+	  push es
+	  les bx,MS_FCB_PTR
+	  mov dl,es:[bx]
+	  pop es
+	  or dl,dl ! jnz not_zero_drv
+	    mov dl,cur_dsk
+	    inc dl
+not_zero_drv:
+	  mov [di],dl
+	  mov dir_attr,8				;signal volume label
+	  xor ax,ax
+srch_label_exit:
+	mov cl,FSELDSK
+	mov dl,cur_dsk
+	call abdos
+	or al,al
+	ret
+
+
+srchf:
+	mov dx,di
+	mov al,[di] ! dec al
+	cmp al,'?'-1 ! jne not_question
+	  mov al,temp_dsk
+not_question:
+	mov ah,0100b
+	call check_error
+	cmp al,0FFH ! je srchf_exit
+	  xor ah,ah ! mov cl,5 ! shl ax,cl	;multiply return code by 32
+	  mov si,offset buffer ! add si,ax	;si points to dir entry in buffer
+srchf_exit:
+	ret
+
+
+get_search_state:
+;	entry:	none
+;	exit:	none
+;	ds,es,di,si preserved
+
+	push ds ! push es ! push si ! push di
+	mov es,sysdat
+	mov di,es:RLR
+	mov di,es:PD_UDA[di]
+	mov es,di
+	mov di,0
+	lds si,MS_FCB_PTR
+	mov al,24[si]			;get searchl from fcb
+	mov es:7[di],al			;save in uda
+	mov ax,25[si]			;get dcnt from fcb
+	mov es:12[di],ax		;save in uda
+	mov ax,27[si]			;get extcnt from fcb
+	mov es:14[di],ax		;save in uda
+	pop di ! pop si ! pop es ! pop ds
+	ret
+
+
+save_search_state:
+;	entry:	none
+;	exit:	none
+;	ds,es,di,si preserved
+
+	push ds ! push es ! push si ! push di
+	les di,MS_FCB_PTR
+	mov ds,sysdat
+	mov si,RLR
+	mov si,PD_UDA[si]
+	mov ds,si
+	mov si,0
+	mov al,7[si]			;get searchl
+	mov es:24[di],al		;save in fcb
+	mov ax,12[si]			;get dcnt
+	mov es:25[di],ax		;save in fcb
+	mov ax,14[si]			;get extcnt
+	mov es:27[di],ax		;save in fcb
+	pop di ! pop si ! pop es ! pop ds
+	ret
+
+
+save_bdos_state:
+;	entry:	none
+;	exit:	none
+;	ds,es,di preserved
+
+	push di ! push ds ! push es
+	mov ax,ds ! mov es,ax			;setup for string move
+	mov ds,sysdatseg
+	mov bx,word ptr .68H			;get CCP/M process descriptor addr
+	mov ax,word ptr 10H[bx]			;get CCP/M UDA segment
+	mov ds,ax				;setup ds to UDA segment
+	mov cx,28/2
+	mov di,offset bdos_struct
+	mov si,2				;start of BDOS data within UDA (ds)
+	rep movsw
+	pop es ! pop ds ! pop di
+	ret
+
+restore_bdos_state:
+;	entry:	none
+;	exit:	none
+;	ds,es,di preserved
+
+	push di ! push es
+	mov es,sysdatseg
+	mov bx,es:word ptr .68H		;get CCP/M process descriptor addr
+	mov ax,es:word ptr 10H[bx]		;get CCP/M UDA segment
+	mov es,ax				;setup es to UDA segment
+	mov cx,28/2
+	mov si,offset bdos_struct
+	mov di,2				;start of BDOS data within UDA (es)
+	rep movsw
+	pop es ! pop di
+	ret
+
+
+eject
+
+ms_delete:
+;========
+;
+;	Function:	013h
+;	Delete file
+;
+;	entry:	ms_ds_dx = UNOPENED FCB
+;
+;	exit:	AL = 0FFh IF NOT FOUND
+;		AL = 0 IF FOUND
+;
+;	ALL MATCHES ARE DELETED
+;
+
+	call check_extended
+	call check_for_device ! jz not_deleting_device
+	  mov ret_al,0FFh
+	  ret
+not_deleting_device:
+	mov ret_al,0FFH				;no deletes happened yet
+	call setup_for_search			;prepare to search for the file
+	mov cl,FSEARCH				;search for the file before deleting
+dellab1:
+	mov di,offset search_fcb
+	call srchf
+	cmp al,0FFH ! je xms_delete		;exit if no file found
+	  test byte ptr 9[si],80H ! jnz dellab2	;test for read only file
+	    push si
+	    call save_bdos_state
+	    pop si
+	    mov al,search_fcb			;get the drive
+	    mov [si],al				;store in found fcb [si]
+	    mov cl,FDELETE
+	    mov dx,si				;set address of fcb to delete
+	    					;try to delete the file
+	    mov al,[si] ! dec al			;al has drive byte
+	    mov ah,0101b
+	    call check_error
+	    or al,al ! jnz xms_delete		;delete failed - exit
+	      push ms_fcb			;save MS_FCB_PTR
+	      push ms_fcb+2
+	      mov word ptr ms_fcb,si		;offset of current del fcb
+	      mov word ptr ms_fcb+2,ds		;segment of current del fcb
+	      call find_fcb ! jnz dont_kill_entry
+	        call kill_fcb
+
+dont_kill_entry:
+	      pop ms_fcb+2			;restore MS_FCB_PTR
+	      pop ms_fcb
+	      call restore_bdos_state
+	      mov ret_al,0			;signal successful delete has
+
+dellab2:					;occured
+	      mov cl,FSEARCH_NEXT
+	      jmps dellab1
+
+xms_delete:
+	les dx,ms_dma_ptr			;restore dos dma address and
+	jmp set_dma_ptr				;return
+	  
+
+eject
+
+ms_read:
+;======
+;
+;	Function:	014h
+;	Sequential Read
+;
+;	entry:	ms_ds_dx = OPEN FCB
+;
+;	exit:	AL = 1,no data
+;		AL = 3,partial record
+;
+
+	call check_EXTENDED
+	push es:word ptr MS_RAN_REC [si]	;SAVE THESE VALUES
+
+	cmp es:word ptr MS_REC_SIZE[si],64
+	jb save_two_read_bytes
+	    push es:word ptr MS_RAN_REC+1[si]
+	    jmps cont_ms_read
+
+save_two_read_bytes:
+	    push es:word ptr MS_RAN_REC+2 [si]	;THIS ALSO
+
+cont_ms_read:
+	call ms_set_ran_rec
+	call ms_rread
+
+
+inc_ms_record:
+	cmp ret_al,01H ! jz dont_inc_block	;check for error
+	    les si,MS_FCB_PTR			;POINT TO FCB
+	    add es:byte ptr MS_CURRENT_RECORD [si],1
+
+	    cmp es:byte ptr MS_CURRENT_RECORD[si],80H
+	    jb dont_inc_block
+		inc es:word ptr MS_CURRENT_BLOCK [si]
+		mov es:byte ptr MS_CURRENT_RECORD[si],0
+
+dont_inc_block:
+	cmp es:word ptr MS_REC_SIZE[si],64
+	jb restore_two_bytes
+	    pop es:word ptr MS_RAN_REC+1[si]
+	    jmps restore_low_word
+
+restore_two_bytes:
+	    pop es:word ptr MS_RAN_REC+2 [si]
+
+restore_low_word:
+	pop es:word ptr MS_RAN_REC [si]
+	ret
+
+
+eject
+
+ms_write:
+;=======
+;
+;	Function:	015h
+;	Sequential Write
+;
+;	entry:	ms_ds_dx = OPEN FCB
+;
+;	exit:	ms_al = 0,successful
+;		ms_al = 1,disk full
+;		ms_al = 2,not enough space in trans seg
+;
+	call check_EXTENDED
+	push es:word ptr MS_RAN_REC [si]	;SAVE THESE VALUES
+
+	cmp es:word ptr MS_REC_SIZE[si],64
+	jb save_two_write_bytes
+	    push es:word ptr MS_RAN_REC+1[si]
+	    jmps cont_ms_write
+
+save_two_write_bytes:
+	    push es:word ptr MS_RAN_REC+2 [si]	;THIS ALSO
+
+cont_ms_write:
+	call ms_set_ran_rec
+	call ms_rwrite
+	JMPS inc_ms_record
+
+
+eject
+
+MS_CREATE	equ	ms_open
+;========
+;
+;	Function:	016h
+;	Create file
+;
+;	entry:	ms_ds_dx = unopened FCB
+;
+;	exit:	ret_al = 0FFh,failed
+;		ret_al = 00h,successful
+;	
+
+
+eject
+
+ms_rename:
+;========
+;
+;	Function:	017h
+;	Rename file
+;
+;	entry:	ms_es_dx = MOD FCB,IN CPM RENAME FORMAT
+;			EXCEPT ?? ARE OK
+;
+;	exit:	AL = 0,IF DONE
+;		AL = 0FFh,IF NOT FOUND or DOUBLE ENTRY
+;			FIRST SHIFT SECOND NAME TO TFCB FOR SEARCH
+;
+
+	call check_extended
+	add si,10H
+	call check_for_device
+	or al,al ! jz not_renaming_device
+	    mov ret_al,0ffh
+	    ret
+
+not_renaming_device:
+	call flush_buffer
+	mov buffer_activeb,FALSE
+	test erflag,0FFH ! JMPNZ xms_rename
+	mov ax,ds
+	mov es,ax	;FOR SETDMA
+	mov dx,offset buffer
+	call set_dma_ptr	;REMEMBER TO RESET IT ON EXIT
+	mov ret_al,0FFH	;ASSUME ERROR
+
+rename_loop:
+	mov di,offset search_fcb	;es:di IS search_fcb
+	lds si,MS_FCB_PTR	;START OF MSFCB
+	call init_fcb
+	push es
+	pop ds	;ds setup FOR SEARCH
+	mov si,offset search_fcb
+	call set_def_drv_byte
+	mov dx,si
+	mov cl,FSEARCH
+					;LOOK FOR SOURCE NAME
+	mov al,[si]
+	dec al
+	mov ah,0100b
+	call check_error
+	cmp al,0FFH			;NOT FOUND?
+	jne	name_found		;CONTINUE IF FOUND
+	jmp restore_ms_dma		;ELSE LEAVE
+
+name_found:
+
+;	al = offset/32; es=ds=MSEM data seg
+;	NOW SAVE THE FOUND FCB IN "TEMPFCB"
+
+	and ax,3	;ISOLATE POINTER/32
+	mov cl,5
+	shl ax,cl	;EXPAND PTR
+	add ax,offset buffer	;POINT TO FOUND FCB
+	mov si,ax	;SET PTR
+	mov di,offset fcb
+	mov cx,12/2
+	rep movsw	;SAVE IT
+	mov al,search_fcb
+	mov fcb,al			;store drive byte in fcb
+	push ms_fcb+2
+	push ms_fcb
+	push es
+	push ds
+	pop es
+	mov ms_fcb+2,ds
+	mov si,offset fcb
+	mov di,si
+	mov ms_fcb,si
+	call ms_close2		;close file - in case file being renamed
+	pop es
+	pop ms_fcb			;  was open
+	pop ms_fcb+2
+;NOW SEE IF DESTINATION NAME IS ALREADY PRESENT
+
+	lds si,dword ptr ms_fcb		; Fix for extended files TJM  
+
+	add si,17			;POINT TO START OF DEST NAME
+	mov di,offset search_fcb+1	;WILL PUT IT IN search_fcb FOR SEARCH
+	mov bx,offset fcb+1		;test FOR ? IN HERE
+	mov cx,11			;BYTE COUNT -- NAME.TYPE
+
+replace_loop:
+	lods al				;GET ONE CHR
+	and al,7FH			;strip hi bits
+	cmp al,'a' ! jb not_lower_case
+	cmp al,'z' ! ja not_lower_case
+	    and al,5FH
+
+not_lower_case:
+	cmp al,'?' ! jne not_q		;IS IT A ?
+	    mov al,es:[bx]		;REPLACE IF A ?
+
+not_q:
+	stos al				;SAVE IT IN TFCB
+	inc bx				;POINT TO NEXT COMPARE STRING
+	loop replace_loop
+	mov ax,es
+	mov ds,ax	;FOR SEARCH
+	mov dx,offset search_fcb
+	mov cl,FSEARCH
+	push dx
+	push 	bx
+	mov bx,dx
+	mov al,[bx]
+	dec al
+	mov ah,0100b
+	call check_error
+	pop bx
+	pop dx
+	cmp al,0FFH	;IF FOUND,HAVE ERROR
+	je dest_not_found
+
+xms_rename:
+	mov ret_al,0FFH	;FLAG ERROR
+	jmp restore_ms_dma
+
+dest_not_found:
+
+;NOW DO THE RENAME,SOURCE IN TEMPFCB,DEST IN FCB
+
+	mov si,offset search_fcb
+	mov di,offset fcb+10h
+	mov cx,6
+	rep movsw		;shift dest up to correct position
+	mov dx,offset fcb
+	mov cl,FRENAME
+				;DO THE RENAME
+	push dx
+	push bx
+	mov bx,dx
+	mov al,[bx]
+	dec al
+	mov ah,0101b
+	call check_error
+	pop bx
+	pop dx
+	mov ret_al,0FFH
+	cmp al,0FFH	;NOT FOUND
+	JMPZ restore_ms_dma
+	mov ret_al,0
+	jmp rename_loop ;TRY FOR THE NEXT
+
+
+eject
+
+ms_curdsk:
+;========
+;
+;	Function:	019h
+;	Current disk
+;
+;	entry:	None
+;
+;	exit:	AL = default drive (A=0,B=1,...)
+;
+
+	mov cl,FGET_DRIVE
+	call bdos
+	mov ret_al,al
+	ret
+
+
+eject
+
+ms_setdma:
+;========
+;
+;	Function:	01Ah
+;	Set disk transfer address
+;
+;	entry:	es:dx = dma address
+;
+;	exit:	None
+;
+
+	mov ms_dmaadr,dx		;save is for other functions
+	mov ms_dmabase,es
+
+set_dma_ptr:
+;	entry:	es:dx = dma address
+;	exit:	last_dma_ptr is set to new dma address
+
+	call set_dmaadr
+	mov dx,es			;fall thru
+
+set_dmab:
+;	entry:	dx = dma segment
+;	exit:	last_dmabase = new dma segment
+
+	mov last_dmabase,dx
+	mov cl,FSETDMAB
+	call bdos
+	ret
+
+set_dmaadr:
+;	entry:	dx = dma offset
+;	exit:	last_dmaadr = new dma offset
+
+	mov last_dmaadr,dx
+	mov cl,FSETDMA
+	call bdos
+	ret
+
+
+eject
+
+ms_get_alloc:
+;===========
+;
+;	Function:	01Bh
+;	Allocation table info
+;
+;	entry:	Cur_dsk variable valid
+;
+;	exit:
+;
+
+	mov es,sysdat
+	mov bl,cur_dsk ! xor bh,bh
+	shl bx,1
+	mov bx,es:0C18H[bx]		;get dph address out of dph table
+
+ms_get_alloc1:
+	mov si,es:8[bx]			;get dpb address
+	mov ax,es:18[bx]		;get hash table address
+	xor cx,cx ! mov dx,cx
+	push ds
+	mov di,ms_sp
+	mov ds,ms_ss
+	mov [di],ax			;return hash table address as FAT seg
+	pop ds
+	mov MS_BX,cx			;zero offset for FAT
+	mov ax,80H
+	cmp es:word ptr [si],0FFFFH ! jne not_dos_dpb
+	  mov cl,es:1bh[si]		;PSH out of dpb
+	  shl ax,cl
+	  mov MS_CX,ax			;return physical sector size
+	  mov bx,ax			;save physical sector size
+	  mov ax,es:8[si]		;get cluster size
+	  div bx
+	  mov ret_al,al
+	  mov ax,es:6[si]		;get number of clusters
+	  jmps ms_alloc_exit
+not_dos_dpb:
+	mov cl,es:15[si]		;PSH out of dpb
+	shl ax,cl
+	mov MS_CX,ax			;return physical sector size
+	mov bx,ax			;save for later
+	mov ax,80H
+	mov cl,es:2[si]			;get BSH out of dpb
+	shl ax,cl
+	div bx				;calculate number of physical
+	mov ret_al,al			;sectors in allocation unit
+	mov ax,es:5[si]			;get DSM out of DPB
+	inc ax
+ms_alloc_exit:
+	mov MS_DX,ax
+	ret
+
+
+eject
+
+ms_spec_alloc:
+;============
+;
+;	Function	01Ch
+;	Allocation table info for specified drive
+;
+;	entry:	DL = Drive # 1=A, 2=B, ..., 0=default
+;
+;	exit:	BX:DS --> FAT ID
+;		AL = # sectors
+;		CX = Physical sector size
+;		DX = # Allocation units
+;
+
+	dec dl ! jns spec_ok		; if not default, skip
+	    mov dl,cur_dsk		;   else, get current
+
+spec_ok:
+	mov es,sysdat
+	mov bl,dl
+	xor bh,bh ! shl bx,1
+	mov bx,es:0C18h[bx]
+	cmp bx,0 ! je spec_error	; is there a drive?
+	    jmp ms_get_alloc1		; yes
+
+spec_error:
+	mov ret_al,0FFh			; this is how dos returns an error
+	ret
+
+eject
+
+ms_rread:
+;=======
+;
+;	Function	021h
+;	Random read
+;
+;	entry:	ES:DX,ms_es_dx = open fcb with random record set
+;
+;	exit:	ret_al = 0,read successful
+;		       = 1,no data available
+;		       = 2,no space in dma segment for read
+;		       = 3,partial record read
+;
+
+	mov block_rw,FALSE		;NOT BLOCK READ
+	push MS_CX			;save original cx
+	mov cx,1
+	mov MS_CX,cx 			;ASK FOR BLOCK OF 1
+	call ms_block_read_a
+	pop MS_CX			;DOESN'T CHANGE
+	ret
+
+
+eject
+
+activate_buffer:
+;
+;	entry:	cpm_fcb SET
+;		READ BUFFER IN IF INACTIVE
+;		IF ACTIVE,SEE IF CORRECT RECORD,IF NOT,FLUSH and READ IN
+;		This routine has been modified to save the pdrive path.
+
+	cmp buffer_activeb,TRUE ! jne fill_buffer
+						;HAS IT NOT BEEN STARTED?
+						;IF NOT,JUST FILL IT
+	    call check_equal			;FLUSH IT IF DIFFERENT
+	    RETE				;LEAVE IF SAME
+		call flush_buffer
+		mov al,erflag
+		or al,al ! jnz xactivate
+
+fill_buffer:
+;
+;	entry: CPM_RAN REC SET
+;
+
+	mov buffer_activeb,FALSE	;JUST IN CASE OF ERROR
+	mov first_write,TRUE		;Initialize to first write to buffer
+
+	les dx,buffer_ptr
+	call set_dma_ptr		;MAKE LOCAL POINTER
+
+	mov si,cpm_fcb ! mov dx,si
+	mov buffer_fcb,dx		;BUFFER FCB NOW = CPM FCB
+
+	push word ptr CPM_RAN_REC[si]
+	push word ptr CPM_RAN_REC+1[si]
+
+	mov cl,FRREAD			;DO RANDOM READ INTO BUFFER
+	mov al,[si] ! dec al
+	mov ah,3
+	call check_error
+
+	pop word ptr CPM_RAN_REC+1[si]
+	pop word ptr CPM_RAN_REC[si]
+
+	push ax
+	call get_pdrive_hds		; if drive = p:, return hds
+	mov buffer_pdrive,ax		;   and save it
+	pop ax
+
+	les bx,dword ptr CPM_R01-1[si]	;BH=R0
+	mov BUFFER_R0,BH
+	mov BUFFER_R12,es
+
+xactivate:
+	mov erflag,al
+	or al,al ! RETNZ		;LEAVE IF ERROR
+	    mov buffer_activeb,TRUE		;BUFFER IS VALID NOW
+	    push ax
+	    mov dl,0FFH			;get default user no.
+	    call get_set_user
+	    mov buffer_user_no,al		;store the buffer user no.
+	    pop ax
+	    ret
+
+
+
+
+get_set_user:
+	mov cl,FGET_SET_USER
+	jmp bdos
+
+
+
+check_equal:	;ret Z IF FCB=BUFFER FCB
+	mov si,cpm_fcb
+	cmp si,buffer_fcb ! RETNE
+	mov ax,CPM_RAN_REC [si]
+	cmp ax,buffer_rec_lo ! RETNE
+	    mov al,CPM_RAN_REC + 2 [si]
+	    cmp al,buffer_rec_hi
+	    ret
+
+
+
+flush_buffer:
+;This routine has been modified to swap the pdrive path.
+
+	mov erflag,0
+						;SEE IF BUFFER WRITTEN,FLUSH IF SO
+	cmp buffer_writtenb,TRUE ! RETNE	;LEAVE IF NOT WRITTEN
+write_buffer:					;ENTER HERE TO FORCE A WRITE
+	mov dl,0FFH
+	call get_set_user
+	push ax
+	mov dl,buffer_user_no
+	call get_set_user
+	les dx,buffer_ptr
+	call set_dma_ptr	;MAKE LOCAL POINTER
+	mov dx,buffer_fcb
+	mov si,dx
+	push word ptr CPM_RAN_REC [si]
+	push word ptr CPM_RAN_REC + 1 [si]
+	mov ax,buffer_rec_lo	;RESTORE CORRECT BUFFER POINTER
+	mov CPM_RAN_REC [si],ax
+	mov al,buffer_rec_hi
+	mov CPM_RAN_REC +2 [si],al
+
+	call swap_buffer_pdrive		; current <--> saved
+	mov cl,FRWRITE			;DO RANDOM WRITE FROM BUFFER
+	mov al,[si]! dec al
+	mov ah,0111B
+	call check_error
+	mov cpm_written[si],0FFH	; mark fcb as written to
+	call swap_buffer_pdrive		; current <--> saved
+
+	pop word ptr CPM_RAN_REC + 1 [si]
+	pop word ptr CPM_RAN_REC [si]
+	pop dx				;user no into dl
+	push ax
+	call get_set_user		;set back to default user no.
+	pop ax				;set user number back before checking
+	mov buffer_writtenb,FALSE	;NO LONGER DIRTY BUT STILL ACTIVE
+	mov erflag,al
+	ret
+
+;	swap current p: hds with buffer saved value
+;	entry:	si -> fcb
+swap_buffer_pdrive:
+	cmp	byte ptr [si],10h	; if drive != p:
+	jnz	swap_not_pdrive		;   then skip this
+
+	push es ! push di ! push ax	; just to be sure
+	call	point_to_pdrive		; es:di -> p:'s hds
+	mov	ax,buffer_pdrive	; get saved value
+	xchg	ax,es:[di]		;   switch with current
+	mov	buffer_pdrive,ax	;   and save current
+	pop ax ! pop di ! pop es
+swap_not_pdrive:
+	ret
+
+
+eject
+
+ms_rwrite:
+;========
+;
+;	Function	022h
+;	Random write
+;
+;	entry:	es:dx,ms_es_dx = open fcb with random record set
+;
+;	exit:	ret_al = 0 = write successful
+;		       = 1 = no space available on disk
+;		       = 2 = no space in dma segment for write
+;
+
+	mov block_rw,FALSE		;not block write
+	push MS_CX			;save original cx
+	mov cx,1
+	mov MS_CX,cx 			;ask for block of 1
+	call ms_block_write_a
+	pop MS_CX			;restore cx
+	ret
+
+
+eject
+
+ms_size:
+;======
+;
+;	Function	023h
+;	File size
+;
+;	entry:	es:dx,ms_es_dx = unopened fcb with MS_REC_SIZE set
+;
+;	exit:	al = 0 for success and random record fields set
+;		   = 0FFH for failure
+;
+
+	mov ret_al,0
+	call check_extended
+	call check_for_device ! jz not_sizing_device
+	  mov es:word ptr MS_RAN_REC[si],ax
+	  mov es:word ptr MS_RAN_REC+2[si],ax
+	  ret
+not_sizing_device:
+	mov ret_al,0FFH		;pre condition for error
+	call setup_for_search
+	mov cl,FSEARCH
+	mov di,offset search_fcb
+	call srchf
+	cmp al,0FFh ! je ms_size_exit
+	xor bx,bx
+	mov bl,13[si]
+	push bx
+	mov dx,offset search_fcb
+	mov si,dx
+	mov cl,FSIZE
+	mov al,[si] ! dec al
+	mov ah,0100B
+	call check_error
+	pop bx
+	cmp al,0FFH
+	je ms_size_exit
+	mov ax,CPM_RAN_REC[si]
+	mov dl,CPM_RAN_REC+2[si]
+	xor dh,dh
+	call rdmul128	;RETURNS SIZE IN BYTES
+	or bl,bl
+	jz skip_filesize_adjust
+	push ax
+	or ax,dx
+	pop ax
+	jz skip_filesize_adjust
+	sub ax,128
+	sbb	dx,0
+	add ax,bx
+	adc dx,0
+skip_filesize_adjust:
+	les si,MS_FCB_PTR	;RESTORE PTR
+	mov cx,es:MS_REC_SIZE[si]
+	or cx,cx
+	jnz rec_size_not_zero
+	mov cx,128
+rec_size_not_zero:
+	mov bx,dx	;FOR div
+	call div32
+	or cx,cx
+	jz dont_round_up
+	  add ax,1
+	  adc dx,0
+dont_round_up:
+	mov ret_al,0
+	mov es:MS_RAN_REC[si],ax
+	cmp es:word ptr MS_REC_SIZE[si],64
+	jb two_byte_high_size
+	  mov es:MS_RAN_REC+2[si],dl
+	  jmps ms_size_exit
+two_byte_high_size:
+	mov es:MS_RAN_REC+2[si],dx
+ms_size_exit:
+	les dx,ms_dma_ptr
+	jmp set_dma_ptr
+
+
+eject
+
+ms_set_ran_rec:
+;=============
+;
+;	Function	024h
+;	Set random record field
+;
+;	entry:	ds:dx=OPEN FCB
+;
+;	exit:	RANDOM RECORD FIELD IS SET TO VALUE OF
+;		CURRENT BLOCK:RECORD
+;
+
+	call check_EXTENDED
+	call check_file_device
+	jz not_setting_device
+	   ret
+not_setting_device:
+	mov si,dx	;es:si=UNEXT FCB
+	mov ax,es:MS_CURRENT_BLOCK[si]
+	xor dx,dx
+	call rdmul128	;dx:ax=REC COUNT
+	mov cl,es:MS_CURRENT_RECORD[si]
+	xor ch,ch
+	add ax,cx
+	adc dx,0	;CARRY OVER
+	mov es:MS_RAN_REC[si],ax	;LOW
+	cmp es:word ptr MS_REC_SIZE[si],64
+	jb set_two_random_bytes
+	  mov 	es:MS_RAN_REC+2[si],dl	;HIGH
+	  ret
+set_two_random_bytes:
+	mov es:MS_RAN_REC+2[si],dx	;HIGH
+	ret
+
+
+eject
+
+ms_set_int:
+;=========
+;
+;	Function	025h
+;	Set interrupt vector
+;
+;	entry:	ms_ds:dx = INT POINTER
+;		AL = INT TYPE
+;
+;	exit:	None
+;
+
+	xor ah,ah
+	shl ax,1
+	shl ax,1	;MULT BY 4	;ax=ADDRESS
+	mov di,ax
+	xor ax,ax
+	mov es,ax	;es:di=ADDRESS
+	push ds
+	lds	ax,ms_ds_dx
+	pushf
+	cli		;SO NO INTS HERE
+	cld
+	stos ax	;offset
+	mov ax,ds
+	stos ax	;SEG
+
+if IAPX286
+	popf286 b286
+else
+	popf
+endif
+
+	pop ds
+	ret
+
+
+eject
+
+ms_create_seg:
+;============
+;
+;	Function	026h
+;	Create new program Segment
+;
+;	entry:	DX = SEGMENT BASE
+;
+;	exit:	None
+;
+
+;FIRST DETERMINE IF DESIRED SEG IS INSIDE CURRENT PROGRAM
+
+	mov es,dx
+	xor di,di
+	push ds
+	mov ds,psp_base	;get program prefix segment
+	xor si,si
+	cld
+	mov cx,100H/2
+	rep movsw	;SHIFT FIRST 100H BYTES INTO NEW SEG
+	xor ax,ax
+	mov ds,ax	;BASE PAGE
+	mov si,offset TERMINATE_ADDRESS	;CURRENT BREAK,TERM
+	mov di,offset TERMINATE_O
+	mov cx,4
+	rep movsw	;BREAK,TERM SAVED HERE
+	pop ds
+	sub dx,psp_base		;SEG DIFFERENCE
+	mov ax,psp_length
+	sub ax,dx	;=REMAINING LENGTH
+	call compute_length_ax	;GET offset
+	mov di,offset DOS_CALL_O
+	stos ax
+	call compute_segment
+	stos ax
+	ret
+
+
+eject
+
+check_file_device:
+;	entry	es:si	= ptr to unextended dos fcb
+;	exit	al	= device code for devices
+;			= 0 for files
+
+	mov al,es:byte ptr MS_DEVICE_CODE[si]
+	cmp al,0FBH ! ja file_device
+	  xor al,al
+file_device:
+	or al,al
+	ret
+
+
+eject
+
+ms_block_read:
+;============
+;
+;	Function	027h
+;	Random block read
+;
+;	entry:	es:dx = OPEN FCB WITH RAN REC SET
+;		CX = REC COUNT=MS_CX
+;
+;	exit:	MS_CX=# OF RECORDS READ
+;		al=0 IF GOOD READ and EXACT COUNT
+;		al=1 IF END OF FILE BEFORE RECORD COUNT
+;		al=2 IF SEGMENT OVERFLOW
+;		al=3 IF END OF FILE and LAST RECORD PARTIAL
+;
+
+	mov block_rw,TRUE			;DO BLOCK
+
+ms_block_read_A:
+	mov ms_count,cx				;SAVE IT HERE
+	mov ret_al,0				; 2 - ;FLAG AN ERROR
+	or cx,cx ! JMPZ xblock_read
+	push cx
+	call check_extended			;SET UP FCB ADDR
+	pop cx
+	mov ret_al,0
+	test es:word ptr MS_REC_SIZE[si],0FFFFH
+	jnz dont_fix_read_size		;if record size 0 change to 80
+	mov es:word ptr MS_REC_SIZE[si],80H
+
+dont_fix_read_size:
+	call check_file_device
+	JMPZ not_reading_device
+	cmp al,0FEH
+	JMPE aux_read
+	mov ret_al,1
+	cmp al,0FFH
+	JMPNE exit_block_read
+	test con_buf_active,0ffh	;is the con: buffer active
+	jnz active_conbuffer
+	mov dx,offset con_buf_hdr
+	mov di,dx
+	push si
+	push es
+	push ds
+	pop es
+	push MS_DX
+	mov MS_DX,dx
+	call ms_rdbuf
+	pop MS_DX
+	mov dl,LF
+	call ms_conout
+	pop es
+	pop si
+	mov con_buf_active,0FFH
+	xor bx,bx
+	mov bl,byte ptr con_buf_hdr+1
+	inc byte ptr con_buf_hdr+1
+	inc byte ptr con_buf_hdr+1
+	mov byte ptr con_buf[bx],CR
+	inc bx
+	mov byte ptr con_buf[bx],LF
+	mov con_buf_ptr,0		;initialize ptr to beginning of buffer
+
+active_conbuffer:
+	mov ret_al,0
+	xor ax,ax
+	mov al,byte ptr con_buf_hdr+1
+	sub ax,con_buf_ptr
+	mov cx,es:word ptr MS_REC_SIZE[si]
+	mov dx,cx		;save the record size
+	cmp ax,cx
+	jae enough_data
+	mov cx,ax
+	mov ret_al,3
+
+enough_data:
+	les di,ms_dma_ptr
+	mov si,offset con_buf
+	add si,con_buf_ptr
+	push cx
+	rep movsb
+	pop cx
+	sub dx,cx
+	jz dont_zero_buf
+	push cx
+	mov cx,dx
+	xor ax,ax			;zero the rest of the buffer
+	rep stosb
+	pop cx
+
+dont_zero_buf:
+	add con_buf_ptr,cx
+	xor ax,ax
+	mov al,con_buf_hdr+1
+	cmp con_buf_ptr,ax
+	jb dont_zero_ptr
+	mov con_buf_ptr,0
+	mov con_buf_active,0
+
+dont_zero_ptr:
+exit_block_read:
+	ret
+
+aux_read:
+;
+;	es:si	Ptr to unextended DOS FCB
+;	   cx	Record cnt
+;
+
+	mov	cx,es:word ptr ms_rec_size[si]
+	jcxz	ret_2
+
+	mov	ax,ms_dmabase
+	mov	chcb_seg,ax	; Store away DMA segment
+	mov	si,ms_dmaadr	; Get DMA offset
+
+aux_read_loop:
+	push	cx
+	mov	chcb_cnt,cx	; Store away number of characters left to read
+	mov	chcb_off,si	; Store away current offset of DMA
+	mov	dx,offset chcb
+	mov	cl,A_READBLK
+	call	bdos
+	pop	cx
+	add	si,ax		; Prepare for possiblilty of another A_READBLK
+	sub	cx,ax		; Calculate how many more characters need to
+				; be read
+	jnz	aux_read_loop	; read them
+
+	mov	ret_al,0	; Return with no errors
+
+	ret
+
+ret_2:
+	mov	ret_al,2	; Return with a funny error to confuse user
+
+	ret
+
+
+not_reading_device:
+	call FIND_FCB
+	cmp al,0FFH ! jne cont_read
+	  call reopen_file
+	  or al,al ! jnz read_error
+cont_read:
+	call set_rw_parms			;SET UP ALL VALUES
+
+
+
+; START - New code for random read
+
+	call check_file_size
+
+	cmp ret_al,1 ! je read_eof
+	    call read_cpm_first
+	    or al,al ! jnz read_error
+
+		mov ax,cpm_rec_count
+		dec ax ! js good_read
+		jz skip_full
+		    mov cpm_full_count,ax
+		    call read_cpm_full
+		    or al,al ! jnz read_error
+skip_full:
+		    call read_cpm_last
+		    or al,al ! jnz read_error
+			jmps good_read
+
+
+read_eof:
+	    mov al,1
+
+read_error:
+	    mov ret_al,al
+
+good_read:
+
+	push MS_CX
+	call compute_cx
+	pop ax
+
+	sub ax,MS_CX ! jz good_read1		; Check for end of file
+	cmp partial_record,0 ! jnz good_read1	; in middle of block read
+	    mov ret_al,1
+
+good_read1:
+	cmp ret_al,3 ! jne xblock_read
+	    les di,MS_DMA_PTR			;
+	    add di,bytes_done
+	    push ds
+	    lds si,MS_FCB_PTR
+	    mov cx,MS_REC_SIZE[si]
+	    pop ds
+	    mov ax,bytes_done
+	    xor dx,dx
+	    div cx
+	    sub cx,dx
+	    xor al,al ! cld
+	    rep stosb				; zero out rest of buffer
+
+
+xblock_read:
+	ret
+
+
+
+check_file_size:
+
+	mov bx,start_byte_hi			; bx:ax = starting byte offset
+	mov ax,start_byte_lo
+
+	push ds					; Get the file size
+	lds si,MS_FCB_PTR
+	mov cx,MS_FILE_SIZE[si]			; dx:ax = file size
+	mov dx,MS_FILE_SIZE+2[si]
+	pop ds
+
+	cmp dx,bx
+	ja check_part ! jb chk_eof
+	cmp cx,ax
+	ja check_part ! jbe chk_eof
+
+check_part:
+	    mov bx,end_byte_hi
+	    mov ax,end_byte_lo
+
+	    cmp dx,bx
+	    ja ok ! jb partial
+	    cmp cx,ax ! jae ok
+
+partial:
+		mov end_byte_lo,cx
+		mov end_byte_hi,dx
+
+		sub cx,1
+		sbb dx,0
+
+		mov ax,cx
+
+		call rddiv128
+
+		mov cpm_last_rec_lo,ax
+		mov cpm_last_rec_hi,dl
+		mov cpm_last_byte,ch
+
+		sub ax,cpm_first_rec_lo
+
+		mov cpm_rec_count,ax
+
+		mov ret_al,3
+		jmp ck_fl_exit
+
+ok:
+		mov ret_al,0
+		jmp ck_fl_exit
+
+chk_eof:
+	    mov ret_al,1
+
+ck_fl_exit:
+	ret
+
+; END - New code for random read	*TJM*
+
+
+
+;	call read_cpm_first			;al=0,1,2,ALWAYS DO THIS
+;	or al,al ! jz skip_read_first		;READ SOME MORE
+;read_errors:
+;	cmp al,2
+;	jnz not_read_overflow
+;	call compute_cx	;END UP CORRECT
+;	mov ret_al,2	;FLAG OVERFLOW
+;xblock_read:
+;	ret
+;not_read_overflow:
+;	push MS_CX
+;	call compute_cx
+;	pop ax
+;	sub ax,MS_CX	;WERE THEY SAME
+;	mov ret_al,0
+;	RETZ			;LEAVE IF SO
+;	mov ret_al,1	;ELSE INCOMPLETE
+;	cmp partial_record,0
+;	RETZ
+;	mov ret_al,3	;ELSE HAVE PARTIAL
+;	les di,MS_DMA_PTR	;ADDRESS
+;	add di,bytes_done	;POINT TO AFTER READ
+;	push ds
+;	lds	si,MS_FCB_PTR	;FCB
+;	mov cx,MS_REC_SIZE [si]
+;	pop ds
+;	mov ax,bytes_done
+;	xor dx,dx
+;	div	cx
+;	sub cx,dx
+;	xor al,al
+;	cld
+;	rep stosb	;FILL WITH 0
+;	ret
+;skip_read_first:
+;	mov ax,cpm_rec_count
+;	dec ax	;BODY COUNT
+;	js	read_exit	;LEAVE IF WAS ONLY 1
+;	jz skip_read_full	;ONLY LAST IS LEFT
+;	mov cpm_full_count,ax
+;	call read_cpm_full	;RETURNS 0,1,2
+;	or al,al
+;	jnz read_errors
+;	
+;skip_read_full:
+;	call read_cpm_last
+;	or al,al
+;	jnz read_errors
+;read_exit:
+;	call compute_cx
+;	mov ret_al,0
+;	ret
+
+
+eject
+
+compute_cx:
+;
+;	FOR INVALID READ,WRITE
+;
+	mov ax,cur_dmaadr
+	sub ax,MS_DMAADR			;BYTE COUNT READ
+	mov bytes_done,ax			;SAVE IT
+	xor dx,dx
+	les si,MS_FCB_PTR			;POINT TO ORIG FCB
+	mov bx,es:MS_REC_SIZE [si]
+	div bx					;=COUNT READ
+	or dl,dh ! jz not_partial		;REMAINDER
+	    inc ax
+
+not_partial:
+	mov partial_record,dl			;<>0 IF PARTIAL RECORD
+	mov MS_CX,ax				;RESULT
+	test BLOCK_rw,0FFH ! jnz compute_next_dma	;IS IT A BLOCK READ,WRITE
+	    jmps set_block_record
+
+compute_next_dma:
+	    mov ax,MS_CX			;COUNT
+	    les si,MS_FCB_PTR
+	    cmp bx,64 ! jb two_byte_high_ran_rec
+		add es:MS_RAN_REC [si],ax	;POINT TO NEXT
+		adc es:byte PTR MS_RAN_REC+2 [si],0	;CARRY
+		jmps set_block_record
+
+two_byte_high_ran_rec:
+		add es:MS_RAN_REC [si],ax	;POINT TO NEXT
+		adc es:word ptr MS_RAN_REC + 2 [si],0	;CARRY
+
+set_block_record:
+;
+;entry: ms_ds:dx=UNEXT FCB,RAN REC SET
+;SET BLOCK,CURRENT REC
+;
+	les si,MS_FCB_PTR			;POINT TO FCB
+	mov ax,es:MS_RAN_REC[si]		;LOW
+	mov dx,es:MS_RAN_REC+2[si]
+
+	cmp es:word ptr MS_REC_SIZE[si],64 ! jb dont_zero_high_byte
+	    xor dh,dh
+
+dont_zero_high_byte:
+
+	call rddiv128				;REM IN ch
+	mov es:MS_CURRENT_BLOCK[si],ax
+	mov es:MS_CURRENT_RECORD[si],ch
+	ret
+
+
+eject
+
+read_cpm_first:
+;
+;	entry: CUR_DMA_PTR IS SET,ALL OTHER VALUES SET
+;
+	les ax,CPM_FIRST_REC_PTR
+	mov si,cpm_fcb
+	mov CPM_RAN_REC[si],ax
+	mov ax,es
+	mov CPM_RAN_REC+2[si],al
+	call activate_buffer			;READ IT IN
+	or al,al ! jz first_read_ok
+	    mov al,1				;END FILE
+	    ret
+
+first_read_ok:
+	mov si,word ptr cpm_first_byte
+	mov cx,80H
+	cmp cpm_rec_count,0 ! jne keep_cx	;MEANS FIRST=LAST
+	    mov cx,word ptr cpm_last_byte	;ELSE START HERE
+	    inc cx
+
+keep_cx:
+	sub cx,si ! JA keep_80			;GET COUNT
+	    mov ax,800CH
+	    jmp do_critical_error
+
+keep_80:
+	les di,CUR_DMA_PTR
+	cld
+	add si,offset BUFFER
+
+read_first_loop:
+	    movsb				;PUT IT IN
+	    or di,di ! jnz neg_read_overflow	;OVERFLOW?
+		mov cur_dmaadr,di
+		mov al,2
+		ret
+neg_read_overflow:
+	loop read_first_loop
+
+	mov cur_dmaadr,di			;UPDATE
+
+xread_cpm_first:
+	mov si,cpm_fcb				;POINT TO FCB
+	add word ptr CPM_RAN_REC[si],1		;NEXT REC
+	adc byte ptr CPM_RAN_REC+2[si],0
+	xor ax,ax
+	ret
+
+
+eject
+
+read_cpm_full:
+;
+;	CPM RAN REC ALREADY SET FROM BEFORE
+;	cpm_full_count SET
+;
+
+read_cpm_full_loop:
+	    les dx,CUR_DMA_PTR
+	    call set_dma_ptr			;WRITE DIRECTLY
+	    mov dx,128
+	    cmp cpm_full_count,128 ! jae count_gr_than_128
+		mov dx,cpm_full_count
+
+count_gr_than_128:
+	    sub cpm_full_count,dx
+	    mov bx,cur_dmaadr
+	    mov ax,dx
+	    mov cl,7
+	    shl ax,cl
+	    add bx,ax ! jnc no_overflow		;check for segment overflow
+		mov ret_al,2
+		xor dx,dx
+		sub dx,cur_dmaadr		;sub 64k - cur_dmaadr
+		shr dx,cl			;divide by 128
+
+no_overflow:
+	    call set_multi_sector
+
+	    push dx
+	    mov dx,cpm_fcb
+	    mov si,dx				;POINT TO FCB
+	    mov cl,FRREAD
+	    mov al,[si] ! dec al
+	    mov ah,0110B
+	    call check_error
+
+	    push ax
+	    mov dl,1
+	    call set_multi_sector
+	    pop ax
+
+	    pop dx
+
+	    or al,al ! jz dont_adj_secs_read
+		mov dl,ah
+
+dont_adj_secs_read:
+	    mov cl,7
+	    push dx
+	    shl dx,cl				;multiply by 128
+	    add cur_dmaadr,dx
+	    pop dx
+	    or al,al ! jz not_full_end		;?END FILE
+
+		cmp al,0FFh ! je phys_read_error
+		    mov dl,ah
+		    add word ptr cpm_ran_rec[si],dx
+		    adc byte ptr cpm_ran_rec+2[si],0
+
+phys_read_error:
+		mov al,1
+		ret
+
+not_full_end:
+	    add word ptr cpm_ran_rec[si],dx
+	    adc byte ptr cpm_ran_rec+2[si],0
+	mov ax,cpm_full_count
+	or ax,ax ! JMPNZ read_cpm_full_loop
+
+	xor ax,ax
+	ret
+
+
+eject
+
+read_cpm_last:
+;
+;	entry: CUR_DMA_PTR IS SET,ALL OTHER VALUES SET
+;
+	mov si,cpm_fcb
+	call activate_buffer			;READ IT IN
+	or al,al ! jz not_last_end
+	    mov al,1
+	    ret
+
+not_last_end:
+	mov cx,word ptr cpm_last_byte
+	inc cx					;COUNT
+	les di,CUR_DMA_PTR
+	cld
+	push ds
+	lds si,BUFFER_PTR
+
+read_last_loop:
+	    movsb				;PUT IT IN
+	    or di,di ! jnz neg_lread_overflow	;OVERFLOW?
+		pop ds
+		mov cur_dmaadr,di
+		mov al,2
+		ret
+
+neg_lread_overflow:
+	loop read_last_loop
+
+	pop ds
+	mov cur_dmaadr,di	;UPDATE
+
+xread_cpm_last:
+	xor ax,ax
+	ret
+
+
+eject
+
+reset_file_size:
+	mov di,cpm_fcb
+	push di
+	cmp di,buffer_fcb
+	CALLE	flush_buffer	;flush byte buffer
+	pop di
+	les si,MS_FCB_PTR
+	mov bx,es:word ptr MS_RAN_REC+2[si]
+	mov ax,es:word ptr MS_RAN_REC[si]
+	mov 	cx,es:word ptr MS_REC_SIZE[si]
+	cmp cx,64
+	jb less_than_64
+	xor bh,bh
+
+less_than_64:
+	call mul_bxax_cx	;mult bx:ax by cx returns bx:ax
+	mov es:word ptr MS_FILE_SIZE[si],ax
+	mov es:word ptr MS_FILE_SIZE+2[si],bx
+	mov dx,bx
+	call rddiv128	;divide by 128 returns dx:ax
+	mov cpm_r2[di],dl	;high byte of local fcb random field
+	mov cpm_r01[di],ax	;low word of local fcb random field
+
+zero_length_file_size:
+	mov dx,di
+	mov cl,FCLOSE
+	mov al,[di] ! dec al
+	mov ah,0101B
+	call check_error
+	mov dx,di
+	mov cl,FTRUNC
+	mov al,[di] ! dec al
+	mov ah,0101B
+	call check_error
+	mov dx,di
+	mov cl,FOPEN
+	mov al,[di] ! dec al
+	mov ah,0100B
+	call check_error
+	mov dx,di
+	mov ret_al,al
+	ret
+
+
+eject
+
+ms_block_write:
+;=============
+;
+;	Function	028h
+;	Random block write
+;
+;	entry:	ms_es_dx=OPEN FCB
+;		cx=MS_CX=# OF RECORDS TO WRITE
+;
+;	exit:	al=1 IF NOT ENOUGH ROOM FOR ENTIRE WRITE(NOT IMP)
+;		al=2 IF SEG OVERFLOW
+;		IF cx=0 THEN SET FILE LENGTH TO RANDOM REC FIELD LENGTH
+
+
+	mov BLOCK_rw,TRUE			;DO BLOCK
+
+ms_block_write_A:
+	mov ms_count,cx				;SAVE IT HERE
+	push cx
+	call check_EXTENDED			;SET UP FCB ADDR
+	pop cx
+	mov ret_al,0
+	test es:word ptr MS_REC_SIZE[si],0FFFFH
+	jnz dont_fix_write_size			;if record size 0 then make 80
+	    mov es:word ptr MS_REC_SIZE[si],80H
+
+dont_fix_write_size:
+	or cx,cx ! jz exit_block_write
+	    call check_file_device
+	    jz not_writing_device
+	    cmp al,0FDH				;Check for NUL: device
+	    je exit_block_write
+	mov ret_al,2				;set up for error return
+	mov cx,es:word ptr MS_REC_SIZE[si] ;get number of bytes to write
+	mov bx,ds
+	mov es,bx		;save local data segment
+	lds si,ms_dma_ptr
+	push si
+	add si,cx		;check for segment overflow
+	pop si
+	jc exit_block_write
+
+	cld				;* to insure correct direction
+
+	cmp al,0FFH		;Check for CON: device
+	jne lst_write
+
+get_con_char:
+	lods al
+	mov dl,al
+	push cx
+	push ds
+	push es ! pop ds
+	call ms_conout
+	pop ds
+	pop cx
+	loop get_con_char
+	jmps cont_c_write
+
+lst_write:
+	cmp	al,0feh
+	je	aux_write
+	lods	al
+	mov dl,al
+	push cx
+	push ds
+	push es ! pop ds
+	call ms_list
+	pop ds
+	pop cx
+	loop lst_write
+
+cont_c_write:
+	mov ax,es
+	mov ds,ax
+ret_0:
+	mov ret_al,0
+
+exit_block_write:
+	ret
+
+aux_write:
+;
+;	es,bx	Local Data Segment
+;	ds:si	DMA
+;	   cx	Character cnt
+;
+
+	mov	ax,ds
+	mov	ds,bx		; We love our DS
+	mov	chcb_seg,ax	; Store away DMA segment
+
+;	jcxz	ret_0		; If no character exit stage right
+;				  This has been checked at DONT_FIX_WRITE_SIZE
+
+aux_write_loop:
+	push	cx
+	mov	chcb_cnt,cx	; Store away number of characters left to write
+	mov	chcb_off,si	; Store away current offset of DMA
+	mov	dx,offset chcb
+	mov	cl,A_WRITEBLK
+	call	bdos
+	pop	cx
+	add	si,ax		; Prepare for possiblilty of another A_WRITEBLK
+	sub	cx,ax		; Calculate how many more characters need to
+				; be sent
+	jnz	aux_write_loop	; Send them
+	jmps	ret_0		; retuen to user with no error
+
+
+not_writing_device:
+	call FIND_FCB
+	cmp al,0FFH ! jne cont_write
+	  call reopen_file
+	  or al,al ! jnz reopen_write_error
+
+cont_write:
+	test ms_count,0FFFFH
+	JMPZ reset_file_size
+	call set_rw_parms	;SET UP ALL VALUES
+	push es
+	call write_cpm_first	;al=0,1,2
+	pop es
+
+reopen_write_error:
+	or al,al		;FULL?
+	jz skip_write_first	;READ SOME MORE
+	mov ret_al,al
+	jmp bad_cpm_write
+
+skip_write_first:
+	mov ax,cpm_rec_count
+	dec ax	;BODY COUNT
+	js write_exit
+	jz skip_write_full
+	mov cpm_full_count,ax
+	call write_cpm_full
+	or al,al
+	jz skip_write_full
+	mov ret_al,al
+	jmp bad_cpm_write
+
+skip_write_full:
+	call WRITE_CPM_LAST
+	or al,al
+	jz write_exit
+	mov ret_al,al
+	jmp bad_cpm_write
+
+write_exit:
+	les si,MS_FCB_PTR
+
+	mov ax,cur_dmaadr
+	sub ax,ms_dmaadr
+
+	mov dx,0
+
+	add ax,start_byte_lo
+	adc dx,start_byte_hi
+
+	cmp dx,es:MS_FILE_SIZE+2[si]
+	ja write_exit1 ! jb skip_add
+
+	cmp ax,es:MS_FILE_SIZE[si]
+	jb skip_add
+
+write_exit1:
+	    mov es:MS_FILE_SIZE[si],ax		;MS_FCB file size is kept
+	    mov es:MS_FILE_SIZE+2[si],dx	;current.
+
+skip_add:
+	mov ret_al,0
+	test BLOCK_rw,0FFH
+	RETZ
+	call compute_cx
+	ret
+
+
+eject
+
+bad_cpm_write:
+	cmp al,1 ! RETNE
+	    les si,MS_FCB_PTR
+	    mov bx,es:MS_RAN_REC+2[si]
+	    mov ax,es:MS_RAN_REC[si]
+	    mov cx,es:MS_REC_SIZE[si]
+	    cmp cx,64 ! jb bad_cpm_write1
+		xor bh,bh
+
+bad_cpm_write1:
+	    call mul_bxax_cx
+
+	    mov dx,bx
+	    call rddiv128
+
+	    mov si,cpm_fcb
+	    mov CPM_R01[si],ax
+	    mov CPM_R2[si],dl
+	    mov dx,si
+
+	    mov cl,FCLOSE
+	    mov al,[si] ! dec al
+	    mov ah,0101B
+	    call check_error
+
+	    mov dx,si
+	    mov cl,FTRUNC
+	    mov al,[si] ! dec al
+	    mov ah,0101B
+	    call check_error
+
+	    mov dx,si
+	    mov cl,FOPEN
+	    mov al,[si] ! dec al
+	    mov ah,0100B
+	    call check_error
+
+	    test block_rw,0FFH ! RETZ
+		mov MS_CX,0
+		ret
+
+
+eject
+
+write_cpm_first:
+;
+;	entry: CUR_DMA_PTR IS SET,ALL OTHER VALUES SET
+;
+	les ax,CPM_FIRST_REC_PTR
+	mov si,cpm_fcb
+	mov CPM_RAN_REC [si],ax
+	mov ax,es
+	mov CPM_RAN_REC + 2 [si],al
+	call activate_buffer	;READ IT IN,END FILE OK
+	cmp al,2
+	jb cwrite_cpm_first
+	cmp al,4
+	je cwrite_cpm_first
+	jmp write_cpm_first_error
+
+cwrite_cpm_first:
+	mov di,word ptr cpm_first_byte
+	mov cx,80H
+	cmp cpm_rec_count,0
+	jne keep_80w
+	mov cx,word ptr cpm_last_byte
+	inc cx
+
+keep_80w:
+	sub cx,di	;cx = BYTE COUNT
+	JA	keep_cxw
+	JMPs	write_cpm_first_error
+
+keep_cxw:
+	push cx
+	mov dl,0FFH
+	call get_set_user
+	pop cx
+	mov buffer_user_no,al
+	mov buffer_activeb,TRUE
+	mov buffer_writtenb,TRUE
+	push ds
+	pop es	;es:di SET INTO BUFFER,cx=COUNT
+	push ds
+	add di,offset BUFFER	;POINT INTO BUFFER
+	lds	si,CUR_DMA_PTR
+	cld
+
+write_first_loop:
+	movsb		;PUT IT IN
+	or di,di	;OVERFLOW?
+	jnz neg_write_overflow
+	pop ds
+	mov cur_dmaadr,si
+	mov al,2
+	ret
+
+neg_write_overflow:
+	loop write_first_loop
+
+	pop ds
+	mov cur_dmaadr,si	;UPDATE
+	cmp first_write,TRUE
+	jne	xwrite_cpm_first
+	call flush_buffer		;on first write flush the buffer
+	or al,al			;to handle disk full case.
+	jnz write_cpm_first_error
+	mov first_write,FALSE	;not first write to buffer
+
+xwrite_cpm_first:
+	mov si,cpm_fcb
+	add word ptr CPM_RAN_REC [si],1
+	adc byte ptr (CPM_RAN_REC + 2) [si],0
+	xor ax,ax
+	ret
+
+write_cpm_first_error:
+	mov ax,1
+	ret
+
+
+eject
+
+write_cpm_full:
+;
+;	cmp RAN REC SET,CPM FULL COUNT SET
+;
+	les dx,CUR_DMA_PTR
+	call set_dma_ptr	;WRITE DIRECTLY
+	mov dx,128
+	cmp cpm_full_count,128
+	jae count_grt_128
+	mov dx,cpm_full_count
+count_grt_128:
+	sub cpm_full_count,dx
+	mov bx,cur_dmaadr
+	mov ax,dx
+	mov cl,7
+	shl ax,cl
+	add bx,ax		;check for segment overflow
+	jnc no_write_overflow
+	mov ret_al,2
+	xor dx,dx
+	sub dx,cur_dmaadr	;sub 64k - cur_dmaadr
+	shr dx,cl		;divide by 128
+no_write_overflow:
+	call set_multi_sector
+	push dx
+	mov dx,cpm_fcb
+	mov si,dx		;POINT TO FCB
+	mov cl,FRWRITE
+	mov al,[si] ! dec al
+	mov ah,0111b
+	call check_error
+	mov cpm_written[si],0FFH	; mark fcb as written to
+	push ax
+	mov dl,1
+	call set_multi_sector
+	pop ax
+	pop dx
+	or al,al
+	jz dont_adj_secs_written
+	mov dl,ah
+dont_adj_secs_written:
+	mov cl,7
+	push dx
+	shl dx,cl		;multiply by 128
+	add cur_dmaadr,dx
+	pop dx
+	or al,al		;?END FILE
+	jz not_full_end_WRITE
+	cmp al,0FFh
+	je phys_write_error
+	mov dl,ah
+	add word ptr cpm_ran_rec[si],dx
+	adc byte ptr cpm_ran_rec+2[si],0
+phys_write_error:
+	mov al,1
+	ret
+not_full_end_WRITE:
+	add word ptr cpm_ran_rec[si],dx
+	adc byte ptr cpm_ran_rec+2[si],0
+	mov ax,cpm_full_count
+	or ax,ax
+	JMPNZ	write_cpm_full
+	ret
+
+
+eject
+
+write_cpm_last:
+;
+;	entry: CUR_DMA_PTR IS SET,ALL OTHER VALUES SET
+;
+	mov si,cpm_fcb
+	call activate_buffer	;READ IT IN,FLUSH OLD
+	cmp al,2 ! jb cwrite_cpm_last
+	cmp al,4 ! je cwrite_cpm_last
+	    jmp phys_write_error
+
+cwrite_cpm_last:
+	mov cx,word ptr cpm_last_byte
+	inc cx
+	push cx
+	mov dl,0FFH
+	call get_set_user
+	pop cx
+	mov buffer_user_no,al
+	mov buffer_writtenb,TRUE
+	mov buffer_activeb,TRUE
+	push ds
+	les di,BUFFER_PTR
+	lds si,CUR_DMA_PTR
+	cld
+
+write_last_loop:
+	    movsb					;PUT IT IN
+	    or si,si ! jnz NEG_LWRITE_OVERFLOW	;OVERFLOW?
+		pop ds
+		mov cur_dmaadr,si
+		mov al,2
+		ret
+
+NEG_LWRITE_OVERFLOW:
+	loop write_last_loop
+
+	pop ds
+	mov cur_dmaadr,si			;UPDATE
+
+XWRITE_CPM_LAST:
+	xor ax,ax
+	ret
+
+
+
+
+reopen_file:
+;
+;	entry:	MS_FCB_PTR set
+;	exit:	al = 0 if successful open
+;		al = 1 if not successful open
+;
+	les si,MS_FCB_PTR
+	push MS_AX			;preserve the function number
+	push RET_AX			;preserve return code
+	push es:word ptr MS_REC_SIZE[si]
+	mov ms_ah,FOPEN
+	mov dx,si
+	call ms_open			;open the file
+	les si,MS_FCB_PTR
+	pop es:word ptr MS_REC_SIZE[si]
+	mov ax,RET_AX			;get open return code
+	pop RET_AX			;restore return code
+	pop MS_AX			;restore the function number
+	xor ah,ah
+	cmp al,0FFh ! jne reopen_exit
+	  mov ah,1
+reopen_exit:
+	mov al,ah
+	ret
+
+
+eject
+
+m29_parse:
+;========
+;
+;	Function	029h
+;	Parse filename
+;
+;	entry:	ds:si=LINE TO PARSE
+;		es:di = RESULT BUFFER
+;
+;	exit:	MAKE FCB AT es:di,ds:si POINTS  TO NEXT
+;
+
+	mov si,ms_si
+	mov di,ms_di
+	mov es,ms_es
+	mov ds,ms_ds
+	call PARSE
+	call get_data_seg
+	mov ms_si,si
+	mov ret_al,al
+	ret
+
+
+eject
+
+;	IN -> al BITS AS FOLLOWS
+;	BIT 0 = 1,SCAN OFF LEADING DELIMITERS
+;	BIT 1 = 1,CHANGE DRIVE ONLY IF SPECIFIED
+;	BIT 2 = 1,CHANGE NAME ONLY IF SPECED
+;	BIT 3 = 1,CHANGE TYPE ONLY IF SPECED
+;
+;	PARSE A STANDARD CPM FILE NAME DELIMITED BY
+;	SPACE,TAB,or ",:;.+=/[] or ANY CONTROL CHR
+;	ENTER WITH ds:si= LINE TO PARSE
+;	es:di=DESTINATION PARSED NAME
+;	di->START OF 12 BYTES-- DRIVE,NAME(8),TYPE(3)
+;	SAVES ALL REGS EXCEPT si WHICH WILL POINT TO
+;	FIRST CHR AFTER NAME
+
+PARSE:
+	push ax
+PARSE_AL	equ	byte ptr 12
+	push cx
+	push di	;LEAVE di LAST ON STACK
+PARSE_DI	equ	word ptr 8
+	push si
+PARSE_SI	equ	word ptr 6
+	push es
+PARSE_ES	equ	word ptr 4
+	push ds
+PARSE_DS	equ	word ptr 2
+	push bp
+	mov bp,sp	;POINT TO PARMS
+	cld
+;FIRST BLANK THE RESULT BUFFER and FLAGS
+	push ds		;ds=string segment
+	call get_data_seg
+	mov ax,ds
+	pop ds		
+	mov es,ax		;es=local data segment
+	xor ax,ax
+	mov di,offset parse_return_flag
+	stos al	;NOT BAD DRIVE,NOT AST
+	stos ax	;DRIVE,NAME FLAGS
+	stos ax	;TYPE FLAG,DRIVE CODE
+	mov ax,'  '
+	stosw!stosw!stosw!stosw	;FILL NAME WITH BLANKS
+	stosw!stosb		;FILL TYPE WITH BLANKS
+	mov di,offset parse_fcb	;POINT TO START OF LOCAL FCB
+	test PARSE_AL[bp],1	;?SKIP DELIMITERS
+	jz parse_drive
+	call skip_delimiters
+	or al,al		;?END
+	jnz COPY_FCB2
+parse_drive:
+	inc di	;POINT PAST DRIVE SPEC
+	cmp byte ptr 1[si],':'	;IS THERE A DRIVE SPEC
+	jne	parse_name
+	dec di	;RESTORE PTR
+	mov es:parse_drive_flag,0FFH	;DRIVE IS HERE
+	lods	ax	;SKIP COLON
+	or al,00100000B	;LOWER CASE
+	sub al,60H
+	JA	drive_test
+bad_drive:
+	mov es:parse_return_flag,0FFH	;FLAG DRIVE ERROR
+	inc di	;ADJUST FOR NO stosb
+	JMPS	parse_name
+drive_test:
+	cmp al,70H	;MUST NOT BE ABOVE
+	JA	bad_drive
+	stos al	;INSERT DRIVE SPEC
+
+parse_name:
+	mov cx,8
+parse_name_loop:
+	lods	al	;GET CHR
+	cmp al,'.'	;?END OF NAME
+	je parse_type
+	call check_parse_delimiters
+	jbe copy_fcb	;DONE IF ANY DELIM
+	mov es:parse_name_flag,0FFH	;FLAG NAME PRESENT
+	call expand_ast	;SEE IF ASTERISK
+	JCXZ	parse_type	;cx=0 IF WAS AST
+	stos al	;PUT IN FCB
+	loop parse_name_loop
+parse_type:
+	add di,cx		;CORRECT di
+	mov cx,3
+	lods	al	;SEE IF DOT
+	cmp al,'.'
+	jne	parse_type_loopa	;KEEP al IF NOT DOT
+parse_type_loop:
+	lods	al
+parse_type_loopa:
+	call check_parse_delimiters
+	jbe copy_fcb	;DONE
+	mov es:parse_type_flag,0FFH	;Flag type present
+	call expand_ast
+	JCXZ	COPY_FCB2
+	stos al
+	loop parse_type_loop
+	jmps copy_fcb2
+copy_fcb:
+	dec si
+	inc cl
+copy_fcb2:
+	push es	;es=local data segment
+	pop ds	;SOURCE HERE
+	mov PARSE_SI[bp],si	;SAVE si
+	mov si,offset parse_fcb
+	mov es,PARSE_ES[bp]
+	mov di,PARSE_DI[bp]	;SET DEST POINTER
+	test PARSE_AL[bp],10B	;SEE IF DRIVE SHOULD CHANGE
+	jz change_drive	;YES IF 0
+	test parse_drive_flag,0FFH	;ELSE SEE IF DRIVE SENT
+	jz skip_drive
+change_drive:
+	movsb		;CHANGE IT
+skip_drive:	;DO NAME
+	mov di,PARSE_DI[bp]	;POINT TO NAME
+	inc di
+	mov si,offset parse_fcb_name
+	test PARSE_AL[bp],100B	;SEE IF NAME SHOULD CHANGE
+	jz change_name
+	test parse_name_flag,0FFH
+	jz skip_name
+change_name:
+	mov cx,8/2
+	rep movsw
+skip_name:
+	mov di,PARSE_DI[bp]
+	add di,9	;POINT TO TYPE
+	mov si,offset parse_fcb_type
+	test PARSE_AL[bp],1000B	;SHOULD TYPE CHANGE
+	jz change_type
+	test parse_type_flag,0FFH	;WAS TYPE CHANGED
+	jz parse_exit		;IF Z,NO
+change_type:
+	movsw!movsb
+
+parse_exit:
+	pop bp
+	pop ds
+	pop es
+	pop si
+	pop di
+	pop cx
+	pop ax
+	push ds
+	call get_data_seg
+	mov al,parse_return_flag
+	pop ds
+	ret
+
+;EXPAND * IF PRESENT
+expand_ast:	;EXPAND AST TO ?
+	cmp al,'*'
+	jne	xexpand_ast
+	or es:parse_return_flag,1	;SET EXPANSION FLAG
+	mov al,'?'
+	rep stosb	;FILL WITH AST
+	or ah,1	;FLAG ??
+xexpand_ast:
+	ret
+
+check_parse_delimiters:
+;	RETURNS Z IF EQUAL,RETURNS CARRY IF BELOW,NC IF ABOVE
+;	DECREMENTS si IF END OF LINE
+			;ds=string segment
+			;es=local data segment
+	cmp al,'a'-1
+	jc	no_upper
+	cmp al,'z'+1
+	jnc no_upper
+	and al,1011111b
+no_upper:
+	push cx
+	mov cx,PARSE_DELIMITER_LENGTH
+	push di
+	mov di,offset parse_delimiters
+	REPNE	SCASB	;es relative
+	pop di
+	pop cx
+	je xcheck_parse_delimiters
+	cmp al,' '	;SET CARRY IF BELOW
+xcheck_parse_delimiters:
+	ret		;LEAVE WITH Z SET IF DELIM
+
+
+;SKIP LEADING DELIMITERS
+skip_delimiters:
+	lods	al	;GET CHR
+	call check_parse_delimiters
+	jb end_of_line
+	loopz	skip_delimiters	;loop UNTIL NONE
+	dec si
+	inc cl
+	mov al,0	;ASSUME NOT
+	ret
+end_of_line:
+	dec si
+	inc cl
+	mov al,0FFH	;END OF LINE
+	ret
+
+
+eject
+
+m2a_get_date:
+;===========
+;
+;	Function	02Ah
+;	Get date
+;
+;	entry:	None
+;
+;	exit:	cx = year (1980-2099)
+;		dh = month (1-12)
+;		dl = day (1-31)
+;		al = 00H success
+;
+
+	les si,TOD_PTR
+	mov ax,es:[si]			;get CP/M Date
+	call trans_date			;convert date to DOS format
+	mov MS_CX,cx			;store year
+	mov MS_DX,dx			;store month and day
+	mov ret_al,0
+	ret
+
+
+eject
+
+trans_date:
+;	entry:	ax = Rolander Date
+;	exit:	cx = Binary year
+;		dh = Binary month
+;		dl = Binary day of month
+
+	sub ax,730			;normalize to 1980
+	mov cx,ax			;save day count
+	xor dx,dx
+	mov di,dx			;save zero leap days
+	sub ax,60			;less than 60 days
+	jc no_leap_days	;means no leap days to subtract
+	  mov bx,1461			;1461 = days in four years
+	  div bx			;get number of leap years since 1980
+	  inc ax
+	  sub cx,ax			;normalize years to 365 days
+	  mov di,ax			;save proper leap day count
+no_leap_days:
+	mov ax,cx
+	xor dx,dx
+	mov bx,365
+	div bx				;get number of years since 1980
+	or dx,dx			;check for zero days left
+	jnz days_left
+	  dec ax			;dec year count
+	  mov dx,365			;set day count to last day of last year
+days_left:
+	mov si,ax			;save year count
+	add ax,1980			;make real date
+	push ax				;Save MS years
+	xor bx,bx
+	mov cx,12
+get_month:				;find the appropriate month
+	cmp dx,totaldays[bx] ! jbe got_month
+	  add bx,2
+	  loop get_month
+got_month:
+	shr bx,1
+	push bx	;save MS month
+	dec bx
+	shl bx,1
+	mov ax,si			;restore year count
+	mov cx,di			;restore leap days
+	cmp bx,2 ! jne not_leap_yr	;jump if not FEB
+	  test ax,3 ! jnz not_leap_yr
+	    shr ax,1 ! shr ax,1		;divide years by 4
+	    inc ax		
+	    cmp ax,cx ! jne not_leap_yr
+	      inc dx
+not_leap_yr:
+	sub dx,totaldays[bx]		;get days into month
+	pop ax				;get MS month back
+	mov dh,al			;put month in dh,days already in dl
+	pop cx				;get MS year back
+	ret
+
+
+eject
+
+m2b_set_date:
+;===========
+;
+;	Function	02Bh
+;	Set date
+;
+;	entry:	cx = year (1980-2099)
+;		dh = month (1-12)
+;		dl = day (1-31)
+;
+;	exit:	al = 00H success
+;		   = FFH failure
+;
+
+	call convert_date
+	jc m2b_set_date_error
+	    les bx,TOD_PTR
+	    mov es:[bx],cx
+	    mov ret_al,0
+	    ret
+
+m2b_set_date_error:
+	mov ret_al,0FFh
+	ret
+
+
+eject
+
+;	Convert MS DOS date format to Rolander date
+;	This routine is shared with MS2.A86
+;	entry:	CX = year (1980-2099)
+;		DH = month (1-12)
+;		DL = day (1-31)
+;	exit:	CX = Rolander date
+;		or CF = 1 on illegal value error
+
+convert_date:
+	mov ax,cx ! sub ax,1980
+	cmp ax,2099-1980 ! ja xset_date_error ;check for valid year
+	  mov monthdays+1,28
+	  test ax,3 ! jnz not_leap_year
+	    mov monthdays+1,29
+
+not_leap_year:
+	  xor bh,bh ! mov bl,dh ! dec bl		;adjust month to 0-11
+	  cmp bl,12 ! jae xset_date_error ;check for valid month
+	    cmp dl,1 ! jb xset_date_error ; check for not less than 1
+	    cmp monthdays[bx],dl ! jb xset_date_error ;check for valid day
+	    add bx,bx				;adjust for word array index
+	    mov ax,totaldays[bx]		;ax has day count (excluding current month)
+	    xor dh,dh ! add ax,dx		;ax has total days in current year
+	    push ax				;save it
+	    mov ax,cx				;get year
+	    sub ax,1978				;normalize for cp/m
+	    mov bx,365
+	    mul bx				;convert years to days
+	    pop bx				;restore days in current year
+	    add ax,bx				;total days (excluding leap years)
+	    mov cx,ax				;save it
+
+;
+;	if total (ax) >= 790 (feb 29,1980) then
+;	  leap$days = (total - 790) / (365 * 4 + 1) + 1
+;
+	    sub ax,790				;790 = feb 29,1980 (first leap year date)
+	    jc noleap				;earlier than 790 means 0 leap days to add
+	      mov bx,1461			;4 years worth of days (365 * 4 + 1)
+	      sub dx,dx				;clear dividend
+	      div bx				;ax now has # leap years - 1
+	      inc ax
+	      add cx,ax				;cx now has total days,including leap days
+noleap:
+	clc
+	ret
+xset_date_error:
+	stc
+	ret
+
+
+eject
+
+m2d_set_time:
+;===========
+;
+;	Function	02Dh
+;	Set time
+;
+;	entry:	ch = hours (0-23)
+;		cl = minutes (0-59)
+;		dh = seconds (0-59)
+;		dl = seconds (0-99)
+;
+;	exit:	al = 00H success
+;		   = FFH failure
+;
+
+	call convert_time
+	jc m2b_set_time_error
+	    les bx,TOD_PTR
+	    mov es:.2[bx],ch
+	    mov es:.3[bx],cl
+	    mov es:.4[bx],dh
+	    mov ret_al,0
+	    ret
+
+m2b_set_time_error:
+	mov ret_al,0FFh
+	ret
+
+eject
+
+;	Convert MS DOS time format to BCD time
+;	This routine is shared with MS2.A86
+;	entry:	CH = hours (0-23)
+;		CL = minutes (0-59)
+;		DH = seconds (0-59)
+;	exit:	CX = BCD hours/minutes
+;		DH = BCD seconds
+;		or CF = 1 on illegal value error
+
+
+convert_time:
+	cmp ch,23 ! ja xset_time_error
+	cmp cl,59 ! ja xset_time_error
+	cmp dh,59 ! ja xset_time_error
+
+	    mov al,ch				;hours to al
+	    call bcd				;make BCD number
+	    mov ch,al
+
+	    mov al,cl				;get minutes
+	    call bcd				;make bcd number
+	    mov cl,al
+
+	    mov al,dh				;get seconds
+	    call bcd				;make bcd number
+	    mov dh,al
+
+	    clc
+	    ret
+xset_time_error:
+	stc
+	ret
+
+bcd:
+;	entry:	al = binary number
+;	exit:	al = number in BCD format
+
+	aam
+	push cx					;save time
+	mov cl,4 ! shl ah,cl
+	pop cx
+	or al,ah				;to produce BCD number
+	ret
+
+
+eject
+
+m2c_get_time:
+;===========
+;
+;	Function	02Ch
+;	Get time
+;
+;	entry:	None
+;
+;	exit:	ch = hours (0-23)
+;		cl = minutes (0-59)
+;		dh = seconds (0-59)
+;		dl = seconds (0-99)
+;		al = 00H success
+;
+
+	les si,TOD_PTR			;get TOD structure address
+	mov al,es:2[si]			;get CP/M hours
+	call d_bcd			;convert BCD to binary
+	mov ms_ch,al			;store MS hours for return
+	mov al,es:3[si]			;get CP/M minutes
+	call d_bcd			;convert BCD to binary
+	mov ms_cl,al			;store MS minutes for return
+	mov al,es:4[si]			;get CP/M seconds
+	call d_bcd			;convert BCD to binary
+	mov ah,al ! xor al,al
+	mov MS_DX,ax			;store MS seconds and zero 1/100's
+	mov ret_al,al
+	ret
+
+
+eject
+
+d_bcd:
+;	entry:	al = number in BCD format
+;	exit:	al = binary number
+
+	mov bl,10
+	push ax
+	mov cl,4 ! shr al,cl
+	mul bl
+	mov cl,al
+	pop ax
+	and al,0fh
+	add al,cl
+	ret 
+
+
+eject
+
+m2e_verify:
+;=========
+;
+;	Function	02Eh
+;	Set/reset verify switch
+;
+;	entry:	DL = 0 disable verify
+;		DL = 1 enable verify
+;
+;	exit:	None
+;
+
+	ret
+
+
+eject
+
+check_extended:
+;	See if extended FCB,save attribute byte
+;	entry:	ms_ds_dx = dos fcb ptr
+;	exit	es:dx 	 = unextended dos fcb,di,si = dx
+
+	mov attribute,0				;temp assume non extended
+	mov extended,FALSE			;assume not extended
+	les si,ms_ds_dx
+	mov ms_fcb+2,es
+	cmp es:byte ptr[si],0FFH ! jne xcheck_extended	;leave if not extended
+	  mov extended,TRUE
+	  add si,6				;point to attrib
+	  lods es:al				;attr in al
+	  mov attribute,al			;save it
+xcheck_extended:
+	mov ms_fcb,si				;Point to fcb
+	mov di,si ! mov dx,si
+	ret
+
+check_dos_media_fcb:
+;	entry:	ds:bx = offset of cpm_fcb
+;	exit:	al = 0FFH if DOS media FCB
+	xor ax,ax
+	mov cx,16[bx]				;get first 2 bytes of disk map
+	cmp ch,cl ! jne xcheck_dos_media_fcb
+	  and cl,80H ! jz xcheck_dos_media_fcb
+	    mov al,0FFH
+xcheck_dos_media_fcb:
+	or al,al
+	ret
+
+
+eject
+
+init_fcb:
+;	entry:	ds:si = ptr ms fcb
+;		es:di = destination fcb ptr
+;	exit:	cx,ax = 0
+
+	cld
+	mov cx,12
+	mov es:cpm_written[di],00H		; mark fcb as clean
+move_name:
+	lods al					;get char from ms fcb
+	and al,7FH
+	cmp al,'a' ! jb dont_upper_case
+	  cmp al,'z' ! ja dont_upper_case
+	    and al,5FH				;up case the char
+dont_upper_case:
+	stos al					;store in local fcb
+	loop move_name
+	xor ax,ax
+	stos ax ! stos ax			;zero extent, module & rec cnt
+	ret
+
+;	Equates for pdrive hds stuff
+
+PDRIVE		equ	10h		; code for P drive
+PD_CAT		equ	word ptr .2Eh	; offset of cat in PD
+CAT_PDRIVE	equ	1Eh		; offset of p:'s in cat
+
+
+;	If fcb drive = p: and there is a cat, return p:'s hds
+;	entry:	si -> fcb
+;	exit:	ax = hds, or zero if none
+get_pdrive_hds:
+	cmp byte ptr [si],PDRIVE	; if drive != p:
+	jnz get_pdrive_hds_zip		;   take a quick out
+
+	push es ! push di		; scratch registers
+	call point_to_pdrive		; es:di -> p:'s hds
+	mov ax,es:[di]			; get it if it's there
+	pop di ! pop es
+	jnz get_pdrive_hds_exit		; skip if good hds
+
+get_pdrive_hds_zip:
+	sub ax,ax			; default hds value
+get_pdrive_hds_exit:
+	ret
+
+;	point to current p: hds
+;	exit:	es:di -> p:'s hds
+;		zf set if pointer invalid
+point_to_pdrive:
+	mov es,sysdat
+	mov di,es:RLR			; es:di -> proc desc
+	mov di,es:PD_CAT[di]		; fetch our cat
+	test di,di			; if no cat
+	jz point_to_pdrive_exit		;   then forget it
+
+	add di,CAT_PDRIVE		; es:di -> p:'s hds
+point_to_pdrive_exit:
+	ret
+
+
+allocate_fcb:
+;	entry:	MS_FCB_PTR = ptr to unextended dos fcb
+;	exit:	cpm_fcb = offset of cpm fcb
+;		es:di -> dos fcb
+;		al=0 if success,=FF if no more room
+
+	mov si,offset fcb_base
+	mov cx,FCB_MAX
+allocate_fcb_loop:
+	cmp byte ptr [si],0FFH ! je got_fcb	;look for empty entry
+	  add si,CPM_ENTRY_FSIZE		;get next entry
+	  loop allocate_fcb_loop
+	  or al,0FFH				;clear zero flag
+	  ret
+got_fcb:					;si = ptr to drive
+	mov cpm_fcb,si				;save it
+	push ds ! pop es ! push ds ! push si	;local es, save ds,si
+	mov di,si				;es:di=cpm_Fcb
+	lds si,MS_FCB_PTR
+	call init_fcb
+	pop si ! pop ds
+	call get_pdrive_hds			;if p: get hds
+	mov CPM_HDS_PTR[si],ax			;save in fcb
+	les di,MS_FCB_PTR			;for return value
+	xor al,al
+	ret
+
+
+eject
+
+find_fcb:
+;	entry:	MS_FCB_PTR = ptr to unextended dos fcb
+;	exit:	cpm_fcb = offset of cpm fcb
+;		al=0 if success,=FF if no more room
+
+	les di,MS_FCB_PTR
+	call find_fcb_pub
+	jc find_fcb_error
+	    mov cpm_fcb,si
+	    sub al,al
+	    ret
+find_fcb_error:
+	or al,0FFh
+	ret
+
+
+;	Find the CPM FCB which matches a DOS fcb
+;	This routine is shared with MS2.A86
+;	entry:	es:di = ptr to unextended DOS FCB
+;	exit:	si = offset to CPM FCB
+;		or CF = 1 if no match
+
+find_fcb_pub:
+	cld
+	mov si,offset fcb_base 			;point to first fcb
+	mov cx,FCB_MAX
+
+find_fcb_loop:
+	push di					;save dos fcb ptr
+	mov bl,12				;word count
+	push si					;save start
+
+compare_loop:
+	lods al					;get byte from local fcb
+	and al,7FH				;clear high bits
+	mov dl,es:[di]				;get byte from ms fcb
+	and dl,7FH				;clear high bits
+	cmp dl,'a' ! jb dont_up_case
+	cmp dl,'z' ! ja dont_up_case
+	    and dl,5FH				;up case the char
+dont_up_case:
+	inc di
+	cmp al,dl ! jne next_fcb		;next table entry if not equal
+	  dec bl ! jnz compare_loop
+	  pop si				;restore ptr
+	  call get_pdrive_hds
+	  cmp CPM_HDS_PTR[si],ax		;if hds matches
+	  jz found_fcb
+	  push si
+next_fcb:
+	    pop si
+	    add si,CPM_ENTRY_FSIZE
+	    pop di				;restore dos fcb ptr
+	    loop find_fcb_loop
+	    stc					;not found
+	    ret
+found_fcb:
+	pop di					;restore dos fcb ptr
+	clc
+	ret
+
+
+
+
+kill_fcb:
+;
+;	entry:	cpm_Fcb = fcb to kill
+;
+	mov di,cpm_fcb
+	cmp di,offset fcb_base ! jb xkill_fcb	;err if below
+	  cmp di,fcb_end-CPM_ENTRY_FSIZE-1 ! ja xkill_fcb	;err if above
+	    mov byte ptr[di],0FFH		;flag unused
+	    mov ax,buffer_fcb
+	    cmp ax,cpm_fcb ! jne xkill_fcb
+	      mov buffer_writtenb,FALSE
+	      mov buffer_activeb,FALSE
+xkill_fcb:
+	ret
+
+
+eject
+
+mul_bxax_cx:
+;
+;	entry:	bx:ax= 32 BIT MULTIPLICAND,cx=16 BIT MULTIPLIER
+;		OUT->bx:ax=32 BIT RESULT
+;		cx PRESERVED
+;		KILLS dx
+;
+	mul cx				;ax=LOW PART,dx=CARRY
+	push dx				;SAVE CARRY
+	xchg ax,bx			;SAVE LOW IN bx
+	mul	cx			;ax= HIGH PART,dx SHOULD=0(NO test)
+	pop dx
+	add ax,dx			;add IN CARRY
+	xchg ax,bx			;bx=HIGH,ax=LOW
+	ret
+
+
+
+
+rdmul128:
+;
+;	entry:	dx:ax SET
+;		OUT->dx:ax=dx:ax * 128
+;
+	mov cl,7
+	shl dx,cl			;MULT BY 128
+	rol ax,cl			;MULT BY 128,OVERFLOW IN al 0-6
+	mov cl,al
+	and cl,7FH			;LOWER 7 BITS
+	or dl,cl			;INTO dx
+	and al,80H			;KILL LOWER 7 BITS
+	ret
+
+
+
+
+rddiv128:
+;
+;	entry:	dx:ax SET
+;		OUT->dx:ax=dx:ax/128,REM IN ch
+;
+	mov cl,7
+	ror dx,cl
+	mov ch,al
+	and ch,7FH			;ch HAS REMAINDER
+	shr ax,cl			;div BY 128
+	mov cl,dh
+	and cl,0FEH			;KILL BIT 0
+	or ah,cl			;PUT SHIFTED BITS IN ax
+	and dh,1			;KILL MOVED BITS
+	ret
+
+
+
+
+div32:
+;
+;	entry:	bx:ax=32 BIT DIVIDEND,cx=DIVISOR
+;		OUT->dx:ax=RESULT,cx=REMAINDER
+;		USE NEWTONS METHOD,I THINK..
+;
+	JCXZ div0			;div BY 0
+	cmp cx,1			;div BY 1
+	jne not_div1
+	    mov dx,bx			;SKIP IF div BY 1
+	    xor cx,cx
+	    ret
+
+not_div1:
+	xor dx,dx			;EXTEND ax
+	xchg ax,bx			;LOW IN bx,HI IN dx:ax
+	push ax				;SAVE HI
+	div cx				;HI PART
+	mov di,ax			;SAVE IT
+	mul cx				;ax=EVEN DIVISION PART
+	pop dx				;OLD HI IN dx
+	sub dx,ax			;ELIMINATE EVEN PART
+	mov ax,bx			; dx:ax=OLD LOW PART,WILL NOT GET div 0
+	div cx				;LOW PART IN ax
+	mov cx,dx			;REM
+	mov dx,di			;HI IN dx
+	ret
+div0:
+	mov ax,-1
+	mov bx,ax
+	mov dx,ax
+	ret
+
+
+eject
+
+set_rw_parms:
+;
+;	entry:	MS_FCB_PTR=UNEXT FCB WITH RAN REC
+;		MS_REC_COUNT SET,MS_DMAADR SET
+;	exit:
+;		SET CPM_FIRST_REC,CPM_FIRST_REC_BYTE,cpm_first_byte_count
+;		CPM_FIRST_EQUALS_LAST (BOOL)
+;		cpm_rec_count	# OF 128 BYTE RECORDS
+;		SET CPM_LAST_REC,CPM_LAST_REC_BYTE
+;		SETS seg_overflow <> 0 IF COUNT TOO HIGH
+;
+
+	les ax,MS_DMA_PTR
+
+	mov cur_dmaadr,ax
+	mov cur_dmabase,es			;SET UP VALUES
+
+	mov ax,ms_count
+
+	push ds
+
+	lds si,MS_FCB_PTR
+	mov cx,MS_REC_SIZE[si]			;=BYTE COUNT TO TRANSFER
+
+	mul cx
+
+	or dl,dh				;SHOULD BE 0 OVERFLOW
+	pop ds
+	mov seg_overflow,dl
+	jz no_seg_overflow
+	    mov ax,0FFFFH			;MAX COUNT
+
+no_seg_overflow:
+	mov byte_count,ax			;SAVE COUNT
+						;NOW COMPUTE START BYTE offset INTO FILE,32 BITS
+	push ds
+	lds si,MS_FCB_PTR
+	mov bx,MS_RAN_REC+2[si]
+	mov ax,MS_RAN_REC[si]			;bx:ax=RAN REC,cx= REC SIZE FROM ABOVE
+
+	cmp word ptr MS_REC_SIZE[si],64 ! jb cont_set_rw_parms
+	    xor bh,bh				;zero bh if record size > 63
+
+cont_set_rw_parms:
+	pop ds
+
+	call mul_bxax_cx
+
+	mov start_byte_lo,ax
+	mov start_byte_hi,bx			;SAVE VALUES
+
+	push ax					;TEMP SAVE
+
+	mov dx,bx				;FOR NEXT SECTION
+	add ax,byte_count
+	adc bx,0				;CARRY
+	sub ax,1
+	sbb bx,0				;ADJUST TO LAST BYTE
+
+	mov end_byte_lo,ax
+	mov end_byte_hi,bx
+	
+	pop ax					;dx:ax=START_BYTE
+						;NOW COMPUTE START RECORD,DIVIDE BY 80
+	call rddiv128				;REM IN ch
+
+	mov cpm_first_rec_lo,ax
+	mov cpm_first_rec_hi,dl
+
+	mov cpm_first_byte,ch
+
+	neg ch
+	add ch,80H				;=COUNT
+	mov cpm_first_byte_count,ch
+						;NOW COMPUTE LAST RECORD,DIVIDE BY 80
+	mov dx,end_byte_hi
+	mov ax,end_byte_lo
+
+	call rddiv128				;REM IN ch
+
+	mov cpm_last_rec_lo,ax
+	mov cpm_last_rec_hi,dl
+
+	mov cpm_last_byte,ch
+						;DETERMINE IF FIRST=LAST
+	mov ax,cpm_last_rec_lo
+	sub ax,cpm_first_rec_lo			;NEVER OVER 65K
+
+	mov cpm_rec_count,ax			;=COUNT-1
+
+	ret
+
+
+
+
+restore_ms_dma:
+	les dx,MS_DMA_PTR
+	jmp set_dma_ptr
+
+
+eject
+
+bdos:
+	push es	;THESE WILL BE SWAPPED
+	push cx
+	push dx ! push si
+	push di ! push bp
+
+	pushf
+	cli		;disable interrupts for BDOS stack swaps
+	callf cs:BDOS_PTR
+
+	pop bp ! pop di
+	pop si ! pop dx
+	pop cx ! pop es
+	ret
+
+
+;THIS call PRESERVES ALL REGS
+
+abdos:
+	push ax ! push bx
+	call bdos
+	pop bx ! pop ax
+	ret
+
+
+eject
+
+patch_code:
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+
+eject
+
+functab rw 	0	;MSDOS FUNCTIONS
+	dw	m_null
+	dw	ms_conin	; 1
+	dw	ms_conout	; 2
+	dw	ms_auxin	; 3
+	dw	ms_auxout	; 4
+	dw	ms_list		; 5
+	dw	ms_rawio	; 6
+	dw	ms_rawin_noecho	; 7
+	dw	ms_conin_noecho	; 8
+	dw	ms_pbuf		; 9
+	dw	ms_rdbuf	;0A
+	dw	ms_const	;0B
+	dw	ms_clear_in	;0C
+	dw	ms_reset	;0D
+	dw	ms_seldsk	;0E
+	dw	ms_open		;0F
+	dw	ms_close	;10
+	dw	ms_search_first	;11
+	dw	ms_search_next	;12
+	dw	ms_delete	;13
+	dw	ms_read		;14
+	dw	ms_write	;15
+	dw	MS_CREATE	;16
+	dw	ms_rename	;17
+	dw	m_null		;18
+	dw	ms_curdsk	;19
+	dw	ms_setdma	;1A
+	dw	ms_get_alloc	;1B
+	dw	ms_spec_alloc	;1C
+	dw	m_null		;1D
+	dw	m_null		;1E
+	dw	m_null		;1F
+	dw	m_null		;20
+	dw	ms_rread	;21
+	dw	ms_rwrite	;22
+	dw	ms_size		;23
+	dw	ms_set_ran_rec	;24
+	dw	ms_set_int	;25
+	dw	ms_create_seg	;26
+	dw	ms_block_read	;27
+	dw	ms_block_write	;28
+	dw	m29_parse	;29
+	dw	m2a_get_date	;2A
+	dw	m2b_set_date	;2B
+	dw	m2c_get_time	;2C
+	dw	m2d_set_time	;2D
+	dw	m2e_verify	;2E
+
+;	functions beyond 2E are handled by MS2.A86
+
+
+eject
+
+interrupt_table	rb	0
+		db	10H
+		dw	offset int_10
+		db	11H
+		dw	offset int_11
+		db	12H
+		dw	offset int_12
+		db	13H
+		dw	offset int_13
+		db	16h
+		dw	offset int_16
+		db	17h
+		dw	offset int_17
+		db	20H
+		dw	offset int_20
+		db	21H
+		dw	offset bdos_int_entry
+		db	22H
+		dw	offset int_22
+		db	23H
+		dw	offset CTRL_BREAK_EXIT
+		db	24H
+		dw	offset CRITICAL_ERROR
+		db	25H
+		dw	offset absolute_disk_read
+		db	26H
+		dw	offset absolute_disk_write
+		db	27H
+		dw	offset terminate_stay
+INTERRUPT_TABLE_LENGTH	equ	(offset $ - offset INTERRUPT_TABLE) / 3
+
+
+eject
+
+device_names:
+	db	'CON     ',0FFH
+	db	'AUX     ',0FEH
+	db	'COM1    ',0FEH
+	db	'NUL     ',0FDH
+	db	'LPT1    ',0FCH
+	db	'PRN     ',0FCH
+DEVICE_NAMES_END	equ	offset $
+
+builtin_tbl	db	'DIR     '
+		db	'COPY    '
+		db	'TIME    '
+		db	'DATE    '
+		db	'REN     '
+		db	'ERASE   '
+		db	'        '
+		db	'        '
+		db	'        '
+		db	'        '
+		db	'        '
+BUILTIN_TBL_END	equ offset $
+
+dayfile_msg	db	' (User 0) PC-MODE',CR,LF
+
+
+eject
+
+		DSEG	PARA		; alignment needed for environment
+
+	public	sysdat			; for grabbing process desc
+	public	ms_dmaadr		; to speed up setting
+	public	ms_dmabase		;   and fetching
+	public	cur_dsk			; for ms2 get disk free
+	public	dmd_base		; to start memory searches
+	extrn	active_psp:word		; psp base of active child
+
+
+TOTAL_MEMORY	equ	word ptr .2h
+LONG_CALL	equ	byte ptr .5h
+DOS_CALL_O 	equ	word ptr .6h	;ALSO = MEM TOP
+DOS_CALL_SEG	equ	word ptr .8h
+TERMINATE_O 	equ	word ptr .0AH
+TERMINATE_SEG 	equ	word ptr .0CH
+CTRL_BREAK_O	equ	word ptr .0EH
+CTRL_BREAK_SEG 	equ	word ptr .10H
+CRITICAL_ERROR_O equ	word ptr .12H
+CRITICAL_ERROR_SEG equ	word ptr .14H
+
+TERMINATE_ADDRESS	equ	dword ptr .88H
+CTRL_BREAK_ADDRESS	equ	dword ptr .8CH
+CRITICAL_ERROR_ADDRESS	equ	dword ptr .90H	;ALL RESTORED ON TERMINATE
+
+TEMPFCB		equ	byte ptr .4CH
+TFCB		equ	byte ptr .5CH
+TFCB2		equ	byte ptr .6CH
+TFCB_SIZE 	equ	word ptr .7DH
+TFCB_R0		equ	TFCB_SIZE
+TFCB_R2		equ	byte ptr .7FH
+TBUF		equ	byte ptr .80H
+
+RLR		equ	word ptr .68H	;pointer to ready list root in sysdat
+
+eject
+
+env_size	equ	128			; DOS minimum guaranteed
+
+;	PARAGRAPH BOUNDARY
+
+		db	'Environ Size ='	; This 16 byte header is used
+		dw	env_size		;   to be sure we have room
+
+environment	db	'COMSPEC=P:/COMMAND.COM',0	; first should be com
+		db	'PATH=',0
+		db	'OS=CPCDOS 4.1',0
+		db	0
+
+env_default	equ	offset $ - offset environment
+		rb	env_size - env_default		; allow for env_size
+
+
+
+ros_char	dw	0
+
+ext_char	db	FALSE
+column		db	0
+compcol		db	0
+listcp		db	0
+strcol		db	0
+
+file_device_code	db	0
+
+com_type		db	0
+
+		;PARSE function data
+
+parse_delimiters 	db 	9,' :,.;+/[]="'
+PARSE_DELIMITER_LENGTH equ offset $ - offset parse_delimiters
+
+parse_return_flag	db	0
+parse_drive_flag	db	0
+parse_name_flag		db	0
+parse_type_flag		db	0
+parse_fcb		db	0	;DRIVE
+parse_fcb_name		db	'        '
+parse_fcb_type		db	'   '
+
+patch_data	dw	0,0,0,0,0,0,0,0
+		dw	0,0,0,0,0,0,0,0
+		dw	0,0,0,0,0,0,0,0
+		dw	0,0,0,0,0,0,0,0
+		dw	0,0,0,0,0,0,0,0
+		dw	0,0,0,0,0,0,0,0
+		dw	0,0,0,0,0,0,0,0
+
+cpm_first_byte		db	0,0	;0-127
+cpm_first_byte_count	db	0,0	;128-BYTE
+cpm_first_rec_lo	dw	0
+cpm_first_rec_hi	db	0,0
+CPM_FIRST_REC_PTR	equ	dword ptr cpm_first_rec_lo
+
+cpm_last_byte		db	0,0	;0-127
+cpm_last_rec_lo		dw	0
+cpm_last_rec_hi		db	0,0
+
+CPM_LAST_REC_PTR	equ	dword ptr cpm_last_rec_lo
+
+
+byte_count		dw	0	;TOTAL BYTES TO READ-WRITE
+start_byte_lo		dw	0	;FIRST BYTE TO READ,START @ 0
+start_byte_hi		dw	0	;32 BITS
+end_byte_lo		dw	0	;LAST BYTE+1
+end_byte_hi		dw	0	;32 BIT
+seg_overflow		db	FALSE	;BOOL IF rw OVERFLOW WOULD OCCUR
+ms_count		dw	0	;FOR BLOCK COUNT CALCULATIONS
+
+buffer_rec_lo		dw	0
+buffer_rec_hi		db	0,0
+
+BUFFER_R0	equ	byte ptr buffer_rec_lo
+BUFFER_R12	equ	word ptr buffer_rec_lo + 1
+
+buffer_pdrive		dw	0	;save hds for p:
+
+cur_dmaadr		dw	0
+cur_dmabase		dw	0
+
+CUR_DMA_PTR	equ	dword ptr cur_dmaadr
+
+cur_dsk			db	0
+temp_dsk		db	0
+partial_record		db	0	;rw PARTIAL
+bytes_done		dw	0
+block_rw		db	FALSE
+cpm_full_count		dw	0
+cpm_rec_count		dw	0	;USE ONLY IF EVEN
+buffer_user_no		db	0
+first_write		db	TRUE	;first write to deblocking buffer
+buffer_writtenb		db	FALSE	;IF BUFFER DIRTY
+buffer_fcb		dw	0
+buffer_activeb		db	FALSE	;TRUE WHEN BUFFER CONTENTS ARE VALID
+erflag			db	0
+last_chr		db	0	;PREVIOUS RAW INPUT
+rawbuf			db	0	;RAW INPUT BUFFER
+raw_flag		db	0	;=FF IF rawbuf FULL
+default_drive		db	0
+extended		db	0	;=FF IF EXTENDED FCB
+attribute		db	0	;CURRENT attribute
+				;BIT 1 = HIDDEN
+				;BIT 2 = SYSTEM
+dir_attr		db	0
+verify_flag		db	0	;FF MEANS READ AFTER WRITE
+last_dmaadr		dw	0	;LAST DMA SET
+last_dmabase		dw	0
+ms_dmaadr		dw	0
+ms_dmabase		dw	0
+
+MS_DMA_PTR	equ	dword ptr ms_dmaadr
+
+
+ms_fcb			dw	0,0	;POINTER TO FCB
+
+MS_FCB_PTR	equ	dword ptr ms_fcb
+
+;
+;*** Do not change order of next 4 lines
+;
+mcb 			rs 	0	;MEMORY CONTROL BLOCK
+m_base			dw	0	;START LOOKING AT THIS SEG
+m_length 		dw	0	;FOR 64K BLOCK
+m_ext			db	0
+
+
+pd_base			dw	0
+dmd_base		dw	0
+psp_base		dw	0
+psp_length		dw	0
+dma_adr			dw	0
+
+
+			RB	80		;STACK space
+
+ms_bp			dw	0		;MUST push IN THIS ORDER
+ms_di			dw	0		;es:di POINTER
+ms_es			dw	0
+
+MS_ES_DI	equ	dword ptr ms_di
+
+
+ms_si			dw	0
+
+ms_dl			db	0
+ms_dh			db	0
+
+MS_DX	equ	word ptr ms_dl	;ds:dx POINTER
+
+ms_ds			dw	0
+
+MS_DS_DX	equ	dword ptr MS_DX
+
+
+ms_cl			db	0
+ms_ch			db	0
+
+MS_CX	equ	word ptr ms_cl
+
+
+ms_bl			db	0
+ms_bh			db	0
+
+MS_BX	equ	word ptr ms_bl
+
+
+ms_al			db 	0
+ms_ah			db	0
+
+MS_AX	equ	word ptr ms_al
+
+
+STACK			rw	0
+
+ret_al			db	0
+ret_ah			db	0
+
+RET_AX		equ	word ptr ret_al
+
+
+ms_ds_save		dw	0
+ms_ax_save		dw	0
+
+in_int24_flag		db	FALSE
+
+critical_ss_save	dw	0
+critical_sp_save	dw	0
+critical_ss		dw	0
+critical_sp		dw	0
+check_error_parm	dw	0
+
+ms_sp			dw	0
+ms_ss			dw	0
+ms_cs			dw	0
+ms_ip			dw	0
+
+rdbuf_dx		dw	0
+
+cli_ds			dw	0
+cli_user0_flag		db	0
+comp_attrs		db	0
+def_user		db	0
+
+buffer			rw	0
+
+EXE_HEADER	equ	offset buffer	;SHARE BUFFER
+
+
+exe_signature		rw	1
+exe_final		rw	1
+exe_size		rw	1
+exe_rel_count		rw	1
+exe_header_pars		rw	1
+exe_hi_pars		rw	1
+exe_hi_lo		rw	1
+exe_ss_offset		rw	1
+exe_sp			rw	1
+exe_checksum		rw	1
+exe_ip			rw	1
+exe_cs			rw	1
+exe_first_rel		rw	1
+exe_overlay		rw	1
+			rw	40H-14	;rest of buffer
+
+BUFFER_END	equ	offset $
+
+
+		db	0	;extra byte for going off end of buffer
+;	ORG	BUFFER_END
+exe_rel_count_down dw	0
+exe_count_down	dw	0
+next_exe_seg	dw	0
+exe_par_count	dw	0
+exe_seg		dw	0
+exe_r0		dw	0
+exe_r2		db	0
+buffer_offset	dw	offset BUFFER
+buffer_seg	dw	0	;SET BY INIT
+
+BUFFER_PTR	equ	dword ptr buffer_offset
+
+
+tfcb_offset	dw	offset TFCB
+tfcb_seg	dw	0	;INIT
+
+TFCB_PTR	equ	dword ptr tfcb_offset
+
+
+exe_rel_pointer	dw	0	;FIRST REL ITEM
+cpm_fcb		dw	0	;LAST FCB ALLOCATED
+cpm_fcb_seg	dw	0	;FILLED IN WITH CS AT INIT
+
+CPM_FCB_PTR	equ	dword ptr cpm_fcb
+
+
+tod_offset	dw	7eH	;offset of tod structure in system
+tod_seg		dw	0	;segment of tod structure in system
+
+TOD_PTR		equ	dword ptr tod_offset
+
+
+pcmode		db	0
+
+label_info	db	0
+
+console_no	db	0
+list_no		db	0
+
+monthdays	db	31,28,31,30,31,30,31,31,30,31,30,31
+totaldays	dw	0,31,59,90,120,151,181,212,243,273,304,334,0ffffh
+
+bfcb		db	0,0,0,0,0
+
+con_buf_ptr	dw	0
+con_buf_active	db	0
+con_buf_hdr	db	128
+con_buf_size	db	0
+con_buf		rb	130
+
+com_addr	dw	0
+com_len		db	0
+
+
+vid_struct	rw	0
+vid_struct_ax	dw	0
+vid_struct_bx	dw	0
+vid_struct_cx	dw	0
+vid_struct_dx	dw	0
+vid_struct_vc	db	0
+
+
+ddio_op		db	0
+ddio_drive	db	0
+ddio_nsectors	db	0		;high byte of nsectors
+ddio_head	db	0		; overlays head
+ddio_startrec	rw	0		;startrec overlays
+ddio_sector 	db	0		; sector and track
+ddio_track	db	0
+ddio_dmaoff	dw	0
+ddio_dmaseg	dw	0
+
+DDIO_PBLEN	equ	offset $ - offset ddio_op
+
+
+bdos_struct	rb	28
+
+i_vect_save_area	rw	5EH/2	;pcmode interrupt vector save area
+					;saved and restored on dispatch
+
+i_vect_save_area2	rw	5EH/2	;initial interrupt vector save area
+					;saved at pc program load
+					;restored at pc program terminate
+
+acb		db	0,0
+		dw	0
+		db	'        '
+
+MS_PD	 	equ	word ptr .0
+PD_PRIOR	equ	byte ptr .5
+PD_FLAG		equ	word ptr .6
+PD_NAME		equ	byte ptr .8
+PD_UDA		equ	word ptr .10h
+PD_DISKUSER	equ	word ptr .12h
+PD_CMOD		equ	byte ptr .18h
+PD_PARENT	equ	word ptr .1Eh
+PD_CONSOLE	equ	byte ptr .20h
+PD_LIST		equ	byte ptr .24h
+PD_FLAG2	equ	word ptr .26h
+PD_DISP_INTERCEPT_OFF	equ	word ptr .28h
+PD_DISP_INTERCEPT_SEG	equ	word ptr .2ah
+
+PDS_DSK		equ	12h
+
+eject
+
+UDA_LENGTH	equ	180H
+
+;*****************************************************
+;*
+;*	User Data Area - The User Data Area is an
+;*	extension of the process descriptor but it
+;*	travels with the user.	It contains info
+;*	that is needed only while in context.
+;*
+;*	While in the operating system,The Extra
+;*	Segment register points to the beginning
+;*	of the User Data Area.
+;*
+;*****************************************************
+
+;	this area overlays part of BDOS
+
+U_DMA_OFST	equ	word ptr .002h ; BDOS dma offset
+U_DMA_SEG	equ	word ptr .004h ; BDOS dma segment
+U_ERROR_MODE	equ	byte ptr .010h ; BDOS error mode
+
+;	end of overlay area
+
+U_AX		equ	word ptr .020h
+U_WRKSEG	equ	word ptr .02Eh ; curr seg addr of buf
+U_STACK_SP	equ	word ptr .034h ; usr stack segment
+U_INITCS	equ	word ptr .050h
+U_INITDS	equ	word ptr .052h
+U_INITES	equ	word ptr .054h
+U_INITSS	equ	word ptr .056h
+U_IOEXERR	equ	byte ptr .067h ;extended IOS error for PCMODE
+U_8087		equ	word ptr .100h
+
+susp_8087	db	1		;suspend and 8087 flags (suspend enabled)
+ms_retcode	dw	0		;return code for abnormal abort
+ms_minmem	dw	2000H		; 128K for .COM files
+ms_addmem	dw	1000H		; 16K for .EXE files
+search_fcb	rb	36
+
+func_err_msg	db	CR,LF,'Invalid DOS 1.1 function encountered - '
+		db	'Process terminated.'
+		db	CR,LF,'$'
+
+printer_busy_msg	db	CR,LF,'Printer Busy',CR,LF,'$'
+
+type_tbl	db	'CMD'
+		db	'COM'
+		db	'EXE'
+		db	'BAT'
+
+chcb		rw	0	; CHaracter Control Block  
+				; (used by Aux only at this time)
+chcb_off	rw	1
+chcb_seg	rw	1
+chcb_cnt	rw	1
+
+count_error	rb	1	; For Critical error handling
+
+		extrn fcb:byte		;open command fcb
+		extrn clicb:byte	;command line
+		extrn sysdatseg:word	;segment of system data
+
+;FORMAT,BYTE 0 = FLAG,0=EMPTY,FF=ALLOCATED
+;THEN 35 BYTE FCB
+;THIS REGION MUST BE ZERO'D ON INIT
+
+
+fcb_base	rb 	0		;START OF CPM FCBS
+		rb	CPM_ENTRY_FSIZE * FCB_MAX
+
+FCB_END 	equ 	offset $
+
+;	end of ms1.a86
+
+	end
+                                                                                                                                                                                                                                                                 

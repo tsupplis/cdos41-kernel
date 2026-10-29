@@ -1,0 +1,1377 @@
+;VSCREEN.A86
+title    'Virtual Screen Handler '
+;*******************************************************;
+;							;
+;     This module contains all code necessary for	;
+;     full screen buffering on a serial Heath/Zenith	;
+;     Z29 terminal.					;
+;     Note: assumes m_alloc in XIOS header has been	;
+;	   initialized to reserve space for screen	;
+;	   images.					;
+;     Last changed:  2/23/85  JMB			;
+;							;
+;*******************************************************;
+
+include vscreen.equ
+nolist
+include system.lib
+include chrcomm.equ
+include serdata.equ
+list
+;include system.lib
+;include chrcomm.equ
+;include serdata.equ
+
+	dseg
+
+extrn   mem_alloc:word
+extrn   ocdesctbl:word
+public  screen_image_tbl
+
+	cseg
+
+ public vs_init
+ public vs_conout
+ public default_esc
+ public vs_switch
+ public set_up_bx
+ extrn  conout1:near
+ extrn  serial_out:near
+eject
+;***********************************************;
+;	VIRTUAL   SCREEN   INITIALIZATION	;
+;***********************************************;
+
+;======;
+vs_init:
+;======;
+;
+	mov	ax,mem_alloc		; segment address given by GENCCPM
+	mov	bx,offset scrn_image0	; get first screen image table
+	xor	ch,ch
+	mov	cl,nvcons		; do init for each virtual console
+
+init_scrn:				; init each structure with the segment
+	mov	vs_screen_seg,ax	; address of its char/attrib buffer
+	add	bx,vs_struc_len
+	add	ax,((crt_size + 15) shr 4) * 2
+	loop	init_scrn
+
+	mov	ah,vsa_normal		; attribute = normal
+	mov	al,blank		; char =  blank
+	mov	bx,offset scrn_image0	; with normal attribute byte
+	mov	cl,nvcons
+	push	es
+
+clear_scrn:				; do one clear for each virtual console
+	push	cx
+	mov	es,vs_screen_seg	; get segment address back
+	sub	di,di
+	mov	cx,crt_size		; get screen size
+	rep	stosw			; paint screen with blanks
+	pop	cx
+	add	bx,vs_struc_len		; index to next screen structure
+	loop	clear_scrn
+	pop	es			; we're done
+	ret
+eject
+;*******************************************************;
+;							;
+;	 ENTRY POINT FOR VIRTUAL SCREEN UPDATES		;
+;							;
+;*******************************************************;
+
+;========;
+vs_conout:
+;========;
+;	Entry:	DL = virtual console #
+;		CL = character
+;	Exit:	None
+;
+	mov	bx,dx			; BL = virtual console #
+	shl	bx,1
+	mov	bx,screen_image_tbl[bx]	; get virtual screen structure
+	mov	al,cl			; Set up AX for subroutines
+	mov	ah,dl
+	push	ax
+	mov	cx,0			; AH = console #, AL = character
+	call	vs_escape_rt		; Points to escape handler if in middle
+					; of a sequence. Default is CONOUT01.
+	cmp	cx,0			; CX = 0    if in escape sequence
+	 jne	conout01		;    = ffff if regular char
+
+other_char:				; Either we're in the middle of an
+					; escape sequence or its a special char
+	pop	cx			; Fall through to physical output.
+	mov	dl,ch
+	xor	ch,ch			; Virtual update has been done.
+	jmp	conout1
+
+conout01:
+	mov	di,offset spec_char_tab	; check if special char (CR,LF,BS,ESC)
+	mov	si,offset spec_func_tab	; if so, co_look_up jmps to
+	call	co_look_up		; corresponding function
+	 jcxz	conout02		; else,update image with simple char
+	jmps	other_char
+
+conout02:				; simple character handling
+	pop	cx			; restore console # and char
+	mov	dl,ch
+	xor	ch,ch
+	cmp	cl,' '			; don't save ctrl chars in screen image
+	 jb	conout03
+	mov	di,vs_cursor		; starting point of single char copy
+
+	push	es			; BX = virtual screen structure
+	mov	es,vs_screen_seg	; ES = segment of virtual screen
+	mov	ah,vs_attrib		; AH = current attribute
+
+	mov	al,cl			; CL,AL = new char
+	stosw
+	pop	es			; DI pts to next attribute/char word
+
+	cmp	vs_column,crt_col - 1	; are we at end of line?
+	 jb	inc_col			; No:  go move cursor one to the right
+	test	vs_mode,vsm_no_wrap	; Yes: are we in wrap mode?
+	 jnz	conout03		;      No:  leave cursor alone
+	call	carriage_return	;      Yes: update virtual cursor
+	call	line_feed
+
+conout03:
+	jmp	conout1
+
+inc_col:
+	call	r_right			; updates cursor by one (to the right)
+	jmp	conout1
+eject
+;***********************************************;
+;						;
+;	SPECIAL CHARACTER OUTPUT ROUTINES	;
+;						;
+;***********************************************;
+
+;--------------;
+carriage_return:
+;--------------;
+;	Entry:	BX = screen structure
+;	Exit:	BX preserved
+;
+	push	dx
+	xor	dx,dx
+	xchg	vs_column,dl		; set column to zero
+	shl	dx,1			; back up cursor
+	sub	vs_cursor,dx
+	pop	dx
+	ret
+
+;--------;
+line_feed:
+;--------;
+;	Entry:	BX = screen structure
+;	Exit:	BX preserved
+;
+	cmp	vs_row,crt_row - 1
+	 je	lf_scroll		; are we at bottom of screen?
+	jmp	d_down			; no, move cursor down a line
+lf_scroll:
+	push	dx
+	xor	dl,dl			; yes, adjust top & bottom pointers
+	mov	dh,crt_row - 1
+	call	scroll_up
+	pop	dx
+	jmp	erase_line
+
+;---------;
+back_space:
+;---------;
+;	Entry:	BX = screen structure
+;	Exit:	BX = preserved
+;
+	mov	di,vs_cursor
+	test	di,di			; are we at home position ?
+	 jz	bs_ret			; yes, ignore backspace
+	cmp	vs_column,0		; are we at the beginning of a line ?
+	 je	bs_row			; yes, try previous line
+	dec	vs_column		; else, simple case:  dec # cols
+	jmps	bs_set_cursor
+bs_row:
+	test	vs_mode,vsm_no_wrap	; if in nowrap mode, don't back up to
+	 jnz	bs_ret			; previous line
+	dec	vs_row			; else, dec current row and
+	mov	al,vs_row
+	mov	dl,crt_col - 1
+	mov	vs_column,dl		; show column at end of line
+	push	bx
+	push	dx
+	mov	dh,vs_pcon		; get physical console #
+	call	set_up_bx		; get Xmit Q
+	pop	dx
+	call	ser_position_cursor	; set cursor at end of last line
+	pop	bx
+	push	bp
+	mov	bp,sp			; (Making changes? Be *SURE* this is still correct)
+	and	word ptr 6[bp],0FF00h	; change BS to NULL
+	pop	bp
+bs_set_cursor:
+	sub	di,2			; DI = cursor
+	mov	vs_cursor,di
+bs_ret:
+	ret
+eject
+;***************************************;
+;					;
+;	ESCAPE SEQUENCE ROUTINES	;
+;					;
+;***************************************;
+
+;---------;
+co_look_up:
+;---------;
+;	Entry:	BX = address of screen structure
+;		AH = device number
+;		AL = char to scan for
+;		DI = ptr to lookup table
+;		SI = function table
+;	Exit:	CX = 0ffffh if special char found
+;		     0 if no spec char found
+;		if not spec function, AX & BX preserved
+;
+	mov bp,es ! mov dx,ds
+	mov es,dx
+	xor ch,ch ! mov cl,[di]		; first byte of di is length of table
+	mov dx,cx ! inc di
+	repne scasb			; cruise through table for match
+	mov es,bp			; restore ES
+	je lookup_func			; got a match, go get function
+	   ret				; else, return with CX = 0
+lookup_func:
+	inc cx				; CX = number matched on
+	sub dx,cx ! shl dx,1		; function number
+	add si,dx
+	call word ptr [si]
+	xor cx,cx ! dec cx		; return with CX = 0ffffh
+	ret
+
+;--------;
+escape_rt:
+;--------;
+;	Entry:	BX = screen structure
+;		AL = current byte in esc sequence
+;	Exit:	vs_escape_rt = address of next routine to execute
+;		in this sequence
+;
+	mov vs_escape_rt,offset escape1
+	ret
+escape1:
+	mov vs_escape_rt,offset default_esc	; assume done with escape
+	mov di,offset esc_tbl			; if more to do, this field
+	mov si,offset esc_func_tbl		; will be set by handler
+	push cx					; save CX to show in esc
+	call co_look_up				; sequence
+	pop cx
+	ret
+
+;-;
+up:					; ESC A
+;-;
+;	Move up a line
+;
+	cmp vs_row,0			; if at top of screen, ignore it
+	je up_ret
+	sub vs_cursor,crt_col * 2
+	dec vs_row
+up_ret:
+	ret
+
+;---;
+down:					; ESC B
+;---;
+;	Move down a line
+;
+	cmp vs_row,crt_row - 1		; if at bottom of screen, ignore it
+	je down_ret
+d_down:
+	add vs_cursor,crt_col * 2
+	inc vs_row
+down_ret:
+	ret
+
+;----;
+right:					; ESC C
+;----;
+;	Move right a character
+;
+	cmp vs_column,crt_col - 1	; if at end of screen, ignore it
+	je right_ret
+r_right:
+	add vs_cursor,2
+	inc vs_column
+right_ret:
+	ret
+
+;---;
+left:					; ESC D
+;---;
+;	Move left a character
+;
+	cmp vs_column,0			; if at beginning of screen, ignore it
+	je left_ret
+	sub vs_cursor,2
+	dec vs_column
+left_ret:
+	ret
+
+;-------------;
+up_with_scroll:				; ESC I
+;-------------;
+;	Move up a line, scrolling down if needed
+;
+	cmp vs_row,0			; if not on the top line
+	ja up				; move the cursor up only
+	push dx
+	xor dl,dl			; else, scroll it down
+	mov dh,crt_row - 1		; start row = 0, end row = screen bottom
+	call scroll_down		; cursor stays the same
+	pop dx
+	jmp erase_line
+
+;---;
+save:					; ESC j
+;---;
+;	Save the current cursor position
+;
+	mov ah,vs_row			; save row and col in xy
+	mov al,vs_column
+	mov vs_xy,ax
+	mov ax,vs_cursor		; save cursor position
+	mov vs_oldcursor,ax
+	ret
+
+;------;
+restore:				; ESC k
+;------;
+;	Recall the last saved cursor position
+;
+	mov ax,vs_xy
+	mov vs_column,al
+	mov vs_row,ah
+	mov ax,vs_oldcursor
+	mov vs_cursor,ax
+	ret
+
+;------;
+x_and_y:				; ESC Y
+;------;
+;	Direct cursor addressing (row+32,col+32)
+;
+	mov vs_escape_rt,offset xy_row	; wait for row
+	ret
+xy_row:
+	sub al,32
+	cmp al,crt_row - 1
+	ja row_done
+	mov vs_row,al
+row_done:
+	mov vs_escape_rt,offset xy_col	; wait for column
+	ret
+xy_col:
+	sub al,32
+	cmp al,crt_col - 1
+	jbe xy_set_col
+	mov al,crt_col - 1
+xy_set_col:
+	mov vs_column,al		; Set the new column #
+	push cx
+	xor ah,ah
+	mov al,vs_row			; Use new row and column to compute
+	mov cx,crt_col * 2		; new cursor position.
+	mul cx
+	xor ch,ch
+	mov cl,vs_column
+	shl cx,1
+	add ax,cx
+	mov vs_cursor,ax
+	pop cx
+
+xy_ret:
+	mov vs_escape_rt,offset default_esc
+	ret
+
+;-----------;
+erase_screen:				; ESC E
+;-----------;
+;	Erase the screen, and home the cursor
+;
+	push es ! push cx
+	mov es,vs_screen_seg		; get virtual screen segment
+	mov ax,vsa_normal*256 + ' '	; put normal attribute with blank
+	mov cx,crt_size			; do entire screen
+	xor di,di			; start at position zero
+	rep stosw
+	pop cx ! pop es
+;;	jmp home
+
+;---;
+home:					; ESC H
+;---;
+;	Home the cursor
+;
+	xor ax,ax
+	mov vs_cursor,ax
+	mov vs_column,al
+	mov vs_row,al
+	ret
+
+;----------;
+erase_begin:				; ESC b
+;----------;
+;	Erase to the beginning of the screen from the cursor position
+;
+	push es ! push cx
+	mov es,vs_screen_seg		; get virtual screen segment
+	mov ax,vs_cursor		; get number of words to erase from
+	shr ax,1			; beginning of screen
+	mov cx,ax
+	mov ax,vsa_normal*256 + ' '	; give them all normal atrributes
+	xor di,di			; start at top of screen
+	rep stosw
+	pop cx ! pop es
+	ret
+
+;--------;
+erase_end:				; ESC J
+;--------;
+;	Erase to the end of the screen from the cursor position
+;
+	push es ! push cx
+	mov es,vs_screen_seg		; get virtual screen segment
+	mov ax,vs_cursor
+	mov di,ax			; erase from cursor to the end
+	shr ax,1
+	mov cx,crt_size
+	sub cx,ax			; CX = total # words to erase
+	mov ax,vsa_normal*256 + ' '	; given them all normal attributes
+	rep stosw
+	pop cx ! pop es
+	ret
+
+;---------;
+erase_line:				; ESC l
+;---------;
+;	Erase the entire line (not delete)
+;
+	mov al,vs_row
+
+erase_line_al:
+	push es ! push cx ! push dx
+	mov es,vs_screen_seg		; get virtual screen segment
+	xor ah,ah
+	mov cx,crt_col
+	mul cx				; get word offset of current row
+	shl ax,1			; make it a byte offset
+	mov di,ax			; start erasing here
+	mov ax,vsa_normal*256 + ' '	; give them all normal attributes
+	rep stosw
+	pop dx ! pop cx ! pop es
+	ret
+
+;--------;
+erase_bol:				; ESC o
+;--------;
+;	Erase to the beginng of the line
+;
+	push es! push cx
+	mov es,vs_screen_seg
+	mov di,vs_cursor		; beginning offset - word
+	xor ch,ch
+	mov cl,vs_column		; number of words to erase on this line
+	inc cx				; including character under cursor
+	mov ax,vsa_normal*256 + ' '	; give them all normal attributes
+	std
+	rep stosw
+	cld
+	pop cx ! pop es
+	ret
+
+;--------;
+erase_eol:				; ESC K
+;--------;
+;	Erase to the end of the line
+;
+	push es ! push cx		; erase to end of line
+	mov es,vs_screen_seg		; get virtual screen segment
+	mov di,vs_cursor		; start to erase here
+	mov cx,crt_col
+	sub cl,vs_column		; number of words to erase on this line
+	mov ax,vsa_normal*256 + ' '	; give them all normal attributes
+	rep stosw
+	pop cx ! pop es
+	ret
+
+;----------;
+insert_line:				; ESC L
+;----------;
+;	Insert a line, pushing the last line off the screen
+;
+	push ax ! push dx
+	mov dl,vs_row			; start row
+	mov dh,crt_row - 1		; ending row
+	call scroll_down		; make room for the new line
+	call erase_line			; erase the old one
+	call carriage_return
+	pop dx ! pop ax
+	ret
+
+;----------;
+delete_line:				; ESC M
+;----------;
+;	Delete the current line.  Bring a blank line in at the bottom
+;
+;	ENTRY:	BX = screen structure
+;	EXIT:	BX = same
+
+	push ax ! push dx
+	mov dl,vs_row			; scroll up first
+	mov dh,crt_row - 1
+	call scroll_up
+	mov al,crt_row - 1
+	call erase_line_al		; then erase the line
+	call carriage_return
+	pop dx ! pop ax
+	ret
+
+;----------;
+delete_char:				; ESC N
+;----------;
+;	Delete the character under the cursor
+;
+	push es ! push cx
+	mov es,vs_screen_seg		; get virtual screen segment
+	mov di,vs_cursor
+	mov si,di
+	add si,2
+	xor ch,ch
+	mov cl,crt_col - 1
+	sub cl,vs_column
+	push ds ! push es ! pop ds
+	rep movsw
+	mov word ptr 0[di],vsa_normal*256 + ' '	; put a blank in last column
+	pop ds ! pop cx ! pop es
+	ret
+
+;---------;
+reverse_on:				; ESC p
+;---------;
+;	Turn the reverse video bit on
+;
+	or vs_attrib,vsa_reverse
+	ret
+
+
+;----------;
+reverse_off:				; ESC q
+;----------;
+;	Turn the reverse video bit off
+;
+	and vs_attrib,not vsa_reverse
+	ret
+
+;----------;
+graphics_on:				; ESC F
+;----------;
+;	Turn the graphics bit on
+;
+	or vs_attrib,vsa_graphics
+	ret
+
+
+;-----------;
+graphics_off:				; ESC G
+;-----------;
+;	Turn the graphics bit off
+;
+	and vs_attrib,not vsa_graphics
+	ret
+
+;------------;
+set_attribute:				; ESC s #   ('0' <= # <= 'O')
+;------------;
+;	Set the attribute bits to # - '0'
+;
+	mov vs_escape_rt,offset set_attrib2
+	ret
+set_attrib2:
+	sub al,'0'
+	jb set_not
+	  cmp al,31
+	  ja set_not
+	    and vs_attrib,vsa_graphics
+	    or vs_attrib,al
+set_not:
+	mov vs_escape_rt,offset default_esc
+	ret
+
+;-----------;
+keypad_shift:				; ESC t
+;-----------;
+;	Turn the keypad shift bit on
+;
+	or vs_mode,vsm_keypadshift
+	ret
+
+;-------------;
+keypad_unshift:				; ESC u
+;-------------;
+;	Turn the keypad shift bit off
+;
+	and vs_mode,not vsm_keypadshift
+	ret
+
+;----------;
+enable_wrap:				; ESC v
+;----------;
+;	Turn the line-wrap bit on
+;
+	and vs_mode,not vsm_no_wrap
+	ret
+
+;-----------;
+disable_wrap:				; ESC w
+;-----------;
+;	Turn the line-wrap bit off
+;
+	or vs_mode,vsm_no_wrap
+	ret
+
+;--------;
+set_modes:				; ESC x #   ('1' <= # <= '9')
+;--------;
+;	Turn mode # on
+;
+	mov vs_escape_rt,offset set_mode2
+	ret
+set_mode2:
+	mov vs_escape_rt,offset default_esc
+	cmp al,'5'
+	  je hide_cursor
+	cmp al,'6'
+	  je keypad_shift
+	cmp al,'7'
+	  je keypad_alt
+
+hide_cursor:				; ESC x 5
+	or vs_mode,vsm_nocursor
+	ret
+
+;----------;
+reset_modes:				; ESC y #   ('1' <= # <= '9')
+;----------;
+;	Turn mode # off
+;
+	mov vs_escape_rt,offset reset_mode2
+	ret
+reset_mode2:
+	mov vs_escape_rt,offset default_esc
+	cmp al,'5'
+	  je show_cursor
+	cmp al,'6'
+	  je keypad_unshift
+	cmp al,'7'
+	  je keypad_unalt
+	ret
+
+show_cursor:				; ESC y 5
+	and vs_mode,not vsm_nocursor
+	ret
+
+;---------;
+keypad_alt:				; ESC =
+;---------;
+;	Turn the alt keypad bit on
+;
+	or vs_mode,vsm_keypadalt
+	ret
+
+;-----------;
+keypad_unalt:				; ESC >
+;-----------;
+;	Turn the alt keypad bit off
+;
+	and vs_mode,not vsm_keypadalt
+	ret
+eject
+;*******************************************************;
+;							;
+;	SUBROUTINES FOR VIRTUAL SCREEN UPDATES		;
+;							;
+;*******************************************************;
+
+;--------;
+scroll_up:			; scroll up in the range given in AX
+;--------;
+;	Entry:	AH = virtual screen #
+;		BX = screen structure
+;		DL = starting row - 0 relative
+;		DH = ending row - 0 relative
+;	Exit:	AX,BX,ES preserved
+;
+	push es ! push cx ! push dx
+	mov es,vs_screen_seg		; DX=start,end rows; AH=virt. console #
+	mov cx,dx			; save copy of start,end rows
+	xor ah,ah ! mov al,dl		; set up SI,DI
+	mov dx,crt_col * 2
+	mul dx ! mov di,ax		; DX,AX = byte offset starting row
+	add ax,crt_col * 2
+	mov si,ax ! mov ax,cx		; SI = first word to copy from
+	sub ah,al ! xor al,al
+	xchg al,ah			; set up CX for # words to copy
+	mov dx,crt_col
+	mul dx ! mov cx,ax
+	push ds ! push es! pop ds
+	rep movsw
+	pop ds ! pop dx ! pop cx ! pop es
+	ret
+
+;----------;
+scroll_down:
+;----------;
+;	Entry:	AH = virtual console number
+;		BX = screen structure
+;		DL = start row
+;		DH = end row
+;	Exit:	AX,BX,ES preserved
+;
+	push ax ! push cx ! push es
+	mov es,vs_screen_seg
+	mov cx,dx
+	xor ah,ah
+	mov al,dh
+	inc al
+	push dx
+	mov dx,crt_col * 2
+	mul dx
+	sub ax,2
+	mov di,ax
+	sub ax,crt_col * 2
+	mov si,ax
+	std
+	mov ax,cx
+	sub ah,al
+	xor al,al
+	xchg al,ah
+	mov dx,crt_col
+	mul dx
+	mov cx,ax
+	pop dx
+	push ds ! push es ! pop ds
+	rep movsw
+	pop ds ! pop es ! pop cx ! pop ax
+	cld
+	ret
+
+;----------;
+default_esc:
+;----------;
+;	Entry:	CX = 0
+;	Exit:	CX = ffffh - flag for simple char
+;		CX = 0 for escape or backspace
+
+	dec cx
+	ret
+
+eject
+;***********************************************;
+;						;
+;	    SCREEN SWITCH ROUTINES		;
+;						;
+;***********************************************;
+
+;========;
+vs_switch:	; Switch screen with full screen buffering
+;========;
+;
+;	Entry:	DL = Vcon to switch to
+;		DH = Pcon to do the switch on
+;
+;Comments:  A "normal" screen-switch algorithm for a serial console
+;	would use the following basic algorithm:
+;	    * Loop through the character/attribute buffer comparing each
+;	      attribute to the previous.
+;	    * If different, send the physical codes to the console to change
+;	      to the proper attribute.
+;	    * Send the character, and repeat until buffer has been dumped.
+;
+;	This XIOS improves its screen-switch performance by counting, but not 
+;	sending, consecutive occurances of the most common character/attribute
+;	(char=space(20h), attrib=normal), and using direct cursor addressing 
+;	to position the cursor to the next different char./attr.  If less than
+;	5 spaces were counted, they are sent directly to the UART, and direct
+;	cursor addressing is not performed.
+;
+;	Because a typical console contains so much "white space" at any given
+;	moment, his method greatly improves screen switch performance.
+
+switch_init:
+						    ;; These values should be
+	mov term_attrib,vsa_graphics or vsa_reverse ;; changed to attrib & mode
+	mov term_mode,0				    ;; of last vcon
+
+	mov bx,dx
+	xor bh,bh
+	shl bx,1
+	mov bx,screen_image_tbl[bx]		;; BX = screen structure
+	mov es,vs_screen_seg			;; ES = screen image buffer
+
+	mov al,vs_mode
+	push ax
+	push word ptr vs_column			;; save row for cursor restore.
+	push word ptr vs_row			;; save col for cursor restore.
+	push word ptr vs_attrib			;; save attributes for restore.
+	push ax
+
+set_up:
+	call set_up_bx				;; BX = output Q ctl structure
+	call ser_home				;; home physical cursor
+	call ser_clear				;; clear physical screen
+
+chk_keypad_shift:
+	pop ax ! push ax
+	test al,vsm_keypadshift			;; check keypad shift mode
+	  jz no_keyshift
+	call ser_keypad_shift
+	jmps chk_keypad_alt
+
+no_keyshift:
+	call ser_keypad_unshift
+
+chk_keypad_alt:
+	pop ax
+	test al,vsm_keypadalt			;; check keypad alt mode
+	  jz no_keyalt
+	call ser_keypad_alt
+	jmps fill_screen
+
+no_keyalt:
+	call ser_keypad_unalt
+
+fill_screen:
+	call ser_dis_wrap
+	mov ah,vsa_normal
+	call ser_set_attribute			;; set normal attribute
+	mov dl,ah				;; DL = attribute vsa_normal
+
+	xor di,di				;; DI = our cursor
+
+line_loop:
+	mov cx,crt_col				;; number of chars left on line
+char_loop:
+	mov ax,es:[di]				;; CX = new atrribute, char
+	cmp ax,vsa_normal*256 + ' '		;; Is is a normal space?
+	jne compare_attrib
+	cmp cx,1				;; Is it the last character?
+	je compare_attrib
+	dec cx
+	push di
+space_count_loop:				;; See if there are > 4 spaces
+	inc di ! inc di
+	cmp es:[di],ax
+	jne found_nonspace
+	loop space_count_loop
+
+	pop si					;; (Formerly di)
+	inc di ! inc di
+	jmps next_line
+
+found_nonspace:
+	mov si,di
+	pop ax					;; (Formerly di)
+	sub si,ax
+	shr si,1
+	cmp si,5
+	jb not_enough
+
+	push dx ! push cx
+	mov al,0FFh				;; keeps Z29 on current line
+	mov dl,crt_col
+	sub dl,cl
+	call ser_position_cursor
+	pop cx ! pop dx
+	jmps char_loop
+
+not_enough:
+	mov ah,vsa_normal			;; there were < 5 spaces
+
+	cmp dl,ah				;; is the attribute different?
+	mov dl,ah				;; set last attribute
+	push dx ! push cx
+	je send_spaces
+
+	push si
+	call ser_set_attribute
+	pop si
+
+send_spaces:
+	mov cl,' '
+	push si
+	call serial_out
+	pop si
+	dec si
+	jnz send_spaces
+
+	pop cx ! pop dx
+	jmps char_loop
+
+compare_attrib:
+	cmp dl,ah				;; is the attribute different?
+	mov dl,ah
+	push dx ! push cx
+	je send_char
+
+	call ser_set_attribute
+
+send_char:
+	mov cl,al
+	call serial_out				;; send the char
+	pop cx ! pop dx
+
+	inc di ! inc di				;; DI = curr char count
+	loop char_loop				;; decrements line's char count
+
+next_line:
+	cmp di,crt_size * 2			;; DI = total chars sent so far
+	je restore_attribute
+	push dx
+	call ser_cr_lf				;; send a CR/LF
+	pop dx
+	jmp line_loop
+
+restore_attribute:
+	pop cx					;; cl <-- current attribute
+	cmp dl,cl
+	je restore_cursor
+	  mov ah,cl
+	  call ser_set_attribute
+
+restore_cursor:
+	pop ax ! pop dx				;; AL = row, DL = col
+	call ser_position_cursor
+
+chk_wrap:
+	pop dx					;; get mode back
+	test dl,vsm_no_wrap			;; check for wrap-around mode
+	  jnz chk_cursor
+	push dx
+	call ser_en_wrap
+	pop dx
+
+chk_cursor:
+	test dl,vsm_nocursor			;; check cursor mode
+	  jz show_cur
+	call ser_hide_cursor
+	  jmps curr_vc
+
+show_cur:
+	call ser_show_cursor
+
+curr_vc:
+	ret					;; back to switch module
+eject
+
+;--------;
+set_up_bx:
+;--------;
+;	Put the Trasmit Queue control structure into BX
+;
+;	Entry:	DH = Pcon
+;	Exit:	BX = Xmit Q control structure
+;
+	xor bh,bh
+	mov bl,dh				;; use Pcon to index into the Xmit Q's
+	shl bx,1
+	mov bx,ocdesctbl[bx]			;; bx = Xmit Q control
+	ret
+
+;----------------;
+ser_set_attribute:
+;----------------;
+;	Sends Z-29/19 escape sequence to change characters attribute
+;
+;	Entry:	BX = Xmit Q control structure
+;		AL = attribute byte
+;	Exit:	AX preserved
+;
+	mov cl,term_attrib			; Check current graphics mode
+	xor cl,ah				; are the attributes different?
+	and cl,vsa_graphics
+	jz ser_chk_attrib
+
+	xor term_attrib,vsa_graphics		; Yes, so toggle attribute
+	push ax
+	mov oesc_cnt[bx],2
+	mov cl,esc
+	test ah,vsa_graphics
+	jz ser_graphics_off
+
+	call serial_out				; Send graphics_on esc sequence
+	mov cl,'F'
+	call serial_out
+	jmps ser_graphics_pop
+
+ser_graphics_off:
+	call serial_out				; Send graphics_off esc sequence
+	mov cl,'G'
+	call serial_out
+
+ser_graphics_pop:
+	pop ax
+
+ser_chk_attrib:
+	cmp ah,term_attrib			; Are we the same now?
+	je s_s_a_exit
+	mov term_attrib,ah			; No, so change char attributes
+	push ax
+
+	mov oesc_cnt[bx],3
+	mov cl,esc
+	call serial_out
+	mov cl,'s'
+	call serial_out
+	mov cl,term_attrib
+	and cl,not vsa_graphics			; leave out the graphics bit
+	add cl,'0'
+	call serial_out
+
+	pop ax
+s_s_a_exit:
+	ret
+
+;----------;
+ser_en_wrap:
+;----------;
+;	Sends Z-29/19 escape sequence for Enable Wrap Mode
+;
+;	Entry:	BX = Xmit Q control structure
+;
+	mov oesc_cnt[bx],2
+	mov cl,esc
+	call serial_out
+	mov cl,'v'
+	call serial_out
+	ret
+
+;-----------;
+ser_dis_wrap:
+;-----------;
+;	Sends Z-29/19 escape sequence for Disable Wrap Mode
+;
+;	Entry:	BX = Xmit Q control structure
+;
+	mov oesc_cnt[bx],2
+	mov cl,esc
+	call serial_out
+	mov cl,'w'
+	call serial_out
+	ret
+
+;--------------;
+ser_hide_cursor:
+;--------------;
+;	Sends Z-29/19 escape sequence to hide cursor
+;
+;	Entry:	BX = Xmit Q control structure
+;
+;;	test term_mode,vsm_nocursor
+;;	jnz s_s_c_exit
+	or term_mode,vsm_nocursor
+
+	mov oesc_cnt[bx],3
+	mov cl,esc
+	call serial_out
+	mov cl,'x'
+	call serial_out
+	mov cl,'5'
+	call serial_out
+s_h_c_exit:
+	ret
+
+;--------------;
+ser_show_cursor:
+;--------------;
+;	Sends Z-29/19 escape sequence to show cursor
+;
+;	Entry:	BX = Xmit Q control structure
+;
+;;	test term_mode,vsm_nocursor
+;;	jz s_s_c_exit
+	and term_mode,not vsm_nocursor
+
+	mov oesc_cnt[bx],3
+	mov cl,esc
+	call serial_out
+	mov cl,'y'
+	call serial_out
+	mov cl,'5'
+	call serial_out
+s_s_c_exit:
+	ret
+
+;---------------;
+ser_keypad_shift:
+;---------------;
+;	Sends Z-29/19 escape sequence to shift keypad
+;
+;	Entry:	BX = Xmit Q control structure
+;
+;;	test term_mode,vsm_keypadshift
+;;	jnz s_k_s_exit
+	or term_mode,vsm_keypadshift
+
+	mov oesc_cnt[bx],2
+	mov cl,esc
+	call serial_out
+	mov cl,'t'
+	call serial_out
+s_k_s_exit:
+	ret
+
+;-----------------;
+ser_keypad_unshift:
+;-----------------;
+;	Sends Z-29/19 escape sequence to unshift keypad
+;
+;	Entry:	BX = Xmit Q control structure
+;
+;;	test term_mode,vsm_keypadshift
+;;	jz s_k_us_exit
+	and term_mode,not vsm_keypadshift
+
+	mov oesc_cnt[bx],2
+	mov cl,esc
+	call serial_out
+	mov cl,'u'
+	call serial_out
+s_k_us_exit:
+	ret
+
+;-------------;
+ser_keypad_alt:
+;-------------;
+;	Sends Z-29/19 escape sequence to alternate keypad
+;
+;	Entry:	BX = Xmit Q control structure
+;
+;;	test term_mode,vsm_keypadalt
+;;	jnz s_k_a_exit
+	or term_mode,vsm_keypadalt
+
+	mov oesc_cnt[bx],2
+	mov cl,esc
+	call serial_out
+	mov cl,'='
+	call serial_out
+s_k_a_exit:
+	ret
+
+;---------------;
+ser_keypad_unalt:
+;---------------;
+;	Sends Z-29/19 escape sequence to unalternate keypad
+;
+;	Entry:	BX = Xmit Q control structure
+;
+;;	test term_mode,vsm_keypadalt
+;;	jz s_k_ua_exit
+	and term_mode,not vsm_keypadalt
+
+	mov oesc_cnt[bx],2
+	mov cl,esc
+	call serial_out
+	mov cl,'>'
+	call serial_out
+s_k_ua_exit:
+	ret
+
+;--------;
+ser_clear:
+;--------;
+;	Sends Z-29/19 escape sequence for Clear Screen
+;
+;	Entry:	BX = Xmit Q control structure
+;
+	mov oesc_cnt[bx],2
+	mov cl,esc
+	call serial_out
+	mov cl,'E'
+	call serial_out
+	ret
+
+
+;-------;
+ser_home:
+;-------;
+;	Send Z29/19 escape sequence for Home-Cursor
+;
+;	Entry:	BX = XMIT Q control structure
+;
+	mov oesc_cnt[bx],2
+	mov cl,esc
+	call serial_out
+	mov cl,'H'
+	call serial_out
+	ret
+
+;--------;
+ser_cr_lf:
+;--------;
+;	Sends a carriage return/linefeed to the Z19/29.
+;
+;	Entry:	BX = Xmit Q control structure
+;
+	push ax ! push si
+	mov cl,0Ah
+	call serial_out
+	mov cl,0Dh
+	call serial_out
+	pop si ! pop ax
+	ret
+
+;------------------;
+ser_position_cursor:
+;------------------;
+;	Sends Z-29/19 escape sequence to position the cursor
+;
+;	Entry:	BX = Xmit Q control structure
+;
+	push dx ! push ax
+	mov oesc_cnt[bx],4
+	mov cl,esc
+	call serial_out
+	mov cl,'Y'
+	call serial_out
+	pop ax					;; row #
+	add al,32				;; normalize for terminal
+	mov cl,al
+	call serial_out
+	pop dx					;; col #
+	add dl,32				;; move cursor 1 char past last char
+	mov cl,dl
+	call serial_out
+	ret
+eject
+
+	dseg
+
+;***************************************************************;
+;								;
+;		SPECIAL OUTPUT CHARACTER TABLES			;
+;								;
+;***************************************************************;
+
+spec_char_tab	db	4
+		db	cr,lf,backsp,escape
+
+spec_func_tab	dw	carriage_return,line_feed,back_space,escape_rt
+
+;***************************************************************;
+;								;
+;		    ESCAPE SEQUENCE TABLES			;
+;								;
+;***************************************************************;
+
+esc_tbl		db	31
+
+		db	'A','B','C','D'
+		db	'E','H','I','Y'
+		db	'b','J','M','j'
+		db	'o','K','L','k'
+		db	'N','p','q'
+		db	's','l','t','u'
+		db	'v','w','x','y'
+		db	'F','G','=','>'
+
+esc_func_tbl	rw 0
+
+dw	up,		down,		right,		left
+dw	erase_screen,	home,		up_with_scroll,	x_and_y
+dw	erase_begin,	erase_end,	delete_line,	save
+dw	erase_bol,	erase_eol,	insert_line,	restore
+dw	delete_char,	reverse_on,	reverse_off
+dw	set_attribute,	erase_line,	keypad_shift,	keypad_unshift
+dw	enable_wrap,	disable_wrap,	set_modes,	reset_modes
+dw	graphics_on,	graphics_off,	keypad_alt,	keypad_unalt
+eject
+
+;***************************************************************;
+;								;
+;		VIRTUAL SCREEN  IMAGE TABLE			;
+;								;
+;***************************************************************;
+
+screen_image_tbl dw	scrn_image0, scrn_image1, scrn_image2, scrn_image3
+		 dw	scrn_image4, scrn_image5, scrn_image6, scrn_image7
+
+scrn_image0	dw	0,0			;cursor, oldcursor
+		db	0,0,0			;col, row, mode
+		db	vsa_normal		;attribute
+		dw	0,0,0			;xy, oldxy, screen segment
+		dw	offset default_esc	;default: first char = reg char
+		db	0			;pcon
+
+scrn_image1	dw	0,0			;cursor, oldcursor
+		db	0,0,0			;col, row, mode
+		db	vsa_normal		;attribute
+		dw	0,0,0			;xy, oldxy, screen segment
+		dw	offset default_esc	;default: first char = reg char
+		db	0			;pcon
+
+scrn_image2	dw	0,0			;cursor, oldcursor
+		db	0,0,0			;col, row, mode
+		db	vsa_normal		;attribute
+		dw	0,0,0			;xy, oldxy, screen segment
+		dw	offset default_esc	;default: first char = reg char
+		db	0			;pcon
+
+scrn_image3	dw	0,0			;cursor, oldcursor
+		db	0,0,0			;col, row, mode
+		db	vsa_normal		;attribute
+		dw	0,0,0			;xy, oldxy, screen segment
+		dw	offset default_esc	;default: first char = reg char
+		db	0			;pcon
+
+scrn_image4	dw	0,0			;cursor, oldcursor
+		db	0,0,0			;col, row, mode
+		db	vsa_normal		;attribute
+		dw	0,0,0			;xy, oldxy, screen segment
+		dw	offset default_esc	;default: first char = reg char
+		db	1			;pcon
+
+scrn_image5	dw	0,0			;cursor, oldcursor
+		db	0,0,0			;col, row, mode
+		db	vsa_normal		;attribute
+		dw	0,0,0			;xy, oldxy, screen segment
+		dw	offset default_esc	;default: first char = reg char
+		db	1			;pcon
+
+scrn_image6	dw	0,0			;cursor, oldcursor
+		db	0,0,0			;col, row, mode
+		db	vsa_normal		;attribute
+		dw	0,0,0			;xy, oldxy, screen segment
+		dw	offset default_esc	;default: first char = reg char
+		db	1			;pcon
+
+scrn_image7	dw	0,0			;cursor, oldcursor
+		db	0,0,0			;col, row, mode
+		db	vsa_normal		;attribute
+		dw	0,0,0			;xy, oldxy, screen segment
+		dw	offset default_esc	;default: first char = reg char
+		db	1			;pcon
+
+;*************************************;
+;  Current terminal Mode & attribute  ;
+;*************************************;
+
+term_mode	db 0
+term_attrib	db 0
+
+	end
+                                                                                                                                                                                                                                                                                                                                                                                                                             

@@ -1,0 +1,808 @@
+;HDISK.A86
+title	'Disk 2 Hard Disk Driver'
+;************************************************
+;					     	*
+;	HARD DISK DRIVER MODULE			*
+;	Last changed : 1/15/85			*
+;						*
+;************************************************
+
+nolist
+include system.lib
+include popf.a86			; 286 bug
+include diskhdr.equ
+include exerror.equ
+include sysdat.lib
+list
+;include system.lib
+;include popf.a86			; 286 bug
+;include diskhdr.equ
+;include exerror.equ
+;include sysdat.lib
+
+	cseg
+
+public	h_read, h_write, h_dsk_sel
+public	h_init, h_disk_int
+
+extrn	intdisp:near
+extrn	supif:near, sysdat:word
+extrn	read_write:near
+
+	dseg
+
+extrn	dph_tbl:word
+extrn	dph1:byte, dph2:byte, dph3:byte
+
+extrn	current_reskew:word
+
+extrn	itrack:word, isector:byte, idmaoff:word, idmaseg:word
+eject
+
+;*********** EQUATES: **************
+
+HD_IRL		equ	02H		; hard disk interrupt request line
+
+MASTER_PIC_PORT	EQU	50H
+RW_ERROR	EQU	01
+SUCCESS		EQU	0
+RET_ADDR	EQU	04
+					; FOR HARD DISK WITH A DISK 2 CONTROLLER
+H_READ_F		EQU	1
+H_WRITE_F		EQU	2
+					; disk 2 ports
+STAT_CONTROL		equ	0C8H
+DISK_2_DATA		equ	STAT_CONTROL + 1
+DISK_2_SELECT		equ	0F0H
+
+ROUTINE_USE	equ	2
+
+phys_drvs	equ	1		; # physical hard drive(s) supported
+track_0		equ	0		; this is track 0
+drive_sel_op	equ	0		; disk 2 drive select op code
+drive_0		equ	10h		; this is the first and only drive
+					; in the system
+seek_outer	equ	false
+seek_inner	equ	true
+
+home_count	equ	512
+					; status equates
+ATTN_NOT		equ	80h
+TIME_OUT		equ	40h
+CRC_ERROR		equ	20h
+OVER_RUN		equ	10h
+READY_NOT		equ	08h
+SEEK_COMPLETE_NOT	equ	04h
+WRITE_FAULT_NOT		equ	02h
+TRACK0_NOT		equ	01h
+					; control equates
+RUN			EQU	40H
+OP2			EQU	20H
+OP1			EQU	10H
+OP0			EQU	08H
+FAULT_CLR		EQU	04H
+USR1			EQU	02H
+USR2			EQU	01H
+					; command equates
+NULL_F		equ	0C0H
+CLEAR_INT	equ	080H
+READ_DATA_F	equ	0C8H
+WRITE_DATA_F	equ	0D0H
+WRITE_HEADER_F	equ	091H
+READ_HEADER_F	equ	0E0H
+					; seek direction, op2(bit 5) of the 
+					; command word sets the direction 
+					; signal to the disk drive.
+INNER		EQU	20H
+OUTTER		EQU	00H
+					; offsets for read header command buffer
+TEST_CYLINDER	EQU	0H
+TEST_HEAD	EQU	1H
+TEST_SECTOR	EQU	2H
+
+eject
+
+					; For the DISK2 selector card
+					; See page 28 of the DISK2 manual 
+					; the patterns given are for:
+					; d7 = write/read
+					; d6 = memory (vs io port operations)
+					; d5 = increment the memory address
+					; d4 = no wait states 
+					; d3 - d0 = complement of the dma dev
+					; the selector channel will work with
+DISK_2_INT_PRIORITY	equ	10
+DISK_2_DMA_PRIORITY	equ	not	DISK_2_INT_PRIORITY
+WRITE_TO_DISK	equ	00100000b or ( DISK_2_DMA_PRIORITY and 0fh )
+READ_FROM_DISK	equ	10100000b or ( DISK_2_DMA_PRIORITY and 0fh )
+
+					; For the read/write routines
+TRACK_OFFSET	EQU	0
+HEAD_OFFSET	EQU	2
+SECTOR_OFFSET	EQU	4
+DMA_OFFSET	equ	6
+					; these are the op codes for the DISK2
+OP_DRIVE	equ	080H
+OP_TRACK	equ	088H
+OP_HEAD		equ	090h
+OP_SECTOR	equ	098h
+
+H_DISK_FLAG	EQU	8
+HD_EOI		EQU	61H
+
+hd_stat		db	0		; Interrupt handler will put status
+					; from the DISK2 controller here before
+					; it resets the PIC.
+eject
+
+	cseg
+
+;==========
+h_disk_int:				; hard disk interrupt handler
+;==========
+	push	ds
+	mov	ds,sysdat
+
+	mov	h_disk_ssreg,ss		; may need to check for
+	mov	h_disk_spreg,sp		; re-entrant interrupt since
+	mov	ss,sysdat		; nmi's can't be disabled
+	mov	sp,offset h_disk_tos
+
+	push ax ! push bx
+	push cx ! push dx
+	push di ! push si
+	push bp ! push es
+	
+	in	al,( MASTER_PIC_PORT + 1 )	; get the PIC's mask
+	or	al,HD_IRL			; mask out the Disk 2
+	out	( MASTER_PIC_PORT + 1 ),al	; write the mask back to the PIC
+	
+ 	mov	dx,H_DISK_FLAG
+ 	mov	cl,F_FLAGSET 
+	call	supif
+
+	mov	al,HD_EOI			; just reset the PIC's
+	out	MASTER_PIC_PORT,al
+
+	pop es ! pop bp
+	pop si ! pop di
+	pop dx ! pop cx
+	pop bx ! pop ax
+
+	mov	ss,h_disk_ssreg
+	mov	sp,h_disk_spreg
+
+	pop	ds
+	jmp intdisp			; iret from dispatcher
+eject
+
+;=========
+h_dsk_sel:
+;=========
+; 	Translates cpm logical drive to a controller specific drive
+;
+;	ENTRY:	cl = cpm logical drive
+;		bx = offset into a dph table
+;		dl[bit 0] = select code
+;
+;	EXIT:	ax = bx = &dph if every thing went ok
+;		ax = bx = 0 if there is no DPH for this drive
+;
+;	NOTE:	this routine just indexes into the dph table
+;		and returns whatever is there. There is no protection.
+
+	mov	ax,dph_tbl[bx]
+	mov	bx,ax
+	mov	current_reskew, 0
+	ret
+
+
+;====
+h_init:
+;====
+; 	Initialzation of the hard disk sub-system.
+; 	Initializes the memory structures, homes the head,
+; 	and puts the disk2 and its selector in a safe state.
+;       See microdisk drives C/E Manual (lsi version) by FUJITSU
+; 	and page 6 of the disk 2 manual
+
+; init the last physical sector to 0:
+	mov	last_cyl,track_0
+
+; do the initial read of the selector channel:
+; (pages 27 and 28 of the disk 2 guide)
+	in	al,DISK_2_SELECT
+
+; init the header buffer d word:
+	mov	( header_buffer_addr + 2 ),ds
+
+; we only are supporting one drive
+; wait for the drive to be come ready:
+	mov	al,OP_DRIVE		; select drive command
+	call	send_command
+	mov	al,DRIVE_0		;   for this drive
+	call	send_data
+
+init_drv_rdy_lp:			; wait for the drive
+	mov	al,NULL_F
+	call	send_command
+	call	stat_return
+	test	al,READY_NOT
+	 jnz	init_drv_rdy_lp
+
+	call	h_home
+	 jz	init_exit
+	or	al,ERROR		; extended from h_home
+init_exit:
+	ret
+eject
+
+;======
+h_read:
+;======
+;	this routine is called by the bdos
+;
+;	ENTRY:	bp = &(IOPB on the stack)
+;
+;	EXIT:	OK if the read happened ok
+;		RW_ERROR if there was a read error
+
+	mov	hard_op,H_READ_F
+	mov	si,offset h_rd_wt
+	jmp	read_write
+
+;======
+h_write:
+;======
+;	this routine is called by the bdos
+;
+;	ENTRY:	bp = &(IOPB on the stack)
+;
+;	EXIT:	OK if the read happened ok
+;		RW_ERROR if there was a read error
+
+	mov	hard_op,H_WRITE_F
+	mov	si,offset h_rd_wt
+	jmp	read_write
+eject
+;=======
+h_rd_wt:
+;=======
+; This is the main sector read routine for concurrent
+; It does everything possible to make the read.
+; The drive is assumed to be 0 and selected befor this operation.
+;
+;	ENTRY:	hd_op	= READ if we want a read, WRITE if we want a write
+;		itrack	= the track we want to read
+;		isector	= the sector we want to read
+;		idmaoff	= where to get or put the data
+;		idmaseg	= where to get or put the data
+;
+;	EXIT:	al	= OK if every thing went OK
+;		al	= RW_ERROR (01)  if there was a fatal error
+
+	mov	bx,offset rw_track
+	mov	h_rd_wt_param_add,bx		; save the param pointer
+
+; translate the track from concurrent to the track and
+; sector for the hard disk:
+; (this assumes 8 heads [ 0 - 7 ])
+	mov	ax,itrack
+	and	ax,07
+	mov	HEAD_OFFSET[bx],al
+	mov	ax,itrack
+	mov	cl,3
+	shr	ax,cl
+	mov	TRACK_OFFSET[bx],ax
+
+; move the remaining params passed in from read_write to
+; our local copies:
+	xor	ax,ax
+	mov	al,isector
+	mov	SECTOR_OFFSET[bx],ax
+	mov	ax,idmaoff
+	mov	DMA_OFFSET[bx],ax
+	mov	ax,idmaseg
+	mov	DMA_OFFSET + 2 [bx],ax
+	
+; select the drive and
+; check for the drive being ready:
+	mov	al,OP_DRIVE
+	call	send_command
+	mov	al,DRIVE_0
+	call	send_data
+	call	stat_return
+	and	al,READY_NOT
+	 jz	rd_drv_rdy
+	mov	ah,ATTA_FAILED		; drive was not ready
+	or	al,RW_ERROR
+	ret
+
+rd_drv_rdy:
+	mov	re_homes,RETRY_COUNT / 2
+re_home_lp:
+	mov	h_rd_wt_retries,RETRY_COUNT 
+h_rd_wt_retry_lp:
+	mov	bx,h_rd_wt_param_add	; set up the parameter pointer
+
+; seek to the proper track:
+	mov	ax,TRACK_OFFSET[bx]
+	mov	cyl,ax
+	call	seek
+	
+	mov	bx,h_rd_wt_param_add	; set up the parameter pointer
+
+; set up the drive register:
+	mov	al,OP_DRIVE		; select the drive/head register for
+	call	send_command		; for the subsequent out instruction
+	xor	ax,ax			; only drive 0 is valid
+	mov	ax,HEAD_OFFSET[bx]
+	and	ax,0fH			; THE lower nibble in al is head
+	or	al,DRIVE_0		; the upper nibble is the drive
+	call	send_data
+
+; set up the track register:
+	mov	al,OP_TRACK
+	call	send_command
+	mov	ax,TRACK_OFFSET[bx]	; select the track
+	call	send_data
+
+; set up the head register:
+	mov	al,OP_HEAD
+	call	send_command
+	mov	ax,HEAD_OFFSET[bx]	; select the head
+	and	ax,0fh
+	call	send_data
+
+; set up the sector register:
+	mov	al,OP_SECTOR
+	call	send_command
+	mov	ax,SECTOR_OFFSET[bx]	;select the sector
+	and	al,0ffh
+	call	send_data
+
+; set up the dma base and direction:
+	lea	bx,DMA_OFFSET[bx]
+	cmp	hard_op,H_READ_F
+	 jne	h_wrt_now
+	mov	al,READ_FROM_DISK
+	jmps	set_h_dma
+h_wrt_now:
+	mov	al,WRITE_TO_DISK
+set_h_dma:
+	call	set_disk_2_dma
+
+; do the read or write:
+	cmp	hard_op,H_READ_F
+	 jne	h_wrt_now_1
+	mov	al,READ_DATA_F
+	jmps	h_do_rd_wt
+h_wrt_now_1:
+	mov	al,WRITE_DATA_F
+h_do_rd_wt:
+	call	send_command
+
+; get the status byte and deal with any errors:
+	call	h_int_wait
+	call	stat_return
+	test	al,(TIME_OUT or CRC_ERROR or OVER_RUN)
+	 jnz	h_rd_wt_err_1
+	and	al,SUCCESS
+	jmp	h_rd_wt_exit
+h_rd_wt_err_1:
+
+; stash the last return error code from the controller:
+	mov	h_rd_wt_error_type,al
+; check the number of retries:
+	dec	h_rd_wt_retries
+	 jnz	rd_wt_retry_1
+; re-home the head after 5 retries:
+	dec	re_homes
+	 jz	re_home_1
+	call	h_home
+	jmp	re_home_lp
+re_home_1:
+	mov	ah,ATTA_FAILED
+    	mov	al,RW_ERROR
+	jmp	h_rd_wt_exit
+rd_wt_retry_1: 
+
+; if it's a crc_error or a data_over_run error just retry it:
+	test	al,TIME_OUT
+	 jnz	rd_wt_retry_2
+	jmp	h_rd_wt_retry_lp
+rd_wt_retry_2:
+; must be a time out error, so check for the proper track:
+	mov	bx,offset header_buffer_addr
+	call	read_header
+	cmp	al,SUCCESS
+	 je	check_track
+	or	al,RW_ERROR		; extented error set in read_header
+	jmps	h_rd_wt_exit
+check_track:
+; we h_rd_wt the header so check the track:
+	mov	bx,h_rd_wt_param_add
+	mov	ax,TRACK_OFFSET[bx]
+	mov	bx,offset header_buffer
+; if the head is over the proper cylinder/track just retry:
+	cmp	ax,TEST_CYLINDER[bx]
+	 jne	wrong_track
+	jmp	h_rd_wt_retry_lp
+wrong_track:
+; must have been over a wrong track. 
+; so update last track and re-seek:
+	mov	ax,TEST_CYLINDER[bx]
+	mov	last_cyl,ax
+	mov	bx,h_rd_wt_param_add
+	mov	ax,TRACK_OFFSET[bx]
+	mov	cyl,ax
+	call	seek
+	jmp	h_rd_wt_retry_lp
+
+h_rd_wt_exit:
+	ret
+eject
+
+;=====
+h_home:
+;=====
+; this routine will home the drive.
+; If the track 0 not signal is true we do nothing.
+; If it's false we try to home the heads.
+;	ENTRY:	none
+;
+;	EXIT:	al = 0ffh	on error
+;		al = 000h	if things went OK.
+;		the zero flag refects al
+
+; if were on track 0 we don't have to home:
+	mov	al,OP_DRIVE
+	call	send_command
+	mov	al,DRIVE_0
+	call	send_data
+	call	stat_return
+	test	al,TRACK0_NOT
+	 jz	home_exit
+
+; we have do the home:
+	mov	home_retries,RETRY_COUNT
+home_retry_lp:
+; first find out what track we're over:
+	mov	bx,offset header_buffer_addr
+	call	read_header
+	cmp	al,SUCCESS
+	 je	h_home_1
+	dec	home_retries
+	 jnz	home_retry_lp
+	or	al,ERROR		; extended error set in read_header
+	jmp	home_exit
+h_home_1:
+; get the current cylinder:
+	xor	ax,ax
+	mov	bx,offset header_buffer
+	mov	al,TEST_CYLINDER[bx]
+	mov	last_cyl,ax
+
+; seek to cylinder 0:
+	mov	cyl,0
+	call	seek
+
+	call	stat_return
+	test	al,TRACK0_NOT
+	 jz	end_home_lp
+; try to issue the home command:
+	pushf ! cli
+	mov	al,SEEK_OUTER	; set direction
+	call	send_command
+	mov	cx,HOME_COUNT	; and bang the port
+home_lp:
+	in	al,DISK_2_DATA	; over 256 reads from the data port
+	loop	home_lp		; at a rate between 3K and 3 Meg
+	popff
+
+	mov	dl,( 15 * DELAY_16_MS )	; wait for the hard disk to recover
+	mov	cl,DELAY_F		; about 250 ms
+	call	supif
+
+	call	stat_return
+
+	test	al,TRACK0_NOT
+	 jz	end_home_lp
+; if we're still not over track 0,
+; get away from the stop and try again:
+	mov	cyl,30
+	call	seek
+	dec	home_retries
+	 jnz	home_retry_lp
+	mov	ah,SEEK_FAILED
+	or	al,ERROR
+end_home_lp:
+	mov	last_cyl,TRACK_0
+
+home_exit:
+	ret
+eject
+
+read_header:
+;-----------
+; This routine reads the three header bytes from the first sector
+; encountered on the track the head is over.  In essence it just
+; drops the head and tells you the current cylinder, head, and sector.
+;	ENTRY:	bx	= &dma_add (dword)
+;
+;	EXIT:	al	= ERROR if the drive was not ready.
+;			  or if the header couldn't be ready with in 
+;			  RETRY_COUNT attempts.
+;		al	= OK if every thing worked OK, 
+;			  the address pointed to by bx on the way in
+;			  will contain the cylinder, head, and sector
+;			  for the currently selected drive.
+
+	mov	rd_hdr_retries,RETRY_COUNT
+rd_hdr_retry_lp:
+; set up the dma base and direction:
+	mov	al,READ_FROM_DISK
+	call	set_disk_2_dma
+
+rd_hdr_drv_rdy:
+	mov	al,READ_HEADER_F
+	call	send_command
+	
+	call	h_int_wait
+	call	stat_return
+
+; check for no errors:
+	and	al,(TIME_OUT or CRC_ERROR or OVER_RUN)
+	test	al,SUCCESS
+	 jz	exit_read_header
+; must have some sort of error:
+	dec	rd_hdr_retries
+	 jnz	rd_hdr_retry_lp
+	mov	ah,al
+	or	al,ERROR
+	test	ah,TIME_OUT
+	 jz	not_time_out
+	mov	ah,ATTA_FAILED
+	jmps	exit_read_header
+not_time_out:
+	shr	ah,1		; convert to extended error
+
+exit_read_header:
+	ret
+eject
+
+seek:
+;----
+; This routine seeks to the track passed in.
+; It does no error recovery.  It expects the READ or Write routine
+; to take care of errors.
+;	ENTRY:	cyl		the cylinder we want to seek to.
+;		last_cyl	the last cylinder we were on.
+;				The one the head should be over when we
+;				enter this routine.
+;	EXIT:	there is no error code returned.
+;		if there is an error in the seek operation, the corresponing
+;		read or write will fail.  When the corresponding read 
+;		or write tries to recover it will do the seeks again.
+
+; Is the current cylinder the one we want?
+	mov	ax,cyl
+	cmp	ax,last_cyl
+	 je	exit_seek
+	 jg	requested_cyl_greater
+	sub	last_cyl,ax		; the last cylinder was greater 
+	mov	al,OUTTER		; set the direction twords the edge
+	call	send_command
+	jmps seek_1
+
+requested_cyl_greater:
+	xchg	ax,last_cyl		; the cylinder we want is greater
+	sub	last_cyl,ax
+	mov	al,inner		; set the direction twords the spindle
+	call	send_command
+seek_1:
+	mov	cx,last_cyl		; last_cyl = abs( cyl - last_cyl )
+	pushf ! cli			; critical region
+seek_2:
+	in	al,DISK_2_DATA		; bang the step port
+	loop	seek_2
+	popff
+	
+; set the null command and do a flag wait:
+	mov	al,NULL_F
+	call	send_command
+
+	call	h_int_wait
+	call	stat_return
+
+	mov	ax,cyl		; update the cylinder register
+	mov	last_cyl,ax
+
+; just to get back to here the seek must have happened:
+; the only action to take at this time would be a sample
+; of the track field on the disk.  This has to be done
+; by the read or write any way. So return.
+
+exit_seek:
+	ret
+eject	
+
+set_disk_2_dma:
+;--------------
+; This routine sets the 24 bit dma from the dword
+; pointed to by Bx.
+;
+;	ENTRY:	al	= mode byte for the selector channel
+;		bx	= &dma_add (dword)
+;
+;	EXIT:		the selector channel will have it's dma
+;			set to the value passed in.
+
+	push ax
+
+; just do a read of the selector channel to make it:
+; ready for the subsequent writes
+	in	al,DISK_2_SELECT
+
+; calculate the segment and offset into a 20 bit dma value:
+	mov	dx,2[bx]
+	mov	ax,dx
+	mov	cl,4
+	shl	ax,cl
+	shr	dh,cl
+	add	ax,[bx]
+	adc	dh,0
+
+; send this three (3) byte dma value to the disk 2 selector channel:
+	mov	dl,al
+	in	al,DISK_2_SELECT
+	mov al,dh ! out DISK_2_SELECT,al
+	mov al,ah ! out DISK_2_SELECT,al
+	mov al,dl ! out DISK_2_SELECT,al
+
+; send the mode control byte to the selector channel:
+	pop	ax
+	out	DISK_2_SELECT,al	
+
+	ret
+eject
+
+h_int_wait:
+;----------
+;	This routine waits for the interrupt
+;
+;	ENTRY:	none
+;	EXIT:	none
+
+	jmps	real_h_int
+
+int_wait_lp:
+	call	stat_return
+	test	al,ATTN_NOT
+	 jnz	int_wait_lp
+
+	jmp	h_int_wait_exit
+
+real_h_int:
+	push ax! push bx! push cx! push dx
+	push di! push si! push bp
+	push es! push ds!
+
+; turn on the disk 2's interrupt line:
+	in	al,( MASTER_PIC_PORT + 1 )	; read the PIC's int mask
+	and	al,not HD_IRL			; turn on the disk 2
+	out	( MASTER_PIC_PORT + 1 ),al	; write the mask back out
+
+	mov	dl,H_DISK_FLAG
+	mov 	cl,F_FLAGWAIT
+	call	supif
+
+	pop ds! pop es
+	pop bp! pop si! pop di
+	pop dx! pop cx! pop bx! pop ax
+
+h_int_wait_exit:
+	ret
+eject
+
+send_command:
+;------------
+; this routine sends a command to the DISK2 controller
+;
+;	ENTRY:	al = command
+;	EXIT:	none
+;
+;	bx must be preserved
+
+	out	STAT_CONTROL,al
+	ret
+
+
+send_data:
+;---------
+; this routine sends a data byte to the DISK2 controller
+;
+;	ENTRY:	al = data byte
+;	EXIT:	none
+;
+;	NOTE:	bx must be preserved
+
+	out DISK_2_DATA, al
+	ret
+
+
+stat_return:
+;-----------
+; this routine just returns the status from the disk controler
+;
+;	ENTRY:	none
+;
+;	EXIT:	al = current status from the disk controller
+
+	in al, STAT_CONTROL		; get the controler status
+	ret
+
+;CSEG ISR stack:
+
+		rw	48
+h_disk_tos	rw	0
+h_disk_ssreg	rw	1
+h_disk_spreg	rw	1
+eject
+
+	dseg
+
+h_rd_wt_error_type		db	0
+
+header_buffer_addr	dw	offset header_buffer
+			dw	0
+
+header_buffer		db	0,0,0,0,0	; should only need three
+
+;params for h_rd_wt:
+
+hard_op		db	0
+rw_track	dw	0
+rw_head		dw	0
+rw_sector	dw	0
+rw_dma_off	dw	0
+rw_dma_seg	dw	0
+
+;The current retry counters:
+
+h_rd_wt_retries		db	0
+re_homes		db	0
+write_retries		db	0
+rd_hdr_retries		db	0	
+home_retries		db	0
+eject
+
+; The disk 2 controler wants a control word and delivers a status
+; word for each operation:
+
+disk2_control	db	0
+disk2_status	db	0
+
+;      BIT	CTL		        STATUS
+;     	       (write)		        (read)
+;--------------------------------------------------------
+;	7	attn_not		attn_not
+;	6	run			time out
+;	5	op2			crc error
+;	4	op1			over run
+;	3	op0			ready_not
+;	2	fault clr		seek complete_not
+;	1	usr1			write fault_not
+;	0	usr0			track0_not
+;
+; where: 	_not   indicates an active low signal
+
+; used by init and seek:
+
+last_cyl	dw	0	; the last cylinder we were on
+cyl		dw	0	; the current cylinder we want 
+
+h_rd_wt_param_add	dw	0
+
+	end
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                  

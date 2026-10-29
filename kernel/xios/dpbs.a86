@@ -1,0 +1,348 @@
+;DPBS.A86
+title	'Compupro CCP/M DPHs & DPBs'
+;****************************************
+;					*
+;	DISK PARAMETER HEADERS & BLOCKS *
+;	Last changed: 1/15/85  JMB	*
+;					*
+;****************************************
+
+nolist
+include dpbs.equ
+list
+;include dpbs.equ
+
+	dseg
+
+public	dph1,dpe5,dph2,dph3,dph4,dph5
+
+public	xlts, xltd1, xltd2, xltd3
+public	current_reskew
+public	re_skew_26_3, re_skew_26_2, re_skew_15_2, re_skew_8_2
+public	dpbs1, dpbs2, dpbd1, dpbd2, dpbd3, dpbd4, dpbd5, dpbd6
+public	dpbpc1, dpbpc5, dpbpc6
+eject
+
+; DISK PARAMETER HEADERS:
+
+;==   floppy disk 0:
+dph1	dw	xltd3, 0000h	; translate table
+	dw	0000h, 0000h	; scratch area
+	dw	dpbinit		; disk parameter table, for GENCCPM 
+	dw	0ffffh, 0ffffh	; check, alloc vectors
+	dw	0ffffh		; dir buf control block
+	dw	0ffffh		; data buff cntrl block
+	dw	0ffffh		; hash table segment
+
+;==  floppy disk 1:
+dph2	dw	xltd3, 0000h	; translate table
+	dw	0000h, 0000h	; scratch area
+	dw	dpbinit		; disk parameter table, for GENCCPM
+	dw	0ffffh,0ffffh	; check, alloc vectors  
+	dw	0ffffh		; dir buf control block
+	dw	0ffffh		; data buff cntrl block
+	dw	0ffffh		; hash table segment
+
+; hard disk outer edge:
+dph3	dw	0000h, 0000h	; translate table
+	dw	0000h, 0000h	; scratch area
+	dw	dpbh1		; disk paramater table
+	dw	0ffffh		; check sum vector
+	dw	0ffffh		; alloc vectors
+	dw	0ffffh		; dir buf control block
+	dw	0ffffh		; data buff cntrl block
+	dw	0ffffh		; hash table segment
+
+; hard disk middle:
+dph4	dw	0000h, 0000h	; translate table
+	dw	0000h, 0000h	; scratch area
+	dw	dpbh2		; disk paramater table
+	dw	0ffffh		; check sum vector
+	dw	0ffffh		; alloc vectors
+	dw	0ffffh		; dir buf control block
+	dw	0ffffh		; data buff cntrl block
+	dw	0ffffh		; hash table segment
+
+; hard disk near spindle
+dph5	dw	0000h, 0000h	; translate table
+	dw	0000h, 0000h	; scratch area
+	dw	dpbh3		; disk paramater table
+	dw	0ffffh		; check sum vector
+	dw	0ffffh		; alloc vectors
+	dw	0ffffh		; dir buf control block
+	dw	0ffffh		; data buff cntrl block
+	dw	0ffffh		; hash table segment
+eject
+
+; mdisk
+dpe5	dw	xlt5,0000h	;Translate Table
+	dw	0000h,0000h	;Scratch Area
+	dw	dpb5		;Dsk Parm Block
+	dw	0ffffh,ALV_M	; check, alloc Vectors
+	dw	0ffffh		;Dir Buff Cntrl	Blk
+	dw	0		;Data Buff Cntrl Blk
+	dw	0		;Hash Table Segment
+
+
+
+;	THESE ARE THE SKEW TABLES
+;	sector translation tables (for floppy disks)
+
+xlts	DB	0,6,12,18,24,4,10,16,22,2,8,14,20	; physical skew = 6
+	DB	1,7,13,19,25,5,11,17,23,3,9,15,21	; 26 sectors/track
+							; 128 byte sectors
+
+xltd1	db	0,9,18,1,10,19,2,11,20,3,12,21		; physical skew = 9
+	db	4,13,22,5,14,23,6,15,24,7,16,25		; 26 sectors/track
+	db	8,17					; 256 byte sectors
+
+xltd2	db	0,4,8,12,1,5,9,13			; physical skew = 4
+	db	2,6,10,14,3,7,11			; 15 sectors/track
+							; 512 byte sectors
+
+xltd3	DB	0,3,6,1,4,7,2,5				; physical skew = 3
+							; 8 sectors per track
+							; 1024 byte sectors
+
+;	THESE ARE THE RE-SKEW TABLES
+
+current_reskew	dw	0
+
+re_skew_26_3	db	0,3,6,9,12,15,18,21,24,1,4,7,10
+		db	13,16,19,22,25,2,5,8,11,14,17,20,23
+
+re_skew_26_2	db	0,2,4,6,8,10,12,14,16,18,20,22,24
+		db	1,3,5,7,9,11,13,15,17,19,21,23,25
+
+re_skew_15_2	db	0,2,4,6,8,10,12,14
+		db	1,3,5,7,9,11,13
+
+re_skew_8_2	db	0,2,4,6
+		db	1,3,5,7
+eject
+
+;The initial DPB below will become the mdisk ALV at run time to save space:
+ALV_M		rb 0
+
+;Initial DPB containing information to force GENCCPM to create buffers
+;and vectors large enough for the most extreme floppy formats supported.
+
+dpbinit	dw	0	;SPT, not used by GENCCPM
+	db	0,0,0	;BSH, BLM, EXM not used by GENCCPM
+
+	dw	1222	;DSM...largest is DS DD (1024) DOS
+			;(GENCCPM uses DSM to calculate ALV)
+
+	dw	512	;DRM...largest is DS DD (1024) FAT (2K)
+			;(GENCCPM uses DRM to size the hash table or FAT)
+
+	db	0,0	;AL0,AL1 not used by GENCCPM
+
+	dw	64	;CKS...CPM DS DD's all have 256 directory entries
+			;(Used by GENCCPM to reserve the CSV)
+
+	dw	0	;OFF not used by GENCCPM
+
+	db	3,7	;PSH, PHM...1K is the largest sector
+			;(used by GENCCPM to size the buffers)
+
+DPB_SIZE equ offset $ - offset dpbinit
+	rb	((M_DSM/8)+1)*2 - DPB_SIZE	;reserve the rest for ALV M:
+eject
+
+;Disk parameter blocks for supported PCMODE formats:
+
+dpbpc1:			; 8" single sided and density DOS
+	DW	0ffffH			; EXTFLAG
+	DW	2			; NFATS
+	DW	6			; NFATRECS
+	DW	495			; NCLSTRS
+	DW	128*4			; CLSIZE
+	DW	1			; FATADD
+	DW	26			; SPT
+	DB	2			; BSH extrapolate from table for...
+	DB	3			; BLM ...512-byte block size
+	DB	0			; EXM, not used for DOS
+	DW	494			; DSM, largest cluster number
+	DW	68-1			; DRM, directory entries - 1
+	DB	0			; AL0, not used
+	DB	0			; AL1, not used
+	DW	8011H			; CKS, based on DRM
+	DW	0			; OFF
+	DB	0			; PSH, 128b sectors
+	DB	0			; PRM
+
+dpbpc5:			; 8" single-sided, double density (1024) DOS 
+	DW	0ffffH			; EXTFLAG
+	DW	2			; NFATS
+	DW	1			; NFATRECS
+	DW	612			; NCLSTRS
+	DW	1024			; CLSIZE
+	DW	1			; FATADD
+	DW	8			; SPT
+	DB	3			; BSH
+	DB	7			; BLM
+	DB	0			; EXM, not used for DOS
+	DW	611			; DSM, largest cluster number
+	DW	96-1			; DRM, directory entries - 1
+	DB	0			; AL0, not used
+	DB	0			; AL1, not used
+	DW	8018H			; CKS, based on DRM
+	DW	0			; OFF
+	DB	3			; PSH, 1K sectors
+	DB	7			; PRM
+eject
+
+dpbpc6:			; 8" double-sided double density (1024) DOS 
+	DW	0ffffH			; EXTFLAG
+	DW	2			; NFATS
+	DW	2			; NFATRECS
+	DW	1223			; NCLSTRS
+	DW	1024			; CLSIZE
+	DW	1			; FATADD
+	DW	8			; SPT
+	DB	3			; BSH
+	DB	7			; BLM
+	DB	0			; EXM, not used for DOS
+	DW	1222			; DSM, largest cluster number
+	DW	192-1			; DRM, directory entries - 1
+	DB	0			; AL0, not used
+	DB	0			; AL1, not used
+	DW	8030H			; CKS, based on DRM
+	DW	0			; OFF
+	DB	3			; PSH, 1K sectors
+	DB	7			; PRM
+eject
+;Disk parameter blocks for supported CP/M formats:
+dpbs1:			;single density, single sided.
+	DW	26			;sectors per track
+	DB	3,7,0			;block size=1k, exm=0
+	DW	s1dsm-1,64-1		;dsm,drm
+	DB	11000000b,00000000b	;2 blocks for directory
+	DW	8010H			;64/4 cks
+	DW	2			;offset by 2 tracks
+	db	0			; physical sector shift
+	db	0			; physical sector mask
+
+dpbs2:			;single density, double sided.
+	DW	26			;sectors per track
+	DB	4,15,1			;block size=2k, exm=1
+	dw	s2dsm-1,128-1
+	DB	11000000b,00000000b	;2 blocks for directory
+	DW	8020H			;128/4 cks
+	DW	2*2			;offset by 4 tracks
+	db	0			; physical sector shift
+	db	0			; physical sector mask
+
+dpbd1:			;double density, single sided. (256 byte sectors)
+	DW	26			;physical sectors per track
+	DB	4,15,0			;block size = 2k, exm=0 (should be 1)
+	DW	d1dsm-1,128-1		;dsm, drm
+	DB	11000000b,00000000b	;2 blocks for directory
+	DW	8020H			;128/4 cks
+	DW	2			;offset 2 tracks
+	db	1			; physical sector shift
+	db	1			; physical sector mask
+
+dpbd2:			;double density, double sided. (256 byte sectors)
+	DW	26			; physical sectors per track
+	DB	4,15,0			;2k block size, exm=0
+	DW	d2dsm-1,256-1		;dsm, drm
+	DB	11110000b,00000000b	;4 directory blocks
+	DW	8040H			;256/4 cks
+	DW	2*2			;offset 4 tracks
+	db	1			; physical sector shift
+	db	1			; physical sector mask
+eject
+
+dpbd3:			;double density, single sided. (512 byte sectors)
+	DW	15			;physical sectors per track
+	DB	4,15,0			;2k block size, exm=0
+	DW	d3dsm-1,128-1		;dsm, drm
+	DB	11000000b,00000000b	;2 directory blocks
+	DW	8020H			;128/4 cks
+	DW	2			;offset 2 tracks
+	db	2			; physical sector shift
+	db	3			; physical sector mask
+
+dpbd4:			;double density, double sided. (512-byte sectors)
+	DW	15			;physical sectors per track
+	DB	4,15,0			;2k block size, exm=0
+	DW	d4dsm-1,256-1		;dsm, drm
+	DB	11110000b,00000000b	;4 directory blocks
+	DW	8040			;256/4 cks
+	DW	2*2			;offset 4 tracks
+	db	2			; physical sector shift
+	db	3			; physical sector mask
+
+dpbd5:			;double density, single sided. (1024-byte sectors)
+	DW	8			;physical sectors per track
+	DB	4,15,0			;2k block size, exm=0
+	DW	d5dsm-1,128-1		;dsm, drm
+	DB	11000000b,00000000b	;2 directory blocks
+	DW	8020H			;128/4 cks, semi-permanent
+	DW	2			;offset 2 tracks
+	db	3			; physical sector shift
+	db	7			; physical sector mask
+
+dpbd6:			;double density, double sided. (1024-byte sectors)
+	DW	8			;physical sectors per track
+	DB	4,15,0			;2k block size, exm=0
+	DW	d6dsm-1,256-1		;dsm, drm
+	DB	11110000b,00000000b	;4 directory blocks
+	DW	8040H			; 256/4 cks, semi-permanent
+	DW	2*2			;offset 4 tracks
+	db	3			; physical sector shift
+	db	7			; physical sector mask
+
+dpbh1:	; hard disk near outtter edge
+	DW	11			;physical sectors per track
+	DB	5,31,1			; 4k block size, exm=1
+	DW	7FDh,3FFH		;dsm, drm
+	DB	0ffh,0ffh		; 16 directory blocks
+	DW	8000h			; 0 cks, semi-permanent
+	DW	8			;offset 8 tracks
+	db	3			; physical sector shift
+	db	7			; physical sector mask
+
+dpbh2:	; hard disk near middle
+	DW	11			;physical sectors per track
+	DB	5,31,1			; 4k block size, exm=1
+	DW	7FDh,3FFH		;dsm, drm
+	DB	0ffh,0ffh		; 16 directory blocks
+	DW	8000h			; 0 cks, semi-permanent
+	DW	2F0h			;offset 2F0h tracks
+	db	3			; physical sector shift
+	db	7			; physical sector mask
+
+dpbh3:	; hard disk near spindle
+	DW	11			;physical sectors per track
+	DB	5,31,1			; 4k block size, exm=1
+	DW	4E5h,3FFH		;dsm, drm
+	DB	0ffh,0ffh		; 16 directory blocks
+	DW	8000h			; 0 cks, semi-permanent
+	DW	5D8h			;offset 5D8h tracks
+	db	3			; physical sector shift
+	db	7			; physical sector mask
+eject
+
+;MDISK:
+
+dpb5	equ	offset $	;Disk Parameter Block
+	dw	8		;Sectors Per Track
+	db	3		;Block Shift
+	db	7		;Block Mask
+	db	0		;Extnt Mask
+	dw	M_DSM		;Disk Size - 1
+	dw	31		;Directory Max
+	db	128		;Alloc0
+	db	0		;Alloc1
+	dw	0		;Check Size
+	dw	0		;Offset
+	db	0		;Phys Sec Shift
+	db	0		;Phys Sec Mask
+
+xlt5	equ	0		;No Translate Table
+
+	end
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              

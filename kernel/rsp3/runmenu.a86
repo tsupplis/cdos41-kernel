@@ -1,0 +1,1422 @@
+;RUNMENU.A86
+;************************************************************************
+;
+;	Menu system interface module for TMP (Terminal Message Processor)
+;
+;		    By: Rtek Inc.   06/10/84
+;			2265 E. Becker Lane
+;			Phoenix, Arizona 85028
+;			(602) 867-9336
+;
+;	Modified 27 FEB 85 by JMB to properly handle menu execution on
+;	any (serial) console as well as on CPCDOS 3.3 compatible windowed
+;	screens (i.e., those that are supported with the published XIOS
+;	window calls and using the same VC_ structure).
+;
+;	The mods. can be summarized as follows:
+;
+;	* RUNMENU determines if it is running on a SQUID-compatible window
+;	  by executing the WW_POINTER XIOS call to return the VC_ structure
+;	  offset.  If the VS_CRT_SEG is not B000 or B800, the assumption is
+;	  that the console is a plain vanilla.  No further WW_calls are made
+;	  and all menu output vectors through a serial routine which can
+;	  handle all the PC attributes and colors as it wishes.
+;
+;	* If vanilla, the acceptable menu keystrokes become "0" through "9"
+;	  instead of F1 through F10.  "0" will indicate the 10th option
+;	  instead of the first.  If menus are to be designed to be equally
+;	  functional on SQUID windows or serial terminals, they must somehow
+;	  inform the user to type either "1" or "F1", etc., as appropriate.
+;
+;	* The distributed version of the TMP includes RMENUIO, which contains
+;	  the "TERM.DAT" serial conversion scheme.  This method depends on
+;	  a file "TERM.DAT" (or "TERM0.DAT - TERM15.DAT") existing under
+;	  user 0 on the system drive (P:).  If that file cannot be found or
+;	  read, the "cannot run on this terminal" message is written.
+;
+;	Newly modified source lines are marked by a comment field set off
+;	by ";*".
+eject
+
+;		EQUATES
+;
+TRUE		equ 0ffh
+FALSE		equ 0
+
+F1_KEY		equ 0BBh
+F10_KEY 	equ 0C4h
+SER1_KEY	equ 030h	;*
+SER10_KEY	equ 039h	;*
+
+esc		equ 01bh	; Escape character
+cr		equ 13		; carrage return
+lf		equ 10		; line feed
+
+F_MULTISEC	equ 02ch
+P_TERM		equ 08fh
+
+C_MODE		equ 06Dh
+RAW_MODE_BIT	equ 40h
+ESC_MODE_BIT	equ 400h
+
+C_WRITESTR	equ 009h
+C_WRITE 	equ 002h
+C_GET		equ 099h
+C_DELIMIT	equ 110
+DRV_GET 	equ 019h
+M_ALLOC 	equ 080h
+M_FREE		equ 082h
+F_DMASEG	equ 033h
+F_DMAOFF	equ 26
+F_READ		equ 20
+F_OPEN		equ 15
+F_READRAND	equ 33
+
+;* I/O routine pointers...SQUID or SERIAL
+clr_scr		equ	cs: word ptr 0[bx]	;*
+clr_eos		equ	cs: word ptr 2[bx]	;*
+set_attr	equ	cs: word ptr 4[bx]	;*
+cursor_off	equ	cs: word ptr 6[bx]	;*
+cursor_on	equ	cs: word ptr 8[bx]	;*
+posn_cursor	equ	cs: word ptr 10[bx]	;*
+expand_off	equ	cs: word ptr 12[bx]	;*
+expand_on	equ	cs: word ptr 14[bx]	;*
+wrap_on		equ	cs: word ptr 16[bx]	;*
+normalize	equ	cs: word ptr 18[bx]	;* reset terminal to normal
+eject
+
+;
+;		External References
+;
+	CSEG				;*
+	EXTRN	PARSE:near		; in tmp
+	EXTRN	CCPM:near		; in tmp
+	EXTRN	P_STR:near		; in tmp
+	EXTRN	NXT_CMD:near		; in tmp
+	EXTRN	CRLF:near		; in tmp
+	EXTRN	RCLN:near		; in tmp
+	EXTRN	GET_RAW:near		; in tmp
+	EXTRN	DR_FREE:near		; in tmp
+	EXTRN	GETUSER:near		; in tmp
+	EXTRN	SETUSER:near		; in tmp
+	EXTRN	GETDISK:near		; in tmp
+	EXTRN	SETDISK:near		; in tmp
+	EXTRN	PRNUM:near		; in tmp
+
+	EXTRN	UPD_PHY:near		; in dmsubs
+	EXTRN	DM_INIT:near		; in dmsubs
+
+	EXTRN	M_DISP:near		; in dispmenu
+
+	EXTRN	WM_MXQ:near		; in wwcall
+
+	EXTRN	SER_REP_STOSW:near	;* in RMENUIO
+	EXTRN	SER_TERM_INIT:near	;*
+	EXTRN	SER_CLR_SCR:near	;*
+	EXTRN	SER_CLR_EOS:near	;*
+	EXTRN	SER_SET_ATTR:near	;*
+	EXTRN	SER_CURSOR_OFF:near	;*
+	EXTRN	SER_CURSOR_ON:near	;*
+	EXTRN	SER_POSN_CURSOR:near	;*
+	EXTRN	SER_WRAP_ON:near	;*
+	EXTRN	SER_NORMALIZE:near	;*
+
+	DSEG
+	EXTRN	WORD_OUT:word		;* in DISPMENU
+;
+;		External Definitions in code segment
+;
+	PUBLIC	M_INIT
+	PUBLIC	M_GETCMD
+	PUBLIC  CONOUT			;* for RMENUIO.A86
+;
+;		External Definitions in data segment
+;
+	PUBLIC	CCP_DATA
+	PUBLIC	VCCP_CMD
+	PUBLIC	VCCP_LEN
+	PUBLIC	M_ACTIVE
+	PUBLIC	CCP_ACT
+	PUBLIC	CUR_PTR
+	PUBLIC	CUR_SEG
+	PUBLIC	CMD_READY
+eject
+
+	CSEG
+;
+;		Initialize RUNMENU
+;
+M_INIT:
+
+;	push ax ! push bx		;*
+
+;	mov cl,C_GET			;*; get the virtual console #
+;	xor dx,dx			;*
+;	int 224				;*
+
+;	cmp al,3 ! jle m_init1		;*
+;	    pop bx ! pop ax		;*
+;	    mov cl,C_WRITESTR		;*
+;	    mov dx,offset not_console	;*
+;	    push ds			;*
+;	    push cs ! pop ds		;*
+;	    int 224			;*
+;	    pop ds			;*
+;	    ret				;*
+
+m_init1:
+;	pop bx ! pop ax			;*
+
+dmenu_init:
+	test M_ACTIVE,0ffh	; see if already going
+	jz dmenu_init_10	; jmp if no
+	  ret
+eject
+
+dmenu_init_10:
+;
+;		Decode the command tail, if any
+;		Entry:	ax = address of next delimiter in command
+;
+	or ax,ax		; see if any more chars
+	jz norm_init		; jmp if no
+	  mov di,ax		; move offset
+	  inc di		; skip delimiter
+	  mov si,offset FCB	; use other fcb
+	  call PARSE		; move filename to fcb
+	  jcxz is_a_file	; jmp if file name present
+	    jmp norm_init	; no filename, continue with init
+is_a_file:
+	mov cx,12		; move fcb to menu_fcb
+	mov si,offset FCB	; source
+	mov di,offset menu_fcb	; destination
+	push ds 		; set es = destination
+	pop es			;
+	rep movsb		; move the bytes
+	or ax,ax		; see if menu name specified
+	jz norm_init		; jmp if not
+	  inc ax		; there is, jump over delimiter
+	  mov di,ax		; set source
+	  mov si,offset FCB	; set destination
+	  call PARSE		; pretend it's a file name
+	  jcxz is_a_name	; jmp if there is a name there
+	    jmp norm_init	; no starting menu name
+
+is_a_name:
+	mov cx,8		; move name to name storeage area
+	mov si,offset FCB + 1	; source
+	mov di,offset first_name ; destination
+	push ds 		; make es = ds
+	pop es			;
+	rep movsb		; mov them characters
+eject
+
+;
+;		Done with command tail, go for it
+;
+norm_init:
+	test dmenu_init_done,0ffh ; see if init already done
+	jnz part_init		; jmp if yes
+	mov cl,C_GET		; get our virt console number
+	call CCPM		;
+	xor ah,ah		; clear hi bits
+	mov VC_NUM,ax		; save our virtual console number
+	push ax 		; 'C' entry protocol
+	call DM_INIT		; initialize for virtual screen direct access
+
+;* the above call will now return ax=0 if this console is not SQUID-compatible.
+
+	add sp,2		;
+	mov VC_SEG,ax		; returns virtual console segment address
+
+	cmp ax,0		;*
+	 jne part_init		;* jump if SQUID-compatible
+
+;* Here if it's not a SQUID-compatible terminal.
+;* Initialize the serial output routines:
+	mov	al,byte ptr VC_NUM
+	call	SER_TERM_INIT	;* this brings back AX=FFFF if init failed,
+				;* else the segment of TERM.DAT in memory.
+	inc	ax
+	 jnz	term_init_more
+
+;* Here if we can't help 'em.  Do the message and return.
+	mov cl,C_WRITESTR	;*
+	mov dx,offset not_console ;*
+	push ds			;*
+	mov ax,cs ! mov ds,ax	;*
+	int 224			;*
+	pop ds			;*
+	ret			;*
+
+term_init_more:			;*
+	mov	WORD_OUT,offset SER_REP_STOSW	;* change from REP_STOSW
+	mov	lo_key,SER1_KEY			;* change from F1_KEY
+	mov	hi_key,SER10_KEY		;* change from F10_KEY
+	mov	bx,offset ser_routines		;*
+	mov	io_pointer,bx			;*
+	call	wrap_on				;* we must insist on this
+						;* to handle the last char.,
+						;* but only for serial.
+part_init:
+	call read_dir		; initialize menu directory
+	test al,0ffh		; see if a problem reading directory
+	jnz menu_abort		; jump if yes
+
+	call GETUSER		; get current user for menu re-open
+	mov menu_user,bl	; and save it
+	mov si,offset first_name; default menu name
+	push ds ! pop es	; in data segment
+	call find_menu		; find default menu
+	mov dx,offset no_menu_abort ; can't find menu message
+	or ax,ax		; found it?
+	js menu_abort		; jmp if not
+
+	mov menu_num,0ffffh	; set current menu number to cmd processor (-1)
+	call m_cmd_05		; read the menu & setup stack
+	mov dmenu_init_done,TRUE; set init done flag so no re-entry
+
+set_dmenu_active:
+	mov M_ACTIVE,TRUE	; set dmenu active flag
+
+dmenu_init_exit:
+	ret			; initialization complete
+eject
+
+;
+;		Open the Menu file and Read the Directory
+;		input:	none
+;		exit:	al = 0ffh if error
+;			dx -> error message
+;
+
+read_dir:
+	call open_menu		; open the menu file
+	test al,0ffh		; check for error
+	jnz read_dir_exit	; exit with error set
+
+	mov ax,800+200		; # bytes for directory & record # table
+	call get_mem		; get the memory
+	jz no_mem_abort 	; abort if we can't get it
+	mov dir_seg,ax		; store the directory segment address
+
+	mov dx,ax		; set DMA segment
+	mov cl,F_DMASEG 	;
+	call CCPM		;
+
+	xor dx,dx		; set DMA offset = 0
+	mov cl,F_DMAOFF 	;
+	call CCPM		;
+
+	mov dx,8		; set multi sector count for 8 sectors
+	mov cl,F_MULTISEC	;
+	call CCPM		;
+
+	mov cl,F_READ		; read the directory
+	mov dx,offset menu_fcb	;
+	call CCPM		;
+read_dir_exit:
+	ret			; return to caller
+
+no_mem_abort:
+	mov dx,offset no_mem_msg; tell the user why
+	mov al,0ffh		; error flag
+	ret			; return to caller
+eject
+;
+;	Abort the menu system after displaying error message
+;	input:	dx-> error message
+;
+
+menu_abort:
+	push dx 		; save error message address
+	mov bx,io_pointer	;*
+	call clr_scr		; clear screen
+	pop dx			; restore error message address
+	call P_STR		; tell the user why
+	call any_key		; wait for user to see message
+	call e_cmd		; clear up menu status
+	ret			; return to caller
+
+;
+;	Open the Menu FCB
+;	input:	none
+;	exit:	al = 0ffh if error
+;		dx -> error message
+;
+open_menu:
+	test menu_fcb,0ffh	; see if drive indicator set
+	jnz open_menu_10	; jmp if yes
+	  call GETDISK		; nope, get default drive & set in fcb
+	  inc al		; bias by one
+	  mov menu_fcb,al	; store in fcb
+open_menu_10:
+	or byte ptr menu_fcb + 6,080h	; set R/O mode bit
+	mov fcb_ex,00h		; set extent to 0
+	mov fcb_cr,00h		; set current record to 0
+
+	mov dx,offset menu_fcb	; open the menu file
+	mov cl,F_OPEN		;
+	call CCPM		;
+
+	mov dx,offset no_menu_file ; error message
+	ret			; return to caller
+eject
+;		Find a Menu
+;
+;		Entry:	es:si has offset of 0 terminated menu name to find
+;		Exit:	ax = menu number (0 relative)
+;			   = -1 if error (menu not found)
+;
+find_menu:
+;
+;		move menu name to 8 byte blank filled temp location
+;
+	mov di,offset menu_name ; point to our temp location
+	mov cx,8		; maximum number to move
+find_menu_10:
+	mov al,es:[si]		; load al
+	inc si			; increment source index
+	test al,0ffh		; see if non zero
+	jz find_menu_20 	; nope, dun
+	  mov [di],al		; store byte
+	  inc di		; increment index
+	  loop find_menu_10	; loop til all 8 bytes moved
+	  jmp find_menu_30	; skip blank fill
+
+find_menu_20:
+	mov al,' '		; blank fill the rest
+find_menu_25:
+	mov [di],al		; store a blank
+	inc di			; incr destination
+	loop find_menu_25	; lupe for the rest
+;
+;		Search menu directory for the menu requested
+;
+find_menu_30:
+	xor ax,ax		; menu number
+	mov cx,100		; number of menu directory entries
+	mov di,0		; offset of the menu directory
+	mov es,dir_seg		; segment address of menu directory
+find_menu_40:
+	mov si,offset menu_name ; what we are searching for
+	push cx 		; save outer loop counter
+	mov cx,8		; number of bytes in menu name
+	repe cmpsb		; compare the sucker
+	mov dx,cx		; remember the remainder
+	pop cx			; get outer loop counter
+	jz find_menu_50 	; jmp if found
+	  add di,dx		; incr to next menu in directory
+	  inc ax		; increment menu number
+	  loop find_menu_40	; outer loop
+	  mov ax,-1		; error return
+find_menu_50:			; success return point
+	ret
+eject
+;
+;		Read a menu into memory
+;
+;		Entry:	ax = menu number (0 relative)
+;		Exit:	ax = 0ffh if error, 0 if ok
+;
+read_menu:
+	mov menu_num,ax 	; save menu number
+	call set_menu_user	; save current user & setup menu user
+	mov cmd_ready,FALSE	; clear command ready since we use option_buf
+	call open_menu		; re-open the menu file
+	test al,0ffh		; see if error
+	jnz read_menu_exit	; jmp if yes
+
+	mov dx,offset menu_buf	; set DMA offset
+	mov cl,F_DMAOFF 	;
+	call CCPM		;
+
+	push ds ! pop dx	; set DMA segment
+	mov cl,F_DMASEG 	;
+	call CCPM		;
+
+	mov dx,1		; set multi sector count for 1 sector
+	mov cl,F_MULTISEC	;
+	call CCPM		;
+
+	mov bx,menu_num 	; get menu number back
+	shl bx,1		; make into word offset
+	mov es,dir_seg		; segment address of record number table
+	mov ax,es:menu_rec[bx]	; pick up starting record number
+	mov rand_rec,ax 	; store in FCB
+	mov dx,offset menu_fcb	; get FCB address
+	mov cl,F_READRAND	; do a random read (1 sector)
+	call CCPM		;
+	test al,0ffh		; test for errors
+	jz rand_ok		; jmp if ok
+bad_menu_read:
+	mov dx,offset menu_read_error ; proper error message
+read_menu_exit:
+	push ax 		; save error status
+	push dx 		; save error message address
+	call restore_user	; restore user's user number
+	pop dx			; restore error message address
+	pop ax			; restore error indicator
+	ret			; return with error indicator
+
+rand_ok:
+	mov ax,menu_seg 	; free memory from last menu (if any)
+	or ax,ax		; see if any allocated
+	jz none_to_free 	; jmp if not
+	  call free_mem 	; give it back
+	  mov menu_seg,0	; zap address so we don't free it again
+
+none_to_free:
+	mov ax,menu_len 	; allocate memory for menu record
+	or ax,07fh;		; round up to 128 byte boundry
+	call get_mem		; get it
+	jnz got_mem		; jmp if we did
+	  mov dx,offset no_mem_msg ; proper error message
+	  mov al,0ffh		; error signal
+	  jmp read_menu_exit	; and return to caller
+got_mem:
+	mov menu_seg,ax 	; store address of memory
+	mov dx,menu_len 	; total record length of menu record
+	add dx,127		; round up to record
+	mov cl,7		; convert to # records
+	shr dx,cl		;
+	mov cl,F_MULTISEC	; set multi sector count
+	call CCPM		;
+
+	xor dx,dx		; set DMA offset
+	mov cl,F_DMAOFF 	;
+	call CCPM		;
+
+	mov dx,menu_seg 	; set DMA segment
+	mov cl,F_DMASEG 	;
+	call CCPM		;
+
+	mov cl,F_READ		; read the menu
+	mov dx,offset menu_fcb	;
+	call CCPM		;
+	test al,0ffh		; test error status
+	jnz bad_menu_read	; jmp if error
+
+;
+;		Setup all the pointers to the commands and screen
+;
+read_ok:
+	mov bx,0		; table index
+	mov cx,16		; number of commands
+	mov ax,cmd_buffer	; first command address
+cmd_loop:
+	mov cmd_ptr[bx],ax	; store offset of command
+	add ax,cmd_len[bx]	; bump to next command
+	inc bx			; and next table entry
+	inc bx			;
+	loop cmd_loop		;
+
+	add ax,2		; skip over screen length
+	mov scr_ptr,ax		; store pointer to screen
+	xor ax,ax		; set good return status
+	jmp read_menu_exit	; return to caller
+
+;
+;	setup the user number for the menu file
+;
+set_menu_user:
+	call GETUSER		; get current user number
+	mov user_save,bl	; and save it
+	mov dl,menu_user	; get menu file user number
+	call SETUSER		; set it
+	ret			; return to caller
+;
+;	Restore user's user number
+;
+restore_user:
+	mov dl,user_save	; get user's user number
+	call SETUSER		; set it
+	ret			; return to caller
+eject
+;
+;		Display the menu screen
+;		input:	none
+;		exit:	al = 0ffh if error occured
+;			dx -> error message
+;			zero flag reset (jnz error)
+;
+disp_menu:
+	cmp VC_SEG,0		;* serial or SQUID console?
+	 je do_display		;* jump if serial
+
+	push VC_NUM		; 'C' entry protocol
+	xor ax,ax		; zero is a free mx_que
+	push ax 		;
+	call WM_MXQ		; lock out other updators of VC
+	add sp,4		; clean up stack
+
+do_display:			;*
+	les si,menu_addr	; address of screen
+	call M_DISP		; do the display
+	push ax 		; save error status
+	mov bx,io_pointer	;*
+	call normalize
+
+	cmp VC_SEG,0		;*
+	 je check_error		;*
+
+	push VC_NUM		; 'C' entry protocol
+	xor ax,ax		; clear ax
+	inc ax			; set to 1 (free mx_que)
+	push ax 		;
+	call WM_MXQ		; free up the que
+	add sp,4		; clean up the stack
+
+check_error:			;*
+	pop ax			; restore display error status
+	test al,0ffh		; check for error
+	jnz disp_menu_abort	; and abort if error status
+
+	cmp VC_SEG,0		;*
+	 je display_fini	;*
+
+	push VC_NUM		; 'C' entry protocol
+	call UPD_PHY		; update screen to physical
+	add sp,2		; clear up the stack
+
+display_fini:			;*
+	mov menu_displayed,TRUE ; set menu displayed flag
+	xor al,al		; clear error status
+disp_menu_abort:
+	mov dx,offset menu_corrupted ; proper error message
+	ret			; return to caller
+eject
+;
+;		Get next command
+;
+;		Gets the next command, either from the current command
+;		or wait for user to pick another option & then give command
+;
+M_GETCMD:
+	test cmd_ready,0ffh	; see if another command waiting
+	jz cmd_not_ready	; nope, display the menu or get another command
+	  call get_cmd		; yes, get a command ready for the TMP
+	  jcxz cmd_not_ready	; returns length in cx, no zero length commands
+	    ret 		; return to TMP with command
+;
+;		See if runmenu is active, if so, wait for user command
+;		otherwise, get a command from the user
+;
+cmd_not_ready:
+	mov bx,next_step	; in middle of a command?
+	or bx,bx		;
+	jz get_user_command	; jmp if not
+	  mov next_step,0	; clear the next step so no loop
+	  call bx		; yes, call post processor routine
+	  jmp M_GETCMD		; and go get another command
+
+get_user_command:
+	test CCP_DATA,0ffh	; is vccp waiting for an ESC?
+	jz get_user_command_05	; jmp if not
+	  call esc_term_on	; turn on escape terminator
+	  jmp get_user_command_10 ; jump over menu test
+
+get_user_command_05:
+	test dmenu_active,0ffh	; is menu system active
+	jnz call_the_menu	; jump if yes
+
+get_user_command_10:
+	test CMDSENT,0ffh	; see if crlf needed
+	jz get_user_command_20	; jmp if no
+	  call CRLF		; yes, send it
+	  mov cmdsent,FALSE	; and clear the flag
+
+get_user_command_20:
+	call user_command	; get the user command
+	test CCP_DATA,0ffh	; did we turn on esc?
+	jz M_GETCMD		; jmp if not
+	  call restore_mode	; turn off escape terminator
+	  jmp M_GETCMD		; command loop
+;
+;		Wait for user to see screen, then print menu & prompts
+;
+call_the_menu:
+	call ctl_p_off		; disable control p
+	call menu_option	; call the menu processor
+	call restore_mode	; enable control p
+	jmp M_GETCMD		; and loop for more commands
+
+;
+;		Wait for user to pick an option from the menu
+;
+
+menu_option:
+	test wait_required,0ffh ; see if wait required
+	jz skip_the_wait	; no, skip the wait
+	call any_key		; wait for any key
+skip_the_wait:
+	mov wait_required,TRUE	; set wait required flag
+	call disp_menu		; display the menu screen (sets cur_attr)
+	jz display_ok		; jmp if no error
+	  call menu_abort	; error, abort the menu system
+	  ret			; and return to caller
+
+display_ok:
+	mov al,cur_attr 	; set by display menu
+	mov bx,io_pointer	;*
+	call set_attr		; set the new attribute
+;
+;		Loop here until the user gives us
+;		something that we know what to do with
+;
+menu_lupe:
+	mov bx,io_pointer	;*
+	call cursor_off 	; disable cursor
+	mov bx,io_pointer	;*
+	call expand_off 	; turn off function key expansion
+	call GET_RAW		; wait for user to choose option
+	push ax 		; save character
+	mov bx,io_pointer	;*
+	call cursor_on		; enable cursor
+	mov bx,io_pointer	;*
+	call expand_on		; turn on function key expansion
+	pop ax			; get char back again
+	cmp esc_enable,'N'	; look for esc?
+	jnz no_esc		; jmp if not
+	  cmp al,esc		; see if esc
+	  jnz no_esc		; jmp if not
+	  call up_the_tree	; process prior menu command
+	  ret			; and return to caller
+no_esc:
+	cmp enter_enable,'N'	; look for cr?
+	jnz no_enter		; jmp if not
+	  cmp al,cr		; see if cr
+	  jnz no_enter		; jmp if not
+	    call c_cmd		; process dos command
+	    ret 		; and return to caller
+no_enter:
+;	cmp al,F1_KEY		;*
+	cmp al,lo_key		;*
+	jb menu_lupe		; too small
+;	  cmp al,F10_KEY	;*
+	  cmp al,hi_key
+	  ja menu_lupe		; too big
+				; just right
+
+;* If vanilla, adjust 0,1,2,3... to 1,2,3...,8,9,0:
+	cmp VC_SEG,0		;* vanilla?
+	 jne adjust_key		;*
+	dec al			;* 31h to 30h, etc.
+	cmp al,SER1_KEY-1	;*
+	 jne adjust_key		;*
+	mov al,SER10_KEY	;*
+adjust_key:			;*
+;	    sub al,F1_KEY	;* ; get zero relative
+	    sub al,lo_key	;*
+	    xor ah,ah		;
+	    mov bx,ax		; to index reg
+	    call process_cmd	; process the command (if any)
+	    ret 		; return to caller
+
+;
+;	Routine to process a menu command
+;	input:	bx has command index (0 - 15)
+;	output: command is processed
+;
+process_cmd:
+	mov al,cmd_types[bx]	; get function type
+	shl bx,1		; convert to word index
+	cmp al,'A'		; an Application command?
+	je a_cmd		;
+	cmp al,'O'		; a DOS command with options?
+	je o_cmd		;
+	cmp al,'M'		; another menu?
+	je m_cmd		;
+	cmp al,'E'		; exit to TMP?
+	jne not_e_cmd		; jmp if not
+	jmp e_cmd		;
+not_e_cmd:
+	cmp al,'C'		; user entered command
+	jne process_cmd_exit	; nope, then we are done
+	jmp c_cmd		;
+process_cmd_exit:
+	ret			; return to caller
+
+;
+;		Application Command
+;
+a_cmd:
+	mov ax,cmd_ptr[bx]	; set pointer to start of command string
+	mov cur_ptr,ax		;
+	mov ax,menu_seg 	; set segment
+	mov cur_seg,ax		; set segment
+	mov cmd_ready,TRUE	; set flag
+	ret			; and return
+
+;
+;		DOS command with user entered Options
+;
+o_cmd:
+	mov ax,cmd_ptr[bx]	; set pointer to start of command string
+	mov cur_ptr,ax		;
+	mov ax,menu_seg 	; set segment of command string
+	mov cur_seg,ax		;
+	mov cmd_ready,TRUE	; set command ready for processing flag
+	call get_options	; get user options
+	call CRLF		; print cr/lf sequence
+	ret			; return to caller
+
+;
+;		Menu call
+;
+m_cmd:
+	mov si,cmd_ptr[bx]	; pointer to command buffer containing menu name
+	mov es,menu_seg 	; segment of command buffer
+	call find_menu		; find the menu in directory
+	or ax,ax		; see if there
+	jns m_cmd_05		; yup, seems to be
+	ret			; nope, ignore
+
+m_cmd_05:
+	push menu_num		; save old menu for the menu stack
+	call read_menu		; read the menu record
+	test al,0ffh		; test status
+	jnz m_cmd_abort 	; bad return, abort menu system
+
+	mov di,menu_stack_cnt	; get menu stack pointer
+	pop dx			; get old menu number
+	cmp di,menu_stack_len	; see if menu stack full
+	jae m_cmd_10		; yup, can't push any more
+	mov menu_stack[di],dl	; store old menu on the stack
+	call GETUSER		; get user number
+	mov user_stack[di],bl	; save user number
+	call GETDISK		; get default disk
+	mov disk_stack[di],bl	; save default disk
+	inc menu_stack_cnt	; increment stack pointer
+;
+;		Setup pointer to pre-menu command in new menu
+;
+m_cmd_10:
+	mov ax,cmd_ptr+28	; command number 14 is the guy
+	mov cur_ptr,ax		; store in command pointer
+	mov ax,menu_seg 	; segment of menu record
+	mov cur_seg,ax		; store in command segment
+	mov cmd_ready,TRUE	; set command ready flag
+	mov ax,offset m_cmd_30	; address of post command processor
+	mov next_step,ax	; store as next step
+	ret			; return to caller
+;
+;		Error reading new menu, tell user why and abort menu system
+;
+m_cmd_abort:
+	pop ax			; restore old menu number (set stack straight)
+	jmp menu_abort		; abort menu & return to caller
+;
+;	Pre menu command post processor
+;
+m_cmd_30:
+	mov wait_required,FALSE ; no wait required on pre-menu command
+	ret			; return to caller
+;
+;		DOS command entered by user
+;
+c_cmd:
+	mov dx,offset null_prompt
+	call user_prompt	; clear bottom of screen
+	mov ax,offset user_command  ; address of continuation routine
+	mov next_step,ax	; save it
+	ret			; return to caller
+
+eat_options:
+	  test option_flag,0ffh ; see if user entered options available
+	  jz cmd_done		; nope, done with this command
+	    mov bx,offset option_buf
+	    mov cur_ptr,bx	; make get_cmd eat the options too!
+	    push ds		; set segment
+	    pop es		; in es
+	    mov cur_seg,es	; and cur_seg
+	    mov option_flag,0	; clear options available flag
+	    jmp get_cmd_lupe	; and start eating the options buffer
+;
+;		Setup a command for the TMP to process
+;
+get_cmd:
+	mov di,offset READ_BUF + 2; TMP command buffer (destination)
+	mov cx,0		; command length counter
+	les bx,cur_addr 	; pointer to next/last byte of command
+
+get_cmd_lupe:
+	mov al,es:[bx]		; get next command character
+	cmp al,'!'		; multi command terminator?
+	je get_cmd_90		; jmp if yes
+	  test al,0ffh		; zero terminator?
+	  jz eat_options	; jmp if yes, go eat the options (if any)
+
+get_cmd_30:
+	mov [di],al		; nope, store in TMP command buffer
+	inc cx			; inc command length
+	inc di			; dest pointer
+	inc bx			; source pointer
+	jmp get_cmd_lupe	; loop for more characters
+
+get_cmd_90:			; ! terminator (more to come)
+	inc bx			; jump over the !
+
+;
+;		We have a completed command
+;
+end_cmd:
+	mov cur_ptr,bx		; save pointer to next character
+	jcxz get_cmd		; don't process empty commands
+
+	mov wait_required,TRUE	; set wait required flag
+	mov byte ptr [di],00h	; store a 00 at end of command
+	mov READ_BUF + 1,cl	; store length into TMP buffer
+	call DR_FREE		; free the drives
+	test menu_displayed,0ffh; see if menu has been displayed
+	jz end_cmd_exit 	; jmp over clear if not on screen
+	  mov bx,io_pointer	;*
+	  call clr_scr		; clear screen
+	  mov menu_displayed,FALSE ; clear menu displayed flag
+end_cmd_exit:
+	mov cl,READ_BUF + 1	; return length of command
+end_cmd_exit1:
+	ret			; return for TMP for processing
+
+cmd_done:
+	mov cmd_ready,FALSE	; clear commands available flag
+	jcxz end_cmd_exit1	; exit if no command in TMP buffer
+	jmp end_cmd		; process the last of the command
+
+;
+;	Exit Command exit to dos command level
+;
+e_cmd:
+	mov ax,menu_seg 	; free menu memory
+	call free_mem		;
+	mov ax,dir_seg		; free up the directory memory
+	call free_mem		;
+	mov menu_stack_cnt,0	; clear menu stack counter
+	mov wait_required,FALSE ; reset wait required flag
+	mov dmenu_active,FALSE	; reset dmenu active flag
+	mov menu_displayed,FALSE; turn off menu on screen flag so no clear scrn
+	mov al,07h		; set std IBM attribute
+	mov bx,io_pointer	;*
+	call set_attr		; set the attribute
+	mov bx,io_pointer	;*
+	call clr_scr		; clear the screen
+	call DR_FREE		; free up the drives
+	ret			; return to caller
+
+;
+;		Up the tree - go to prior menu
+;
+up_the_tree:
+;
+;		Setup pointer to post-menu command in current menu
+;
+	mov ax,cmd_ptr+30	; command number 15 is the guy
+	mov cur_ptr,ax		; store in command pointer
+	mov ax,menu_seg 	; segment of menu record
+	mov cur_seg,ax		; store in command segment
+	mov cmd_ready,TRUE	; set command ready flag
+	mov ax,offset up_the_tree_10 ; address of post processor
+	mov next_step,ax	; store as what to do next
+	ret			; return to caller
+;
+;		Menu call post processor
+;
+up_the_tree_10:
+	mov wait_required,FALSE ; don't wait after this kind of command
+	test menu_stack_cnt,0ffffh  ; see if any up to go to
+	jz up_the_tree_35	; jump if no
+
+	dec menu_stack_cnt	; decr counter
+	mov di,menu_stack_cnt	; into index register
+	cmp save_user,'Y'	; restore user number?
+	jne up_the_tree_20	; jmp if no
+	  mov dl,user_stack[di] ; get user number
+	  call SETUSER		; and set it
+up_the_tree_20:
+	cmp save_drive,'Y'	; restore drive number?
+	jne up_the_tree_30	; jmp if no
+	  mov dl,disk_stack[di] ; get disk number
+	  call SETDISK		; and set it
+up_the_tree_30:
+	xor ax,ax		; clear hi bits
+	mov al,menu_stack[di]	; get menu number
+	cmp al,0ffh		; see if at the root
+	jne up_the_tree_40	; jmp if not
+up_the_tree_35:
+	call e_cmd		; at root level, go back to user command level
+	ret			; return to caller
+
+up_the_tree_40:
+	call read_menu		; read the menu
+	test al,0ffh		; check for errors
+	jnz up_the_tree_abort	; back to cmd level if error detected
+	ret			; and return to caller
+
+up_the_tree_abort:
+	call menu_abort 	; can't go up the tree, abort the menu system
+	ret			; and return to caller
+;
+;	Get a command from the user
+;
+user_command:
+	call fm_prompt		; send "file manager" message as appropriate
+	call ccpm_prompt	; send standard ccpm prompt [0]A>
+	call RCLN		; get a command from the user
+	mov dl,lf		; echo the return
+	call putchar		;
+	xor cx,cx		; move the command to our working buffer
+	mov cl,RMAXCMD		; number of bytes in buffer
+	mov si,offset READ_BUF+2; source string
+	mov di,offset option_buf; destination string
+	mov cur_ptr,di		; set pointer to command
+	push ds ! pop es	; make es = ds
+	rep movsb		; move them bytes
+	mov cur_seg,ds		; set segment of command
+	mov cmd_ready,TRUE	; set command ready flag
+	ret			; return to caller
+;
+;		wait for any key
+;
+any_key:
+	mov ah,70		; column 71
+	mov al,23		; row 24
+	mov bx,io_pointer	;*
+	call posn_cursor	;
+	mov al,any_key_attr	; special attribute for any key message
+	test MONO_FLAG,0ffh	; is it a monochrome display?
+	jz its_color		; jmp if not
+	  mov al,mono_any_key_attr; use monochrome any key attribute
+its_color:
+	mov bx,io_pointer	;*
+	call set_attr		; set it
+	mov dx,offset any_key_msg ;
+	call P_STR		; send the message
+	call GET_RAW		; wait for user to press a key
+	mov al,CUR_ATTR 	; restore current attribute
+	mov bx,io_pointer	;*
+	call set_attr		; and set it
+	ret			; return to caller
+;
+;		Enable escape terminator
+;
+esc_term_on:
+	call save_mode		; save current console mode
+	mov cl,C_MODE		; set new mode
+	or ax,ESC_MODE_BIT	;
+	mov dx,ax		; to proper register
+	call CCPM		;
+	ret			; return to caller
+;
+;		Restore Console Mode
+;
+restore_mode:
+	mov cl,C_MODE		;
+	mov dx,mode_save	;
+	call CCPM		;
+	ret			;
+;
+;		Disable Control P while in menu
+;
+ctl_p_off:
+	call save_mode		; save current mode
+	mov cl,C_MODE		; set new mode
+	or ax,RAW_MODE_BIT	; to disable control p
+	mov dx,ax		; to proper register
+	call CCPM		;
+	ret			; return to caller
+;
+;		Save current console mode
+;
+save_mode:
+	mov cl,C_MODE		; get current console mode
+	mov dx,0ffffh		;
+	call CCPM		;
+	mov mode_save,ax	; and save it
+	ret			; and return to caller
+
+;
+;		Get options from the user
+;
+get_options:
+	mov dx,offset null_prompt
+	call user_prompt	; posn cursor & clear to end
+	call ccpm_prompt	; look like regular prompt
+	mov cl,C_DELIMIT	; set delimiter to 00h
+	xor dx,dx		;
+	call CCPM		;
+	mov dx,cur_ptr		; offset of first part of command
+	push ds 		; save our data segment
+	push cur_seg		; set ds = segment of message
+	pop ds			;
+	mov cl,C_WRITESTR	;
+	call CCPM		; send the text
+	pop ds			; restore data segment
+	mov cl,C_DELIMIT	; restore delimiter
+	mov dx,'$'		; to normal
+	call CCPM		;
+	mov dl,' '		; add 1 blank to message
+	call putchar		;
+	call RCLN		; get option string from user
+	mov cx,128		; length of options string
+	mov si,offset READ_BUF + 2 ; move command(s) to option buffer
+	mov di,offset option_buf + 1 ; for processing
+	push ds 		;
+	pop es			;
+	rep movsb		;
+	mov option_flag,TRUE	; set flag
+	mov option_buf,' '	; clear first byte of options
+	ret
+
+;
+;		User prompt - clear lines 22 - 24
+;		prompt user with message
+;		Input:	dx offset of prompt
+;
+user_prompt:
+	push dx 		; save message
+	mov ah,0		; column
+	mov al,21		; row
+	mov bx,io_pointer	;*
+	call posn_cursor	;
+	mov bx,io_pointer	;*
+	call clr_eos		;*
+	pop dx			; get addr of message
+	call P_STR		; send to screen
+	ret
+
+;
+;		Putchar - send character to screen
+;		Input:	dl has character
+;
+CONOUT:				;* external decl. for RMENUIO.A86
+putchar:
+	mov cl,C_WRITE		;
+	jmp CCPM		;
+
+;
+;		Send ESC sequence
+;		Input:	al has sequence
+;
+send_esc_seq:
+	push ax 		; save args
+	mov dl,esc		;
+	call putchar		;
+	pop dx			; get esc arg
+	call putchar		;
+	ret			;
+
+;
+;		File Mangager Prompt - alias: VCCP, CCP etc.
+;
+fm_prompt:
+	test CCP_ACT,0ffh	; see if active
+	jz fm_prompt_exit	; jump if not
+	  mov dx,offset fm_prompt_msg
+	  call P_STR		; print the message
+	  call CRLF		; new line
+
+fm_prompt_exit:
+	ret			; return to caller
+;
+;		CCPM prompt
+;		    send {user}Disk:
+;
+ccpm_prompt:
+	call GETUSER		; get user number in bl
+	test bl,bl		; don't print if zero
+	jz no_zero		;
+	  mov dl,bl		;
+	  call PRNUM		; print user number
+no_zero:
+	call GETDISK		; get default disk
+	mov dl,'A'		; set bias
+	add dl,bl		; add in disk #
+	call putchar		; print it
+	mov dl,'>'		; ususal prompt
+	call putchar		;
+	ret			; return to user
+
+;
+;	Get Memory subroutine
+;	input:	ax = number of bytes to get
+;	output: ax = segment address of memory or zero if error
+;		zero flag is off if no error (JNZ ALL_OK)
+;			     on if error (JZ ERROR)
+;
+get_mem:
+	push ax 		; save byte count
+	xor ax,ax		; get a zero
+	mov cx,5		; 5 word MPB
+	mov di,offset mpb	; the mpb
+	push ds ! pop es	; set es
+	rep stosw		; set to all zeros
+	pop ax			; get byte count back
+	add ax,15		; round up to paragraph
+	mov cl,4		; shift factor
+	shr ax,cl		; turn ax into # paragraphs
+	mov mpb_min,ax		; store into min
+	mov mpb_max,ax		; store into max
+	mov cl,M_ALLOC		; system call
+	mov dx,offset mpb	; point to mpb
+	call CCPM		; get the memory
+	test al,0ffh		; see if we got it
+	jnz get_mem_err 	; jmp if not
+	  mov ax,mpb_start	; got memory, return the starting address
+	  or ax,ax		; reset zero flag (NO ERROR)
+	  ret
+
+get_mem_err:
+	xor ax,ax		; return empty handed w/zero flag set(ERROR)
+	ret
+
+;
+;	Free Memory subroutine
+;	input:	ax has segment address of memory to free
+;	output: memory is freed
+;		al = 0ffh if error
+;		al = 000h if no error
+free_mem:
+	mov mpb_start,ax	; store paragraph in MFPB
+	mov mpb_min,00h 	; zero to 2nd word of MFPB
+	mov cl,M_FREE		; system call
+	mov dx,offset mpb	; MFPB
+	call CCPM		; do it
+	ret			; return to caller
+eject
+
+;* Terminal-specific IO routines for SQUID-screen:
+;
+;		Turn off cursor
+;
+sq_cursor_off:			;*
+	mov al,'f'		;
+	jmp send_esc_seq	;
+;	ret			; and that's all
+;
+;		Turn on cursor
+;
+sq_cursor_on:			;*
+	mov al,'e'		;
+	jmp send_esc_seq	;
+;	ret			; and that's all
+
+;
+;		Turn off function key expansion
+;
+sq_expand_off:			;*
+	mov al,'6'		;
+	jmp  send_esc_seq	;
+;	ret			; and that's all
+
+;
+;		Turn on function key expansion
+;
+sq_expand_on:			;*
+	mov al,'7'		;
+	jmp  send_esc_seq	;
+;	ret			; and that's all
+
+;*
+;*		Clear to EOS
+;*
+sq_clr_eos:
+	mov al,'J'		;* clear to end of screen
+	jmp send_esc_seq	;*
+;*	ret
+
+;
+;		Position cursor
+;		Input:	ah = column 1 - 80
+;			al = row 1 - 24
+;
+sq_posn_cursor:
+	push ax 		; save input args
+	mov al,'Y'		; posn cursor
+	call send_esc_seq	;
+	pop dx			; get args back
+	push dx 		;
+	add dl,' '		;
+	call putchar		; send row
+	pop dx			; get args again
+	xchg dl,dh		; send column
+	add dl,' '		;
+	call putchar		;
+sq_wrap_on:			;* not used
+	ret			; back to caller
+;
+;		Set attributes
+;		Input:	al has attribute
+;
+sq_set_attr:
+	push ax 		; save attribute
+	mov al,'b'		; set fgnd color
+	call send_esc_seq	;
+	pop dx ! push dx	; get attribute
+	call putchar		; set fgnd attr
+	mov al,'c'		; set background color
+	call send_esc_seq	;
+	pop dx			; get attribute
+	mov cl,4		; shift factor
+	shr dl,cl		; shift background to low order
+	call putchar		; send it
+ret_op:
+	ret			;
+
+;
+;		Clear screen
+;
+sq_clr_scr:
+	mov al,'E'		;
+	jmp send_esc_seq	;
+eject
+
+
+;
+;		Static Data Area for RUNMENU
+;
+
+any_key_msg	db  '[any key]$'
+null_prompt	db  '$'
+no_menu_file	db  'Can''t Open Menu File$'
+menu_read_error db  'Can''t Read Menu$'
+no_menu_abort	db  'Specified Menu Not Found$'
+bad_dir 	db  'Menu Directory Corrupted$'
+no_mem_msg	db  'Can''t Allocate Memory$'
+menu_corrupted	db  'Menu Corrupted$'
+fm_prompt_msg	db  'Press Esc to Return to File Manager$'
+not_console	db  13,10,'RUNMENU cannot run on this terminal.',13,10,13,10,'$'
+
+;
+;		Data area for RUNMENU & VCCP interface
+;
+menu_rec	equ 800 	    ; offset to record numbers in directory data
+cmd_buffer	equ 72		    ; offset to commands in menu data
+any_key_attr	equ 0ceh	    ; bright, blink, yellow on red
+mono_any_key_attr equ 0f8h	    ; reverse video bright blinking
+menu_stack_len	equ 20		    ; 20 level menu stack
+
+;*
+;*		Console I/O table:
+squid_routines	dw	sq_clr_scr, sq_clr_eos, sq_set_attr		;*
+		dw	sq_cursor_off, sq_cursor_on, sq_posn_cursor	;*
+		dw	sq_expand_off, sq_expand_on, sq_wrap_on		;*			;*
+		dw	ret_op						;*
+
+ser_routines	dw	SER_CLR_SCR, SER_CLR_EOS, SER_SET_ATTR		;*
+		dw	SER_CURSOR_OFF, SER_CURSOR_ON, SER_POSN_CURSOR	;*
+		dw	ret_op, ret_op, SER_WRAP_ON			;*
+		dw	SER_NORMALIZE					;*
+
+	DSEG
+;
+;		External References
+;
+
+	EXTRN	VC_SEG:word		; in dispmenu
+	EXTRN	VC_NUM:word		; in dispmenu
+	EXTRN	CUR_ATTR:byte		; in dispmenu
+	EXTRN	MONO_FLAG:byte		; in dispmenu
+
+	EXTRN	FCB:byte		; in tmp
+	EXTRN	RMAXCMD:byte		; in tmp
+	EXTRN	READ_BUF:byte		; in tmp
+	EXTRN	CMDSENT:byte		; in tmp
+
+databeg 	rb  0
+
+;
+;	FCB for reading menu file
+;
+menu_fcb db	0		    ; drive code
+	db	'MENU'		    ; file name
+	db	'    '		    ; to avoid a tab character
+	db	'DAT'		    ;
+fcb_ex	db	0		    ; EX - current extent
+	db	0		    ; CS
+	db	0		    ; RS
+	db	0		    ; RC
+	rb	16		    ; D0 - D15
+fcb_cr	db	0		    ; CR - current record number
+Rand_rec rw	0		    ; Random record number
+R0	db	0
+R1	db	0
+R2	db	0
+
+M_ACTIVE	rb  0		    ; Same as below
+dmenu_active	rb  0		    ; Same as below
+dmenu_mode	db  FALSE	    ; True if in menu mode
+dmenu_init_done db  FALSE	    ; Dmenu initialized?
+menu_displayed	db  FALSE	    ; has a menu been displayed?
+menu_user	db  0		    ; user number of menu file
+user_save	db  0		    ; user's user number save area
+wait_required	db  FALSE	    ; flag to force wait before displaying menu
+mode_save	dw  0		    ; save area for console mode
+menu_num	dw  0		    ; current menu number
+next_step	dw  0		    ; address of command continuation routine
+cmd_ptr 	rw 16		    ; pointers to the commands
+menu_addr	rd  0		    ; dw address of screen for LES instructions
+scr_ptr 	dw  0		    ; pointer to screen
+menu_seg	dw  0		    ; segment address of screen
+dir_seg 	dw  0		    ; segment address of directory
+
+menu_buf	rw  0		    ; the menu buffer
+menu_len	rw  1		    ; total record length
+esc_enable	rb  1		    ; Y or N
+enter_enable	rb  1		    ; Y or N
+save_drive	rb  1		    ; Y or N
+save_user	rb  1		    ; Y or N
+save_path	rb  1		    ; Y or N
+save_map	rb  1		    ; Y or N
+menu_spare	rb  16		    ; just some spare space for expansion
+cmd_types	rb  16		    ; command type
+cmd_len 	rw  16		    ; lengths of each command 0 - 129
+option_buf	rb  130 	    ; for user entry of options
+
+menu_name	rb  8		    ; for zero terminated menu name
+		db  0		    ; the zero terminator
+first_name	db  'MAIN    '	    ; default menu name
+		db  0		    ; the zero terminator
+VCCP_CMD	db  128,3,'FM'		    ; activate vccp
+VCCP_LEN	equ 4				    ; length of above
+option_flag	db  false	    ; option buffer full?
+menu_stack_cnt	dw  0		    ; menu stack counter
+menu_stack	rb  menu_stack_len  ; space for menu numbers
+user_stack	rb  menu_stack_len  ; space for user numbers
+disk_stack	rb  menu_stack_len  ; space for disk numbers
+
+mpb		rw  0		    ; Memory Parameter Block
+mpb_start	dw  0		    ; starting paragraph number
+mpb_min 	dw  0		    ; minimum # paragraphs to get
+mpb_max 	dw  0		    ; maximum # paragraphs to get
+mpb_pdadr	dw  0		    ; for system use (must be zero)
+mpb_flags	dw  0		    ; for system use (must be zero)
+
+io_pointer	dw  squid_routines  ;* points to serial or squid routines
+hi_key		db  F10_KEY	    ;* highest menu selector
+lo_key		db  F1_KEY	    ;* lowest menu selector
+
+;
+;		End of Dynamic Data Area for RUNMENU
+;
+;
+;		Dynamic Data Area for VCCP interface
+;
+CCP_DATA	rb  0		    ;
+CCP_ACT 	rb  0		    ; Same as below
+ccp_active	db  FALSE	    ; is the VCCP active?
+cmd_ready	db  FALSE	    ; is there a command ready
+cur_addr	rd  0		    ; for LES instructions
+cur_ptr 	dw  0		    ; current command pointer
+cur_seg 	dw  0		    ; current command segment
+		dw  option_buf	    ; pointer to options buffer for vccp use
+		db  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0   ; 15 more, total = 16 bytes
+;
+;		End of Dynamic Data Area for VCCP interface
+;
+dataend 	rb  0
+		org (((offset dataend - offset databeg)+0fh) and 0fff0h) - 1
+runmenudata	db  0		    ; alligned on a paragraph boundry
+
+		end		;*
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                            
