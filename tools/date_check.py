@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
-COMMAND = ROOT / 'commands/date'
+COMMAND = ROOT / 'commands/datetime'
 
 
 def check():
