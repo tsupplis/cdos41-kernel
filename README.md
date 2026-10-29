@@ -28,7 +28,7 @@ The current version includes:
 - Left/Right, Home/End, Delete and Up during buffered console input.
 - Ctrl+Alt+1–4 to select consoles; Ctrl+Alt+Tab to cycle through them.
 - Ctrl+Alt+Esc opens an installed WMENU; Ctrl+keypad-Plus remains available.
-- Optional paging for TYPE, SDIR and DIR (.CMD/RSP), alongside the built-in DIR's `/P` / `[P]`.
+- Optional paging for TYPE, SDIR and DIR, alongside the built-in DIR's `/P` / `[P]`.
 - CP/M-Plus-style console redirection through PUT, GET and RDR for native commands.
 - A built-in CLS command and a common `Press any key to continue...` prompt.
 - DEL mapped to native ERA.CMD in both the shell and BATCH.
