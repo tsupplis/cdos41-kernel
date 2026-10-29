@@ -1,0 +1,99 @@
+	name 'SCD2'
+;
+;	CCP/M 3.1
+;	Interface for PLM-86 with separate code and data
+;	Code org'd at 0
+;	December 18, 1981
+
+
+dgroup	group	data,stack
+cgroup	group	code
+
+code	cseg
+	public	reset,xdos,mon1,mon2,mon3,mon4
+	extrn	plm:near
+
+	org	0h		; for separate code and data
+reset:
+	pushf
+	pop	ax
+	cli
+	mov	cx,ds
+	mov	ss,cx
+	lea	sp,stack_base
+	push	ax
+	popf
+	call	plm
+	xor	cx,cx
+	mov	dx,cx
+	int	224
+
+
+xdos:
+	push	bp
+	mov	bp,sp
+	mov	dx,4[bp]
+	mov	cx,6[bp]
+	int	224
+	pop	bp
+	ret	4
+
+mon1	equ	xdos		; no returned value
+mon2	equ	xdos		; returns byte in AL
+mon3	equ	xdos		; returns address or word BX
+mon4    equ     xdos		; returns pointer in BX and ES
+
+
+
+    	org	03Ah		; reserve patch area biased by
+				; the 5 bytes the linker inserts
+
+	db	'161183'		;day, month, year
+	db	'CCP/M       '
+	db	0,0,0,0			;patch bits
+	db	'COPYRT 1983,1984'
+	db	'DIGITAL RESEARCH'
+	db	'XXXX-0000-654321'	;serial field
+
+	rb	113			; patch area, 128 total bytes
+	db	'CSEG patch area'
+
+
+stack	sseg	word
+	rw	64
+stack_base	rw	0
+
+data     dseg			;CP/M page 0 - LOC86'd at 0H
+
+	org	4
+bdisk	rb	1
+	org	6
+maxb	rw	1
+	org	50h
+cmdrv	rb	1
+pass0	rw	1
+len0	rb	1
+pass1	rw	1
+len1	rb	1
+	org	5ch
+fcb	rb	16
+	org	6ch
+fcb16	rb	16
+	org	7ch
+cr	rb	1
+rr	rw	1
+ro	rb	1
+	org	80h
+buff	rb	80h
+tbuff	equ	buff
+
+
+	db	'     DSEG patch area'
+
+	public	bdisk,maxb,cmdrv,pass0,len0
+	public	pass1,len1,fcb,fcb16,cr,rr
+	public	ro,buff,tbuff
+
+
+	end
+
