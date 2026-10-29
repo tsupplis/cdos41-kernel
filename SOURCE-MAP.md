@@ -122,3 +122,19 @@ paths are covered, including 00/77/78/99, 19/20, explicit four-digit years,
 2000-02-29 and malformed years. The harness captures function 2Bh rather
 than changing a clock. It rejects the original unmodified DATE.EXE at
 `1/2/00`. The top-level `make check` runs this regression check too.
+
+## Initial system and media
+
+The local sysgen Makefile builds CCPM.SYS from SUP/RTM/CIO/MEM/BDOS/SYSDAT/
+XIOS and PIN/CLOCK/PCTMP/CONFID. The response file uses OS start 6000h and
+the 4.1 wildcard disk-buffer dialog. The IBM PC boot-sector and loader
+sources and cpm86twist.py are unchanged copies from the CCP/M project.
+The SQUID 320 KB DPB and reversed head-1 ordering match that boot chain.
+
+The initial media follow the CCP/M base.img -> cdos86base.img -> untwist /
+populate / twist pattern. Here base.img is generated with mkfs.cpm rather
+than copied as a binary template. cdos86.img contains the system and minimal
+commands; cdostools.img is a data-only development disk. `make test` uses
+media/cdos86 and cdos86.cfg, adapted from the CCP/M launcher/configuration
+with the two local image names and two drives. Build rules read no sibling
+project. HDMAINT's missing loader is not on this floppy boot path.

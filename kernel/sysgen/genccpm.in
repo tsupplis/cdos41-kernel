@@ -1,0 +1,20 @@
+destdrive=a:
+sysparams
+sysdrive=a: tmpdrive=a: cmdlogging=n osstart=6000
+
+memory
+
+diskbuffers
+*:
+4
+4
+2
+2
+no
+
+oslabel
+PC-MODE Personality
+
+rsps
+
+gensys

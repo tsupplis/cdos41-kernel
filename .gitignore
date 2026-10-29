@@ -1,6 +1,7 @@
 **/__pycache__/
 **/*.obj
 **/*.h86
+/commands/**/*.mod
 **/*.hex
 **/*.lst
 **/*.sym
@@ -24,3 +25,6 @@
 **/*.lin
 **/*.prn
 /commands/dskmaint/dskraw.inp
+
+/media/*.lock
+/media/*.cas

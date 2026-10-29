@@ -8,8 +8,9 @@ No build rule reads another project or the historical source archive.
 ## Build
 
 ```sh
-make                 # kernel components and the 27 enabled command families
-make check           # builds, headers, GENCMD self-host and DSKMAINT embedding checks
+make                 # commands, kernel, CCPM.SYS, boot track and two disk images
+make check           # command regressions, system headers, boot track and media checks
+make test            # launch the initial system in PCE, as in the CCP/M project
 make xios-alt        # optional modular OEM XIOS; currently blocked below
 make clean
 ```
@@ -53,9 +54,17 @@ bring-up. These results establish a component build, not a booted system or
 byte identity with an OEM release image.
 
 The final system retains GENCCPM's historical filename `ccpm.sys`.
-System-generation configuration, boot media and boot validation are the next
-integration step; the 3.1 GENCCPM response file is not compatible unchanged
-with the 4.1 disk-buffer prompts. No placeholder `ccpm.sys` is shipped.
+`kernel/sysgen/genccpm.in` selects the seven CON modules and four resident
+processes, places the kernel at paragraph 6000h and allocates disk buffers
+with the 4.1 wildcard dialog. The Makefile stages only those components in
+a fresh directory; `sysgen.log` records the generation transcript.
+
+`boot/` builds the IBM PC floppy boot chain from local source copies.
+`media/` follows the CCP/M packaging sequence and produces `cdos86.img`
+(kernel, minimal STARTUP.0, PIP and BATCH) and `cdostools.img` (development
+tools). Its base.img is generated locally. `make test` runs the matching
+`media/cdos86` launcher and `media/cdos86.cfg`, with system/tools on A:/B:.
+The user reports the initial image booting; build/media checks pass.
 
 ## Enabled command builds
 

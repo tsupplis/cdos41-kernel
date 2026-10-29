@@ -1,0 +1,12 @@
+# SQUID IBM PC 320 KB geometry, in CP/M logical track order.
+# Convert to/from physical CHS with ../tools/cpm86twist.py.
+diskdef ccpm86-320
+  seclen 512
+  tracks 80
+  sectrk 8
+  blocksize 2048
+  maxdir 64
+  skew 1
+  boottrk 1
+  os 2.2
+end

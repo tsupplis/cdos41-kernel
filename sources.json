@@ -4546,6 +4546,35 @@
       "path": "commands/genldr/scd2.a86",
       "origin": "ossrc/ccpmv31/D10/SCD2.A86",
       "sha256": "647251c93beca60ff91d87999b10f55cfa8a2aeba145481363bf2f9647cdfae0"
+    },
+    {
+      "path": "boot/bootsect.a86",
+      "origin": "ccpm86-kernel/boot/bootsect.a86",
+      "sha256": "a47523c840fad136361bc71607c4fcd88e2804884344aa019c2967fe93bba2d6"
+    },
+    {
+      "path": "boot/loader.a86",
+      "origin": "ccpm86-kernel/boot/loader.a86",
+      "sha256": "285a6cc8bf19fcfb7fba68a9992948ca73ddc0e2abff191ae938b9750fc4eb96"
+    },
+    {
+      "path": "tools/cpm86twist.py",
+      "origin": "ccpm86-kernel/tools/cpm86twist.py",
+      "sha256": "192413c3d42fa031ac7a6a0ad0dbeb856e2ca099318097c4fafd4fc7d2605d03"
+    },
+    {
+      "path": "media/cdos86",
+      "origin": "ccpm86-kernel/media/ccpm86",
+      "sha256": "a023d8d937fd84c031f32d904c1c778e08fa9ac8c8fdc20eea8ffc65b1afdf89"
+    },
+    {
+      "path": "media/cdos86.cfg",
+      "origin": "ccpm86-kernel/media/ccpm86.cfg",
+      "sha256": "03c7ca149017f045ed8d17dbf0fae67d5150c3d32b56213602373d5c8ed23b7a",
+      "original_sha256": "8314aefed97dea3d76bb18be3eba224ad9666c263460dc6a9ecfe1e1f9f83e8a",
+      "modifications": [
+        "Use cdos86.img and cdostools.img on two floppy drives."
+      ]
     }
   ]
 }

@@ -1,10 +1,19 @@
-# System generation
+# Concurrent DOS 4.1 system generation
 
-GENCCPM 4.1 has been built from GENC1..6.C in commands/genccpm.
-The selected components build in kernel/con and kernel/rsp1..3.
-The final image must retain the name CCPM.SYS expected by GENCCPM/loaders.
+`make` stages the seven CON components and PIN, CLOCK, PCTMP and CONFID in
+a fresh temporary directory, then runs the locally rebuilt GENCCPM 4.1.
+Only a completed output becomes CCPM.SYS; unrelated RSPs cannot leak in.
+The response file sets system/temp drives to A:, disables command logging,
+uses the initial memory partition list and places the kernel at 6000h.
+This leaves room for this larger 4.1 kernel below the 640 KB boundary.
 
-A validated 4.1 response file and isolated component staging Makefile are
-still required. Do not reuse the 3.1 response file blindly: the 4.1
-hashing/buffer questions differ and misalign the subsequent answers.
-Boot media are a later step; no incomplete system image is a build output.
+`diskbuffers` uses the wildcard profile: four directory buffers and two
+data buffers per configurable drive, with per-process limits of four and
+two. The wildcard dialog asks the hashing question even though the SQUID
+DPHs have fixed hash information. This differs from the 3.1 response file.
+The OS label is PC-MODE Personality. GENCCPM's transcript is sysgen.log.
+
+`make check` validates the fixed-address CODE/DATA headers and the system
+memory boundary. The DATA file group contains separately segmented RSPs
+and can exceed 64 KB; the older 3.1 check imposing a 64 KB group limit is
+not applicable here. Live boot validation belongs to the media check.
