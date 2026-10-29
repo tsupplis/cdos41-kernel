@@ -1,15 +1,20 @@
+# BOOT — ASM86 build.
+# all builds local outputs; check validates them; clean removes generated files.
+
 PYTHON ?= python3
 ASM86 = cpm86_asm86
 H862BIN = h862bin
 
 .PHONY: all check clean
 .DELETE_ON_ERROR:
+
 all: boottrack.bin
 
-%.h86: %.a86
+# Assemble absolute groups for GENCMD.
+%.h86: %.a86 Makefile
 	$(ASM86) $<
 
-%.bin: %.h86
+%.bin: %.h86 Makefile
 	$(H862BIN) $< $@
 
 # The working 320 KB disk's reserved track, built entirely from source:
@@ -28,5 +33,6 @@ check: boottrack.bin
 	@$(PYTHON) -c "from pathlib import Path; expected=bytearray(b'\xe5'*4096); expected[:147]=Path('bootsect.bin').read_bytes(); expected[511]=1; expected[2304:3150]=Path('loader.bin').read_bytes(); assert Path('boottrack.bin').read_bytes()==expected"
 	@echo 'Boot track: layout, both stages, sides marker and filler verified'
 
+# Remove generated outputs only; preserve sources and reference files.
 clean:
 	$(RM) *.bin *.h86 *.sym *.lst boottrack.bin.tmp

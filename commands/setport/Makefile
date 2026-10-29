@@ -1,9 +1,6 @@
-# SETPORT reverse-engineering canvas, copied from CONFIG.
-# The inherited STACK-header normalization is provisional: confirm it against
-# base/setport.cmd before treating either reconstruction as complete.
-# SETPORT — annotated assembly reconstruction.
+# SETPORT — annotated CDOS 4.1 assembly reconstruction.
 # setporg.a86 is the frozen reference; setport.a86 is the maintained source.
-# all builds both CMDs; check validates complete files; clean removes build outputs.
+# all builds both CMDs; check validates the complete files and encoding exceptions.
 
 ASM86=cpm86_asm86
 GENCMD=cpm86_gencmd
@@ -17,23 +14,22 @@ REF=../../base/setport.cmd
 .DELETE_ON_ERROR:
 all: $(TOOLS)
 
-# Assemble absolute groups, then generate the complete CMD image.
-# GENCMD inserts an empty EXTRA descriptor before STACK. header.py validates
-# that layout and compacts descriptors without changing the group payloads.
+# Generate absolute groups, compact GENCMD's empty EXTRA descriptor, and append
+# the documented relocation record. No code/data payload is patched.
 %.cmd: %.h86 Makefile header.py
 	$(GENCMD) $<
 	$(PYTHON) header.py $@
 	$(CMDINFO) $@
 
 %.h86: %.a86 Makefile
-	$(ASM86) $<
+	@$(ASM86) $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
+	@grep -qiE 'NUMBER OF ERRORS: +0' $*.log
 
-# Validate both the frozen reconstruction and maintained version, including headers.
-check: $(TOOLS)
-	cmp setporg.cmd $(REF)
-	cmp setport.cmd $(REF)
-	@echo "PASS: both complete CMD files match $(REF)"
+# Compare every byte, allowing only the 39 verified same-length instruction
+# encodings in encodings.json. No ignored ranges and no instruction DBs.
+check: $(TOOLS) check.py encodings.json
+	$(PYTHON) check.py $(REF)
 
-# Remove generated files only; the invariant source and base reference are retained.
+# Retain sources, the frozen invariant and documented original encodings.
 clean:
 	rm -f *.cmd *.h86 *.lst *.sym *.obj *.log

@@ -1,36 +1,29 @@
+# RSP2 — ASM86 build.
+# all builds local outputs; check validates them; clean removes generated files.
+
+.PHONY: all check clean
+.DELETE_ON_ERROR:
+
 all: clock.rsp
 # Same installed cross-development tools as the CCP/M project.
 ASM86=cpm86_asm86
 GENCMD=cpm86_gencmd
-RASM86=pcdev_rasm86
-LINK86=pcdev_linkcmd
-DRC86=drccpm_cc
-DRCLINK86=drccpm_link
 CMDINFO=cmdinfo
-.DELETE_ON_ERROR:
 # Included files are local copies; no sibling repository participates.
 LOCAL_INCLUDES=$(wildcard *.def *.lib *.fmt *.cod *.sup *.rtm *.cio *.mem *.bdo *.dat *.equ *.mac *.h *.lit *.dcl)
-%.h86: %.a86 $(LOCAL_INCLUDES)
+# Assemble absolute groups for GENCMD.
+%.h86: %.a86 $(LOCAL_INCLUDES) Makefile
 	@$(ASM86) $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
 	@grep -qiE 'NUMBER OF ERRORS: +0' $*.log
-%.obj: %.a86 $(LOCAL_INCLUDES)
-	@$(RASM86) $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
-	@grep -qiE 'Number of errors: +0\.' $*.log
-%.obj: %.c $(LOCAL_INCLUDES)
-	@$(DRC86) -o$@ $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
-	@! grep -iE 'error|unable to open|fatal' $*.log
-%.con: %.h86
+
+%.rsp: %.h86 Makefile
 	$(GENCMD) $<
 	mv $*.cmd $@
 	$(CMDINFO) $@
-%.rsp: %.h86
-	$(GENCMD) $<
-	mv $*.cmd $@
-	$(CMDINFO) $@
-%.cmd: %.h86
-	$(GENCMD) $<
-	$(CMDINFO) $@
-.PHONY: clean
+# Remove generated outputs only; preserve sources and reference files.
 clean:
 	rm -f *.obj *.h86 *.hex *.lst *.sym *.log *.con *.rsp *.cmd *.loc *.lnk *.mp? *.map
-.PHONY: all
+
+# Validate the structure of each rebuilt command/component.
+check: all
+	@set -e; for f in clock.rsp; do cmdinfo $$f; done

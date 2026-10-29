@@ -1,3 +1,6 @@
+# PRINT — DR C / RASM86 build.
+# all builds local outputs; check validates them; clean removes generated files.
+
 RASM86=pcdev_rasm86
 DRC86=drccpm_cc
 DRCLINK86=drccpm_link
@@ -9,6 +12,7 @@ HEADERS=portab.h cpmfunc.h utildef.h
 
 .PHONY: all check clean
 .DELETE_ON_ERROR:
+
 all: $(TOOLS)
 
 print.cmd: $(OBJECTS) sqlink.inp Makefile
@@ -17,16 +21,18 @@ print.cmd: $(OBJECTS) sqlink.inp Makefile
 	@test -s $@
 	cmdinfo $@
 
-cpmif.obj: cpmif.a86
+cpmif.obj: cpmif.a86 Makefile
 	@$(RASM86) $< > cpmif.log 2>&1; result=$$?; cat cpmif.log; test $$result -eq 0
 	@grep -qiE 'Number of errors: +0\.' cpmif.log
 
-%.obj: %.c $(HEADERS)
+# Compile C modules with local declarations.
+%.obj: %.c $(HEADERS) Makefile
 	@$(DRC86) -o$@ $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
 	@! grep -qiE 'error|unable to open|fatal' $*.log
 
+# Remove generated outputs only; preserve sources and reference files.
 clean:
-	rm -f $(OBJECTS) print.cmd $(addsuffix .lst,$(MODULES)) $(addsuffix .sym,$(MODULES)) print.map print.sym *.log
+	$(RM) *.cmd *.obj *.lst *.sym *.map *.log
 
 check: all
 	cmdinfo print.cmd

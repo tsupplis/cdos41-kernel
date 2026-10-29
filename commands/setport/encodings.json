@@ -1,0 +1,236 @@
+[
+  {
+    "offset": "0ea4",
+    "original": "88e0",
+    "assembled": "8ac4",
+    "instruction": "mov al,ah"
+  },
+  {
+    "offset": "0f0e",
+    "original": "89ce",
+    "assembled": "8bf1",
+    "instruction": "mov si,cx"
+  },
+  {
+    "offset": "0fec",
+    "original": "83f83f",
+    "assembled": "3d3f00",
+    "instruction": "cmp ax,0x3f"
+  },
+  {
+    "offset": "1034",
+    "original": "31d2",
+    "assembled": "33d2",
+    "instruction": "xor dx,dx"
+  },
+  {
+    "offset": "103a",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "1176",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "11f9",
+    "original": "89c1",
+    "assembled": "8bc8",
+    "instruction": "mov cx,ax"
+  },
+  {
+    "offset": "1200",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "12c9",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "12cd",
+    "original": "89d6",
+    "assembled": "8bf2",
+    "instruction": "mov si,dx"
+  },
+  {
+    "offset": "130e",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "1326",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "136b",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "1389",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "13a5",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "13b5",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "13d1",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "145e",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "1474",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "14ee",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "1536",
+    "original": "31d2",
+    "assembled": "33d2",
+    "instruction": "xor dx,dx"
+  },
+  {
+    "offset": "157c",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "159f",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "1616",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "1634",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "1640",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "1654",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "167c",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "169f",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "16c0",
+    "original": "89c6",
+    "assembled": "8bf0",
+    "instruction": "mov si,ax"
+  },
+  {
+    "offset": "16e7",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "16f5",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "1726",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "1763",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "179d",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "17b6",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "17d2",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "17f1",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  },
+  {
+    "offset": "185b",
+    "original": "89c3",
+    "assembled": "8bd8",
+    "instruction": "mov bx,ax"
+  }
+]

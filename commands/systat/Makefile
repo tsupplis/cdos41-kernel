@@ -1,3 +1,6 @@
+# SYSTAT — Intel PL/M-86 / Intel ASM86 build.
+# all builds local outputs; check validates them; clean removes generated files.
+
 INTEL_PLM86=intel_plm86
 INTEL_ASM86=intel_asm86
 INTEL_LOC86=intel_loc86
@@ -7,9 +10,10 @@ GENCMD=cpm86_gencmd
 
 TOOLS=systat.cmd
 
-SNIPPETS=
+.PHONY: all check clean
+.DELETE_ON_ERROR:
 
-all: $(TOOLS) $(SNIPPETS)
+all: $(TOOLS)
 
 # BBB and MMM for gencmd's data[bBBB,mMMM,xfff], derived from systat.mp2:
 #   BBB = start of dats segment / 16 (e.g. 1000)
@@ -22,27 +26,34 @@ GENCMD_MIN  = $(shell printf '%x' $$((0x$(GENCMD_MEM)-0x$(GENCMD_BASE))))
 systat.cmd: systat.h86 Makefile
 	@test -n "$(GENCMD_BASE)" -a -n "$(GENCMD_MEM)" || \
 	  { echo "systat: cannot derive DATS/MEMORY from systat.mp2"; exit 1; }
-	# $(GENCMD) $< 'data[b1000]'
 	$(GENCMD) $< 'data[b$(GENCMD_BASE) m$(GENCMD_MIN)]'
 	cmdinfo $@
 
-systat.obj: $(wildcard *.lit) scomon.plm
+systat.obj: $(wildcard *.lit) scomon.plm Makefile
 
-systat.loc: systat.obj scd.obj
+systat.loc: systat.obj scd.obj Makefile
 	$(INTEL_LINK86) scd.obj, $(basename $@).obj to $(basename $@).lnk
 	$(INTEL_LOC86) $(basename $@).lnk 'od(sm(code,dats,data,stack,const))' \
 		'ad(sm(code(0),dats(10000h)))' 'ss(stack(+32))'  to $(basename $@).loc
 
-%.h86: %.loc
-	$(INTEL_OH86) $^
+# Convert the located Intel object to H86.
+%.h86: %.loc Makefile
+	$(INTEL_OH86) $<
 	mv $*.hex $*.h86
 
-%.obj: %.a86
-	$(INTEL_ASM86) $^
+# Assemble relocatable objects; retain the module-specific linker layout.
+%.obj: %.a86 Makefile $(wildcard *.lib *.equ *.def *.inc)
+	$(INTEL_ASM86) $<
 
-%.obj: %.plm
-	$(INTEL_PLM86) $^ debug 'optimize(3)' xref
+# Compile PL/M sources; declarations and Makefile changes trigger recompilation.
+%.obj: %.plm Makefile $(wildcard *.lit *.ext)
+	$(INTEL_PLM86) $< debug 'optimize(3)' xref
 
+# Remove generated outputs only; preserve sources and reference files.
 clean:
-	rm -f *.sys *.loc *.cmd *.obj *.h86 *.sym *.lin *.lst *.prn ccpmtest.img
+	rm -f *.sys *.loc *.cmd *.obj *.h86 *.sym *.lin *.lst *.prn
 	rm -f *.loc *.mp? *.lnk
+
+# Validate the structure of each rebuilt command/component.
+check: all
+	@set -e; for f in $(TOOLS); do cmdinfo $$f; done

@@ -1,3 +1,6 @@
+# Build the seven distribution disks from local components and reference files.
+# check validates image contents; test starts the configured PCE machine.
+
 PYTHON ?= python3
 FORMAT=ccpm86-320
 TWIST=$(PYTHON) ../tools/cpm86twist.py
@@ -43,12 +46,13 @@ OEM1_COMMANDS = ../base/back.cmd ../base/rest.cmd ../base/brinst.cmd \
 
 OEM2_COMMANDS = ../commands/function/function.cmd ../commands/help/help.cmd ../base/diskstat.cmd \
     ../base/n.cmd \
-    ../base/setport.cmd ../base/setup.cmd \
+    ../commands/setport/setport.cmd ../base/setup.cmd \
     ../base/stop.cmd ../base/hdmaint.cmd \
     ../base/hdmaint.doc ../commands/help/help.hlp
 
 .PHONY: all check check-media check-pce test clean
 .DELETE_ON_ERROR:
+
 all: $(IMAGES)
 
 # Locally generated filesystem, then the source-built reserved boot track.
@@ -164,5 +168,6 @@ check-pce: check
 test: cdos86.img cdostools.img cdos86 cdos86.cfg
 	./cdos86
 
+# Remove generated outputs only; preserve sources and reference files.
 clean:
 	$(RM) $(IMAGES) base.img cdos86base.img *.tmp
