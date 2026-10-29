@@ -20,3 +20,7 @@
 /dist/
 /media/*.img
 *.zip
+
+**/*.lin
+**/*.prn
+/commands/dskmaint/dskraw.inp
