@@ -42,3 +42,7 @@ xios.con: squid.h86
 	mv squid.cmd $@
 	$(CMDINFO) $@
 .PHONY: all
+
+.PHONY: check-cursor
+check-cursor: xios.con squid.h86
+	python3 ../../tools/cursor_check.py

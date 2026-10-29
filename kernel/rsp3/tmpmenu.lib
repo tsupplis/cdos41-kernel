@@ -1022,6 +1022,15 @@ rmenu_not_active2:
 ENDIF
 
 
+; Built-in CLS uses the same XIOS ESC E clear/home sequence as CCP/M.
+; Explicit drive/extension commands have already bypassed this dispatch.
+		    mov di,offset clscmd
+		    call parser
+		    jnz shell_not_cls
+		    mov dx,offset cls_sequence
+		    call print_string
+		    jmp nextcommand
+shell_not_cls:
 		    mov di,offset usercmd
 		    call parser
 		    jnz notuser
@@ -1046,8 +1055,6 @@ pruser:			mov dx,offset usermsg
 			call print_string
 			call getuser
 			mov dl,bl ! call prnum
-			mov dx,offset user_warning
-			call print_string
 			call crlf
 			jmp nextcommand
 

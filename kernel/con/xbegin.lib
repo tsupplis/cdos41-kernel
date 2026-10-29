@@ -253,6 +253,8 @@ pf_dskld	equ	2000h	;process was loaded from disk
 ;*	state	- current state of virtual console
 ;*	maxbufsiz - maximum file size for buffered mode
 
+c_editflag	equ	byte ptr 04h
+cf_lineedit	equ	040h
 c_owner		equ	word ptr 00h
 c_mimic		equ	byte ptr 08h
 c_state		equ	word ptr 0Eh
@@ -826,6 +828,31 @@ action_loop_next:
 					;non action type key
 ;	first check for a ctrl/break
 key_make:
+; Compact-keyboard console shortcuts.  Emit the same switch events as
+; Ctrl-keypad, so PIN still controls ownership and switch restrictions.
+    mov ah,down_bits
+    and ah,ctrl_bit or alt_bit
+    cmp ah,ctrl_bit or alt_bit
+    jne key_translate
+    cmp al,15                   ; Ctrl-Alt-Tab: next foreground console
+    je key_next_console
+    cmp al,2                    ; top-row 1 through 4, scan codes 2..5
+    jb key_translate
+    cmp al,5
+    ja key_translate
+    sub al,2                    ; consoles 0 through 3
+    jmps key_console_event
+key_next_console:
+    mov al,top_screen
+    inc al
+    cmp al,num_vir_cons
+    jb key_console_event
+    xor al,al                   ; wrap from console 3 to console 0
+key_console_event:
+    or al,070h                  ; existing console-switch event encoding
+    mov key_type,0ffh
+    jmp save_key_code
+key_translate:
 	cmp	al,70			; if not the break key scan code
 	jnz	not_ctrl_break		;   then continue on
 	cmp	down_bits,ctrl_bit	; if not ctrl/break

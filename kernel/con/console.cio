@@ -489,10 +489,10 @@ nxtccb:	cmp al,0 ! je ct_dlcb
 	    cmp si,u_conccb ! jne ct_dccb
 ;start		*3.2*8*
 if VOUTLIVES
-		and c_flag[si],not (cf_conout + cf_vout + cf_bufp)
+		and c_flag[si],not (cf_conout + cf_vout + cf_bufp + cf_lineedit)
 endif
 if not VOUTLIVES
-		and c_flag[si],not (cf_conout)
+		and c_flag[si],not (cf_conout + cf_lineedit)
 endif
 		mov cx,f_wakeup	;release proc waiting for XIOS conout
 		lea dx,c_cosleep[si]

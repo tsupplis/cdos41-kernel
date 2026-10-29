@@ -1485,8 +1485,6 @@ cmdstr		db	'Command = $'
 usererrmsg	db	CR,LF,'Invalid User Number,'
 		db	' IGNORED',CR,LF,'$'
 usermsg		db	CR,LF,'User Number = $'
-user_warning	db	CR,LF,'Note:  User numbers only apply to CP/M media.'
-		db	CR,LF,'$'
 
 
 memerrmsg	db	CR,LF,'Invalid Memory Allocation Size,'
@@ -1527,6 +1525,8 @@ suspendmsg	db	CR,LF,'Suspend = $'
 pausemsg	db	'Strike a key when ready . . .$'
 
 dircmd		db	'DIR      '
+clscmd		db	'CLS      '
+cls_sequence	db	27,'E','$'
 usercmd		db	'USER     '
 memcmd		db	'COMSIZE  '
 addmemcmd	db	'ADDMEM   '

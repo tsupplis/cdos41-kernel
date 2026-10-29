@@ -634,8 +634,12 @@ initq: procedure(qdaddr) address;
   return(qpb.qaddr);
 end initq;
 
-doq: procedure(vinqnum);
+/* Read the current CCB inside this procedure.  OPTIMIZE(3) retains the
+   old based pointer after ccb$ptr.offset = ccb.link when ccb.vc is
+   evaluated as a caller argument, making adjacent consoles share VINQ. */
+doq: procedure;
   dcl vinqnum byte;
+  vinqnum = ccb.vc;
 
   vinq.name(4) = (vinqnum/100);
   vinq.name(5) = ((vinqnum-(vinq.name(4)*100))/10)+'0';
@@ -660,7 +664,7 @@ plmstart: procedure public;
   lomark = ccb.vc;                          /* First virtual for this PIN */
                                             /* All of its virtuals are    */
 $if not VOUTLIVES
-  call doq(lomark);			    /* Create VINQ for 1st V.S.	  */
+  call doq;			    /* Create VINQ for 1st V.S.	  */
 $endif
 
   himark = 1;                               /* Find out how many virtual  */
@@ -670,7 +674,7 @@ $endif
      ccb$ptr.offset = ccb.link;
 
 $if not VOUTLIVES
-     call doq(ccb.vc);		    /* create another VINQ	  */
+     call doq;		    /* create another VINQ	  */
 $endif
 
      end;

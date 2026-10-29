@@ -81,6 +81,7 @@ INIT:
 	call	check_hi_mem		; from C000 up
 	call	ndp_init		; check for an 8087
 	call	compaq			; do before any video setup
+	call	detect_cursor		; EGA/VGA character-height cursor
 	call	fix_crt			; mono/color vs_ variables
 	call	fix_disk_tables		; match disk tables to equip
 	call	do_int_1e		;* dos support
@@ -408,6 +409,43 @@ compaq_done:
 	ret			; all for now
 
 compaq_name	db	'COMPAQ'
+
+; Match the cursor to enhanced-adapter text height, as in the CCP/M fix.
+; Preserve legacy CGA/MDA/Compaq defaults if INT 10h/12h is unsupported.
+; Read 40:85, not CRTC register 9 (write-only on an original 6845).
+detect_cursor:
+ push ax ! push bx ! push cx ! push dx ! push ds ! push es
+ mov ah,12h
+ mov bx,0FF10h
+ int 10h
+ cmp bh,1
+ ja detect_cursor_done
+ mov ax,40h
+ mov es,ax
+ mov dx,es:.063h
+ cmp dx,mono_port
+ je detect_cursor_height
+ cmp dx,color_port
+ jne detect_cursor_done
+detect_cursor_height:
+ mov ax,es:.085h
+ cmp ax,8
+ jb detect_cursor_done
+ cmp ax,32
+ ja detect_cursor_done
+ dec al                         ; last scan line = character height - 1
+ mov ah,al
+ dec ah                         ; start scan line = character height - 2
+ cmp dx,mono_port
+ je detect_cursor_mono
+ mov var_cursor,ax
+ mov var_sync,0                 ; enhanced adapters need no CGA snow waits
+ jmps detect_cursor_done
+detect_cursor_mono:
+ mov var_mono_cursor,ax
+detect_cursor_done:
+ pop es ! pop ds ! pop dx ! pop cx ! pop bx ! pop ax
+ ret
 
 
 ;	set up the mono/color vs_ variables

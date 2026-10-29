@@ -1187,7 +1187,8 @@ set_color:
 set_mono:
 	mov	vs_crt_seg,mono_seg
 	mov	vs_xlat,offset mono_xlat
-	mov	vs_cur_type,mono_cursor
+	mov	ax,var_mono_cursor	; legacy or detected EGA/VGA height
+	mov	vs_cur_type,ax
 	and	vs_mode,not sync_bit
 	mov	al,vs_bit
 	or	mono_bits,al	; add to mono vc's

@@ -584,6 +584,7 @@ d_lines		dw	0FCDh,0FBAh
 ;	variable video params for the compaq
 
 var_cursor	dw	color_cursor	; hi or low res
+var_mono_cursor	dw	mono_cursor	; MDA default, enhanced BIOS may adjust
 var_sync	db	sync_bit	; to sync or not
 		db	0DBh		; pad
 

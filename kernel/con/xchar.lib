@@ -184,8 +184,25 @@ high_pfks	equ	40		; number of 4 char pfk codes
 ;	a pfk has just been typed, set pointers and count
 
 new_pfk:
+    ; Override only navigation keys while CIO Function 10 owns this console.
+    ; Outside line input retain programmable expansion/raw application codes.
+    push ax ! push bx
+    xor bx,bx ! mov bl,top_screen ! shl bx,1
+    mov bx,ccb_list[bx]
+    test c_editflag[bx],cf_lineedit
+    pop bx ! pop ax
+    jz pfk_normal
+    cmp al,10 ! je pfk_home
+    cmp al,11 ! je pfk_up
+    cmp al,13 ! je pfk_left
+    cmp al,14 ! je pfk_right
+    cmp al,15 ! je pfk_end
+    cmp al,19 ! je pfk_delete
+pfk_normal:
 	cmp	al,low_pfks + high_pfks	; if pfk code is too big
-	jae	conin_wait		;   then ignore it
+	jb	pfk_valid
+	jmp	conin_wait
+pfk_valid:			; valid programmable key
 
 	test	vs_mode,pcmode_bit	; if pcmode
 	jz	not_pc_pfk
@@ -198,6 +215,15 @@ not_pc_pfk:
 
 	call	point_pfk		; set pointer and count
 	jmp	conin_keyboard		; back to return the value
+
+; AH=1 distinguishes editor Home/End from literal high-bit characters.
+; PIN passes these tagged data events through without treating them as switches.
+pfk_home:   mov ax,0180h ! ret
+pfk_end:    mov ax,0181h ! ret
+pfk_up:     mov ax,0117h ! ret ; exactly ^W, including its end-of-line meaning
+pfk_left:   mov ax,0101h ! ret ; ^A
+pfk_right:  mov ax,0106h ! ret ; ^F
+pfk_delete: mov ax,0107h ! ret ; ^G
 
 no_pfk_exp:
 	mov	bx,offset pfk_code_tbl
