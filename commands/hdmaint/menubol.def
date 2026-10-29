@@ -1,0 +1,418 @@
+;	"MENUBOL" interpreter opcodes
+;	6-Jun-84
+;
+;	Setting this switch true converts XBREAK conditional breakpoints
+;	from no-ops to instructions (which you can break on using sid by
+;	setting a pass point at .mbreak in the interpreter action routines).
+;	This switch also enables assembly of the print screen routine.
+ENABLE_XBREAK	equ	DEBUG_MODE
+;
+;	Menubol instructions are generated in the code segment just like
+;	8086 instructions.  All their data objects must be in the Data segment
+;	except for inline messages.
+;	The interpreter saves all registers except AX and the flags.
+;
+;	You must include the library MENUBOL.LIB in your source program
+;	at some point where code and data segments have both been defined for
+;	the program.
+;
+;	To begin execution use the 8086 instruction "Call Menu_bol".
+;	Execution begins at the next byte of code after the call.  If you
+;	return to 8086 code using the XSTOP instruction, execution will resume
+;	after the next instruction.
+;	CAUTION: Be careful about using Trace and Trace without CALL
+;	functions through the switch from interpreted code to 8086 and back
+;	with a debugger.  Some debuggers will modify code at the return point
+;	to be a breakpoint and of course it will make no sense to MENUBOL.
+;
+eject
+;INSTRUCTION SUMMARY:
+;
+;  Assignment and ARITHMETIC functions:
+;
+;	XSETW word,val		sets variable "word"=value
+;
+;	XSETB byte val		sets variable "byte"=value
+;
+;	XADDW word,val		word +=val
+;
+;	XADDB byte,val		byte +=val
+;
+;	XTOGGLE byte		inverts byte specified (used to flip switches)
+;
+;  Interpreter Control functions:
+;
+;	XRESET			initializes the interpreter, CRT mode and
+;				resets the interpreted subroutine call stack
+;
+;	XSTOP			returns to 8086 execution with IP->first byte
+;				after XSTOP.
+;
+;  Console output functions:
+;
+;	XBEEP			generates a beep on the console device
+;
+;	XPUTC charaddr		displays the ascii character from charaddr
+;
+;	XPUTS saddr		displays the zero terminated string whose head
+;				is at saddr at current cursor position on CRT.
+;
+;	XPUTS_AT x,y,saddr	displays the zero terminated string whose head
+;				is at saddr at cursor position x,y on CRT.
+;
+;	XPOSITION x,y		moves cursor to x,y on CRT
+;
+;	XPNUM3 word		prints variable "word" as 3 decimal digits
+;				without leading zero suppression.
+;
+;	XPDECW word		prints variable "word" as unsigned decimal
+;				in as many digits as it takes.  Prints "0"
+;				for zero.
+;
+;	XBOX ulx,uly,lrx,lry	draws a single line box whose at the specified
+;				upper left and lower right corner coordinates.
+;				THE BOX IS NOT CLEARED.
+;
+;	XSPLITBOX lx,ly,rx	draws a DOUBLE line horizontal bar across
+;				a SINGLE line box where lx,ly is the left start
+;				point and rx is the right x coordinate.
+;
+;	XCLRBOX ulx,uly,lrx,lry	clears the box specified to blanks
+;
+;	XKBOX ulx,uly,key	draws a DRI keybox at specified point with
+;				the legend Fn where n is key.  An arrow is
+;				drawn leading from the keybox to its legend
+;				and the cursor is correctly positioned to
+;				write the legend.
+;
+;	XKBOX ulx,uly,key,msg	as above, but also writes the string at msg
+;				as the key legend.
+;
+;  Display control functions:
+;
+;	XCURSORON		turns visible cursor on
+;
+;	XCURSOROFF		turns visible cursor off
+;
+;	XBRIGHT			turns on bright video
+;
+;	XDIM			turns off bright video
+;
+;	XBLINK			turns on blinking video
+;
+;	XNOBLINK		turns off blinking video
+;
+;  Console input functions:
+;
+;	XGETCHAR varb		flushes keyboard buffer and gets next char
+;				TYPED to byte variable varb
+;
+;
+;	XGETS max,string	gets an ascii string of displayable characters
+;				from the console of maximum length MAX (byte)
+;				to string array pointed to by string.
+;				Excess characters merely beep.  CTRL-H and
+;				IBM cursor Left delete character left.  CR
+;				terminates input. CTRL-X deletes entry.
+;				any other control input merely beeps.
+;
+;	XGETFN varb		gets next FUNCTION KEY CODE typed to byte
+;				variable varb.  This code can come either
+;				from the console or the command line buffer.
+;				Any NON FUNCTION KEY generates a beep and goes
+;				back TO THE CONSOLE for another keystroke.
+;				Note that bad input disables re-direction.
+;
+;	XGETDEC ndig,word,delim	get an ndig digit decimal number to variable
+;				word from the keyboard.  The operator is
+;				forced to enter N digits if his first keystroke
+;				is not delim.  If delim is typed as the first
+;				keystroke, then word is untouched.  There is
+;				no other editing.
+;
+;	XKEYCASE mask		gets the next function keystroke from the
+;				input stream and if that key's bit is set
+;				to a 1 in the word mask then an interp call is
+;				done through the nth entry in the table of
+;				label offsets following the XKEYCASE
+;				instruction.  CAUTION:  There is a Key 0
+;				even if your system does not use one.
+;				If the label entry for that key is set to
+;				zero, then execution continues after the
+;				end of the table.  NOTE that the table must
+;				be completely defined (entries 0-10 for PC)
+;				or bizarre things will occur if this default
+;				is ever executed.
+;				If the table entry==00 or after return from the
+;				routine in the table entry, execution continues
+;				after the table.
+;
+;
+;  Control transfer instructions:
+;
+;	XMCALL labl		calls 8086 code routine at labl
+;
+;	XCALL labl		calls interpreter code at labl
+;
+;	XRET			returns to instruction after XCALL
+;
+;	XPOP			discards the most recent return address
+;				on the stack (if any).  This is protected
+;				against stack underflow.
+;
+;	XJMP labl		branches to labl in interpreter code
+;
+;	XJE varb,val,labl	branches to labl if byte variable varb==val
+;
+;	XJNE varb,val,labl	as XJE but branch taken if not equal
+;
+;	XJKEY labl		branch to label if console status returns true
+;
+;	XJNKEY			branch to label if console status returns false
+;
+;	XBREAK			is a NO-OP but executes via a code label
+;				called MDEBUG that can be used as a sid
+;				breakpoint. This opcode generates NO CODE
+;				at all if the ENABLE_XBREAK switch = 0
+;
+;	XFF			sends the character 0ffh to the display
+;				(0ffh is the interpreter escape byte)
+;
+;	Anything else in the instruction stream is sent to the console as
+;	a string until the beginning of the next instruction.  NOTE THAT
+;	ascii 00 does NOT delimit such inline strings.  They are delimited
+;	by the next instruction and so MUST NOT CONTAIN 0FFH.  Note also
+;	that single character IO is used to send such inline strings and so
+;	should be avoided for large strings.
+;
+eject
+;	Menu interpreter opcodes:
+;
+;	All opcodes begin with the escape value 0ffh followed by an opcode
+;	They take varying parameters following them as defined here
+;
+;
+CODEMACRO Xstop				;return to 8086 direct execution mode
+	dw	00ffh
+ENDM
+
+CODEMACRO Xputs_at x:db,y:db,string:xb 	;displays string at xy
+	dw	01ffh
+	db	x
+	db	y
+	dw	string
+ENDM
+
+CODEMACRO Xputs string:xb		;displays string at current xy
+	dw	02ffh
+	dw	string
+ENDM
+
+CODEMACRO Xputc ascii:xb		;displays char at current xy
+	dw	03ffh
+	dw	ascii
+ENDM
+
+CODEMACRO Xposition x:db,y:db		;moves cursor to x,y
+	dw	04ffh
+	db	x
+	db	y
+ENDM
+
+CODEMACRO Xcursoron			;turns cursor display on
+	dw	05ffh
+ENDM
+
+CODEMACRO Xcursoroff			;turns cursor display off
+	dw	06ffh
+ENDM
+
+CODEMACRO Xpnum3 varptr:xw 		;displays variable as 3 dec digits
+	dw	07ffh
+	dw	varptr
+ENDM
+
+CODEMACRO Xbox	ulx:db,uly:db,lrx:db,lry:db	;(ulx,uly,lrx,lry) draws a box
+	dw	08ffh
+	db	ulx
+	db	uly
+	db	lrx
+	db	lry
+ENDM
+
+CODEMACRO Xclrbox ulx:db,uly:db,lrx:db,lry:db	;clears box interior only
+	dw	09ffh
+	db	ulx
+	db	uly
+	db	lrx
+	db	lry
+ENDM
+
+CODEMACRO Xkbox x:db,y:db,key:db		; draw keybox with arrow
+	dw	0affh
+	db	x
+	db	y
+	db	key
+ENDM
+
+CODEMACRO Xkbox_msg x:db,y:db,key:db,msg:xb	;as XBOX but prints msg too
+	dw	0bffh
+	db	x
+	db	y
+	db	key
+	dw	msg
+ENDM
+
+CODEMACRO Xbright				;turn highlighting on
+	dw	0cffh
+ENDM
+
+CODEMACRO Xdim					;turn highlighting off
+	dw	0dffh
+ENDM
+
+CODEMACRO Xblink				;turn blink on
+	dw	0effh
+ENDM
+
+CODEMACRO Xnoblink				;turn blink off
+	dw	0fffh
+ENDM
+
+CODEMACRO Xje memb:xb,bval:db,labl:c		;if(memb==bval) goto labl
+	dw	10ffh
+	dw	memb
+	db	bval
+	dw	labl
+ENDM
+
+CODEMACRO XJne memb:xb,bval:db,labl:c		;if(memb !=bval) goto labl
+	dw	11ffh
+	dw	memb
+	db	bval
+	dw	labl
+ENDM
+
+CODEMACRO Xjmp	labl:c				; goto labl
+	dw	12ffh
+	dw	labl
+ENDM
+
+CODEMACRO Xcall labl:c				;call interpreted subroutine
+	dw	13ffh
+	dw	labl
+ENDM
+
+CODEMACRO Xret					;return from interpreted subr.
+	dw	14ffh
+ENDM
+
+CODEMACRO Xmcall labl:c				;call ml subroutine at labl
+	dw	15ffh
+	dw	labl
+ENDM
+
+CODEMACRO Xpdecw memw:xw			;print word  with l.z.suppr.
+	dw	16ffh
+	dw	memw
+ENDM
+
+CODEMACRO XBREAK				;NO-OP via 8086 label MDEBUG:
+if ENABLE_XBREAK
+	dw	17ffh
+endif
+ENDM
+
+CODEMACRO Xkeycase keys:xw		;branch on FN key using mask
+	dw	18ffh
+	dw	keys
+ENDM
+
+CODEMACRO Xreset				;init interp including sp
+	dw	19ffh
+ENDM
+
+CODEMACRO Xgetchar char:xb			;get next char from con to var.
+	dw	1affh
+	dw	char
+ENDM
+
+CODEMACRO Xgetfn char:xb			;get next FN key # to var.
+	dw	1bffh
+	dw	char
+ENDM
+
+CODEMACRO Xgetdec dig:db,num:xw,delim:db	;get n digit dec number to var
+	dw	1cffh
+	db	dig
+	dw	num
+	db	delim
+ENDM
+
+CODEMACRO Xbeep					;generate a beep on console
+	dw	1dffh
+ENDM
+
+CODEMACRO Xsplitbox lx:db,ly:db,rx:db		;horizontally split a box
+	dw	1effh
+	db	lx
+	db	ly
+	db	rx
+ENDM
+
+CODEMACRO XSETW var:xw,val:d			;sets word variable=value
+	dw	1fffh
+	dw	var
+	dw	val
+ENDM
+
+CODEMACRO XSETB var:xb,val:db			;sets byte variable=value
+	dw	20ffh
+	dw	var
+	db	val
+ENDM
+
+CODEMACRO XADDW	var:xw,val:d			;adds value to word variable
+	dw	21ffh
+	dw	var
+	dw	val
+ENDM
+
+CODEMACRO XADDB	var:xb,val:db			;adds value to word variable
+	dw	22ffh
+	dw	var
+	db	val
+ENDM
+
+CODEMACRO XTOGGLE flag:xb			;complements byte specified
+	dw	23ffh
+	dw	flag
+ENDM
+
+CODEMACRO XPOP					;discard most recent ret.addr
+	dw	24ffh
+ENDM
+
+CODEMACRO XJKEY labl:c				;jmp if console status=true
+	dw	25ffh
+	dw	labl
+ENDM
+
+CODEMACRO XJNKEY labl:c				;jmp if console status=false
+	dw	26ffh
+	dw	labl
+ENDM
+
+CODEMACRO XGETS max:db,buffer:xb		;get a string of max size max
+	dw	27ffh
+	db	max
+	dw	buffer
+ENDM
+
+CODEMACRO Xff					;print character 0ffh
+	dw	0ffffh
+ENDM
+X_MAXKEY	equ	10			;largest legal key # (0-15)
+XBAD_KEY	equ	0
+;	Anything else in control string is printed until next escape code
+                                                                                                                                                                                          
