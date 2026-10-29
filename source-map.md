@@ -158,4 +158,13 @@ selected original OEM binaries/data; see media/README.md. System and maintenance
 are bootable. Unrebuilt HDMAINT, REDOS and TIME are preserved as original inputs,
 without changing their source-build status. No old kernel binary is packaged.
 HELP's rebuilt baseline and the historical 4.1 text are on separate disks.
-Top-level dist/source-dist/check-dist follow the CCP/M artifact conventions.
+Top-level dist/check-dist produce and check disks.zip with the seven disk
+images and license/project notes. Source distribution stays in Git.
+
+## PUT / GET / RDR import
+
+The shared putget module and all three source builds are copied unchanged
+from the CCP/M project. The native console-redirection programs are installed
+on cdos86.img. Their current mechanism launches native CMD programs through
+P_CLI and intercepts INT E0h; DOS execution/redirection is not added by this
+import. ORDER is the 4.1 command-order interface; SETDEF will not be ported.

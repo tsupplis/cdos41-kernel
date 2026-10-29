@@ -8,13 +8,13 @@ disks contain CCPM.SYS and STARTUP.0; the remaining disks are data-only.
 
 | Image | Bootable | Contents |
 | --- | --- | --- |
-| cdos86.img | Yes | Kernel, native file commands/editor, DATE, SDIR, SET, SHOW, SUBMIT, BATCH, SYSDISK, ERA/ERAQ; OEM REN.EXE and STOP.CMD for shell aliases. |
+| cdos86.img | Yes | Kernel, native file commands/editor, DATE, SDIR, SET, SHOW, SUBMIT, BATCH, SYSDISK, ERA/ERAQ, PUT/GET/RDR; OEM REN.EXE and STOP.CMD for shell aliases. |
 | cdostools.img | No | ASM80/ASM86, GENCMD, GENCCPM, HEXCOM, HELP/HLP, PRINT, SYSTAT, CHSET, GENLDR, LOADCCPM, WINDOW/WMENU and core commands. |
 | cdosmaint.img | Yes | Kernel, DSKMAINT, DCOPY, DCOMP, INITDIR and core commands. |
 | cdosmenu.img | No | DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP, menu/terminal/message data, window BAT examples and sample text. |
 | cdosdos.img | No | Rebuilt COPY.EXE, DATE.EXE, ERASE.EXE, PATH.EXE; original TIME.EXE, REN.EXE and REDOS.COM; core commands. |
 | cdosoem1.img | No | Original BACK, REST, BRINST, FM, SPL and backup/file-manager support files. |
-| cdosoem2.img | No | Rebuilt FUNCTION and HELP; original SETUP, SETPORT, DISKSTAT, FIND, N, NS, SID86, STAT, STOP, HDMAINT, its manual and the original 4.1 HELP.HLP. |
+| cdosoem2.img | No | Rebuilt FUNCTION and HELP; original SETUP, SETPORT, DISKSTAT, N, NS, SID86, STAT, STOP, HDMAINT, its manual and the original 4.1 HELP.HLP. |
 
 Rebuilt command outputs are used wherever available. Remaining original
 binaries and data are explicit base/ prerequisites in the Makefile; there
@@ -36,9 +36,8 @@ PCE launcher/configuration convention as CCP/M, with system/tools on A:/B:.
 The default adapter is VGA; `./cdos86 cga` selects CGA. `make check-pce` uses
 disposable system/tools copies for the shell and keyboard regression.
 
-From the project root, `make dist` copies the seven images to the root,
-creates disks.zip with the license files and project/command/patch notes,
-and writes dist/cdos86-source.tar.gz plus dist/source-files.txt.
-`make source-dist` creates the source archive independently. `make check-dist`
-checks both archive containers. `make clean` removes generated media/releases,
-including the locally generated base images; source and OEM inputs remain.
+From the project root, `make dist` copies the seven images to the root and
+creates disks.zip with both license files and the project/command/patch notes.
+`make check-dist` checks that disk archive. Source distribution stays in Git.
+`make clean` removes generated media/releases, including the locally generated
+base images; source and OEM inputs remain.

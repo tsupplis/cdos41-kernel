@@ -5410,6 +5410,46 @@
       "path": "commands/print/sqlink.inp",
       "origin": "ccpm86-kernel/commands/print/sqlink.inp",
       "sha256": "0a4d875d3fabc7763a91c8ba706c5cef03e866e4d28a6c268d5df3f026850892"
+    },
+    {
+      "path": "commands/putget/Makefile",
+      "origin": "ccpm86-kernel/commands/putget/Makefile",
+      "sha256": "0dcf5864c16423dc8c3c9f1e75a8d6a9e0e3a2b86ff3cad9ef81042e5d524704"
+    },
+    {
+      "path": "commands/putget/README.md",
+      "origin": "ccpm86-kernel/commands/putget/README.md",
+      "sha256": "fdf3b3f313dc09af78c4fc3e62234a48a5f6ce784dc89cbf63ad7d765e9c50af"
+    },
+    {
+      "path": "commands/putget/get.a86",
+      "origin": "ccpm86-kernel/commands/putget/get.a86",
+      "sha256": "19a550529a5ddca0c43a2e5264ea9e36233c5ccac85f789ed28928c8ad304d87"
+    },
+    {
+      "path": "commands/putget/put.a86",
+      "origin": "ccpm86-kernel/commands/putget/put.a86",
+      "sha256": "b582f80a2f64d9d5e1a4111162b7cf9de8cff4798abf5cdb52c45fc180e047d5"
+    },
+    {
+      "path": "commands/putget/putget.dat",
+      "origin": "ccpm86-kernel/commands/putget/putget.dat",
+      "sha256": "58f9152d3564073e385426a143ad564245a649cdfd35a2824467347e0f9123c2"
+    },
+    {
+      "path": "commands/putget/putget.def",
+      "origin": "ccpm86-kernel/commands/putget/putget.def",
+      "sha256": "b9a22c7a9c8bb2205f7b72ec42e2b8ed444d16a3d41e3fa1f90cae62cce124fd"
+    },
+    {
+      "path": "commands/putget/putget.lib",
+      "origin": "ccpm86-kernel/commands/putget/putget.lib",
+      "sha256": "7a51e14707b34f662d768430d7335582b0b969612e2b8e43a9e951cff9125f5c"
+    },
+    {
+      "path": "commands/putget/rdr.a86",
+      "origin": "ccpm86-kernel/commands/putget/rdr.a86",
+      "sha256": "b62395bb97164341498fc7d967e98999527bcf8d01193130ed3be36de27b74cc"
     }
   ]
 }

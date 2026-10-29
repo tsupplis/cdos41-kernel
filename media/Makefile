@@ -10,7 +10,8 @@ SYSTEM_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ..
     ../commands/era/eraq.cmd ../commands/ren/ren.cmd ../commands/date/date.cmd \
     ../commands/sdir/sdir.cmd ../commands/show/show.cmd ../commands/set/set.cmd \
     ../commands/submit/submit.cmd ../commands/type/type.cmd ../commands/dir/dir.cmd \
-    ../commands/ed/ed.cmd ../base/ren.exe ../base/stop.cmd
+    ../commands/ed/ed.cmd ../base/ren.exe ../base/stop.cmd \
+    ../commands/putget/put.cmd ../commands/putget/get.cmd ../commands/putget/rdr.cmd
 
 TOOLS_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
     ../commands/asm80/asm80.cmd ../commands/asm86/asm86.cmd ../commands/gencmd/gencmd.cmd \
@@ -28,7 +29,7 @@ MENU_COMMANDS = ../commands/dredix/dredix.cmd ../commands/copymenu/copymenu.cmd 
     ../base/menu.dat ../base/fdmenu.dat ../base/hdmenu.dat \
     ../base/national.msg ../base/index.dsp ../base/help.edx \
     ../base/lsn.edx ../base/keys.pfk ../base/carddeck.bat \
-    ../base/clear.bat ../base/st1.bat ../base/student.bat \
+    ../base/clear.bat ../base/student.bat \
     ../base/letter.txt ../base/user.txt
 
 DOS_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
@@ -41,7 +42,7 @@ OEM1_COMMANDS = ../base/back.cmd ../base/rest.cmd ../base/brinst.cmd \
     ../base/fm.cfg ../base/spl.cmd
 
 OEM2_COMMANDS = ../commands/function/function.cmd ../commands/help/help.cmd ../base/diskstat.cmd \
-    ../base/find.cmd ../base/n.cmd ../base/ns.cmd \
+    ../base/n.cmd ../base/ns.cmd \
     ../base/setport.cmd ../base/setup.cmd ../base/sid86.cmd \
     ../base/stat.cmd ../base/stop.cmd ../base/hdmaint.cmd \
     ../base/hdmaint.doc ../base/help.hlp
