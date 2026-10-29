@@ -1,4 +1,4 @@
-# Concurrent DOS 4.1 kernel and commands
+# !!!WIP!!! Concurrent DOS 4.1 kernel and commands
 
 Independent source rebuild of the OEM Concurrent DOS 4.1 distribution.
 The layout follows the CCP/M kernel project: `kernel/con`, `kernel/rsp1`,
