@@ -1,0 +1,1986 @@
+eject						; Mar 14, 1985
+;						;  flagset retries until good
+;						; Apr 2, 1985
+						;  no flagset if unexp. diskette
+						;  interrupt
+						; Apr 3, 1985
+						;  flagset only retries if
+						;  ext. error = 2Ah
+						; Apr 11, 1985
+						;  shift-tab corrected
+						; (Apr. 22, 1985...recorrected)
+						;  motor-off-counter moved
+						;  door-open fake-out added
+						; Apr 11, 1985
+						;  inc timer_low:timer_high
+;		SYSTEM INFO
+;		-----------
+
+;************************************************
+;*						*
+;*       CCP/M-86 SYSTEM DATA AREA FORMAT	*
+;*						*
+;************************************************
+
+	dseg
+	org	0
+supmod		rw	2
+
+	org	038h
+dispatcher	rw	2
+
+	org	040h
+mpmseg		rw	1
+
+	org	044h
+endseg		rw	1
+
+	org	04ah
+n_flags		rb	1		;total number of system flags
+sys_disk	rb	1		;system disk number patched at init
+mmp		rw	1		;maximum memory per process
+
+	org	050h
+temp_disk	rb	1		;temporary disk number patched at init
+
+	org	058h
+mdul		rw	1		;root of unused memory descriptors
+mfl		rw	1		;root of memory free list
+
+	org	068h
+rlr		rw	1
+
+	org	072h
+thrdrt		rw	1
+qlr		rw	1
+
+	org	078h
+version		rw	1
+vernum		rw	1
+mpmvernum	rw	1
+tod_day		rw	1		;binary days since january 1 1978
+tod_hour	rb	1		;bcd
+tod_min		rb	1		;bcd
+tod_sec		rb	1		;bcd
+
+	org	088h
+open_vec	rw	1		;16 bit vector of drives with open
+					;files - used by status line routine
+		rw	1		;reserved
+owner_8087	rw	1		;process descriptor of 8087 owner
+
+	org	0A0h
+ndp_int_off	rw	1		;offset of 8087 interrupt vector
+ndp_int_seg	rw	1		;segment of same
+ndp_vec_off	rw	1		;offset of 8087 interrupt entry
+ndp_vec_seg	rw	1		;segment of same
+
+
+;********************************************************
+;*							*
+;*		CCP/M-86 SYSTEM EQUATES 		*
+;*							*
+;********************************************************
+
+true		equ	0ffffh
+false		equ	0
+
+;	CCP/M-86 system calls used by the XIOS
+
+					;process control functions:
+p_delay		equ	141		;delay specified number of ticks
+p_dispatch	equ	142		;let other another process run
+p_pdadr		equ	156		;dbl word ptr of process descriptor
+p_term		equ	143		;terminate process
+
+					;device control functions:
+dev_poll	equ	131		;poll device
+dev_flagwait	equ	132		;flag wait
+dev_flagset	equ	133		;flag set
+
+flag_set_ignored equ	2Ah		;* only error to cause retry
+
+					;Time function:
+t_seconds	equ	155		;get date,hours,minutes,seconds
+
+
+;	Definition of flag table used by by CCP/M and this XIOS
+
+					;0 - is reserved
+tick_flag	equ	1		;tick flag number
+sec_flag	equ	2		;seconds flag number
+min_flag	equ	3		;minutes flag number
+
+					;XIOS flags:
+fdc_flag	equ	4		;disk operation flag
+ci_flag		equ	5		;console in flag
+ww_flag		equ	6		;window manager flag
+er_flag		equ	7		;get errror response
+aux_flag_in0	equ	8		; port 0 input flag
+aux_flag_in1	equ	9		; port 1 input flag
+aux_flag_out0	equ	10		; port 0 output flag
+aux_flag_out1	equ	11		; port 1 output flag
+sc0_flag	equ	12		; hang up serial con 0
+sc1_flag	equ	13		; hang up serial con 1
+
+last_flag	equ	13
+
+
+;********************************************************
+;*							*
+;*		PROCESS DESCRIPTOR			*
+;*							*
+;********************************************************
+
+;	The Process Descriptor (PD) along with the
+;	associated User Data Area (UDA), describe
+;	the current state of a Process under CCP/M-86.
+;	The process descriptor is always within the System
+;	Data Segment.
+
+;	Process Descriptor:
+
+;   +-----+-----+-----+-----+-----+-----+-----+-----+
+; 00|   link    |  thread   |stat |prior|   flag    |
+;   +-----+-----+-----+-----+-----+-----+-----+-----+
+; 08|                     name                      |
+;   +-----+-----+-----+-----+-----+-----+-----+-----+
+; 10|    uda    |disk | user|       reserved        |
+;   +-----+-----+-----+-----+-----+-----+-----+-----+
+; 18|               resereved           |  parent   |
+;   +-----+-----+-----+-----+-----+-----+-----+-----+
+; 20|cons |     reserved    |list |    reserved     |
+;   +-----+-----+-----+-----+-----+-----+-----+-----+
+; 28|                   reserved                    |
+;   +-----+-----+-----+-----+-----+-----+-----+-----+
+
+;	link	- used for placement into System Lists
+;	thread	- link field for Thread List
+;	stat	- current process activity
+;	prior	- priority
+;	flag	- process state flags
+;	name	- name of process
+;	uda	- segment address of user data area
+;	disk	- current default disk
+;	user	- current default user number
+;	mem	- pointer to MD list of memory owned
+;		  by this process
+;	parent	- process that created this process
+;	cons	- default console device (doesn't imply ownership)
+;	list	- default list device (doesn't imply ownership)
+
+p_link		equ	word ptr 0
+p_thread	equ	word ptr p_link + word
+p_stat		equ	byte ptr p_thread + word
+p_prior		equ	byte ptr p_stat + byte
+p_flag		equ	word ptr p_prior + byte
+p_name		equ	byte ptr p_flag + word    
+p_uda		equ	word ptr p_name + 8
+p_disk		equ	byte ptr p_uda + word
+p_user		equ	byte ptr p_disk + byte
+p_mem		equ	word ptr p_user + 3
+p_parent	equ	word ptr p_mem + 8
+p_cons		equ	byte ptr p_parent + word
+p_list		equ	byte ptr p_cons + 4
+
+pd_len		equ	30H
+
+;	Values of Process descriptor p_status field:
+
+ps_run		equ	0	;in ready list root
+ps_poll		equ	1	;in poll list
+ps_delay	equ	2	;in delay list
+ps_swap		equ	3	;in swap list
+ps_term		equ	4	;terminating
+ps_sleep	equ	5	;sleep processing
+ps_dq		equ	6	;in dq list
+ps_nq		equ	7	;in nq list
+ps_flagwait	equ	8	;in flag table
+ps_ciowait	equ	9	;waiting for character
+
+;	Bit flags in Process descriptor p_flag field:
+
+pf_sys		equ	0001h	;system process
+pf_keep		equ	0002h	;do not terminate
+pf_kernal	equ	0004h	;resident in kernal
+pf_pure		equ	0008h	;pure memory descibed
+pf_table	equ	0010h	;from pd table
+pf_resource	equ	0020h	;waiting for resource
+pf_raw		equ	0040h	;raw console i/o
+pf_ctlc		equ	0080h	;abort pending
+pf_active	equ	0100h	;active tty
+pf_tempkeep	equ	0200h	;don't terminate yet...
+pf_ctld		equ	0400h	;explicit detach occured
+pf_childabort	equ	0800h	;child terminated abnormally
+pf_noctls	equ	1000h	;control S not allowed
+pf_dskld	equ	2000h	;process was loaded from disk
+
+
+;************************************************
+;*
+;*	Virtual Console Control Block Definition
+;*
+;*	+---------+---------+---------+---------+
+;*  00	|      owner        |      reserved	|
+;*	+---------+---------+---------+---------+
+;*  04	|                reserved               |
+;*	+---------+---------+---------+---------+
+;*  08	|  mimic  |      reserved               |
+;*	+---------+---------+---------+---------+
+;*  0C	|      reserved     |       state       |
+;*	+---------+---------+---------+---------+
+;*  10  |     maxbufsiz     |     reserved      |
+;*	+---------+---------+---------+---------+
+;*  14  |               reserved                |
+;*      +---------+---------+---------+---------+
+;*  18  |               reserved                |
+;*      +---------+---------+---------+---------+
+;*  1C  |               reserved                |
+;*      +---------+---------+---------+---------+
+;*  20  |               reserved                |
+;*      +---------+---------+---------+---------+
+;*  24  |               reserved                |
+;*      +---------+---------+---------+---------+
+;*  28  |               reserved                |
+;*      +---------+---------+---------+---------+
+;*
+;*
+;*
+;*	owner	- current owner of device
+;*		  if 0, no owner
+;*	mimic	- list dev that mimics us.
+;*		  0ffh means no mimic device
+;*	state	- current state of virtual console
+;*	maxbufsiz - maximum file size for buffered mode
+
+c_owner		equ	word ptr 00h
+c_mimic		equ	byte ptr 08h
+c_state		equ	word ptr 0Eh
+c_maxbufsiz	equ	word ptr 10h
+ccblen		equ	2ch
+
+;CCB state flags
+
+csm_buffered	equ	00001h
+csm_background	equ	00002h
+csm_purging	equ	00004h
+csm_noswitch	equ	00008h
+csm_suspend	equ	00010h
+csm_abort	equ	00020h
+csm_filefull	equ	00040h
+csm_ctrlS	equ	00080h
+csm_ctrlO	equ	00100h
+csm_ctrlP	equ	00200h
+
+
+;	Memory Descriptor Format for Init memory trimming
+
+md_link		equ	word ptr 0
+md_start	equ	word ptr md_link + word
+md_length	equ	word ptr md_start + word
+
+
+;*******************************************************
+;*							*
+;*	8087 NUMERIC DATA PROCESSOR CODEMACROS		*
+;*							*
+;********************************************************
+
+codemacro       FNINIT
+        dw      0e3dbh
+endm
+
+codemacro       FNDISI
+        dw      0e1dbh
+endm
+
+codemacro       FNSTCW   dst:Mw
+        segfix  dst
+        db      0d9h
+        modrm   7,dst
+endm
+
+codemacro       FNCLEX
+        dw      0e2dbh
+endm
+
+codemacro       FNSTENV dst:M
+        segfix  dst
+        db      0d9h
+        modrm   6,dst
+endm
+
+codemacro       FLDENV  src:M
+        db      9bh     
+        segfix  src
+        db      0d9h
+        modrm   4,src
+endm
+
+FWAIT   equ     WAIT
+
+
+;****************************************************************
+;*								*
+;*	8259 PROGRAMMABLE INTERRUPT CONTROLLER COMMANDS		*
+;*			AND PORTS				*
+;*								*
+;****************************************************************
+
+ticks_per_second	equ	60
+
+pic_ocw_port		equ	020h	;port 0
+pic_ocw_nseoi		equ	020h	;non specific end of interupt
+pic_ocw_seoi		equ	060h	;specific end of interupt channel 0
+
+disk_channel		equ	06h
+keyboard_channel	equ	01h
+timer_channel		equ	00h
+
+
+;************************************************
+;*						*
+;*		ASCII CODES			*
+;*						*
+;************************************************
+
+nul	equ	00h
+soh	equ	01h
+stx	equ	02h
+etx	equ	03h
+eot	equ	04h
+enq	equ	05h
+ack	equ	06h
+bel	equ	07h
+bs	equ	08h
+ht	equ	09h
+lf	equ	0ah
+vt	equ	0bh
+ff	equ	0ch
+cr	equ	0dh
+so	equ	0eh
+shi	equ	0fh
+dle	equ	10h
+dc1	equ	11h
+dc2	equ	12h
+dc3	equ	13h
+dc4	equ	14h
+nak	equ	15h
+syn	equ	16h
+etb	equ	17h
+can	equ	18h
+em	equ	19h
+subb	equ	1ah
+esc	equ	1bh
+fs	equ	1ch
+gs	equ	1dh
+rds	equ	1eh
+us	equ	1fh
+del	equ	7fh
+
+xon	equ	dc1
+xoff	equ	dc3
+
+
+eject
+
+;	XIOS HEADER AND INTERFACE
+;	-------------------------
+
+;************************************************
+;*						*
+;*		XIOS HEADER 			*
+;*						*
+;************************************************
+
+	cseg
+	org	0C00h		;8080 model XIOS base
+
+				;CCP/M-86 entry points to XIOS:
+	jmp	init		;called once at system boot
+	jmp	entry		;subsequent calls go through here
+
+
+reorg1	equ	offset $
+	dseg
+	org	reorg1
+
+num_vir_cons	equ	4		;number of virtual consoles
+
+sysdat		dw	0
+supervisor_o	rw	1
+supervisor_s	rw	1
+supervisor	equ	dword ptr supervisor_o
+
+tick		db	false
+ticks_sec	db	60
+door		db	false
+nacb		db	num_aux_ports
+npcns		db	1 + num_aux_ports
+nvcns		db	num_vir_cons + num_aux_ports
+nccb		db	num_vir_cons + num_aux_ports
+nlcb		db	5		;5 list devices
+
+ccb		dw	offset ccb_tab	;pointer to the first ccb
+lcb		dw	offset lcb_tab	;pointer to the first lcb
+
+;	This table of disk parameter header offsets is used by
+;	genccpm for internal allocations.  It gets modified by
+;	the INIT routine to match the actual physical drives.
+
+dph_tbl		dw	dph0,dph1	; A: B:   floppies
+		dw	dph2,dph3	; C: D:	  floppies
+		dw	hd_dph0,hd_dph1	; E: F:   hard disks
+		dw	pc_hd_first_dph	; G: H:   hard PC DOS
+		dw	pc_hd_second_dph
+		dw	0,0,0,0		; I: - L:
+md_dph		dw	dph_md		; M:	  memory disk
+		dw	0,0,0		; N: - P:
+
+genccpm_buf	dw	buffer_size/16
+
+acb		dw	offset acb_tab	;pointer to the first acb
+
+debug		db	false		;save debugger interrupts
+
+
+;********************************************************
+;*							*
+;*		INTERFACE TO CCP/M O.S.			*
+;*							*
+;********************************************************
+
+reorg2	equ	offset $
+	cseg
+	org	reorg2
+
+;=====
+;=====
+entry:					;arrive here from JMP at
+;=====					;03H in XIOS code segment
+;=====
+
+;	Note: no alteration of stack is allowed during entry except
+;	for the return address caused by the "call function_table[bx]"
+;	instruction.
+
+	cld				;set the direction flag
+	cbw				;ah = 0
+	shl al,1			;multiply by 2
+	xchg bx,ax			;save bx in ax
+	call function_table[bx]		;no range checking needed
+	mov bx,ax			;only called by O.S.
+	retf				;return to O.S. kernel
+
+
+function_table:
+	dw	io_const		; 0 console status
+	dw	io_conin		; 1 console input
+	dw	io_conout		; 2 console output
+	dw	io_listst		; 3 list status
+	dw	io_list			; 4 list output
+	dw	io_auxin		; 5 auxillary input
+	dw	io_auxout		; 6 auxillary out
+	dw	io_switch		; 7 switch screen
+	dw	io_statline		; 8 update or print new status
+	dw	io_seldsk		; 9 select disk
+	dw	io_read			;10 read logical sector
+	dw	io_write		;11 write logical sector
+	dw	io_flushbuf		;12 flush buffers
+	dw	io_poll			;13 poll device
+	dw	io_pointer		;14 general pointer return
+	dw	io_format		;15 CP/M only format entry
+
+;	back door window control entry points
+
+	dw	ww_pointer		;16 return data pointers
+	dw	ww_key			;17 wait for a key
+	dw	ww_statline		;18 char/attib status line
+	dw	ww_im_here		;19 window process state
+	dw	ww_new_window		;20 redefine a window
+	dw	ww_cursor_view		;21 track mode, viewpoint
+	dw	ww_wrap_column		;22 set wrap around column
+	dw	ww_full_window		;23 same as full key
+	dw	ww_switch_display	;24 mono/color monitors
+	dw	io_ret			;25 dummy
+	dw	io_ret			;26 dummy
+	dw	io_ret			;27 dummy
+	dw	io_ret			;28 dummy
+	dw	io_new_format		;29 variable format entry
+	dw	get_set_screen		;30 alpha/graphics screens
+
+;	PC mode ROM BIOS entry point emulators
+
+	dw	pc_video		;31 rom bios video IO
+	dw	pc_kbd			;32 rom bios keyboard mode switch
+	dw	pc_shifts		;33 rom bios style shift status
+	dw	pc_equip		;34 rom bios style equip word
+	dw	io_ddio_read		;35 rom bios disk read
+	dw	io_ddio_write		;36 rom bios disk write
+
+	dw	io_auxin_stat		;37 aux input status
+	dw	io_auxout_stat		;38 aux output status
+
+io_ret:
+	ret				; for null function calls
+
+flagset:
+	push dx
+	mov cl,dev_flagset
+	call supif			; try to set flag
+	pop dx
+	test ax,ax			; if set fails, then
+	 jz fs_ret			;*
+	cmp cx,flag_set_ignored		;*
+	 je flagset			;* retry only on this error
+fs_ret:
+	ret
+	
+
+flagwait:
+	mov cl,dev_flagwait
+;	jmps supif			;fall through
+
+supif:
+	push	es			; we now explicitly set the
+	mov	bx,rlr			;   es register to the active
+	mov	es,p_uda[bx]		;   uda prior to a supervisor
+	mov	ch,0			;   call, rather than trying
+	callf	supervisor		;   to maintain it through
+	pop	es			;   the entire xios.
+	ret
+
+;	Here is a little bit of room for assorted corrections
+
+patch_space	rb	0		; from here to setup label
+
+
+;	SETUP buffer is no longer read from an extra disk sector
+;	but rather is written to directly in ccpm.sys by SETUP
+
+setup_buf	equ	0D80h		; fixed location for read/write
+
+	org	setup_buf - 40h
+		db	'First FDC specify byte is 6th after "==>"...'
+	org	setup_buf - 10h
+setup_label	db	'Setup Buffer ==>'
+
+	org	setup_buf
+su_check	dw	0	; until written by SETUP
+su_md_start	rw	1	; mdisk start segment
+su_verf		rb	1	; floppy verify flag
+su_hdst		rb	1	; floppy head step
+su_scroll	rb	1	; color monitor scroll mode
+	org	setup_buf + 30h
+		rw	1	; reserved for cp/m-86 fidds
+su_mmp		rw	1	; max mem per process
+su_ser_con	rb	2	; true if serial console
+su_prot		rb	4	; protocol in0, in1, out0, out1
+	org	setup_buf + 60h
+su_cf		rb	2	; config flag (+ assign flag)
+su_pf		rb	2	; pfk flag (+ one byte)
+su_config	rw	1	; both async init bytes
+	org	setup_buf + 70h
+su_pfk_tbl	rb	360	; one console's pfk's
+
+	org	setup_buf + 512		; save room for a whole sector
+
+
+eject
+;		INTERRUPT HANDLERS
+;		------------------
+
+
+;********************************************************
+;*							*
+;*		XIOS BACK DOOR ENTRY			*
+;*							*
+;********************************************************
+
+;	This is included primarily for version 1.0 compatiblity
+;	It is entered with an INT 0E6h, and returns pointers to
+;	screen base addresses and PFK tables, or information to
+;	be used by HDMAINT.
+
+;	entry:	al = 18		; resume normal status line
+; or
+;	entry:	al = 21		; display status line
+;		cx:si -> new status information
+; or
+;	entry:	al = 29		; hd_maint info return
+;	exit:	al = true if there are any open files
+;		dx:cx -> hd_rom_entry
+; or
+;	entry:	al = 31		; version 1.0 pfk_control
+;		cx = vc num
+;	exit:	ax,bx -> pfk offset
+;		si -> vc segment
+; or 
+;	entry:	al = 32		; return max disk
+;	exit:	al = max floppy disk number
+
+xios_v1_entry:
+	cbw
+	cmp	al,32			; if al > 32
+	ja	xios_v1_exit		;   then forget it
+	sub	al,18			; shift the offset
+	jb	xios_v1_exit		;   and ignore < 18
+
+	push ds ! push cs ! pop ds	; local data segment
+	shl	ax,1
+	xchg	ax,bx			; bx = table index
+	call	xios_v1_table[bx]	; branch to routine
+	push ds ! pop es ! pop ds	; es = sysdat, ds restored
+
+xios_v1_exit:
+	iret
+
+xios_v1_table	dw	xios_v1_status_on	; 18
+		dw	v1_null,v1_null		; 19, 20
+		dw	xios_v1_display_stat	; 21
+		dw	v1_null,v1_null,v1_null	; 22,23,24
+		dw	v1_null,v1_null,v1_null	; 25,26,27
+		dw	v1_null			; 28
+		dw	xios_v1_hd		; 29
+		dw	v1_null			; 30
+		dw	xios_v1_pfk_vc		; 31
+		dw	xios_v1_max_disk	; 32
+
+;	restore normal status line operation
+
+xios_v1_status_on:
+	mov	cx,0FFFFh		; that's the code
+	jmps	xios_v1_statline	; shared entry
+
+;	display cx:si on the status line
+
+xios_v1_display_stat:
+	mov	dx,cx			; segment to dx
+	mov	cx,si			; offset to cx
+xios_v1_statline:
+	call	io_statline		; try to display
+	test	al,al			; check success
+	jnz	xios_v1_statline	; retry if failure
+	ret
+
+;	return hdmaint information
+
+xios_v1_hd:
+	mov	ax,open_vec		; one bit per drive
+	test	ax,ax			; if no files open
+	jz	xios_v1_hd1		;   then leave al=00
+	mov	al,true			; else al=0FFh
+xios_v1_hd1:
+	mov	cx,hd_rom_ofs		; get rom offset
+	mov	dx,hd_rom_seg		; and segment
+	ret
+
+;	return pfk and vc buffer pointers
+
+xios_v1_pfk_vc:
+	push	dx
+	mov	dx,cx			; copy vc number
+	call	point_vs		; bx -> vs_
+	mov	si,vs_vc_seg		; si -> virtual console seg
+	mov	ax,vs_pfk_tbl		; ax -> pfk table
+	mov	bx,ax			; copy return to bx
+	pop	dx
+	ret
+
+;	return maximum floppy disk number
+
+xios_v1_max_disk:
+	mov	al,byte ptr num_flop	; max number is one less
+	dec	al			;   then the number of flops
+	ret
+
+;	for ignored entry codes
+
+v1_null:
+	ret				; just return
+
+
+;********************************************************
+;*							*
+;*		KEYBOARD INPUT EQUATES			*
+;*							*
+;********************************************************
+
+;	IBM PC keyboard ports
+
+kbd_data	equ	060h		;input port for the key board data
+kbd_control	equ	061h		;control port for the key board
+
+;	Some of the IBM PC key codes returned from keyboard.
+;	Other key codes are used as indices into the
+;	translation tables key_table, shift_table and control_table
+;	below.
+
+ctrl		equ	29
+shft_left	equ	42
+shft_right	equ	54
+alt		equ	56
+numlock		equ	69
+capslock	equ	58
+
+;	Keyboard interrupt handler bit masks for special function keys
+
+shft_left_bit	equ	001h
+shft_right_bit	equ	002h
+ctrl_bit	equ	004h
+alt_bit		equ	008h
+numlock_bit	equ	010h
+capslock_bit	equ	020h
+
+
+;********************************************************
+;*							*
+;*		KEYBOARD INTERRUPT HANDLER		*
+;*							*
+;********************************************************
+
+;	The following routine gets control after a keyboard interrupt.
+;	Interrupts are generated on the IBM PC when a key is depressed
+;	or released.
+
+;----------
+i_keyboard:
+;----------
+
+	mov cs:keyboard_ax,ax		;save AX,SS,SP
+	mov cs:keyboard_ss,ss
+	mov cs:keyboard_sp,sp
+
+	mov ax,cs			;set up local stack
+	mov ss,ax			;and save all registers
+	mov sp,offset keyboard_i_stack	;keyboard interrupt stack
+
+	push bx ! push cx ! push dx ! push bp
+	push si	! push di ! push ds ! push es
+
+	mov ds,ax			;set up the data segment
+	mov es,ax			;and extra segment
+
+	in al,kbd_data			;get the scan code
+	mov scan_code,al		;save the scan code
+	mov pc_scan_code,al		;save for PC mode
+	in al,kbd_control		;get the current control port
+	mov ah,al			;save the current state
+	or al,080h			;reset the key board
+	out kbd_control,al		;send to control port
+	mov al,ah
+	out kbd_control,al		;set keyboard back to normal state
+
+;	get our screen base pointer and vs_mode just once
+
+	mov 	dl,top_screen		; top screen owns the keyboard
+	call  	point_vs		; bx -> console structure
+	mov	key_vs_base,bx		; save the pointer locally
+	mov	al,vs_mode
+	mov	key_vs_mode,al		; save the mode for PC checking
+	mov	al,scan_code		; restore the scan code
+
+;	Test for CTRL, ALT already being down and DEL being current
+;	scan code.  If yes, call the ROM reset routine.
+
+	cmp	al,83
+	jnz	mask_release		; skip if other than Del key
+	mov	ah,down_bits
+	and	ah,0Fh			; look only at Shft/Ctrl/Alt
+	cmp	ah,ctrl_bit+alt_bit	; if we have Ctrl/Alt/Del
+	jnz	mask_release	
+	jmp	reset			;   then we're gone baby
+
+mask_release:				;parity is on when key is released
+	and al,07fh			;mask off the release bit
+	cmp al,83 ! jle valid_key	;test for non-existent key
+	  jmp key_scan_done
+
+;	Test for CTRL, SHIFT_RIGHT, SHIFT_LEFT, ALT, NUMBLOCK, CAPSLOCK
+;	keys.  The scan codes for these keys are in action_key_table.
+;	and are refered to as action keys in the comments below.
+;	The bit position in AH corresponds with what kind of key is
+;	found, see the section KEYBOARD PORT AND KEY EQUATES, above.
+;	The DOWN_BITS byte has bits on for action keys that are currently
+;	being held down by the operator.  The TOGGLE_BITS byte is similar
+;	but for keys that have toggle action, NUM LOCK, SCROLL LOCK,
+;	SHIFT
+
+valid_key:
+	mov cx,6			;loop count for number of action keys
+	mov ah,01h			;first bit mask
+	mov bx,offset action_key_table	;point at table of action keys
+
+action_loop:
+	cmp al,[bx]			;is it this key
+	jnz action_loop_next		;no then try the next
+	  jmp action_key
+action_loop_next:
+	shl ah,1			;adjust bit mask
+	inc bx				;and point at next element
+	loop action_loop
+
+	mov al,scan_code		;restore scan code
+	or al,al ! jns key_make		;sign is on if key just released
+	  jmp key_scan_done		;ignore release condition on
+					;non action type key
+;	first check for a ctrl/break
+key_make:
+	cmp	al,70			; if not the break key scan code
+	jnz	not_ctrl_break		;   then continue on
+	cmp	down_bits,ctrl_bit	; if not ctrl/break
+	jnz	not_ctrl_break		;   then continue on
+	int	break_interrupt		; if ctrl/break, do the user int
+					; hope we come back...
+;	now we check for a console switch key
+not_ctrl_break:
+	mov	al,down_bits		; see which actions keys are down
+	cmp	al,switch_bits		; and if they don't match switchers
+	jnz	not_switch		;   then skip to normal key
+
+	push es ! push ds ! pop es	; local es for scasb
+	mov	di,offset switch_scan	; scan codes for switch keys
+	mov	cx,num_vir_cons
+	mov	al,scan_code		; restore the scan code
+	cld
+	repnz	scasb			; search the list
+	pop 	es			; restore extra seg
+	jnz	not_switch		; skip if not a console switch
+
+	mov	al,.switch_value[di]	; 0F0h - 0F3h
+	mov	key_type,0FFh		; special key
+	jmp	save_key_code		; skip the rest of this stuff
+
+;	now we fix up special PC Mode scan codes...
+not_switch:
+	mov	al,scan_code
+	cmp	al,59			; if other than a
+	jb	not_pc_fkey		;   function key,
+	cmp	al,69			;   then skip this stuff
+	jae	not_pc_fkey
+
+;	correct pc scan code for shft/ctrl/alt function keys
+	test	key_vs_mode,pcmode_bit	; if not in pc mode
+	jz	scan_code_ok		;   then skip
+
+	mov	al,down_bits
+	mov	ah,25			; shift scan increment
+	test	al,shft_left_bit or shft_right_bit
+	jnz	inc_scan_code
+
+	mov	ah,35			; ctrl scan increment
+	test	al,ctrl_bit
+	jnz	inc_scan_code
+
+	mov	ah,45			; alt scan incremtent
+	test	al,alt_bit
+	jnz	inc_scan_code
+
+	mov	ah,0			; if none, leave it alone
+inc_scan_code:
+	add	pc_scan_code,ah		; bump fkey scan codes
+	mov	al,0
+	jmp	save_key_code
+
+not_pc_fkey:
+	test	down_bits,ctrl_bit	; if ctrl key not down
+	jz	test_alt_num		;   then skip this stuff
+
+;	translate special control scan codes for pc mode
+
+	push es	! push ds ! pop es	; local es for scan
+	mov	di,offset x_ctrl_keys	; list of keys to xlat
+	mov	cx,x_ctrl_count		; number to check
+	cld				; scan code already in al
+	repnz	scasb			; search the list
+	pop	es			; restore es
+	jnz	scan_code_ok		; if not in the list
+
+	mov	al,.x_ctrl_xlat[di]	; get the translated value
+	mov	pc_scan_code,al		;   and save it
+
+	test 	key_vs_mode,pcmode_bit	; if this console is in pcmode
+	jz	scan_code_ok		;   then zero AL and exit
+	cmp	al,0FFh			; ignore keys 8,5,2 when pcmode and
+	jz	ignore_key		;   the cntrl key is pressed
+	xor	al,al
+	jmp	save_key_code		; otherwise save the value
+ignore_key:
+	jmp	key_scan_done
+
+test_alt_num:
+	test	down_bits,alt_bit
+	jz	scan_code_ok
+	cmp	al,2
+	jb	scan_code_ok
+	cmp	al,13
+	ja	scan_code_ok
+	add	pc_scan_code,118
+
+scan_code_ok:
+	mov al,scan_code
+	mov bx,offset key_table		;translation table for single keys
+	test down_bits,ctrl_bit		;was control key already down ?
+	jz test_for_keypad		;no, try numlock
+	  mov bx,offset control_table	;yes, point to control key table
+	  jmp translate
+
+test_for_keypad:
+	cmp im_here,2 ! je test_for_keypad2	;always return value to wmenu
+	cmp al,71 ! jb test_for_shift		;test for keypad
+	cmp al,74 ! je test_for_keypad2		;minus key
+	cmp al,78 ! je test_for_keypad2		;plus key
+	  test key_vs_mode,pcmode_bit		;in pc mode the keypad
+	  jnz pcmode_keypad			;  is handled differently
+test_for_keypad2:
+	    test toggle_bits,numlock_bit	;from keypad, numlock on ?
+	    jz test_for_shift
+	      test down_bits,shft_left_bit or shft_right_bit
+	      jnz translate		;use key_table if numlock,shifted
+	      mov bx,offset shift_table
+	      jmps translate		;use shift table if numlock
+pcmode_keypad:
+	test down_bits,alt_bit
+	jz not_alt_keypad		;altkey down?
+	  push es! push ds! pop es	;yes
+	  mov di,offset keypad_tbl
+	  mov cx,10
+	  repne scasb			;scan table to figure out key number
+	  pop es
+	  jne not_alt_keypad		;didn't find code - exit
+	    sub di,offset keypad_tbl+1
+	    mov al,10
+	    mul alt_keypad_num
+	    add ax,di
+	    mov alt_keypad_num,al	;save modulo 256 result of mult
+	    jmp key_scan_done
+
+not_alt_keypad:
+	cmp al,76 ! je test_for_keypad2		;if keypad 5 key skip
+	test toggle_bits,numlock_bit		;from keypad, numlock on?
+	jz test_keypad_shift
+	  test down_bits,shft_left_bit or shft_right_bit
+	    jz keypad_shifted
+keypad_not_shifted:
+	    xor al,al			;zero the key_value returned
+	    jmp save_key_code
+test_keypad_shift:
+	test down_bits,shft_left_bit or shft_right_bit
+	jz keypad_not_shifted
+test_for_shift:
+	test down_bits,shft_left_bit or shft_right_bit
+	jz translate			;no $ return key from key_table
+keypad_shifted:
+	  mov bx,offset shift_table	;yes $ get key from shift_table
+
+;* kludge to support shift-tab in a mode compatible with PCDOS plus what
+;* was previously done for 3.2.  Shift-table contents used to be 0ch.
+	  cmp al,15			;* tab key
+	  jne translate			;*
+	  test key_vs_mode,pcmode_bit	;* if not zero, pcmode
+	  jnz translate			;*
+	  mov al,0Ch			;* used to be formfeed
+	  jmps tr_1
+
+translate:
+	xlat bx				;look up the key
+tr_1:					;*
+	cmp al,0ffh			;is it undefined
+	jz skip_alt_char		;yes $ done
+	  cbw				;extend sign into AH
+	  mov key_type,ah		;save the key type, 0 or 0FFH
+	  test toggle_bits,capslock_bit	;test for caps lock
+	  jz test_for_alt
+	    cmp al,'z'			;yes
+	    ja test_for_alt		;not alphabetic
+	      cmp al,'a'		;is it lower case ?
+	      jae do_case_change	;yes $ switch case
+	        cmp al,'Z'
+	        ja test_for_alt		;not alphabetic
+	          cmp al,'A'		;test for upper case
+	          jb test_for_alt	;not alphabetic
+do_case_change:
+	xor al,020h			;switch the case
+test_for_alt:
+	test down_bits,alt_bit		;is alt key currently down ?
+	jz save_key_code		;no
+	  cmp al,80h			;check for function key
+	  jb turn_on_msb		;skip if below F1
+	  cmp al,89h
+	  ja save_key_code		;pass on the keypad
+	    add al,20			;fudge the alt-pfk code
+	    jmps save_key_code
+turn_on_msb:
+	or al,080h			;yes $ turn on msb for alt key
+	test key_vs_mode,pcmode_bit
+	jz save_with_msb
+
+	mov ah,scan_code
+	xor al,al
+	cmp ah,2  ! jb skip_alt_char
+	cmp ah,14 ! jb save_with_msb	;check for alt and 1234567890-= keys
+	cmp ah,16 ! jb skip_alt_char
+	cmp ah,26 ! jb save_with_msb	;check for alt and qwertyuiop keys
+	cmp ah,30 ! jb skip_alt_char
+	cmp ah,39 ! jb save_with_msb	;check for alt and asdfghjkl keys
+	cmp ah,44 ! jb skip_alt_char
+	cmp ah,51 ! jb save_with_msb	;check for alt and zxcvbnm keys
+skip_alt_char:
+	jmp key_scan_done
+
+;	console switch keys reenter the mainstream here
+
+save_key_code:
+	and al,07fh			;mask off sign bit from table
+save_with_msb:
+	mov key_value,al		;save the character
+	mov dx,key_flag			;get the flag number
+	cmp dx,ww_flag			;if keys to window manager
+	jnz set_key_flag		;  then inform status flag
+	  mov ww_stat_flag,true
+
+PC_INSERT_KEY	equ	82		;scan code for INSERT
+PC_SCROLL_KEY	equ	70		;scan code for SCROLL LOCK
+PC_SCROLL_FLAG	equ	10h		;ROS bit for SCROLL LOCK toggle
+PC_INSERT_FLAG	equ	80h		;ROS bit for INSERT mode toggle
+
+set_key_flag:
+	mov bx,key_vs_base		;point to current vc
+	mov ah,scan_code
+	mov al,down_bits
+;
+	cmp ah,PC_INSERT_KEY			; update toggles
+	jne not_pc_insert_key
+	  test toggle_bits,numlock_bit		;skip if we are numlocked
+	  jnz not_pc_insert_key
+	    xor vs_pc_shifts,PC_INSERT_FLAG
+;	    jmps not_pc_scroll_key		;screws up too many short jmps
+not_pc_insert_key:
+	cmp ah,PC_SCROLL_KEY
+	jne not_pc_scroll_key
+	  test al,ctrl_bit			;skip if CTRL-BREAK?
+	  jnz not_pc_scroll_key
+	    xor vs_pc_shifts,PC_SCROLL_FLAG
+not_pc_scroll_key:
+
+	call flagset				; alert the system!
+
+key_scan_done:
+						;save PC style shift status
+	cmp scan_code,78 ! jb pc_shift_update	;  ignore update if local fn
+	  test down_bits,ctrl_bit ! jnz no_pc_shifts
+pc_shift_update:
+	mov ah,30h ! and ah,toggle_bits		;build TOGGLE bits nibble
+	shl ah,1
+;
+	mov al,down_bits ! and al,0fh		;mask for ctrl/shift/alt
+	or al,ah
+;
+	mov bx,key_vs_base			;point to current PC shft byte
+	mov ah,90h ! and ah,vs_pc_shifts	;get insert and scroll bits
+	or al,ah ! mov vs_pc_shifts,al		;and update shift byte
+	push ds
+	mov bx,40h! mov ds,bx
+	mov byte ptr .17h,al			;store shift state in low mem
+	pop ds
+
+no_pc_shifts:
+	mov al,pic_ocw_nseoi
+	out pic_ocw_port,al		;ack the interrupt
+
+	pop es ! pop ds ! pop di ! pop si
+	pop bp ! pop dx ! pop cx ! pop bx
+
+	mov ax,cs:keyboard_ax		;restore the stack
+	mov ss,cs:keyboard_ss
+	mov sp,cs:keyboard_sp
+	jmpf cs: dword ptr dispatcher	;let dispatcher do iret
+
+
+action_key:
+;----------
+
+;	Scan code in AL indicates an action key.  AH has a bit on
+;	in the position corresponding to the action key type.
+;	Live action keys are those that must remain pressed down
+;	to have	an effect, i.e., CTRL, SHIFT, ALT.
+;	Toggle action keys are those that switch back and forth in
+;	function each time they are depressed, i.e., NUMLOCK, CAPSLOCK.
+
+;	entry:	AL = scan code, one of CTLR, SHIFT_LEFT, SHIFT_RIGHT,
+;			ALT, NUMLOCK, CAPSLOCK
+;		AH = bit set in position corresponding to value in AL
+;	exit:	None
+
+	cmp al,alt			;if live action: ALT,SHIFT,CTRL
+	ja toggle_action		;no $ its a toggle type key
+	  jne not_altkey
+	    test scan_code,80H		;pressed or released ?
+	    jz altkey_down		;no high bit $ turn it on
+	      not ah			;high bit on $ turn it off
+	      and down_bits,ah		;clear the bit for this key
+	      mov key_type,0
+	      mov al,alt_keypad_num
+	      mov alt_keypad_num,0
+	      push es
+	        mov bx,40H
+	        mov es,bx		;store value in low memory
+	        mov es:byte ptr .19H,al
+	      pop es
+	      cmp al,0			;anybody enter keypad with alt pressed
+	      jz action_key_done	;no?
+	        mov pc_scan_code,0	;yes return value in al
+	        jmp save_with_msb
+altkey_down:
+not_altkey:
+	test scan_code,80H		;pressed or released ?
+	jz action_make			;no high bit $ turn it on
+	  not ah			;high bit on $ turn it off
+	  and down_bits,ah		;clear the bit for this key
+	  jmps action_key_done
+action_make:
+	  or down_bits,ah		;set bit for this key
+	  jmps action_key_done
+
+toggle_action:
+	test scan_code,80H		;pressed or released ?
+	jnz action_key_done		;ignore release of toggle
+	  xor toggle_bits,ah		;it is toggle: reverse state
+	  ;jmps action_key_done
+
+action_key_done:
+	jmp	key_scan_done		;acknowledge interrupt but
+					;do not set the keyboard input flag
+
+
+;********************************************************
+;*							*
+;*		KEYBOARD INTERRUPT DATA AREA		*
+;*							*
+;********************************************************
+
+reorg3	equ	(offset $ + 1) and -2
+	dseg
+	org	reorg3
+
+;	Keyboard interrupt routine stack
+
+		dw	0CCCCH,0CCCCH,0CCCCH,0CCCCH
+		dw	0CCCCH,0CCCCH,0CCCCH,0CCCCH
+		dw	0CCCCH,0CCCCH,0CCCCH,0CCCCH
+		dw	0CCCCH,0CCCCH,0CCCCH,0CCCCH
+
+		dw	0CCCCH,0CCCCH,0CCCCH,0CCCCH
+		dw	0CCCCH,0CCCCH,0CCCCH,0CCCCH
+		dw	0CCCCH,0CCCCH,0CCCCH,0CCCCH
+		dw	0CCCCH,0CCCCH,0CCCCH,0CCCCH
+
+		dw	0CCCCH,0CCCCH,0CCCCH,0CCCCH
+		dw	0CCCCH,0CCCCH,0CCCCH,0CCCCH
+		dw	0CCCCH,0CCCCH,0CCCCH,0CCCCH
+		dw	0CCCCH,0CCCCH,0CCCCH,0CCCCH
+keyboard_i_stack	rs	0
+
+keyboard_ax	dw	0		;register save are for
+keyboard_ss	dw	0		;keyboard interrupt
+keyboard_sp	dw	0		;handler
+
+key		rw	0		;label for word load
+key_value	db	0		;from one of 3 tables below
+key_type	db	0		;if 0 then value is ASCII data
+					;if 0FFH then value is switch
+					;screen value or function key
+key_flag	dw	ci_flag		;console in or window manager
+
+key_vs_base	dw	0		;base addr of top console struct
+key_vs_mode	db	0		;local copy of top screen mode
+
+ww_stat_flag	db	0		;to help with window status
+
+scan_code	db	0		;value returned from keyboard
+pc_scan_code	db	0		;adjusted scan code
+
+down_bits	db	0		;bit vector of
+					;action keys currently pressed
+toggle_bits	db	0		;bit vector of toggle action keys
+
+alt_keypad_num	db	0		;cumulative value of alt keypad inputs
+
+;	this is a table of keypad scan codes ordered in ascending key value
+
+keypad_tbl	db	82,79,80,81,75,76,77,71,72,73
+
+;	this table has been reordered to match the ROS bit pattern
+
+action_key_table:			;search table for action keys
+	db	shft_right
+	db	shft_left
+	db	ctrl
+	db	alt
+	db	numlock
+	db	capslock
+
+;	This is how we now define the virtual console switch keys
+;	this table may be accessed and modified using the general
+;	XIOS pointer function (fcn #14).  Best of luck to you.
+
+switch_bits	db	ctrl_bit	; which down bits define a vc switch
+					; default = ctrl
+switch_scan	db	79,80		; which scan codes define vc switch
+		db	81,75		; default = keypad 1-4, hmmm...
+
+switch_value	equ	offset $ - offset switch_scan - 1
+
+		db	0F0h,0F1h	; values for vc switch keys
+		db	0F2h,0F3h
+
+
+;	This is a little table of special scan codes that must
+;	be translated for PC Mode when the Ctrl key is pressed.
+
+x_ctrl_keys	db	55,71,72,73,75	; scan codes to xlat
+		db	76,77,79,80,81
+
+x_ctrl_count	equ	offset $ - offset x_ctrl_keys
+x_ctrl_xlat	equ	x_ctrl_count - 1
+
+		db	114,119,0FFH,132,115	; values to return
+		db	0FFH,116,117,0FFH,118
+
+
+;********************************************************
+;*							*
+;*		KEYBOARD TRANSLATION TABLES		*
+;*							*
+;********************************************************
+
+;	Three keyboard translation tables follow.  The IBM PC returns
+;	a "scan code" from the keyboard which is used as an index into
+;	the following tables.
+;	KEY_TABLE contains ASCII for keys that have no other keys held
+;	down simultaneously.  The SHIFT_TABLE is for keys depressed
+;	when the shift, capslocks, or numslock keys are also down
+;	The CTRL_TABLE is for keys depressed when the CTRL is down.
+
+;	0FFH in the translation table designates an illegal key code.
+;	The most significant bit is set for keys that are programmable
+;	or are fixed function keys, and also for the switch screen keys.
+
+key_table:
+	;	translation		keyboard scan code
+	;	-----------		------------------
+
+	db	0ffH			;0 - doesn't exist
+	db	esc			;1
+	db	'1234567890-='		;2-13 (1st row)
+	db	bs,ht			;14-15 (backspace, horizontal tab)
+	db	'qwertyuiop[]'		;16-27 (2nd row)
+	db	cr, 0ffh		;28-29 (carriage return)
+	db	'asdfghjkl;''`'		;30-41 (3rd row)
+	db	0ffh			;42 (left shift)
+	db	'\zxcvbnm,./'		;43-53 (4th row)
+	db	0ffh			;54 (right shift)
+	db	'*'			;55
+	db	0ffh			;56 (alt)
+	db	' '			;57 (space bar)
+	db	0ffh			;58 (caps lock)
+
+					;-function keys-
+					;-programmable-
+	db	80h,81h,82h,83h		;59-62 (fucntion keys f1,f2,f3,f4)
+	db	84h,85h,86h,87h		;63-66 (function keys f5,f6,f7,f8)
+	db	88h,89h			;67-68 (function keys f9,f10)
+
+	db	0ffh			;69 (num lock)
+	db	dc3			;70 (scroll lock)
+
+					;- key pad -
+					;-programmable-
+	db	8ah			;71 (home)
+	db	8bh			;72 (up arrow)
+	db	8ch			;73 (Pg Up)
+	db	'-'			;74
+	db	8dh			;75 (left arrow)
+	db	0ffh			;76
+	db	8eh			;77 (right arror)
+	db	'+'			;78
+	db	8fh			;79 (end)
+	db	90h			;80 (down arrow)
+	db	91h			;81 (Pg Dn)
+	db	92h			;82 (Ins)
+	db	93h			;83 (Del)
+
+shift_table:
+	;	translation		keyboard scan code
+	;	-----------		------------------
+
+	db	0ffH			;0 - doesn't exist
+	db	esc			;1
+	db	'!@#$%^&*()_+'		;2-13 (1st row)
+	db	bs,NUL			;14-15 (backspace, back-tab)
+	db	'QWERTYUIOP{}'		;16-27 (2nd row)
+	db	cr			;28 (carriage return)
+	db	0ffh			;29 (ctrl)
+	db	'ASDFGHJKL:"~'		;30-41 (3rd row)
+	db	0ffh			;42 (left shift)
+	db	'|ZXCVBNM<>?'		;43-53 (4th row)
+	db	0ffh			;54 (right shift)
+	db	prsc_key + 80h		;55 (Print Screen key)
+	db	0ffh			;56 (Alt)
+	db	' '			;57 (space bar)
+	db	0ffh			;58 (Caps Lock)
+
+					;-function keys-
+					;-return fixed strings-
+	db	9Eh,9Fh,0A0h,0A1h	;F1 - F4
+	db	0A2h,0A3h,0A4h,0A5h	;F5 - F8
+	db	0A6h,0A7h		;F9 - F10
+	db	0ffh			;69 (Num Lock)
+	db	dc1			;70 (Scroll Lock - ^Q)
+
+					;-key pad-
+	db	'789-456+1230.'		;71-83 (ascii values on keys)
+
+control_table:
+	;	translation		keyboard scan code
+	;	-----------		------------------
+
+	db	0ffh			;0 (no such key code)
+	db	ESC			;1
+	db	0ffh			;2
+	db	NUL			;3 (ctrl @)
+	db	0ffh,0ffh,0ffh		;4-6
+	db	RDS			;7 (ctrl ^)
+	db	0ffh,0ffh,0ffh,0ffh	;8-11
+	db	US			;12 (ctrl _)
+	db	0ffh			;13
+	db	DEL			;14 (left arrow)
+	db	0ffh			;15
+	db	DC1,ETB,ENQ,DC2		;16-19 (ctrl q,w,e,r)
+	db	DC4,EM,NAK,HT		;20-23 (ctrl t,y,u,i)
+	db	SHI,DLE,ESC,GS		;24-27 (ctrl o,p,[,])
+	db	lf			;28 (ctrl cr=lf for word perf)
+	db	0ffh			;29
+	db	SOH,DC3,EOT,ACK		;30-33 (ctrl a,s,d,f)
+	db	BEL,BS,LF,VT		;34-37 (ctrl g,h,j,k)
+	db	FF			;38 (ctrl l)
+	db	0ffh,0ffh,0ffh,0ffh	;39-42
+	db	FS,SUBB,CAN,ETX		;43-47 (ctrl \,z,x,c)
+	db	SYN,STX,SO,CR		;47-50 (ctrl v,b,n,m)
+	db	0ffh,0ffh,0ffh,0ffh	;51-54
+	db	DLE			;55 (^PrtSc = ^P)
+	db	0ffh,' ',0ffh		;56-58
+
+					;-function keys
+	db	0A8H,0A9H,0AAH,0ABH	;F1 - F4
+	db	0ACH,0ADH,0AEH,0AFH	;F5 - F8
+	db	0B0H,0B1H		;F9 - F10
+	db	0ffh			;69
+	db	ETX			;70 break (^scroll lock = ctrl c)
+
+;	the keypad is no longer reserved for vc switches
+;	that function is now performed by the switch_scan table above
+
+	db	'789-'			;7,8,9,-
+	db	'456',wake_key + 80h 	;4,5,6,+
+	db	'123'			;1,2,3
+	db	'0',full_key + 80h	;0,.
+
+
+;********************************************************
+;*							*
+;*		DISK INTERRUPT HANDLER			*
+;*							*
+;*******************************************************
+
+reorg4	equ	offset $
+	cseg
+	org	reorg4
+
+
+;	The following routine gets control from an interrupt from the
+;	FDC.  The current state is saved and dev_flagset is called.
+
+;------
+i_disk:
+;------
+	mov cs:user_ax,ax		;save ax
+	mov cs:user_ss,ss		;save the stack segment
+	mov cs:user_sp,sp		;and stack segment
+	mov ax,cs			;get code segment
+	mov ss,ax			;into stack segment
+	mov sp,offset user_save_area	;point at the save area
+	push bx! push cx
+	push dx! push bp
+	push si! push di
+	push ds! push es
+
+	mov al,pic_ocw_seoi + disk_channel
+	out pic_ocw_port,al
+
+	mov ds,cs:sysdat
+	sub al,al			;* reset it
+	xchg al,xios_int_expect		;* did the XIOS ask for this int?
+	or al,al			;*
+	 jnz i_disk_expected		;* if no, skip the flagset...this
+					;* might let some apps. successfully
+					;* talk directly to the FDC.
+	mov ax,pc_segment		;* emulate DOS
+	mov DS,ax			;*
+	or byte ptr .3Eh,80h		;* show that an interrupt happened
+	jmps i_disk_ret			;*
+
+i_disk_expected:			;*
+	mov dx,fdc_flag
+	call flagset
+
+i_disk_ret:				;*
+	pop es! pop ds
+	pop di! pop si
+	pop bp! pop dx
+	pop cx! pop bx
+	mov ss,cs:user_ss
+	mov sp,cs:user_sp
+	mov ax,cs:user_ax
+	jmpf cs:dword ptr dispatcher
+
+
+;********************************************************
+;*							*
+;*      8253-5 COUNTER TIMER PORT AND DATA EQUATES	*
+;*							*
+;********************************************************
+
+
+timer_0_reg		equ	040h		;first counter timer port
+timer_1_reg		equ	041h
+timer_2_reg		equ	042h
+timer_cmnd_reg		equ	043h		;command port
+
+timer_60_hz		equ	19886		;constant for 60.001 hz tick
+timer_1000_hz		equ	533h		;constant for 1000 hz tone
+
+beep_cmnd		equ	10110110b	;timer 2 lsb,msb binary
+beep_on			equ	03h
+beep_off		equ	0fch
+
+port_a			equ	060h
+port_b			equ	061h
+port_c			equ	062h
+
+timer_low		equ	word ptr .6Ch	;rom bios timer variables
+timer_high		equ	word ptr .6Eh
+
+;********************************************************
+;*							*
+;*		CLOCK INTERRUPT HANDLER			*
+;*							*
+;********************************************************
+
+;	The following routine gets control on a timer interrupt,
+;	from the 8253-5 (?). 
+
+;-------
+i_clock:
+;-------				;interrupts are off
+	push ds				;use one level of user stack
+	mov ds,cs:sysdat
+	mov tickint_ss,ss		;save the registers
+	mov tickint_sp,sp
+	mov ss,sysdat
+	mov sp,offset tickint_save_area
+
+	push ax ! push bx ! push cx ! push dx
+	push bp ! push di ! push si ! push es
+
+	dec user_counter		;do a user tick one out of three
+	 jnz no_user_tick
+
+	mov bx,ds
+	mov ax,pc_segment ! mov ds,ax
+	inc timer_low
+	 jnz no_timer_ov		;skip if no overflow
+	inc timer_high
+no_timer_ov:
+	mov ds,bx
+
+	int 1Ch				;user tick interrupt, must save reg.
+	mov user_counter,3		;tick divisor
+no_user_tick:
+
+	cmp beep_counter,00		;test for beeping now
+	jz check_motor_off		;no then leap to the next test
+	  cmp beep_ticks,00		;is this the first time through
+	  jnz check_beep_tick		;no the leap around set up
+
+set_beep_tick:
+	mov	beep_ticks,0Ch		; set up for a beep
+	mov	al,beep_cmnd		; set up the beep frequency
+	out	timer_cmnd_reg,al	; send the command
+	mov	ax,timer_1000_hz	; get the constant
+	out	timer_2_reg,al
+	xchg	ah,al
+	out	timer_2_reg,al
+
+check_beep_tick:
+	dec beep_ticks			;are we all done with this beep
+	jz check_more_beeps		;yes then leap
+	cmp beep_ticks,2		;where are we in the beep cycle
+	jb turn_beep_off		;low enough to turn off
+	in al,port_b			;else turn on the beeper
+	or al,beep_on
+	out port_b,al
+	jmps check_motor_off
+
+check_more_beeps:
+	dec beep_counter		;count down the beep
+	jnz set_beep_tick		;not the last set a new one
+
+turn_beep_off:
+	in al,port_b			;else get the bits
+	and al,beep_off
+	out port_b,al			;silence the beeper
+
+check_motor_off:
+	cmp disk_on_going,00h		;test for disk operation under way
+	jnz check_disk_time		;yes, don't touch motor off counter
+
+;* MBA wants us to handle the DOS diskette motor bytes.  Ergo, the XIOS
+;* motor byte is now the same.
+
+	mov bx,ds			;* 
+	mov ax,pc_segment		;*
+	mov ds,ax			;*
+
+	dec motor_off_counter		;* MOTOR_COUNT
+	 jnz motor_off_done		;*
+	and byte ptr .03fh,0f0h		;* indicate motor not running, 'cause..
+	mov dx,fdc_port			;*
+	mov al,fdc_on			;* motors off, FDC not reset
+	out dx,al			;*
+
+	mov ds,bx			;*
+	mov motor_flags,al		;* this one still in XIOS
+motor_off_done:				;*
+	mov ds,bx			;*
+
+	call clk_door_check		;* thx JW
+
+check_disk_time:
+	cmp disk_time_out,0		;if zero, then it's not being used
+	jz update_tick			;  so, go about your business
+	  dec disk_time_out		;if it hasn't timed out
+	  jnz update_tick		;  then there's no need to worry
+	    mov disk_error,80h		;if it has timed out
+	    mov dx,fdc_flag		;  then tell the error routine why
+	    call flagset		;  and do a flag set to unstick us
+
+update_tick:
+	cmp tick_counter,ticks_per_second	;test for new second
+	jnz update_tick_dec
+
+update_tick_dec:
+	dec tick_counter
+	jnz do_tick_flag		;not a second then leap
+	mov tick_counter,ticks_per_second
+	mov dx,sec_flag
+	call flagset
+
+do_tick_flag:
+	cmp tick,0	
+	je timer_interrupt_exit
+	mov dx,tick_flag
+	call flagset
+
+timer_interrupt_exit:
+	mov al,pic_ocw_seoi + timer_channel	;pick up end of interrupt word
+	out pic_ocw_port,al		;signal EOI
+
+	pop es ! pop si ! pop di ! pop bp
+	pop dx ! pop cx ! pop bx ! pop ax
+
+	mov ss,tickint_ss
+	mov sp,tickint_sp
+	pop ds				;get DS from interrupted
+					;process's stack
+	jmpf	cs:dword ptr dispatcher	;go run the next ready process
+
+;------
+i_tick:					;don't do anything
+;------
+	iret
+
+
+;	This is the door open interrupt routine called by
+;	the timer interrupt. If a disk is not accessed for
+;	two seconds, the door is declared opened. On the next
+;	BDOS call, the disk directory will be read to verify
+;	that the same disk is still in there. As a result,
+;	disk changes are more likely to be detected and disk
+;	buffers, hash tables etc. may be trusted blindly for
+;	two seconds after the last disk access which should give
+;	us some performance improvement.
+;				JW, DR (UK)
+
+clk_door_check:
+;--------------
+	sub	dx, dx			; start with 1st drive
+clk_dc1:
+	mov	bx, dx
+	shl	bx, 1			;* word table
+	cmp	door_count[bx], 0	; door open count alive?
+	jz	clk_dc2			; skip if not
+
+	dec	door_count[bx]		; count another tick
+	jnz	clk_dc2			; door not yet open
+
+	mov	bx, dph_tbl[bx]		; point to the DPH
+	mov	byte ptr .5[bx], TRUE	; declare drive door open
+	mov	door, TRUE		; set global door open flag
+
+clk_dc2:
+	inc	dx			; move on to next disk
+	cmp	dx, num_flop		; is it still a floppy?
+	jb	clk_dc1			; yes, check it as well
+
+	ret				; done, back to I_CLOCK
+
+
+;********************************************************
+;*							*
+;*		CLOCK INTERRUPT DATA AREA		*
+;*							*
+;********************************************************
+
+reorg5	equ	(offset $ + 1) and -2
+	dseg
+	org	reorg5
+
+beep_counter	db	0		;how many control g's
+beep_ticks	db	0		;elapsed ticks this beep
+
+tick_counter	db  ticks_per_second	;counter for tick interupts
+user_counter	db	3		;one user int for 3 of ours
+
+;* 50 levels of tick stack for CROSSTALK:
+	dw	0cccch,0cccch,0cccch,0cccch,0cccch,0cccch,0cccch,0cccch
+	dw	0cccch,0cccch,0cccch,0cccch,0cccch,0cccch,0cccch,0cccch
+	dw	0cccch,0cccch,0cccch,0cccch,0cccch,0cccch,0cccch,0cccch
+	dw	0cccch,0cccch,0cccch,0cccch,0cccch,0cccch,0cccch,0cccch
+	dw	0cccch,0cccch,0cccch,0cccch,0cccch,0cccch,0cccch,0cccch
+	dw	0cccch,0cccch,0cccch,0cccch,0cccch,0cccch,0cccch,0cccch
+	dw	0cccch,0cccch
+tickint_save_area	rs	0
+tickint_ax	rw	1		;storage for interrupted task
+tickint_ss	rw	1
+tickint_sp	rw	1
+
+
+;************************************************
+;*						*
+;*	8087 NDP INTERRUPT HANDLER		*
+;*						*
+;************************************************
+
+reorg_nmi	equ	offset $
+	cseg
+	org	reorg_nmi
+
+i_nmi:
+	push	ax			; first check parity error
+	in	al,port_c
+	test	al,0C0h			; if not a parity error
+	pop	ax			;   then it really is
+	jz	i_ndp			;   from the 8087
+
+;	memory parity error interrupt
+
+i_parity:
+	push cs ! pop ds		; there's no coming back
+	push cs ! pop es		; so forget the registers
+	mov	di,offset parity_p_msg
+	call	fatal_proc		; store the process name
+	mov	di,offset parity_a_msg
+	call	fatal_addr		; store the return address
+
+	add	beep_counter,3		; beep thee thrice
+	mov	sl_exit_value,true	; take over the status line
+	mov	dx,cs
+	mov	cx,offset parity_msg
+	call	io_statline		; print the error message
+
+	sti
+	mov	bx,4			; about 1 second
+i_parity_pause:
+	loop	i_parity_pause		; wait for beeps to end
+	dec	bx
+	jnz	i_parity_pause
+
+i_parity_freeze:
+	cli
+	hlt				; wait here foever
+	jmps	i_parity_freeze		;   and a day
+
+;	numeric data processor interrupt
+
+i_ndp:
+	push	ds			; on user's stack
+	mov	ds,cs:sysdat
+	mov	ndp_ss_save,ss		; save user's stack
+	mov	ndp_sp_save,sp
+	mov	ss,sysdat		; get our own stack
+	mov	sp,ndp_stack_top
+
+	push ax ! push bx ! push cx ! push dx
+	push si ! push di ! push bp ! push es
+	mov	es,sysdat
+
+	FNSTENV	env_8087		; store 8087 environment
+	FWAIT				; await completion
+	FNCLEX				; clear int request bit
+	xor	ax,ax
+	FNDISI				; disable its int's
+
+	mov	si,offset env_8087
+	mov	bx,owner_8087		; get current owner
+	test	bx,bx			; if owner has already
+	jz	i_ndp_continue		;   terminated, skip
+
+	mov	ax,ndp_status[si]	; if not severe error, continue
+	test	ax,003Ah		; 3A = under/overflow, precision
+	jnz	i_ndp_continue		;      or denormalized operand
+	or	p_flag[bx],80h		; terminate interrupting process
+
+i_ndp_continue:
+	mov	byte ptr 2[si],0	; clear stat word for env restore
+
+	pop es ! pop bp ! pop di ! pop si
+	pop dx ! pop cx ! pop bx ! pop ax
+
+	mov	ss,ndp_ss_save		; restore user's stack
+	mov	sp,ndp_sp_save
+	FLDENV	env_8087		; restore 8087 environment
+	FWAIT				; await completion
+	pop	ds
+	iret
+
+
+;	NUMERIC DATA PROCESSOR INTERRUPT HANDLER DATA
+
+reorg_nmi_dat	equ	offset $
+
+	dseg
+	org	reorg_nmi_dat
+
+ndp_ss_save	rw	1		; save area for user's stack
+ndp_sp_save	rw	1
+
+env_8087	rw	7		; save area for 8087's stack
+ndp_status	equ	word ptr 2	; status word in env_8087
+
+ndp_control	rw	1		; for 8087 init routine
+
+		rb	32		; i_ndp stack area
+ndp_stack_top	equ	offset $
+
+;	parity error messages
+
+parity_msg	db	'Parity error from '
+parity_p_msg	db	'PROCNAME at '
+parity_a_msg	db	'0000:0000   '
+		db	' ****  MACHINE IS HALTED!  ****'
+		db	'       '
+
+
+;************************************************
+;*						*
+;*	    FATAL INTERRUPT HANDLER		*
+;*						*
+;************************************************
+
+fatal_reorg	equ	offset $
+
+	cseg
+	org	fatal_reorg
+
+;	Division by zero or any division overflow
+
+i_divide:
+	mov	si,offset fatal_div	; divide by zero
+	jmps	fatal_int
+
+;	Arithmetic overflow when followed by an Int on ovf
+
+i_overflow:
+	mov	si,offset fatal_ovf	; divide by zero
+	jmps	fatal_int
+
+;	Any undefined interrupt vectors here
+
+i_unexpected:
+	mov	si,offset fatal_unx	; divide by zero
+;	jmps	fatal_int		; fall through
+
+fatal_int:
+	sti				; allow further ints
+	push cs ! pop ds		; local data segment
+	push cs ! pop es		;   and extra too
+	mov	di,offset fatal_t_msg	; error type destination
+	call	fatal_type		; save sub message
+	mov	di,offset fatal_p_msg	; proc name destination
+	call	fatal_proc		; save process name
+	mov	di,offset fatal_a_msg	; address destination
+	call	fatal_addr		; save come-from addr
+
+	mov	bx,rlr			; get process descriptor
+	mov	es,p_uda[bx]		; set up user data area
+	inc	beep_counter		; and extra beep here
+	mov	si,offset fatal_msg
+	mov	di,offset fatal_resp	; allow any key
+	call	sl_error_out		; display message
+
+	mov	bx,rlr			;terminate the running process
+	and	p_flag[bx],not (pf_keep + pf_tempkeep)
+	mov	cx,p_term
+	mov	dx,0FFFFh
+	jmp	supif			;process is terminated
+
+;	store the "type" of fatal interrupt
+
+fatal_type:
+	mov	cx,length fatal_t_msg	; sub message length
+	cld
+	rep	movsb			; store the type of int
+	ret
+
+;	store the process name which caused this mess
+
+fatal_proc:
+	mov	bx,rlr			; get process descriptor
+	lea	si,p_name[bx]		; point to proc name
+	mov	cx,8			; max process name
+	cld
+	rep	movsb			; store the process name
+	ret
+
+;	store the address whence this interrupt came
+
+fatal_addr:
+	mov	bp,sp
+	add	bp,5			; look up the stack
+	mov	bx,offset hex_digits	; for translation
+	call	fatal_word		; print segment
+	inc	di			; skip the :
+;	jmp	fatal_word		;   and offset
+
+fatal_word:
+	call	fatal_byte		; print ms byte
+;	jmp	fatal_byte		;   and ls byte
+
+fatal_byte:
+	mov	al,[bp]			; return byte from stack
+	dec	bp			; next byte down
+	call	fatal_nibble		; print ms nibble
+;	jmp	fatal_nibble		;   and ls nibble
+
+fatal_nibble:
+	mov	cl,4
+	rol	al,cl			; ms nibble first
+	push	ax			; save for ls nibble
+	and	al,0Fh			; 4 bits only
+	xlat	bx
+	stosb				; store hex code
+	pop	ax
+	ret
+
+;	Fatal error messages are all in the code seg
+
+fatal_msg	rb	0
+fatal_t_msg	db	'Unexpected'
+		db	' Interrupt from '
+fatal_p_msg	db	'PROCNAME at '
+fatal_a_msg	db	'0000:0000  '
+		db	' Type any key to stop process. '
+
+fatal_div	db	'  Division'
+fatal_ovf	db	'  Overflow'
+fatal_unx	db	'Unexpected'
+fatal_type_len	equ	offset $ - offset fatal_unx
+
+fatal_resp	db	0		; allow any key
+
+hex_digits	db	'0123456789ABCDEF'
+
+
+;************************************************
+;*						*
+;*	RESET FUNCTION - CTRL/ALT/DEL REBOOT	*
+;*						*
+;************************************************
+
+reset_flag	equ	word ptr .72h
+
+reset:
+	mov	ax,40H
+	mov	ds,ax			;ROM data segment
+	mov	reset_flag,1234H
+	jmpf	cs:dword ptr rom_reset
+
+;	Reset routine data
+
+reset_key	rb	1
+
+rom_reset	dw	0000h,0FFFFh
+
+
+;************************************************
+;*						*
+;*	PC MODE EQUIPMENT WORD			*
+;*						*
+;************************************************
+
+;	This was previously a seperate module name PCMODE.LIB
+
+;	miscellaneous code and data required for PC_MODE support in XIOS
+;	written by M.P. Vano 22-November-1983
+
+;	New XIOS function 32 used to return equipment check word.
+pc_equip:
+	mov	bx,rlr			; ready list root
+	mov	dl,p_cons[bx]		; process's console number
+	call	point_vs		; this proc's vc structure
+	mov	al,vs_screen_save
+
+	push	ds
+	  mov	dx,40h
+	  mov	ds,dx			; reach into base page
+	  mov	dx,.10h			; get IBM's equipment word
+	pop	ds
+
+	push es	! push ds ! pop es	; local es for scan
+	  mov	di,offset equip_modes	; list of screen modes to fudge
+	  mov	cx,equip_count		; number to check
+	  cld				; scan code already in al
+	  repnz	scasb			; search the list
+	pop	es			; restore es
+	jnz	equip_done		; if not in the list
+
+	and	dl,0CFh			; mask off default console
+	or	dl,.equip_xlat[di]	;   and mash in a fake one
+
+equip_done:
+	mov	ax,dx			; return equipment word
+	ret
+
+;	these tables are used to make the equipment word look
+;	as if the current monitor/mode were the default value
+
+equip_modes	db	02h,03h,04h,05h		; screen modes to xlat
+		db	09h,20h,30h,40h
+
+equip_count	equ	offset $ - offset equip_modes
+equip_xlat	equ	equip_count - 1
+
+		db	10h,10h,20h,20h		; equip word xlations
+		db	30h,20h,20h,20h
+                                                                                                                                                                                                                                            

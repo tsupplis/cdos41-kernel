@@ -1,0 +1,1694 @@
+eject						; Feb 13, 1985
+						; graphics switching
+						;* Apr. 18, 1985
+						;*  console check for pcvid.
+
+;********************************************************
+;*							*
+;*		CHARACTER OUT PRIMITIVES		*
+;*							*
+;********************************************************
+
+;	draw a single line frame
+;	save:	dx for double frame
+
+draw_frame_s:
+	push	dx
+	mov	dl,top_screen	; old top frame
+	call	point_vs	; bx -> old vs_
+	call	copy_full_top	; if full, copy to image
+	call	old_cursor_off	; for 2 monitor switch
+	mov	si,offset s_lines
+	call	draw_frame	; single line frame
+	pop	dx
+	ret
+
+;	draw a double line frame
+;	entry:	bx -> vs_
+
+draw_frame_d:
+	mov	si,offset d_lines
+;	jmps	draw_frame	; double line frame
+
+;	draw frame around the window
+;	entry:	bx -> vs_
+;		si -> line data
+
+draw_frame:
+	mov	dx,vs_top_left
+	mov	cx,vs_cols	; column count
+	dec	dh		; up one row
+	js	draw_f1		; skip if top row
+
+	mov	ax,top_corners
+	call	hline		; top line + corners
+draw_f1:
+	mov	dh,vs_bottom
+	inc	dh		; down on row
+	cmp	dh,crt_rows_c	; never draw the frame
+	jae	draw_f2		;   below line 23
+
+	mov	ax,bot_corners
+	call	hline		; bottom line + corners
+draw_f2:
+	mov	dx,vs_top_left
+	mov	cx,vs_rows	; row count
+	dec	dl		; left one column
+	js	draw_f3		; skip if 1st column
+
+	call	vline		; left line only
+draw_f3:
+	mov	dl,vs_right
+	inc	dl		; right one column
+	cmp	dl,crt_cols
+	jz	draw_f4		; skip if last column
+
+	call	vline		; right line only
+draw_f4:
+	ret
+
+;	draw a horizontal line with corners
+;	entry:	dx=row,col  cx=col count  ax=corners
+
+hline:
+	push	es
+	push	si
+	push	dx
+	push	cx
+	push	ax		; save corners
+	mov	ax,horiz	; horiz line + attrib
+	mov	ds:h_copy,ax	; save for draw
+
+	call	point_cursor	; di -> line start
+	xchg	ax,si		; si -> map
+	mov	es,vc_map_seg	; for owner check
+	cmp	dl,0		; if at left edge
+	jz	hline1		;   skip first corner
+
+	pop	ax
+	push	ax
+	dec	di		; back up for corner
+	dec	di
+	dec	si		; on the map too
+	mov	ah,ds:a_copy	; frame attribute
+	call	put_if_ours	; to the screen
+hline1:
+	add	dl,cl		; get to right column
+	dec	dl
+	mov	ax,ds:h_copy	; horiz line + attrib
+hline2:
+	call	put_if_ours	; to the screen
+	loop	hline2		; cx times
+
+	pop	ax		; corners again
+	cmp	dl,crt_cols-1	; if at right edge
+	jz	hline3		;   skip last corner
+
+	mov	al,ds:a_copy	; frame attribute
+	xchg	al,ah
+	call	put_if_ours	; to the screen
+hline3:
+	pop	cx
+	pop	dx
+	pop	si
+	pop	es
+	ret
+
+c_copy	rb	1		; character
+a_copy	rb	1		; attribute
+h_copy	equ	word ptr c_copy
+
+;	draw a vertical line  (no corners)
+;	entry:	dx=row,col  cx=row count
+
+vline:
+	push	es
+	push	si
+	push	cx
+	push	vert		; save vert line
+	call	point_cursor	; di -> line start
+	xchg	ax,si		; si -> map
+	mov	es,vc_map_seg	; for owner check
+	pop	ax		; vert line + attrib
+vline1:
+	call	put_if_ours	; to the screen
+	add	di,2*(crt_cols-1)
+	add	si,crt_cols-1
+	loop	vline1		; num of rows times
+	pop	cx
+	pop	si
+	pop	es
+	ret
+
+
+;	put a frame char to screen if we own it
+;	entry:	ax = char + attrib
+;		es:si -> vc_map
+;		di -> crt
+
+put_if_ours:
+	push	ax		; save char
+	mov	al,es:[si]	; get map code
+	inc	si		; to next char
+	call	xlat_priority	; who owns it?
+	cmp	al,vs_number	; if not us
+	pop	ax		;   then skip
+	jnz	put_if1
+	jmp	put_crt_c	; print one char
+put_if1:
+	inc	di		; bump destination
+	inc	di
+	ret
+
+
+;	clear the unowned portions of the screen
+;	entry:	dh = vc bit mask
+;		dl = vs_mode (08 to sync)
+;		bx = crt_segment
+
+erase_crt:
+	push	es
+	sub	si,si		; start at top left
+	sub	di,di
+	mov	es,vc_map_seg
+	mov	cx,crt_rows_c * crt_cols
+	mov	ax,blank	; space + attrib
+erase_crt1:
+	test	es:byte ptr [si],dh
+	jnz	erase_crt2	; skip if owned
+
+	call	put_mon_c	; straight to monitor
+	jmps	erase_crt3	; di taken care of
+erase_crt2:
+	inc	di		; next crt char
+	inc	di
+erase_crt3:
+	inc	si		; next map char
+	loop	erase_crt1
+
+	pop	es		; restore extra seg
+	ret
+
+
+;	copy crt back to vc image when full screen on top
+;	entry:	bx -> vs_
+
+copy_full_top:
+	call	check_full_top	; if not full top screen
+	jnz	copy_f_done	;   then skip
+;
+;	top screen is full, save it
+;
+	push	cx
+	push	dx
+	push	ds
+	push	es
+	sub	si,si		; top left
+	sub	di,di		;   of both
+	mov	al,crt_cols
+	mul	vs_crt_rows	; ax = our crt size
+	mov	cx,ax
+	mov	es,vs_vc_seg	; image is destination
+	mov	ds,vs_crt_seg
+	mov	ah,in_sync	; sync for reading
+	call	put_crt_m	; general mover
+	pop	es
+	pop	ds
+	pop	dx
+	pop	cx
+	or	vs_mode,match_bit
+copy_f_done:
+	ret
+
+
+;	store characters to crt  (like a rep stosw)
+;	entry:	di -> cursor location
+;		ax = attribute, character
+;		bx -> vs_
+;		cx = char count
+
+put_crt_s:
+	push bx ! push dx ! push es
+	mov	es,vs_crt_seg	; get our segment
+
+	test	vs_mode,sync_bit
+	jz	put_s_all	; skip if not syncing
+
+	cmp	cx,stos_burst	; if less than one burst
+	jbe	put_s_slow	;   then sneak it in
+	cmp	scroll_mode,0	; if we're default scroll mode
+	jz	put_s_fast	;   then blast it
+	cmp	scroll_mode,2	; if we're wide open
+	jz	put_s_all	;   then just ship it
+
+;	slow non-flickering erase
+
+put_s_slow:
+	mov	dx,color_port+6
+put_s_top:
+	mov	bx,ax		; save char in bx
+put_s_wait:
+	sti			; allow an interrupt
+	nop
+	cli			;; hold the ints
+	in	al,dx
+	test	al,vrt		;; if vertical retrace
+	jnz	put_s_burst	;;   then store a burst
+	test	al,hrt		;; if horiz retrace
+	jnz	put_s_wait	;;   then stay here
+put_s_no_hrt:
+	in	al,dx
+	test	al,hrt
+	jz	put_s_no_hrt	; wait for fresh hrt
+
+	xchg	ax,bx		; char back to ax
+	stosw			; put it out
+	loop	put_s_top	; more if you've got 'em
+	jmps	put_s_done	; done if not
+
+;	fast flickering erase
+
+put_s_fast:
+	call	disable_video
+	rep	stosw		; get it over with
+	call	enable_video
+	jmps	put_s_done
+
+;	vertical retrace, put a burst
+;	now we're sure to have less than stos_burst
+
+put_s_burst:
+	xchg	ax,bx		; char back to ax
+
+put_s_all:
+	rep	stosw		; store them all
+;
+;	finished with the store
+;
+put_s_done:
+	sti			; allow interrupts
+	pop es ! pop dx ! pop bx
+	ret
+
+
+;	generalized move to/from crt
+;	entry:	ds:si -> source
+;		es:di -> destination
+;		cx = char count
+;		ah = sync flag
+
+in_sync		equ	01h
+out_sync	equ	02h
+
+put_crt_m:
+	push	bx
+	push	dx
+	push	bp
+
+;	test	cs:vs_screen_mode,0F0h
+;	jnz	put_m_done	; if we're graphics, bag it
+
+	test	cs:vs_mode,sync_bit
+	jz	put_m_all	; skip if not syncing
+	test	ah,ah		; if no sync bits
+	jz	put_m_all	;   then just move
+
+	cmp	cx,movs_burst	; if less than one burst
+	jbe	put_m_slow	;   then sneak it in
+	mov	al,cs:scroll_mode
+	cmp	al,0		; use al for speed
+	jz	put_m_fast	; blast it if default
+	cmp	al,2		; if we're wide open
+	jz	put_m_all	;   then just ship it
+
+;	slow non-flickering scroll
+
+put_m_slow:
+	mov	dx,color_port+6
+	mov	bh,ah		; sync bits live here
+put_m_top:
+	test	bh,in_sync	; do we wait on input?
+	jz	put_m2		;   if not, skip
+put_m0:
+	sti			; allow an interrupt
+	nop
+	cli			;; hold the ints
+	in	al,dx
+	test	al,vrt		;; if vertical retrace
+	jnz	put_m_burst	;;   then move a burst
+	in	al,dx		;; get a fresh one
+	test	al,hrt		;; if no horiz retrace
+	jnz	put_m0		;;   then stay here
+put_m1:
+	in	al,dx
+	test	al,hrt
+	jz	put_m1		; wait for fresh hrt
+put_m2:
+	mov	ax,[si]		; get char, keep ptr
+	test	bh,out_sync	; do we wait on ouput?
+	jz	put_m5		;   if not, skip
+	xchg	ax,bp		; save char in bp
+put_m3:
+	sti			; allow an interrupt
+	nop
+	cli			;; hold the ints
+	in	al,dx
+	test	al,vrt		;; if vertical retrace
+	jnz	put_m_burst	;;   then move a burst
+	test	al,hrt		;; if no horiz retrace
+	jnz	put_m3		;;   then stay here
+put_m4:
+	in	al,dx
+	test	al,hrt
+	jz	put_m4		; wait for fresh hrt
+	xchg	ax,bp		; char back to ax
+put_m5:
+	stosw			; put it out
+	lods	cs:ax		; incs or decs si leaving screen alone
+	loop	put_m_top	; more if you've got 'em
+	jmps	put_m_done	; done if not
+
+;	vertical retrace, put a burst
+
+put_m_burst:
+	mov	ax,movs_burst	;; move count
+	cmp	cx,ax		;; if count is too big
+	jbe	put_m_all	;;   then do a burst
+				;;   at a time
+	sub	cx,ax		;; first correct the count
+	xchg	ax,cx		;; cx = burst count
+	rep	movsw		;; move a burst
+	xchg	ax,cx		;; corrected count to cx
+	jmps	put_m_top	;; go back for more
+
+;	fast flickering scroll
+
+put_m_fast:
+	call	disable_video
+	rep	movsw		; get it over with
+	call	enable_video
+	jmps	put_m_done
+
+put_m_all:
+	rep	movsw		; move them all
+;
+;	finished with the move
+;
+put_m_done:
+	sti			; allow interrupts
+	pop	bp
+	pop	dx
+	pop	bx
+	ret
+
+
+;	enable the video beam
+enable_video:
+	push	ax
+	mov	al,cs:mode_reg	; bit on
+	jmps	shared_video
+
+;	disable the video beam
+disable_video:
+	push	ax
+	mov	ah,21h		; bit off
+	mov	dx,color_port+6
+disable_video_loop:
+	in	al,dx
+	test	al,vrt		; wait for vertical
+	jz	disable_video_loop
+
+	mov	al,ah		; recover value
+shared_video:
+	mov	dx,color_port+4
+	out	dx,al		; and blast it
+	pop	ax
+	ret
+
+
+put_mon_c:
+	push	es
+	push	dx
+	push	bx
+	mov	es,bx		; set crt segment
+	jmps	put_crt_c0	; sneak in
+
+
+;	store one character to crt  (like a stosw)
+;	entry:	di -> cursor location
+;		ax = attribute, character
+
+put_crt_c:
+	push	es
+	push	dx
+	push	bx
+
+;	test	cs:vs_screen_mode,0F0h
+;	jnz	put_c_done	; if we're graphics, bag it
+
+	mov	es,vs_crt_seg	; mono or color
+	mov	dl,vs_mode
+put_crt_c0:
+	xchg	ax,bx		; save char in bx
+	test	dl,sync_bit
+	jz	put_c3		; if no sync, skip
+
+	mov	dx,color_port+6	; crt status
+put_c1:
+	sti			; allow an interrupt
+	nop
+	cli			;; hold the ints
+	in	al,dx
+	test	al,vrt		;; if vert retrace
+	jnz	put_c3		;;   just do it
+	in	al,dx		;; get a fresh one
+	test	al,hrt		;; if horiz retrace on
+	jnz	put_c1		;;   wait for it to go away
+put_c2:
+	in	al,dx
+	test	al,hrt		;; wait for fresh horiz rt
+	jz	put_c2
+put_c3:
+	xchg	ax,bx		;; char back to ax
+	stosw			;; the fastest
+put_c_done:
+	sti
+	pop	bx
+	pop	dx
+	pop	es
+	ret
+
+
+;	get one character from crt  (like a lodsw)
+;	entry:	si -> cursor location
+;	exit:	ax = attribute, character
+
+get_crt_c:
+	push	ds
+	push	dx
+	mov	dl,vs_mode
+	mov	ds,vs_crt_seg	; mono or color
+get_crt_c0:
+	test	dl,sync_bit
+	jz	get_c3		; if no sync, skip
+
+	mov	dx,color_port+6	; crt status
+get_c1:
+	sti			; allow an interrupt
+	nop
+	cli			;; hold the ints
+	in	al,dx
+	test	al,vrt		;; if vert retrace
+	jnz	get_c3		;;   just do it
+	in	al,dx		;; get a fresh one
+	test	al,hrt		;; if horiz retrace on
+	jnz	get_c1		;;   wait for it to go away
+get_c2:
+	in	al,dx
+	test	al,hrt		;; wait for fresh horiz rt
+	jz	get_c2
+get_c3:
+	lodsw			;; grab it
+	sti			;  and get out
+	pop	dx
+	pop	ds
+	ret
+
+
+;	video controller port output
+;	entry:	al = first data register number
+;		bx -> vs_
+;		cx = two data bytes
+
+video_out:
+	push	dx
+	mov	dx,mono_port	; assume monochrome
+	cmp	vs_crt_seg,mono_seg
+	jz	video_out1	; skip if true
+	mov	dx,color_port	; color port if false
+video_out1:
+	cli			; critical section
+	out	dx,al		;   set port number
+	inc	dx		;   data register
+	xchg	al,ch		;   al = first data
+	out	dx,al		;
+	dec	dx		;   back to set port
+	xchg	al,ch		;
+	inc	ax		;   next port
+	out	dx,al		;
+	inc	dx		;
+	mov	al,cl		;   second data
+	out	dx,al		;
+	sti			; section done
+
+	pop	dx
+	ret
+
+
+;********************************************************
+;*							*
+;*		CONSOLE OUT VARIABLES			*
+;*							*
+;********************************************************
+
+reorg9	equ	(offset $ + 1) and -2
+	dseg
+	org	reorg9
+
+vc_map_seg	rw	1	; filled by init
+
+list_next	rw	1	; for new vc list
+list_vc		rb	1	; same here
+
+mono_bits	rb	1	; which vc's are mono
+color_bits	rb	1	; which vc's are color
+graphic_bits	db	0	; which vc's in graphics (or 40 col)
+top_screen_mode	db	05h	; current screen mode of color monitor
+mode_reg	db	29h	; current mode register val
+palette_reg	db	0	; current palette port val
+scroll_mode	db	0	; 0 => fast flicker, 1 => slow snake
+
+;	single / double line frame drawing data
+
+horiz		equ	word ptr 0[si]
+vert		equ	word ptr 2[si]
+top_corners	equ	word ptr 4[si]
+bot_corners	equ	word ptr 6[si]
+
+s_lines		dw	07C4h,07B3h
+		dw	0BFDAh,0D9C0h
+
+d_lines		dw	0FCDh,0FBAh
+		dw	0BBC9h,0BCC8h
+
+;	variable video params for the compaq
+
+var_cursor	dw	color_cursor	; hi or low res
+var_sync	db	sync_bit	; to sync or not
+		db	0DBh		; pad
+
+;	window data block   returned by ww_pointer
+
+im_here		db	0	; initially not resident
+		db	num_vir_cons
+vc_priority	rb	num_vir_cons-1
+top_screen	rb	1
+
+;	priority translate table
+
+mono_xlat	rb	1 shl num_vir_cons	; for mono vc's
+color_xlat	rb	1 shl num_vir_cons	; for color vc's
+
+;	virtual console structure definition
+
+vs_cursor	equ	word ptr 0[bx]		; cursor row,column
+vs_cur_col	equ	byte ptr 0[bx]
+vs_cur_row	equ	byte ptr 1[bx]
+vs_top_left	equ	word ptr 2[bx]		; t l window corner
+vs_left		equ	byte ptr 2[bx]
+vs_top		equ	byte ptr 3[bx]
+vs_bot_right	equ	word ptr 4[bx]		; b r window corner
+vs_right	equ	byte ptr 4[bx]
+vs_bottom	equ	byte ptr 5[bx]
+vs_old_t_l	equ	word ptr 6[bx]		; last t l corner
+vs_old_b_r	equ	word ptr 8[bx]		; last b r corner
+vs_crt_size	equ	word ptr 10[bx]		; total rows, columns
+vs_win_size	equ	word ptr 12[bx]		; including invisible
+vs_view_point	equ	word ptr 14[bx]		; window top left
+vs_rows		equ	word ptr 16[bx]		; window row count
+vs_rowsb	equ	byte ptr 16[bx]
+vs_cols		equ	word ptr 18[bx]		; window column count
+vs_colsb	equ	byte ptr 18[bx]
+vs_correct	equ	word ptr 20[bx]		; char position factor
+vs_vc_seg	equ	word ptr 22[bx]		; vc map base segment
+vs_crt_seg	equ	word ptr 24[bx]		; base of screen memory
+vs_list_ptr	equ	word ptr 26[bx]		; start of row updates
+vs_attrib	equ	byte ptr 28[bx]		; current char attrib
+vs_mode		equ	byte ptr 29[bx]		; wrap, cursor on/off
+vs_cur_track	equ	byte ptr 30[bx]		; cursor tracking mode
+vs_width	equ	byte ptr 31[bx]		; wrap width
+vs_number	equ	byte ptr 32[bx]		; virt console num
+vs_bit		equ	byte ptr 33[bx]		; vc num = bit pos
+vs_save_cursor	equ	word ptr 34[bx]		; cursor save loc
+vs_vector	equ	word ptr 36[bx]		; console state vector
+vs_xlat		equ	word ptr 38[bx]		; mono/color xlat table
+vs_crt_rows	equ	byte ptr 40[bx]		; 24 (cpm) or 25 (pc)
+vs_pc_shifts	equ	byte ptr 41[bx]		; pc mode shift state
+vs_true_view	equ	word ptr 42[bx]		; corrected view point
+vs_true_col	equ	byte ptr 42[bx]
+vs_true_row	equ	byte ptr 43[bx]
+vs_cur_type	equ	word ptr 44[bx]		; mono or color
+vs_pfk_tbl	equ	word ptr 46[bx]		; prog func key base
+vs_pfk_ptr	equ	word ptr 48[bx]		; pointer to pfk table
+vs_pfk_count	equ	byte ptr 50[bx]		; pfk count down
+vs_pfk_exp	equ	byte ptr 51[bx]		; pfk expansion flag
+vs_mx		equ	byte ptr 52[bx]		; mutual exclusion sema
+vs_back_count	equ	byte ptr 53[bx]		; XIOS back door count
+vs_back_ax	equ	word ptr 54[bx]		; ax for XIOS back door
+vs_back_bx	equ	word ptr 56[bx]
+vs_back_cx	equ	word ptr 58[bx]
+vs_back_dx	equ	word ptr 60[bx]
+vs_screen_mode	equ	byte ptr 62[bx]		; alpha/graphics mode
+vs_screen_save	equ	byte ptr 63[bx]		; saves the old mode
+size_vs		equ	64
+
+;	vs_mode bit definitions
+
+wrap_bit	equ	01h		; wrap mode enabled
+cursor_bit	equ	02h		; cursor displayed
+rev_bit		equ	04h		; reverse video mode
+sync_bit	equ	08h		; sync crt accesses
+match_bit	equ	10h		; image matches physical
+pcmode_bit	equ	20h		; pc mode for console & keyboard
+
+init_mode	equ	wrap_bit + cursor_bit + match_bit
+
+table_vs	dw	first_vs,second_vs,third_vs,fourth_vs
+
+crt_full	equ	100h * (crt_rows_c - 1) + (crt_cols - 1)
+
+first_vs	dw	0,0,crt_full
+		dw	0,crt_full,crt_full
+		dw	1850H,0
+		dw	crt_rows_c,crt_cols,0
+		dw	0,0,vc_list
+		db	07h,init_mode,1,crt_cols,0,1
+		dw	0,con_normal,0
+		db	crt_rows_c,0
+		dw	0,0
+		dw	pfk_tbl0,0,0FF00h
+		dw	0,0,0,0,0
+		db	1,0
+
+second_vs	dw	0,0,crt_full
+		dw	0,crt_full,crt_full
+		dw	1850H,0
+		dw	crt_rows_c,crt_cols,0
+		dw	0,0,vc_list
+		db	07h,init_mode,1,crt_cols,1,2
+		dw	0,con_normal,0
+		db	crt_rows_c,0
+		dw	0,0
+		dw	pfk_tbl1,0,0FF00h
+		dw	0,0,0,0,0
+		db	1,0
+
+third_vs	dw	0,0,crt_full
+		dw	0,crt_full,crt_full
+		dw	1850H,0
+		dw	crt_rows_c,crt_cols,0
+		dw	0,0,vc_list
+		db	07h,init_mode,1,crt_cols,2,4
+		dw	0,con_normal,0
+		db	crt_rows_c,0
+		dw	0,0
+		dw	pfk_tbl2,0,0FF00h
+		dw	0,0,0,0,0
+		db	1,0
+
+fourth_vs	dw	0,0,crt_full
+		dw	0,crt_full,crt_full
+		dw	1850H,0
+		dw	crt_rows_c,crt_cols,0
+		dw	0,0,vc_list
+		db	07h,init_mode,1,crt_cols,3,8
+		dw	0,con_normal,0
+		db	crt_rows_c,0
+		dw	0,0
+		dw	pfk_tbl3,0,0FF00h
+		dw	0,0,0,0,0
+		db	1,0
+
+
+;	video controller configuration data tables
+;	used by get_set_screen routine
+
+mono_table   db  61h,50h,52h,0Fh,19h,06h,19h,19h,02h,0Dh,2Bh,0Ch,0,0,0,0
+graph_str    db  38h,28h,2Dh,0Ah,7Fh,06h,64h,70h,02h,01h,26h,07h,0,0,0,0
+alpha_str_40 db  38h,28h,2Dh,0Ah,1Fh,06h,19h,1Ch,02h,07h,26h,07h,0,0,0,0
+alpha_str_80 dw  ibm_str
+color_table  rb  0
+ibm_str      db  71h,50h,5Ah,0Ah,1Fh,06h,19h,1Ch,02h,07h,26h,07h,0,0,0,0
+compaq_str   db  71h,50h,5Ah,0Ah,19h,06h,19h,19h,02h,0Dh,2Bh,0Ch,0,0,0,0
+
+
+;	Graphics mode character font copped from the ROM BIOS
+
+font	rb	0
+   db	0,0,0,0,0,0,0,0,7Eh,81h,0A5h,81h,99h,0A5h,81h,7Eh
+   db	7Eh,0FFh,0DBh,0FFh,0E7h,0DBh,0FFh,7Eh,6Ch,0FEh,0FEh,0FEh,7Ch,38h,10h,0
+   db	10h,38h,7Ch,0FEh,7Ch,38h,10h,0,38h,7Ch,38h,0FEh,0FEh,7Ch,38h,7Ch
+   db	10h,10h,38h,7Ch,0FEh,7Ch,38h,7Ch,0,0,18h,3Ch,3Ch,18h,0,0
+   db	0FFh,0FFh,0E7h,0C3h,0C3h,0E7h,0FFh,0FFh,0,3Ch,66h,42h,42h,66h,3Ch,0
+   db	0FFh,0C3h,99h,0BDh,0BDh,99h,0C3h,0FFh,0Fh,7,0Fh,7Dh,0CCh,0CCh,0CCh,78h
+   db	3Ch,66h,66h,66h,3Ch,18h,7Eh,18h,3Fh,33h,3Fh,30h,30h,70h,0F0h,0E0h
+   db	7Fh,63h,7Fh,63h,63h,67h,0E6h,0C0h,99h,5Ah,3Ch,0E7h,0E7h,3Ch,5Ah,99h
+   db	80h,0E0h,0F8h,0FEh,0F8h,0E0h,80h,0,2,0Eh,3Eh,0FEh,3Eh,0Eh,2,0
+   db	18h,3Ch,7Eh,18h,18h,7Eh,3Ch,18h,66h,66h,66h,66h,66h,0,66h,0
+   db	7Fh,0DBh,0DBh,7Bh,1Bh,1Bh,1Bh,0,3Eh,63h,38h,6Ch,6Ch,38h,0CCh,78h
+   db	0,0,0,0,7Eh,7Eh,7Eh,0,18h,3Ch,7Eh,18h,7Eh,3Ch,18h,0FFh
+   db	18h,3Ch,7Eh,18h,18h,18h,18h,0,18h,18h,18h,18h,7Eh,3Ch,18h,0
+   db	0,18h,0Ch,0FEh,0Ch,18h,0,0,0,30h,60h,0FEh,60h,30h,0,0
+   db	0,0,0C0h,0C0h,0C0h,0FEh,0,0,0,24h,66h,0FFh,66h,24h,0,0
+   db	0,18h,3Ch,7Eh,0FFh,0FFh,0,0,0,0FFh,0FFh,7Eh,3Ch,18h,0,0
+   db	0,0,0,0,0,0,0,0,30h,78h,78h,30h,30h,0,30h,0
+   db	6Ch,6Ch,6Ch,0,0,0,0,0,6Ch,6Ch,0FEh,6Ch,0FEh,6Ch,6Ch,0
+   db	30h,7Ch,0C0h,78h,0Ch,0F8h,30h,0,0,0C6h,0CCh,18h,30h,66h,0C6h,0
+   db	38h,6Ch,38h,76h,0DCh,0CCh,76h,0,60h,60h,0C0h,0,0,0,0,0
+   db	18h,30h,60h,60h,60h,30h,18h,0,60h,30h,18h,18h,18h,30h,60h,0
+   db	0,66h,3Ch,0FFh,3Ch,66h,0,0,0,30h,30h,0FCh,30h,30h,0,0
+   db	0,0,0,0,0,30h,30h,60h,0,0,0,0FCh,0,0,0,0
+   db	0,0,0,0,0,30h,30h,0,6,0Ch,18h,30h,60h,0C0h,80h,0
+   db	7Ch,0C6h,0CEh,0DEh,0F6h,0E6h,7Ch,0,30h,70h,30h,30h,30h,30h,0FCh,0
+   db	78h,0CCh,0Ch,38h,60h,0CCh,0FCh,0,78h,0CCh,0Ch,38h,0Ch,0CCh,78h,0
+   db	1Ch,3Ch,6Ch,0CCh,0FEh,0Ch,1Eh,0,0FCh,0C0h,0F8h,0Ch,0Ch,0CCh,78h,0
+   db	38h,60h,0C0h,0F8h,0CCh,0CCh,78h,0,0FCh,0CCh,0Ch,18h,30h,30h,30h,0
+   db	78h,0CCh,0CCh,78h,0CCh,0CCh,78h,0,78h,0CCh,0CCh,7Ch,0Ch,18h,70h,0
+   db	0,30h,30h,0,0,30h,30h,0,0,30h,30h,0,0,30h,30h,60h
+   db	18h,30h,60h,0C0h,60h,30h,18h,0,0,0,0FCh,0,0,0FCh,0,0
+   db	60h,30h,18h,0Ch,18h,30h,60h,0,78h,0CCh,0Ch,18h,30h,0,30h,0
+   db	7Ch,0C6h,0DEh,0DEh,0DEh,0C0h,78h,0,30h,78h,0CCh,0CCh,0FCh,0CCh,0CCh,0
+   db	0FCh,66h,66h,7Ch,66h,66h,0FCh,0,3Ch,66h,0C0h,0C0h,0C0h,66h,3Ch,0
+   db	0F8h,6Ch,66h,66h,66h,6Ch,0F8h,0,0FEh,62h,68h,78h,68h,62h,0FEh,0
+   db	0FEh,62h,68h,78h,68h,60h,0F0h,0,3Ch,66h,0C0h,0C0h,0CEh,66h,3Eh,0
+   db	0CCh,0CCh,0CCh,0FCh,0CCh,0CCh,0CCh,0,78h,30h,30h,30h,30h,30h,78h,0
+   db	1Eh,0Ch,0Ch,0Ch,0CCh,0CCh,78h,0,0E6h,66h,6Ch,78h,6Ch,66h,0E6h,0
+   db	0F0h,60h,60h,60h,62h,66h,0FEh,0,0C6h,0EEh,0FEh,0FEh,0D6h,0C6h,0C6h,0
+   db	0C6h,0E6h,0F6h,0DEh,0CEh,0C6h,0C6h,0,38h,6Ch,0C6h,0C6h,0C6h,6Ch,38h,0
+   db	0FCh,66h,66h,7Ch,60h,60h,0F0h,0,78h,0CCh,0CCh,0CCh,0DCh,78h,1Ch,0
+   db	0FCh,66h,66h,7Ch,6Ch,66h,0E6h,0,78h,0CCh,0E0h,70h,1Ch,0CCh,78h,0
+   db	0FCh,0B4h,30h,30h,30h,30h,78h,0,0CCh,0CCh,0CCh,0CCh,0CCh,0CCh,0FCh,0
+   db	0CCh,0CCh,0CCh,0CCh,0CCh,78h,48,0,0C6h,0C6h,0C6h,0D6h,0FEh,0EEh,0C6h,0
+   db	0C6h,0C6h,6Ch,38h,38h,6Ch,0C6h,0,0CCh,0CCh,0CCh,78h,30h,30h,78h,0
+   db	0FEh,0C6h,8Ch,18h,32h,66h,0FEh,0,78h,60h,60h,60h,60h,60h,78h,0
+   db	0C0h,60h,30h,18h,0Ch,6,2,0,78h,18h,18h,18h,18h,18h,78h,0
+   db	10h,38h,6Ch,0C6h,0,0,0,0,0,0,0,0,0,0,0,0FFh
+   db	30h,30h,18h,0,0,0,0,0,0,0,78h,0Ch,7Ch,0CCh,76h,0
+   db	0E0h,60h,60h,7Ch,66h,66h,0DCh,0,0,0,78h,0CCh,0C0h,0CCh,78h,0
+   db	1Ch,0Ch,0Ch,7Ch,0CCh,0CCh,76h,0,0,0,78h,0CCh,0FCh,0C0h,78h,0
+   db	38h,6Ch,60h,0F0h,60h,60h,0F0h,0,0,0,76h,0CCh,0CCh,7Ch,0Ch,0F8h
+   db	0E0h,60h,6Ch,76h,66h,66h,0E6h,0,30h,0,70h,30h,30h,30h,78h,0
+   db	0Ch,0,0Ch,0Ch,0Ch,0CCh,0CCh,78h,0E0h,60h,66h,6Ch,78h,6Ch,0E6h,0
+   db	70h,30h,30h,30h,30h,30h,78h,0,0,0,0CCh,0FEh,0FEh,0D6h,0C6h,0
+   db	0,0,0F8h,0CCh,0CCh,0CCh,0CCh,0,0,0,78h,0CCh,0CCh,0CCh,78h,0
+   db	0,0,0DCh,66h,66h,7Ch,60h,0F0h,0,0,76h,0CCh,0CCh,7Ch,0Ch,1Eh
+   db	0,0,0DCh,76h,66h,60h,0F0h,0,0,0,7Ch,0C0h,78h,0Ch,0F8h,0
+   db	10h,30h,7Ch,30h,30h,34h,18h,0,0,0,0CCh,0CCh,0CCh,0CCh,76h,0
+   db	0,0,0CCh,0CCh,0CCh,78h,30h,0,0,0,0C6h,0D6h,0FEh,0FEh,6Ch,0
+   db	0,0,0C6h,6Ch,38h,6Ch,0C6h,0,0,0,0CCh,0CCh,0CCh,7Ch,0Ch,0F8h
+   db	0,0,0FCh,98h,30h,64h,0FCh,0,1Ch,30h,30h,0E0h,30h,30h,1Ch,0
+   db	18h,18h,18h,0,18h,18h,18h,0,0E0h,30h,30h,1Ch,30h,30h,0E0h,0
+   db	76h,0DCh,0,0,0,0,0,0,0,10h,38h,6Ch,0C6h,0C6h,0FEh,0
+
+
+;	dynamic row update list for fast window scrolling
+
+vc_list		rw	(2*num_vir_cons-1) * crt_rows_p * 2 + 4
+
+;	console control blocks have moved to xchar.lib
+eject
+
+;********************************************************
+;*							*
+;*		PC MODE VIDEO SUPPORT			*
+;*							*
+;********************************************************
+
+;	This was previously a seperate module name PCVIDEO.LIB
+
+;	code and data required for PC_MODE video support in XIOS
+;	written by M.P. Vano 22-November-1983
+;	altered by D.D. Ballard 8-December-1983
+
+;	PARAMETER BLOCK DEFINITION
+
+;	VID (VIDeo command block) passes registers to some subfunctions.
+;	The registers pass different parameters to different subfunctions.
+;	These definitions are also used to index the parameters when
+;	they are put on the stack.
+
+VID_ax		equ	word ptr 0	;ax register
+VID_al		equ	byte ptr 0
+VID_ah		equ	byte ptr 1
+VID_bx		equ	word ptr 2	;bx register
+VID_bl		equ	byte ptr 2
+VID_bh		equ	byte ptr 3
+VID_cx		equ	word ptr 4	;cx register
+VID_cl		equ	byte ptr 4
+VID_ch		equ	byte ptr 5
+VID_dx		equ	word ptr 6	;dx register
+VID_dl		equ	byte ptr 6
+VID_dh		equ	byte ptr 7
+VID_vcons	equ	byte ptr 8	;virtual console number
+
+
+reorg_mv2_code	equ	offset $
+		cseg
+		org	reorg_mv2_code
+
+;	New XIOS function 31 used to support ROS video emulation
+pc_video:
+	cmp	al,14			;this was bl at xios entry
+	jg	pc_video_err		;out of range function
+	cbw
+	xchg	ax,bx			;bx = function number
+	shl	bl,1
+	jmp	pc_video_fn[bx]
+;
+pc_video_fn:					;subfunction branch table
+	dw	offset pc_video_err		;0
+	dw	offset pc_video_cursortype	;1 set cursor type
+	dw	offset pc_video_setcursor	;2 set cursor position
+	dw	offset pc_video_getcursor	;3 get cursor position
+	dw	offset pc_video_err		;4
+	dw	offset pc_video_err		;5
+	dw	offset pc_video_scroll_up	;6 scroll window up
+	dw	offset pc_video_scroll_down	;7 scroll window down
+	dw	offset pc_video_read		;8 get attr/char at cursor
+	dw	offset pc_video_write_attr	;9 set attr/char at cursor
+	dw	offset pc_video_write_char	;10 set char (curr.attr) @ cur
+	dw	offset pc_video_set_color	;11 pallette / border control
+	dw	offset pc_video_write_dot	;12 graphics pix write
+	dw	offset pc_video_read_dot	;13 graphics pix read
+	dw	offset pc_video_write_tty	;14 write char stream as a tty
+
+pc_video_err:				;null routine for unimplemented fns
+	ret
+
+
+;	***  Sub-function 1  ***
+;	set cursor type   start line=CH, end line=CL
+pc_video_cursortype:
+	call	pc_video_setup		; point to vs_
+	 jz	pc_vid_1		;* ZF reset if serial console
+	 jmp	pc_vid_ser_exit		;* leave
+pc_vid_1:				;*
+	mov	vs_cur_type,cx		; save the new cursor
+	call	show_cursor		;   and display it
+	jmp	pc_video_exit
+
+
+;	***  Sub-function 2  ***
+;	set/update cursor to row=CH, col=CL
+pc_video_setcursor:
+	call	pc_video_setup
+	 jz	pc_vid_2		;* ZF reset if serial console
+	 jmp	pc_vid_ser_exit		;* leave
+pc_vid_2:				;*
+	cmp	ch,vs_crt_rows
+	jb	pc_v_row_ok		; if row is too big
+	  mov	ch,vs_crt_rows		;   then clip it
+	  dec	ch
+
+pc_v_row_ok:
+	cmp	cl,vs_width
+	jb	pc_v_col_ok		; if column is too big
+	  mov	cl,vs_width		;   then clip it
+	  dec	cl
+
+pc_v_col_ok:
+	mov	dx,cx
+	call	put_cursor		; (updates vs_cursor as well)
+	jmp	pc_video_exit
+
+
+;	***  Sub-function 3  ***
+;	return AH=row, AL=column
+pc_video_getcursor:
+	call	pc_video_setup
+	 jz	pc_vid_3		;* ZF reset if serial console
+	 jmp	pc_vid_ser_exit		;* leave
+pc_vid_3:				;*
+	mov	ax,vs_cursor
+	jmp	pc_video_exit
+
+
+;	***  Sub-function 6  ***
+;	scroll ROS screen window as per Scroll Command Block CX:DX--> 
+pc_video_scroll_up:
+	call	pc_video_params		; push registers on stack
+	 jz	pc_vid_6		;* ZF reset if serial console
+	 jmp	pc_vid_ser_p_exit	;* leave
+pc_vid_6:				;*
+	test	vs_screen_mode,0F0h	; if we're in graphics mode
+	jz	pc_v_scroll_up		;   then skip
+	jmp	pc_gr_scroll_up		; do a graphics scroll
+
+pc_v_scroll_up:
+	mov	dx,VID_cx[bp]		; top left corner to start
+	call	point_cursor		; di -> top left corner
+	call	pc_video_count		; move, erase and column counts
+	jc	pc_v_scroll_exit	; quit on illegal box
+
+	mov	al,vs_width		; next row down
+	cbw  !	shl ax,1
+	jmps	pc_v_move_erase		; shared routine from here
+
+
+;	***  Sub-function 7  ***
+;	scroll ROS screen window as per Scroll Command Block CX:DX--> 
+pc_video_scroll_down:
+	call	pc_video_params		; push registers on stack
+	 jz	pc_vid_7		;* ZF reset if serial console
+	 jmp	pc_vid_ser_p_exit		;* leave
+pc_vid_7:				;*
+	test	vs_screen_mode,0F0h	; if not in graphics mode
+	jz	pc_v_scroll_down	;   then skip
+	jmp	pc_gr_scroll_down	; do a graphics scroll
+
+pc_v_scroll_down:
+	mov	dh,VID_dh[bp]		; bottom row
+	mov	dl,VID_cl[bp]		; left column
+	call	point_cursor		; di -> bottom left corner
+	call	pc_video_count		; move, erase and column counts
+	jc	pc_v_scroll_exit	; quit on illegal box
+
+	mov	al,vs_width		; next row down
+	cbw ! shl ax,1 ! neg ax
+;	jmps	pc_v_move_erase		; shared routine from here
+
+;	shared code for scroll up and down
+;	entry:	ax = + or - chars per crt row
+pc_v_move_erase:
+	push	ax			; save row increment
+	imul	VID_dx[bp]		; ax = move offset
+	mov	si,di
+	add	si,ax			; si -> move source
+	pop	dx			; dx = row increment
+
+	cmp	VID_cx[bp],0		; if no moves to do
+	jz	pc_v_erase_loop		;   then just erase
+
+pc_v_move_loop:
+	mov	cx,VID_ax[bp]		; get column count
+	push si ! push di		; save line pointers
+	call	z_movsw			; move one screen line
+	pop di ! pop si
+	add	si,dx			; next source line
+	add	di,dx			;   and next destination
+	dec	VID_cx[bp]		; move countdown
+	jnz	pc_v_move_loop
+
+pc_v_erase_loop:
+	mov	cx,VID_ax[bp]		; get column count
+	mov	al,' '			; erase to a blank
+	mov	ah,VID_bh[bp]		; pick up the attribute
+	push dx ! push di
+	call	erase_pc		; erase one line
+	pop di ! pop dx
+	add	di,dx			; next line to erase
+	dec	VID_dx[bp]		; erase countdown
+	jnz	pc_v_erase_loop
+
+pc_v_scroll_exit:
+	jmp	pc_video_p_exit
+
+
+;	calculate move, erase and column counts
+;	exit:	VID_dx[bp] = erase count
+;		VID_cx[bp] = move count
+;		VID_ax[bp] = column count
+;		      -	or -
+;		cf set on illegal box
+
+pc_video_count:
+	mov	al,VID_dh[bp]		; bottom row
+	sub	al,VID_ch[bp]		; minus top row
+	jc	pc_count_exit		; if negative, forget it
+
+	cbw  !  inc ax			; ax = # of rows in box
+	mov	dx,ax			; dx = default erase count
+	sub	cx,cx			; default move count = 0
+	sub	al,VID_al[bp]		; subtract lines to scroll
+	jbe	pc_count_erase		; if too much, just erase
+	cmp	VID_al[bp],0		; if al = 0, just erase
+	jz	pc_count_erase
+
+	mov	cx,ax			; cx = move count
+	sub	dx,ax			; dx = erase count
+pc_count_erase:
+	mov	al,VID_dl[bp]		; right column
+	sub	al,VID_cl[bp]		; minus left column
+	jc	pc_count_exit		; if negative, forget it
+
+	cbw  !	inc ax			; ax = column count
+	mov	VID_dx[bp],dx		; save the move count
+	mov	VID_cx[bp],cx		;   the erase count and
+	mov	VID_ax[bp],ax		;   column count in the stack
+	clc				; all is well
+pc_count_exit:
+	ret
+
+;	Graphics mode scrolling
+pc_gr_scroll_up:
+	mov	dx,VID_cx[bp]		; get the top left corner
+	call	pc_gr_set_index		; set up di, si for move
+	add	si,ax			; source below destination
+	sub	ax,ax			; no post-move correction
+	jmps	pc_gr_scroll		; the rest is shared code
+
+pc_gr_scroll_down:
+	mov	dl,VID_cl[bp]		; get the left edge
+	mov	dh,VID_dh[bp]		;   but the bottom row
+	call	pc_gr_set_index		; set up di, si for move
+	sub	si,ax			; source above destination
+	mov	ax,-640			; post-move correct up row
+	jmps	pc_gr_scroll		; the rest is shared code
+
+pc_gr_set_index:
+	call	graph_point		; di -> graphics screen
+	mov	si,di			; si will be offset either
+	mov	al,160			;   up or down as many rows
+	mul	VID_al[bp]		;   as we have to scroll
+	shl	ax,1			; ax = 320 * row count
+	ret
+
+;	Graphics scrolling function
+;	shared by scroll up and scroll down
+;	entry:	si,di -> graphics screen
+;		ax = post move address correction
+pc_gr_scroll:
+	push	es
+	push	ds
+
+	xchg	ax,VID_dx[bp]		; get bottom right, and
+					;   save address correction
+	sub	ax,VID_cx[bp]		; subtract top left
+	add	ax,0101h		; ah = rows, al = cols
+	mov	VID_bh[bp],ah		; save for scroll count
+	mov	VID_bl[bp],ah		;   and for blank count
+
+	cbw
+	cmp	vs_screen_mode,40h	; 1 * col count for hi-res
+	jz	pc_gr_scroll_lines
+	shl	ax,1			; 2 * col count for med-res
+pc_gr_scroll_lines:
+	mov	VID_cx[bp],ax		; save for movsw and stosw
+	mov	ax,color_seg
+	mov	es,ax			; reach into the crt ram
+	mov	ds,ax
+
+	mov	al,VID_al[bp]		; get scroll count
+	test	al,al			; if count = 0
+	jz	pc_gr_blank_loop	;   then just blank
+
+	sub	VID_bh[bp],al		; reduce scroll count
+	mov	VID_bl[bp],al		; and set the blank count
+
+pc_gr_scroll_loop:
+	mov	cx,4			; 4 even/odd pairs per row
+pc_gr_scroll_row:
+	push	cx
+	mov	dx,2000h		; even to odd
+	call	pc_gr_move_one		; scroll one line
+	mov	dx,80 - 2000h		; odd to next even
+	call	pc_gr_move_one
+	pop	cx
+	loop	pc_gr_scroll_row
+
+	add	di,VID_dx[bp]		; correct pointers when
+	add	si,VID_dx[bp]		;   scrolling down
+	dec	VID_bh[bp]		; scroll count down
+	jnz	pc_gr_scroll_loop
+
+pc_gr_blank_loop:
+	sub	ax,ax			; ax = 0 for blanking
+	mov	cx,4			; 4 even/odd pairs per row
+pc_gr_blank_row:
+	push	cx
+	mov	dx,2000h		; even to odd
+	call	pc_gr_store_one		; blank even scan line
+	mov	dx,80 - 2000h		; odd to next even
+	call	pc_gr_store_one		; blank odd scan line
+	pop	cx
+	loop	pc_gr_blank_row
+
+	add	di,VID_dx[bp]		; correct for down scroll
+	dec	VID_bl[bp]		; blank count down
+	jnz	pc_gr_blank_loop
+
+	pop	ds
+	pop	es
+	jmp	pc_video_p_exit		; clear stack and leave
+
+;	scroll one horizontal scan line
+pc_gr_move_one:
+	mov	cx,VID_cx[bp]
+	sub	dx,cx			; correct next line inc
+	rep	movsb			; move one scan line
+	add	si,dx			; next source line
+	add	di,dx			; next dest line
+	ret
+
+;	blank one horizontal scan line
+pc_gr_store_one:
+	mov	cx,VID_cx[bp]
+	sub	dx,cx			; correct next line inc
+	rep	stosb			; blank one scan line
+	add	di,dx			; next dest line
+	ret
+
+
+;	***  Sub-function 8  ***
+;	read a character at current cursor position
+pc_video_read:
+	call	pc_video_setup		; bx -> vs_
+	 jz	pc_vid_8		;* ZF reset if serial console
+	 jmp	pc_vid_ser_exit		;* leave
+pc_vid_8:				;*
+	mov	dx,vs_cursor
+	test	vs_screen_mode,0F0h	; if we're in a graphics mode
+	jnz	pc_gr_read		;   then skip
+
+	call	point_cursor		; di -> cursor dest
+	test	vs_mode,match_bit	; if matched then
+	jnz	pc_v_read_image		;   get it from the image
+
+	mov	si,di			; for lodsw
+	call	get_crt_c		; with sync'ing for color
+	jmp	pc_video_exit
+pc_v_read_image:
+	push	es
+	mov	es,vs_vc_seg
+	mov	ax,es:[di]		; no hurry here
+	pop	es
+	jmp	pc_video_exit
+
+;	Read one character off the graphics screen
+;	This works in the somewhat awkward (but IBM compatible!) manner
+;	of reading the font and scanning the font tables for a match.
+pc_gr_read:
+	push es	! push ds		; save both segments
+	pop es	! push es		; local extra segment
+	call	graph_point		; dx set, returns di
+	mov	si,di
+	mov	ax,color_seg
+	mov	ds,ax			; ds:si -> graphics ram
+	mov	di,offset temp_font	; local storage
+	mov	cx,4			; even/odd row pairs
+	cmp	cs:vs_screen_mode,40h	; if not in hi-res mode
+	jnz	pc_gr_read_med		;   then skip
+
+pc_gr_read_hi:
+	movsb				; store font directly
+	add	si,2000h-1
+	movsb				; odd rows too
+	add	si,(80 - 2000h - 1)
+	loop	pc_gr_read_hi
+	jmps	pc_gr_search
+
+pc_gr_read_med:
+	call	one_row_in		; read even font row
+	add	si,2000h - 2		; to odd row
+	call	one_row_in		; read odd font row
+	add	si,(80 - 2000h - 2)	; to next even row
+	loop	pc_gr_read_med
+
+pc_gr_search:
+	pop ds	! push ds		; restore local ds
+	mov	si,offset font		; ds:si -> low font table
+	call	search_font		; look for a match
+	jz	pc_gr_read_done		; zf set on a match
+
+	mov	si,00h
+	mov	ds,si			; reach for the base page
+	lds	si,dword ptr .7Ch	; ds:si -> hi font table
+	call	search_font		; look for a match
+	jnz	pc_gr_read_done		; al = 0 if no match
+
+	add	al,80h			; correct offset
+pc_gr_read_done:
+	pop ds	! pop es		; restore both segments
+	jmp	pc_video_exit		; and return with al
+
+;	Read one row of font from the med-res graphics ram
+;	entry:	ds:si -> graphics ram
+;		es:di -> temp font storage
+one_row_in:
+	push	cx
+	lodsw				; grab the graphics ram
+	xchg	al,ah			; correct the order
+	mov	dx,ax			; save a copy
+	shr	ax,1
+	or	dx,ax			; or the color bits
+	mov	cx,8			; font bits per word
+one_row_in_loop:
+	shl	dx,1
+	shl	dx,1			; font bit to carry
+	rcl	al,1			; save it in al
+	loop	one_row_in_loop
+	stosb				; save in temp font
+	pop	cx
+	ret
+
+;	Search one font table for a match
+;	entry:	ds:si -> font table
+;	exit:	if match, zf set & al = ascii value
+;		if not, zf clear & al = 0
+search_font:
+	mov	al,0			; initial ascii
+	mov	dx,si			; for reinitialization
+search_font_loop:
+	mov	si,dx			; character beginning
+	mov	di,offset temp_font
+	mov	cx,8			; bytes per font
+	add	dx,cx			; for next time
+	repz	cmpsb			; compare the two
+	jz	search_font_done	; skip if matched
+	inc	al			; next ascii value
+	jns	search_font_loop	; up to 80h
+
+	mov	al,0			; al = 0 for failure
+search_font_done:
+	ret
+
+temp_font	rb	8		; font compare storage
+
+
+;	***  Sub-function 9  ***
+;	write a char/attr at current cursor position
+pc_video_write_attr:
+	call	pc_video_params		; push registers on stack
+	 jz	pc_vid_9		;* ZF reset if serial console
+	 jmp	pc_vid_ser_p_exit	;* leave
+pc_vid_9:				;*
+	test	vs_screen_mode,0F0h	; if we're in a graphics mode
+	jnz	pc_gr_write_attr	;   then skip
+
+	pop	ax			; recover character
+	pop	dx			; recover attribute
+	mov	ah,dl			;   and save it
+	jmps	pc_v_write		; shared with write_char
+
+;	Graphics mode char out routines
+
+pc_gr_write_char:			; if no color specified
+	mov	VID_bl[bp],03h		;   use white for color
+pc_gr_write_attr:
+	jmp	pc_gr_write		; jump to shared code
+
+
+;	***  Sub-function 10  ***
+;	write a char at current cursor using current attribute
+pc_video_write_char:
+	call	pc_video_params		; push registers on stack
+	 jz	pc_vid_10		;* ZF reset if serial console
+	 jmp	pc_vid_ser_p_exit	;* leave
+pc_vid_10:				;*
+	test	vs_screen_mode,0F0h	; if we're in a graphics mode
+	jnz	pc_gr_write_char	;   then skip
+
+	pop	ax			; recover character
+	pop	dx			; throw away the attrib
+	mov	ah,vs_attrib		; use current attribute
+;	jmps	pc_v_write		; shared with write_attr
+
+;	Shared code for alpha character writes
+;	write cx attr/chars at current cursor
+pc_v_write:
+	pop	cx			; recover repeat count
+	pop	dx			; throw away dx
+	push	ax			; save attr/char
+	mov	dx,vs_cursor
+	call	point_cursor		; di -> cursor dest
+	pop	ax			; restor attr/char
+	test	vs_mode,match_bit	; if full screen top
+	jz	pc_v_write_full		;   then skip
+
+;	this is a little redundant but it's much better than
+;	the old way of updating the screen every character!
+
+pc_v_write_image:
+	push	es
+	push	cx
+	mov	cx,ax			; save char in cx
+	call	point_cursor
+	mov	es,vs_vc_seg		; go to the vc image
+	mov	es:[di],cx		; store char, attrib
+
+;	now update screen if character belongs
+
+	mov	es,vc_map_seg		; for ownership check
+	add	ax,vs_correct
+	xchg	ax,si			; save for map check
+	call	in_window		; is char in window?
+	mov	ax,cx			; ax = character + attrib
+	jc	pc_v_image_bump		; skip if not
+
+	mov	di,si
+	shl	di,1			; back to screen coords
+	call	put_if_ours		; print it if we own it
+pc_v_image_bump:
+	inc	dl			; advance cursor
+	cmp	dl,vs_width		; if not wrapping around
+	jb	pc_v_image_next		;   then do next char
+
+	mov	dl,0
+	inc	dh			; next row
+pc_v_image_next:
+	pop	cx
+	pop	es
+	loop	pc_v_write_image
+	jmp	pc_video_exit
+
+pc_v_write_full:
+	call	put_crt_s		; go right to physical
+	jmp	pc_video_exit
+
+
+;	Shared code for graphic character writes
+pc_gr_write:
+	push	es			; we'll use these
+	push	ds
+	call	font_point		; ds:si -> char font
+	mov	ax,color_seg		; always in color ram
+	mov	es,ax
+	mov	dx,cs:vs_cursor		; find where we point
+
+;	set jump vectors for a move
+	mov	VID_ax[bp],offset pc_gr_mov_al
+	mov	VID_dx[bp],offset pc_gr_mov_ax
+	test	VID_bl[bp],80h		; if color msb not set
+	jz	pc_gr_again		;   then go to it
+
+;	set jump vectors for an exclusive or
+	mov	VID_ax[bp],offset pc_gr_xor_al
+	mov	VID_dx[bp],offset pc_gr_xor_ax
+	mov	VID_bx[bp],03h		; store a white for xor
+
+pc_gr_again:
+	push	dx			; save for repeats
+	push	si
+	call	graph_point		; point to graphics screen
+	mov	cx,4			; 4 evens, 4 odds
+	mov	dx,VID_bx[bp]		; grab the color value
+	and	dx,03h			; mask off color bits
+pc_gr_out:
+	call	one_row			; first the even row
+	add	di,2000h
+	call	one_row			; then the odd row
+	add	di,(80 - 2000h)
+	loop	pc_gr_out
+
+	pop	si			; restore font pointer
+	pop	dx			;   and previous cursor
+	inc	dl			; next column
+	dec	VID_cx[bp]		; count down repeat
+	jnz	pc_gr_again		; and loop till done
+
+	pop	ds
+	pop	es
+	jmp	pc_video_p_exit
+
+;	point to a character in the graphics screen
+;	entry:	dx = cursor row,column
+;	exit:	di -> character start
+graph_point:
+	mov	ah,dh			; ah = row number
+	mov	al,0
+	shr	ax,1
+	shr	ax,1			; ax = row * 64
+	add	ah,dh			; ax = row * 320
+	mov	dh,0			; dx = column
+	add	ax,dx			; ax = 320 * row + col
+	cmp	cs:vs_screen_mode,40h	; if hi-res
+	jz	graph_point_done	;   then skip
+	add	ax,dx			; 2 bytes per in med-res
+graph_point_done:
+	xchg	di,ax			; tuck it away
+	ret
+
+;	point to low or hi font
+;	exit:	ds:si -> font
+font_point:
+	mov	al,VID_al[bp]		; grab the character
+	cmp	al,80h			; if above 7Fh
+	jae	font_point_hi		;   then skip
+
+	mov	si,offset font		; if below, then local
+	jmps	font_shared
+font_point_hi:
+	and	al,7Fh			; zap the msb
+	mov	si,00h			; base page
+	mov	ds,si
+	lds	si,dword ptr .7Ch
+font_shared:
+	mov	ah,8			; bytes per char
+	mul	ah			; ax = index
+	add	si,ax			; ds:si -> char font
+	ret
+
+;	calc font mask for one horiz line
+one_row:
+	cmp	cs:vs_screen_mode,40h	; if not hi-res
+	jnz	one_row_med		;   then skip
+
+	push	dx			; save the color
+	rcr	dl,1			; color bit to carry
+	sbb	dl,dl			;   and copied across
+	lodsb
+	and	al,dl			; font or zeros
+	pop	dx
+	jmp	VID_ax[bp]		; mov or xor to finish
+
+one_row_med:
+	push	cx
+	push	dx
+	lodsb				; grab a font byte
+	mov	dh,al
+	mov	cx,8
+one_row_loop:
+	shl	ax,1
+	shl	dh,1
+	rcl	ax,1			; expand into ax
+	loop	one_row_loop
+
+	mul	dx			; ax = color * font
+	xchg	al,ah			; lead with lsb
+	pop	dx			; restore color
+	pop	cx			; and outer count
+	jmp	VID_dx[bp]		; mov or xor to finish
+
+pc_gr_mov_al:
+	mov	es:[di],al		; store hi-res font
+	ret
+pc_gr_mov_ax:
+	mov	es:[di],ax		; store med-res font
+	ret
+pc_gr_xor_al:
+	xor	es:[di],al		; xor with hi-res font
+	ret
+pc_gr_xor_ax:
+	xor	es:[di],ax		; xor with med-res font
+	ret
+
+
+;	***  Sub-function 11  ***
+;	set the palette / border color
+pc_video_set_color:
+	call	pc_video_params		; get the parameters
+	 jz	pc_vid_11		;* ZF reset if serial console
+	 jmp	pc_vid_ser_p_exit	;* leave
+pc_vid_11:				;*
+	mov	al,palette_reg		; current value
+	mov	dx,VID_bx[bp]		; this gets used
+	test	dh,dh			; if not color=0
+	jnz	pc_video_set_pal	;   the set to 1
+
+	and	al,0E0h			; 5 lsb's off
+	and	dl,01Fh			; 3 msb's off
+	or	al,dl			; mash 'em
+	jmps	pc_video_set_out	; shared code
+pc_video_set_pal:
+	and	al,0DFh			; turn off palette select
+	mov	cl,5			; shift count
+	shl	dl,cl			; move up to palette bit
+	and	dl,20h			; just in case
+	or	al,dl			; set it
+pc_video_set_out:
+	mov	dx,color_port + 5	; palette port
+	out	dx,al
+	mov	al,palette_reg		; for next time
+	jmp	pc_video_p_exit
+
+
+;	***  Sub-function 12  ***
+;	write one dot to a graphics screen
+pc_video_write_dot:
+	push	es
+	call	pc_video_params		; get the parameters
+	 jz	pc_vid_12		;* ZF reset if serial console
+	 pop	es			;*
+	 jmp	pc_vid_ser_p_exit	;* leave
+pc_vid_12:				;*
+	call	pc_video_dot_pos	; get the dot position
+	shr	al,cl			; shift output bits
+	and	al,ah			; mask off
+	mov	cl,es:[si]		; get current byte
+	test	VID_al[bp],80h		; check xor flag
+	jnz	pc_video_dot_xor	; skip if on
+
+	not	ah
+	and	cl,ah			; strip unwanted bits
+	or	al,cl			; or with the new ones
+	jmps	pc_video_dot_out	; put it
+pc_video_dot_xor:
+	xor	al,cl
+pc_video_dot_out:
+	mov	es:[si],al		; store it
+	pop	es			; restore segment
+	jmp	pc_video_p_exit		; and bug out
+
+
+;	***  Sub-function 13  ***
+;	read one dot from a graphics screen
+pc_video_read_dot:
+	push	es
+	call	pc_video_params		; get the parameters
+	 jz	pc_vid_13		;* ZF reset if serial console
+	 pop	es			;*
+	 jmp	pc_vid_ser_p_exit	;* leave
+pc_vid_13:				;*
+	call	pc_video_dot_pos	; get the dot position
+	mov	al,es:[si]		; get the graphics byte
+	and	al,ah			; mask off unwanted bits
+	shl	al,cl			; shift to the top
+	mov	cl,dh			; bits per pix
+	rol	al,cl			; rotate to bottom
+	pop	es			; restore segment
+	jmp	pc_video_p_exit		; and bug out
+
+;	calculate the address of a given pix cell
+;	entry:	VID_dx = row value (0-199)
+;		VID_cx = col value (0-639)
+;	exit:	si = offset into crt memory
+;		al = write pix shifted left
+;		ah = pix bit mask
+;		cl = count to right justify ah
+;		dh = number of result bits
+;		es = crt segment
+pc_video_dot_pos:
+	mov	ax,color_seg
+	mov	es,ax			; for crt mem references
+	mov	ax,40			; bytes per row
+	mov	dx,VID_dx[bp]		; get row value
+	and	dl,0FEh			; zap the lsb
+	mul	dx			; ax -> first row byte
+	test	VID_dx[bp],1		; if row is even
+	jz	pc_video_dot_even	;   then skip
+	add	ax,2000h		; else jump up 2000h
+pc_video_dot_even:
+	xchg	ax,si			; si hold the pointer
+	mov	dx,2C0h			; set medium res params
+	mov	cx,302h
+	cmp	vs_screen_mode,40h	; check which mode we're in
+	jnz	pc_video_dot_res	; skip if not hi res
+	mov	dx,180h			; set hi res params
+	mov	cx,703h
+pc_video_dot_res:
+	mov	ax,VID_cx[bp]		; get column number
+	and	ch,al			; ch = pix address in byte
+	shr	ax,cl			; byte address in row
+	add	si,ax			; si -> byte containing pix
+	mov	cl,0
+	mov	al,VID_al[bp]		; get write byte
+	mov	ah,dh			; copy count
+pc_video_dot_shift:
+	ror	al,1			; left justify it
+	add	cl,ch			; slow multiply
+	dec	ah
+	jnz	pc_video_dot_shift	; cl = bit count
+
+	mov	ah,dl			; get bit mask
+	shr	ah,cl			; move to correct position
+	ret				; return params
+
+
+;	***  Sub-function 14  ***
+;	write as a tty the char in CL to console # in DL
+pc_video_write_tty:
+	call	pc_video_setup
+	 jz	pc_vid_14		;* ZF reset if serial console
+	 jmp	pc_vid_ser_exit		;* leave
+pc_vid_14:				;*
+	mov	dx,vs_cursor
+
+	cmp	cl,8			;backspace?
+	jne	pc_not_bs
+	  call	vc_out_bs
+	  jmps	pc_video_exit
+
+pc_not_bs:
+	cmp	cl,0dh			;cr?
+	jne	pc_not_cr
+	  call	vc_out_cr
+	  jmps	pc_video_exit
+
+pc_not_cr:
+	cmp	cl,0ah			;lf?
+	jne	pc_not_lf
+	  call	vc_out_lf
+	  jmps	pc_video_exit
+
+pc_not_lf:
+	cmp	cl,7			;bell?
+	jne	pc_not_bell
+	  call	vc_out_bel
+	  jmps	pc_video_exit
+
+pc_not_bell:
+	call	vc_out
+	jmps	pc_video_exit
+
+;	leave the pc_video function, restoring the stack
+
+pc_video_p_exit:
+	add	sp,8			; clear the stack
+;	jmps	pc_video_exit		; and fall through
+
+pc_video_exit:
+	mov	vs_mx,0			; release crt routines
+	ret
+pc_vid_ser_p_exit:			;* clear the stack
+	add	sp,8			;*
+;	jmps	pc_vid_ser_exit		;*
+
+pc_vid_ser_exit:			;*
+	ret				;*
+
+;	as pc_video setup1 but for cases where there is a VID involved
+;	exit:	ax - dx returned on the stack (ax comes off first)
+;*	Return w/ ZF set if PC console, reset if serial console
+
+pc_video_params:
+	pop	di			; stash the return addr
+	mov	ax,es			; save es in ax
+	mov	es,cx			; set up segment and
+	mov	bx,dx			;   offset of parmam block
+	push	es:VID_dx[bx]		; push the dx param
+	push	es:VID_cx[bx]		; push the cx param
+	push	es:VID_bx[bx]		; push the bx param
+	push	es:VID_ax[bx]		; push the ax param
+	mov	bp,sp			; for stack var references
+	push	di			; return return addr to stack
+
+	mov	dl,es:VID_vcons[bx]	; get the console number
+	mov	es,ax			; restore es
+;	jmp	pc_video_setup		; set up bx -> vs_
+
+;	sets up environment as if already in vc routines for simple parameters
+pc_video_setup:
+	cmp	dl,num_vir_cons		;* check for PC screen
+	 jb	pc_v_s_ok		;* 
+	mov	ax,0ffffh		;* indicate error
+	jmps	pc_v_back		;*
+pc_v_s_ok:
+	push	cx			; save char for tty mode
+	call	point_vs
+	call	get_mx
+	pop	cx
+	xor	ax,ax			;*
+pc_v_back:				;*
+	or	ax,ax			;* set ZF appropriately
+	ret
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                

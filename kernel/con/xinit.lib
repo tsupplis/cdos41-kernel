@@ -1,0 +1,1303 @@
+eject						; Apr. 1, 1985
+						;  add int 1E support
+						; Apr 12, 1985
+						;  customize motor-on delay
+;			INIT
+;			----
+
+;************************************************
+;*						*
+;*	IBM PC SOFTWARE INTERRUPT STRUCTURE	*
+;*						*
+;************************************************
+
+divide_interrupt	equ	00h
+single_step_interrupt	equ	01h
+nmi_interrupt		equ	02h
+one_byte_interrupt	equ	03h
+overflow_interrupt	equ	04h
+clock_interrupt		equ	08h
+keyboard_interrupt	equ	09h
+aux1_interrupt		equ	0Bh
+aux0_interrupt		equ	0Ch
+hd_hard_interrupt	equ	0Dh
+disk_interrupt		equ	0Eh
+
+equip_int		equ	11h		; ROS equipment check int
+mem_int			equ	12h		; ROS memory check int
+disk_int		equ	13h		; ROS disk int
+async_int		equ	14h		; ROS async port int
+print_int		equ	17h		; ROS printer int
+
+break_interrupt		equ	1Bh		; user keyboard break
+tick_interrupt		equ	1Ch		; user tick vector
+
+disk_parms_interrupt	equ	1Eh		;* diskette parameters ptr.
+ int_1E_vec_off		equ	disk_parms_interrupt * 4
+ int_1E_vec_seg		equ	int_1E_vec_off + 2
+
+hd_code_interrupt	equ	40h		; pass along to floppy
+hd_param_interrupt	equ	41h		; hard disk param pointer
+os_interrupt		equ	224		; normal CCP/M-86 entry
+debugger_interrupt	equ	225		; debugger entry to O.S.
+flag_interrupt		equ	228		; to get an unused flag
+fidds_interrupt		equ	229		; for attachamatic drives
+xios_interrupt		equ	230		; for ver 1.0 back door
+
+
+;********************************************************
+;*							*
+;*	      XIOS INITIALIZATION ROUTINE		*
+;*							*
+;********************************************************
+
+;	The following routine is used to initialize any required
+;	data areas, and alter any peripheral chip programming when
+;	starting up CCP/M-86.  This code is called once from the
+;	SUP(ERVISOR) after the SUP has called the RTM, CIO, MEM and
+;	BDOS initialization routines, and before SUP has created
+;	the RSP processes.
+
+;	We are again hoping that the DL register is preserved through
+;	the init process, because we are setting sysdisk to A: when
+;	we boot from floppy to ease the installation procedures.
+
+;	Aux in buffers now use INIT code space to save memory
+
+aux_buf_in0	equ	offset $
+aux_top_in0	equ	aux_buf_in0 + auxin_buf_size - 1
+aux_buf_in1	equ	aux_buf_in0 + auxin_buf_size
+aux_top_in1	equ	aux_buf_in1 + auxin_buf_size - 1
+
+reorg16	equ	offset $
+	cseg
+	org	reorg16
+
+INIT:
+	cli
+	call	set_sys_vars		; set up system variables
+	call	check_286		; see if we're the new machine
+	call	equip_check		; see what we've got
+	call	check_hi_mem		; from C000 up
+	call	ndp_init		; check for an 8087
+	call	compaq			; do before any video setup
+	call	fix_crt			; mono/color vs_ variables
+	call	fix_disk_tables		; match disk tables to equip
+	call	do_int_1e		;* dos support
+	call	printer_init		; reset the parallel printers
+	call	do_video		; initial window setup
+	call	do_setup		; customize XIOS
+	call	flop_off		; turn off the floppy motors
+	call	try_mdisk		; done after setup data read
+	call	floppy_hash		; allocate floppy hash tables
+	call	hd_init			; get hard disk partitions
+	call	trim_memory		; fix up the partition list
+	call	do_aux_ports		; serial port int init
+	call	do_interrupts		; do all of the int stuff
+	call	sign_on			; print signon message
+	call	enable_ints		; interrupts back on
+	retf				; initializaiton done
+
+
+;	copy and point int 1Eh:
+do_int_1e:
+	push DS				;*
+	xor ax,ax			;* point to vectors
+
+; If the following section is uncommented, the 11 disk-parm. bytes
+; pointed to by int 1E are copied to our local XIOS string.  Else
+; the initialized values in the XIOS are used, which correspond to those
+; found under dos 2.1.  In either case, the vector is changed to point to
+; XIOS RAM.
+
+;	mov DS,ax			;* source
+;	lds si,dword ptr .int_1E_vec_off ;* possibly ROM
+;
+;	pop ES ! push ES		;* destination
+;	mov di,offset int_1e_parms	;* in XIOS ROM
+;
+;	mov cx,11
+;	cld
+;	rep movsb			;* to our local area
+
+	mov DS,ax			;* = 0
+	mov word ptr .int_1E_vec_seg,CS ;* new vector	
+	mov word ptr .int_1E_vec_off,offset int_1e_parms
+
+	pop DS
+	ret
+
+
+;	set up initial system variables
+
+set_sys_vars:
+	mov boot_drive,dl		;back to this old trick
+	cld				;Sup saves DS,ES on INIT call 
+	in  al,pic_mask			;get the current interrupt mask
+	mov pic_mask_image,al		;and save it for restoration
+	mov al,0FFh
+	out pic_mask,al			;mask off all interrupts
+	mov sysdat,ds			;save System Data Segment 
+	mov bx,offset supmod		;save Sup entry double word
+	mov ax,[bx]			;get offset out of Sys Data Seg
+	mov supervisor_o,ax		;save it
+	mov ax,2[bx]			;get the segment
+	mov supervisor_s,ax		;save it
+	mov owner_8087,0FFFFh		;8087's owner's pd
+	mov tod_hour,0			;start with zero time
+	ret
+
+
+;	check to see if we're running on the PC-AT
+
+check_286:
+	mov	ax,0FFFFh		; top of rom
+	mov	es,ax
+	cmp	es:byte ptr .0Eh,0FCh	; if we're other than 286
+	 jz	yes_at
+	jmp	check_286_done		;   then forget it
+yes_at:
+	mov	pc_at,0FFh		; we're running on an AT
+
+	mov	motor_on_var,MOTOR_ON_TICKS_AT 		;* slower startup
+	jmps	do_at_time				;*
+	db	'<-- 2 bytes before < is motor-startup'	;*
+	db	'delay for ATs in sec/60.'		;*
+do_at_time:						;*
+
+	mov	al,0Eh			; cmos ram check byte
+	call	read_286_cmos
+	test	al,0C0h			; check battery, checksum
+	jnz	check_286_done		; if ones, info unreliable
+
+	mov	al,10h			; cmos ram disk types
+	call	read_286_cmos
+	sub	si,si			; for the first drive
+	call	set_286_drive		;   set the drive type
+	inc	si			; for the second drive
+	call	set_286_drive		;   do the same
+
+	mov	al,0
+	call	read_286_cmos		; get seconds
+	mov	tod_sec,al
+	mov	al,2
+	call	read_286_cmos		; get minutes
+	mov	tod_min,al
+	mov	al,4
+	call	read_286_cmos		; get hours
+	mov	tod_hour,al
+
+	mov	al,7
+	call	read_286_bcd		; get binary date
+	mov	tod_day,ax		; initial set
+	mov	al,8
+	call	read_286_bcd		; get binary month
+	mov	ch,0			; assume march-dec
+	cmp	al,3			; and if true
+	jae	check_286_leap		;   skip
+
+	mov	ch,1			; jan-feb leap correct
+check_286_leap:
+	dec ax ! shl ax,1		; zero base and word index
+	xchg	ax,bx
+	mov	ax,month_length[bx]	; days in prior months
+	add	tod_day,ax		; add days up to now
+
+	mov	al,9
+	call	read_286_bcd		; get binary year
+	sub	al,78			; cpm base year
+	push	ax
+	  mov dx,365 ! mul dx		; convert to days
+	  add tod_day,ax		; here's the biggie
+	pop	ax
+	add	al,2			; 78 -> 80
+	sub	al,ch			; dec if jan or feb
+	shr ax,1 ! shr ax,1		; every 4 years
+	add	tod_day,ax		;   gives us a day
+
+check_286_done:
+	ret
+
+;	read PC AT cmos ram and convert bcd to binary
+
+read_286_bcd:
+	call	read_286_cmos		; grab the byte
+	mov	ah,al
+	mov	cl,4
+	shr	ah,cl			; ms nib to ah
+	and	al,0Fh			; ls nib in al
+	aad				; ax = 10*ah + al
+	ret
+
+;	read PC AT cmos ram port in al
+
+read_286_cmos:
+	out	70h,al			; set address
+	jmps	$ + 2			; pause
+	in	al,71h			; read the rom
+	ret
+
+set_286_drive:
+	mov	cl,4			; the nibble we want first
+	rol	al,cl			;   is in the top half
+	push	ax			; but save the other half too
+	and	al,0Fh			; mask off the unwanted
+	cmp	al,2			; if other than 2 (hyper)
+	jnz	set_286_drive_done	;   then leave it alone
+
+	mov	drive_type[si],hyper_drive
+	mov	data_rate[si],rate_hyper_48
+set_286_drive_done:
+	pop	ax
+	ret
+
+
+;	check IBM equipment word, set number variables
+
+equip_check:
+	int	equip_int		; return equip word
+	mov	dx,ax
+
+	mov	cl,4
+	shr	dx,cl			; shift down init_video
+	mov	al,dl
+	and	al,03h
+	mov	init_video_mode,al	; save for crt setup
+
+	mov	cl,2
+	shr	dx,cl			; shift down floppy bits
+	mov	ax,dx
+	and 	ax,03h			; mask for floppy
+	inc	ax			; correct 0 based code
+	mov	num_flop,ax
+
+	cmp	al,1			; if there is only one floppy
+	jnz	equip_check_des		;   then use 2 designators
+
+	mov	al,2			; this fakes a B: drive
+
+equip_check_des:			;   in single drive systems
+	mov	num_flop_des,ax
+
+	mov	cl,3
+	shr	dx,cl			; shift down port bits
+	mov	ax,dx
+	and	ax,07h			; mask for serial ports
+	mov	num_port,ax
+
+	mov	cl,5
+	shr	dx,cl			; shift down printer bits
+	mov	ax,dx
+	and	ax,03h			; mask for printer
+	mov	num_print,ax
+
+	mov	ah,08			; XT param check
+	mov	dl,80h			; first hard disk code
+	int	disk_int
+	jnc	equip_ch1		; skip if dl good
+	mov	dl,0			; else no hard disks
+equip_ch1:
+	mov	dh,0
+	mov	num_hard,dx
+
+	mov	bx,0ffeh		; off the screen
+	mov	ax,mono_seg
+	call	crt_check		; is the monochrome there?
+	mov	num_mono,ax		; store the count 0 or 1
+
+	mov	ax,color_seg
+	call	crt_check		; is the color card there?
+	mov	num_color,ax		; store the count 0 or 1
+
+	int	mem_int			; check total memory size
+	mov	num_mmkb,ax		; save kilobytes
+	mov	cl,6
+	shl	ax,cl			; change to paragraph count
+	mov	memory_top,ax		; save for memory trim
+	mov	lo_mem_top,ax		; keep a permanent copy
+	ret
+
+;	do a memory check on the crt ram
+
+crt_check:
+	mov	es,ax			; crt segment
+	mov	ax,0DDB2h		; bit pattern
+	mov	es:[bx],ax		; store it
+	sub	ax,es:[bx]		; check it
+	jnz	crt_chk1		; and skip if not there
+
+	mov	ax,blank		; once more for
+	mov	es:[bx],ax		;   good measure
+	sub	ax,es:[bx]
+	jnz	crt_chk1
+
+	inc	ax			; only one
+	ret
+crt_chk1:
+	sub	ax,ax			; nobody home
+	ret
+
+
+;	Check for memory at or above C000:0000
+
+check_hi_mem:
+	mov	dx,0C000h		; starting segment
+	mov	cx,12			; 16k block count
+	mov	ax,0DDB2h		; check pattern
+ch_hi_mem1:
+	call	ch_hi_word		; is there RAM ?
+	jz	ch_hi_mem2		; if so, skip
+	add	dx,400h			; check next 16k
+	loop	ch_hi_mem1		; up to F000
+	ret				; if none there, return
+
+ch_hi_mem2:
+	mov	hi_mem_start,dx		; there is some memory
+ch_hi_mem3:
+	add	dx,400h			; up 16k
+	call	ch_hi_word		; as long as it's good
+	jz	ch_hi_mem3		;   keep on going
+	mov	hi_mem_top,dx		; and save the top
+	ret
+
+ch_hi_word:
+	sub	si,si			; zero index
+	mov	es,dx			; set check segment
+	mov	es:[si],ax		; store check pattern
+	cmp	es:[si],ax		; and see if it matches
+	ret				; return with zf set
+
+
+;	8087 Numeric Data Processor initiation routine
+
+ndp_init:
+	FNINIT				; init and check for 8087
+	xor	ax,ax			; stall for time
+	mov	ndp_control,ax		;   and clear control word
+	FNSTCW	ndp_control		; get 8087 control word
+	or	ax,ndp_control		; test for 8087 presence
+	jz	ndp_init_done		; if not there, skip
+
+	mov	num_ndp,1		; we've got one!
+	mov	owner_8087,0		; tell the system about it
+
+	mov	ndp_int_off,nmi_interrupt * 4
+	mov	ndp_int_seg,0		; save the vector location
+	mov	ndp_vec_off,offset i_ndp
+	mov	ndp_vec_seg,cs		; and the interrupt vector
+ndp_init_done:
+	ret
+
+
+;	if this is the compaq, change cursor, sync and sl_attrib
+
+compaq:
+	mov	ax,0F000h
+	mov	es,ax		; ROM segment
+	mov	di,0FFEAh	; ID offset
+	mov	si,offset compaq_name
+	mov	cx,6
+	repz	cmpsb		; look for a match
+	jnz	compaq_done
+
+	mov	var_cursor,compaq_cursor
+	mov	var_sync,0	; no retrace sync
+	mov	sl_attrib,0Fh	; enhanced white
+	mov	alpha_str_80,offset compaq_str
+compaq_done:
+	ret			; all for now
+
+compaq_name	db	'COMPAQ'
+
+
+;	set up the mono/color vs_ variables
+
+fix_crt:
+	mov	si,offset set_mono	; assume monochrome
+	mov	di,offset z_sl_mono	; for status line too
+	cmp	init_video_mode,03h	; if mono switched on
+	jz	fix_crt1		;   then skip
+
+	mov	si,offset set_color	; else color
+	mov	di,offset z_sl_color	; and color status
+fix_crt1:
+	call	di			; set status line
+	mov	dl,0			; first vc number
+fix_crt2:
+	call	point_vs		; bx -> structure
+	call	si			; mono or color
+	inc	dl			; next vc
+	cmp	dl,num_vir_cons		; through the last
+	jb	fix_crt2
+	ret
+
+
+;	correct the disk tables to match physical configuration
+
+fix_disk_tables:
+	sub	ax,ax			; ax = 0; al = A:
+	mov	temp_disk,al		; tempory disk default
+
+	push ds ! pop es		; local extra segment
+	mov	di,offset dph_tbl	; first we must zap the
+	mov	cx,8			;   dph table to zeros
+	rep	stosw			; that does A: - H:
+
+;	now, set up the true dph and branch vector tables
+
+	sub	di,di			; di = 0, first entry
+	mov	cx,num_flop		; first the floppies
+	mov	bx,offset flop_dph_list	; list of floppy dph's
+fix_flops:
+	mov	si,offset flop_vectors	; select, read, write flops
+	call	fix_one_disk		; set dph and vectors
+	loop	fix_flops
+
+	cmp	num_flop,1		; now, if only one floppy
+	jnz	fix_flop_done		;   then we special case
+	 inc di	! inc di		;   by skipping B:
+
+fix_flop_done:
+	mov	cx,num_hard		; number of hard drives
+	jcxz	fix_disk_done		; if none, then we're through
+
+	mov	bx,offset pc_hd_dph_list ; we do pc partitions first now
+fix_pc_hd:
+	mov	si,offset pc_hd_vectors	; select, read, write pc part
+	call	fix_one_disk		; set dph and vectors
+	loop	fix_pc_hd
+
+	mov	cx,num_hard		; can't be zero now
+	mov	bx,offset hard_dph_list	; now we do cp/m partitions
+fix_hard:
+	mov	si,offset hard_vectors	; select, read, write cp/m part
+	call	fix_one_disk		; set dph and vectors
+	loop	fix_hard
+
+fix_disk_done:				; the non-disk defaults have
+	ret				;   already been set up
+
+;	set up table entries for one disk
+
+fix_one_disk:
+	mov	ax,[bx]			; get the dph offset
+	mov	dph_tbl[di],ax		; set dph
+	lodsw				; fetch the select vector
+	mov	select_tbl[di],ax
+	lodsw				; fetch the read vector
+	mov	read_tbl[di],ax
+	lodsw				; fetch the write vector
+	mov	write_tbl[di],ax
+	inc bx	! inc bx		; to next dph entry
+	inc di	! inc di		; to next vector entry
+	ret
+
+;	lists of dph offsets
+flop_dph_list	dw	dph0, dph1, dph2, dph3
+hard_dph_list	dw	hd_dph0, hd_dph1
+pc_hd_dph_list	dw	pc_hd_first_dph, pc_hd_second_dph
+
+;	lists of branch vector offsets
+flop_vectors	dw	select_flop, read_flop, write_flop
+hard_vectors	dw	select_hd, read_hd, write_hd
+pc_hd_vectors	dw	pc_select_hd, pc_read_hd, pc_write_hd
+
+
+;	reset all parallel printer ports
+;	set up list_out and list_stat tables
+
+printer_init:
+	mov	cx,num_print		; get the count
+	jcxz	pr_par_done
+
+	sub	dx,dx			; first is zero
+pr_par_loop1:
+	mov	ah,1			; reset code
+	int	print_int
+	inc	dx			; next printer
+	loop	pr_par_loop1
+
+	mov	ax,40h			; look into base page
+	mov	es,ax
+	mov	si,8			; printer address list
+	mov	cx,num_print		; printer count
+pr_par_loop2:
+	push	cx
+	mov	ax,es:[si]		; fetch printer address
+	mov	di,-2			; pre decrement for scan
+	mov	cx,3			; max printer count
+pr_par_loop3:
+	inc	di			; to next list data
+	inc	di
+	cmp	ax,list_data[di]	; if no match
+	loopnz	pr_par_loop3		;   then keep looking
+	jnz	pr_par_next		; until exausted
+
+	mov	list_out[di],offset parallel_out
+	mov	list_stat[di],offset parallel_stat
+pr_par_next:
+	inc	si
+	inc	si			; next list entry
+	pop	cx
+	loop	pr_par_loop2
+
+;	we don't do this for serial printers any more
+;	do_aux_ports takes care of it for us.
+
+pr_par_done:
+	ret
+
+
+;	get all of the window stuff rolling
+
+do_video:	
+	cmp	init_video_mode,03h	; if initial crt is mono
+	jz	do_color		;   then skip port init
+	  mov	dx,mono_port		; get the video chip port
+	  mov	si,offset mono_table	; initialization commands
+	  mov	ax,0029h		; video mode / color sel
+	  call	video_init		; send commands to port
+do_color:
+	cmp	init_video_mode,03h	; if initial crt is color
+	jnz	init_v0			;   then skip port init
+	  mov	dx,color_port
+	  mov	si,offset color_table
+	  mov	ax,0029h		; video mode / color sel
+	  call	video_init
+
+;	Set up the virtual screen structures (one per virtual console)
+;	and blank out their screen save areas.
+init_v0:
+	mov	ax,genccpm_buf		;paragraph address of buffer
+					;space allocated by GENCCPM.
+	mov	bx,offset first_vs
+	mov	cx,num_vir_cons
+init_v1:
+	mov	vs_vc_seg,ax		; tell each vs_ where to find
+	add	bx,size_vs		;   its buffer segment
+	add	ax,((crt_rows_p*crt_cols+15) shr 4) * 2	; segment size
+	loop	init_v1
+	mov	vc_map_seg,ax		; ownership map segment
+
+	mov	es,ax			; now set up the initial map
+	sub	di,di			; top left corner
+	mov	cx,crt_rows_p*crt_cols
+	mov	al,(1 shl num_vir_cons)-1	; all bits on
+	cld
+	rep	stosb				; fill the map
+;
+	mov	bx,offset first_vs
+	mov	cx,num_vir_cons
+init_v2:
+	push	cx
+	mov	es,vs_vc_seg		; point to image
+	sub	di,di
+	mov	cx,crt_rows_p*crt_cols
+	mov	ax,blank		; to erase virtual images
+	rep	stosw			; fill with blanks
+	pop	cx
+	add	bx,size_vs		; next virtual structure
+	loop	init_v2
+
+	push	ds
+	pop	es			; local extra segment
+	mov	di,offset vc_priority	; vc priority list
+	mov	al,num_vir_cons-1
+init_v3:
+	stosb				; lowest priority first
+	dec	al
+	jns	init_v3			; do through zero
+	jmp	new_monitor		; set up initial windows
+
+
+;	Do the SETUP customizing of the XIOS
+
+do_setup:
+	cmp	su_check,0DDB2h		; check for secret code
+	jnz	setup_done		; if bad, bag it
+
+;	at this point, the SETUP block is a winner
+
+	mov	ax,su_md_start
+	mov	mdisk_start,ax		; where to try for mdisk
+	mov	al,su_verf
+	mov	verify_flag,al		; whether to verf after write
+	mov	ax,su_mmp		; max mem per process
+	mov	mmp,ax			; tell the system
+	mov	al,su_scroll
+	mov	scroll_mode,al		; for the color monitor
+
+;	serial com setup is done in do_aux_ports
+
+	mov	al,su_hdst		; head step code
+	mov	fdc_spec1_var,al	; save for specify
+	call	flop_specify		; set head step speed
+
+	cmp	su_cf,0			; check the config flag
+	jz	setup_pfks		; if not saved, skip
+
+	mov	ax,su_config
+	mov	config_data,ax		; save both codes
+
+;	move the SETUP protocol bytes to the aux blocks
+
+	push ds ! pop es	; local move
+	mov	cx,4		; bytes to move
+	mov	bx,offset aux_prot_blk
+	mov	si,offset su_prot
+setup_prot:
+	mov	di,[bx]		; get block prot pointer
+	movsb			; put the byte
+	inc bx ! inc bx		; next pointer
+	loop	setup_prot	; next block
+
+setup_pfks:
+	cmp	su_pf,0			; check the pfk flag
+	jz	setup_done		; if not saved, finished
+
+	push ds ! pop es		; local es
+	mov	di,offset pfk_tbl0	; first pfk
+	mov	bx,num_vir_cons		; number of pfk tables
+setup_pfk_loop:
+	mov	si,offset su_pfk_tbl	; the saved values
+	mov	cx,180			; words per pfk table
+	rep	movsw			; copy 'em
+	dec	bx
+	jnz	setup_pfk_loop		; for each console
+setup_done:
+	ret
+
+
+;	turn off the floppy motors before taking over interrupts
+
+flop_off:
+	mov	dx,FDC_PORT
+	mov	al,FDC_ON		; turn off floppy motors
+	mov	MOTOR_FLAGS,al		; or they may stay on forever
+	out	dx,al
+	ret
+
+
+;	set up mdisk variables and clear the memory
+
+try_mdisk:
+	mov	ax,mdisk_start	; try to start it here
+	test	ax,ax		; if mdisk start = 0
+	jz	no_mdisk	;   then forget it
+
+	mov	dx,lo_mem_top	; main mem ceiling
+	cmp	ax,dx		; if start is below
+	jb	yes_mdisk_lo	;   then it's a winner
+
+	mov	dx,hi_mem_start	; now look above video mem
+	test	dx,dx		; if dx=0 there's none
+	jz	no_mdisk
+	cmp	ax,dx		; if mdisk is below
+	jb	no_mdisk	;   then forget it
+	mov	dx,hi_mem_top	; high memory ceiling
+	cmp	ax,dx		; if start is above
+	jae	no_mdisk	;   then forget it
+
+	call	yes_mdisk	; set it up
+	jmps	alloc_mdisk	; and take care of hashing
+
+no_mdisk:
+	mov	md_dph,0	; zap the dph
+	ret			; and we're done
+
+yes_mdisk_lo:
+	call	yes_mdisk	; set it up
+	mov	ax,num_mdkb	; get mdisk size
+	sub	num_mmkb,ax	;   and reduce main mem
+	mov	cl,6
+	shl	ax,cl		; ax = mdisk paragraphs
+	sub	memory_top,ax	; bring down the ceiling
+
+alloc_mdisk:
+	lea	si,dph_md	; mdisk's dph
+	mov	ax,16		; 64 * 4 / 16
+	jmp	hash_alloc	; save some hash table
+
+;	set up mdisk parameters, and init the memory
+
+yes_mdisk:
+	mov	temp_disk,'M'-'A'
+	xchg	ax,dx		; dx = starting segment
+	sub	ax,dx		; ax = paragraph length
+	mov	cx,800h		; minimum mdisk size
+	cmp	ax,cx		; if mdisk is less than 32k
+	jae	yes_mdisk_size	;   then force it up to 32k
+
+	add	dx,ax		; up to memory top
+	sub	dx,cx		;   and down 32k
+	mov	mdisk_start,dx	; correct for the mdisk_calc
+	xchg	ax,cx		; ax = size = 32k
+yes_mdisk_size:
+	mov	cl,6
+	shr	ax,cl		; ax = 1k chunks of mdisk
+	mov	num_mdkb,ax	; save for signon
+	shr	ax,1		; ax = 2k chunks of mdisk
+	mov	bx,ax		; save for fill count
+	dec	ax
+	mov	dsm_md,ax	; save in the dpb
+
+	mov	ax,0E5E5h	; CP/M erase bytes
+yes_mdisk_fill:
+	mov	es,dx		; set up destination
+	sub	di,di		; di = 0
+	mov	cx,1024
+	rep	stosw		; blast 2k bytes of E5's
+	add	dx,80h		; up 2k
+	dec	bx
+	jnz	yes_mdisk_fill
+	ret
+
+
+;	some equates used by floppy and hard disk hash allocation
+
+dph_dpb		equ	word ptr 8
+dph_hstbl	equ	word ptr 18
+dpb_drm		equ	word ptr 7
+
+;	Allocate hash tables for the real floppies
+
+floppy_hash:
+	mov	cx,num_flop	; how many are there
+	jcxz	flop_hash_done	; skip if nobody
+
+	lea	bx,dph_tbl	; floppies are first here
+flop_hash_loop:
+	mov	si,[bx]		; point to the dph
+	mov	ax,0E0h		; big enough for pc 1.2 meg FAT's
+	call	hash_alloc	; save one chunk
+	inc bx ! inc bx		; point to next dph
+	loop	flop_hash_loop	; and do another
+flop_hash_done:
+	ret
+
+
+;	subroutine to allocate a hash table for a pc hard disk partition
+;	entry:	si -> dph
+
+pc_hash_alloc:
+	mov	di,dph_dpb[si]		; point to dpb
+	mov	ax,sector_size shr 4	; paragraphs per sector
+	mul	PCDPB_fatrec[di]	; ax = paragraphs per fat
+;	jmps	hash_alloc		; fall through
+
+;	subroutine to allocate one hash table at top of available memory
+;	entry:	si -> dph
+;		ax = hash table size in paragraphs
+hash_alloc:
+	sub	memory_top,ax	 ; lower the ceiling
+	mov	ax,memory_top	 ; get the new start
+	mov	dph_hstbl[si],ax ;   and save it in the dph
+	ret
+
+
+;	Cold start setup for XT hard disk driver
+;	needs to do these things:
+;	1)	setup floppy interrupt trap
+;	2)	save disk interrupt vector for far call usage
+;	3)	initialize HDINF vectors about physical drive char.
+;	4)	try to login both hard disks
+;	5)	decide who will be system disk and temp disk
+;
+;	this code assumes that it is running in XIOS codeseg and that
+;	the floppy initialization has already been done
+;
+hd_init:
+	push	ds
+	push	es
+	xor	ax,ax
+	mov	es,ax			;point to vector seg
+
+hd_patch_step_rate:			;step option bits off
+	and	es:byte ptr .hd_control_byte,0F8h or (not SLOW_SEEK)
+
+	les	ax,es:.HD_PTR		;get hard disk int ptr
+	mov	hd_rom_seg,es
+	mov	hd_rom_ofs,ax		;to local link address
+
+	mov	disk_int_off,ax		;save for dskmaint too
+	mov	disk_int_seg,es
+
+;	see if we have any hard disks at all
+
+	mov	dl,80h			;ask about 1st drive
+	mov	ah,8
+	pushf ! callf HD_ROM_ENTRY	;if a drive is present
+	jnc	hd_init_pc0		;  then try to log pc part
+	jmp	hd_init_done		;  else forget it
+
+;	now try to log in first pc dos partition
+
+hd_init_pc0:
+	lea	si,hd_info0		;if drive is there then
+	call	hd_init_hdinf		;  set its info vector
+	sub	cx,cx			; 0 = physical drive number
+	call	pc_hd_login		; try to log in partition
+	or	al,al			; if can't login,
+	jnz	hd_init_cpm0		;   try another partition
+
+;	login is successful, allocate the hash table (for FAT)
+
+	mov	si,offset pc_hd_first_dph
+	call	pc_hash_alloc		; save some hash space
+
+	mov	al,byte ptr num_flop_des ; skip over the floppy designators
+	mov	SYS_DISK,al		 ; SYS and TEMP disks now
+	mov	TEMP_DISK,al		 ;   default to first dos partition
+	mov	al,hd_boot_flag		 ; save the boot flag in case we
+	mov	pc_pt_bootable,al	 ;   want to override cp/m sysdisk
+
+;	now try to log in first cpm partition
+
+hd_init_cpm0:
+	lea	si,hd_info0		; drive information vector
+	mov	AUX_DRIVE,0		; try to login 1st drive
+	call	hd_login		; si is good from above
+	or	al,al			; if can't login,
+	jz	hd_init_drive2		;   try another drive
+
+;	login successful, correct dpb pointer, hash table, sysdisk, tempdisk
+
+	lea	si,hd_dph0		; point to our dph
+	lea	di,hd_dpb0		; point to our new dpb
+	mov	dph_dpb[si],di		; save the dpb pointer in the dph
+	mov	ax,dpb_drm[di]		; ax = num of directory entries - 1
+	shr ax,1 ! shr ax,1		; ax * 4(hash) / 16(paragraph)
+	inc	ax			; round up
+	call	hash_alloc		; allocate hash space
+
+	cmp	pc_pt_bootable,80h	 ; if pc partition was bootable
+	jz	hd_init_drive2		 ;   then don't change sysdisk
+
+	mov	al,byte ptr num_flop_des ; skip over the floppy designators
+	add	al,byte ptr num_hard	 ; skip over the pc dos partitions
+	mov	SYS_DISK,al		 ; SYS and TEMP disks now
+	mov	TEMP_DISK,al		 ;   default to first cp/m partition
+
+hd_init_drive2:
+	cmp	num_hard,2		; if fewer than 2 drives,
+	jb	hd_init_done		;   then we're finished
+
+	mov	dl,81h			; ask about 2nd drive
+	mov	ah,8
+	pushf ! callf HD_ROM_ENTRY
+	jc	hd_init_done		; if something screwed up
+
+;	now try to log in second pc dos partition
+
+hd_init_pc1:
+	lea	si,hd_info1
+	call	hd_init_hdinf		; setup #2's info vector
+	mov	cx,1			; physical drive number
+	call	pc_hd_login		; try to log in partition
+	or	al,al			; if can't login,
+	jnz	hd_init_cpm1		;   try the second cpm
+
+;	login is successful, allocate the hash table (for FAT)
+
+	mov	si,offset pc_hd_second_dph
+	call	pc_hash_alloc		; save some hash space
+
+;	now try to log in second cpm partition
+
+hd_init_cpm1:
+	lea	si,hd_info1		; drive information vector
+	mov	AUX_DRIVE,1		; try to login 2nd drive
+	call	hd_login		; si is still good
+	or	al,al			; if can't login,
+	jz	hd_init_done		;   then we're done
+
+;	login is successful, correct the dpb pointer and allocate hash
+
+	lea	si,hd_dph1		; point to our dph
+	lea	di,hd_dpb1		; point to our new dpb
+	mov	dph_dpb[si],di		; save the dpb pointer in the dph
+	mov	ax,dpb_drm[di]		; ax = num of directory entries - 1
+	shr ax,1 ! shr ax,1		; ax * 4(hash) / 16(paragraph)
+	inc	ax			; round up
+	call	hash_alloc		; allocate hash space
+
+hd_init_done:
+	mov	hd_init_flag,0ffh	;set XIOS initialized flag
+	pop	es			;(which enables error handler)
+	pop	ds
+	cmp	boot_drive,00h		;if we booted from hard disk
+	jnz	hd_init_quit		;  then we're done
+
+	mov	sys_disk,00h		;otherwise, system disk = A:
+hd_init_quit:
+	ret
+
+;	subroutine sets up physical information vector about a drive
+;	entry:	registers as returned from ROM call
+
+hd_init_hdinf:
+	mov	HDINF_exists[si],0ffh		;it at least exists
+	inc	dh				;change last hd to # of hds
+	  mov	HDINF_heads[si],dh
+	mov	al,3fh ! and al,cl		;sectors is already # of spt
+	  mov	HDINF_spt[si],al
+	rol cl,1 ! rol cl,1
+	  and cl,3 ! xchg ch,cl			;unpack max cyl address
+	  mov	HDINF_cyl[si],cx		;and save it
+	ret
+
+
+;	trim the memory partion list to match physical memory
+
+trim_memory:
+	mov	cx,memory_top	; top segment address
+	lea	bx,mfl		; memory free list root
+trim_next:
+	mov	si,bx		; save previous link
+	mov	bx,md_link[bx]	; link to next
+	test	bx,bx
+	jz	trim_done	; 0 => end of list
+
+	mov	ax,md_start[bx]	; memory block start seg
+	cmp	ax,cx		; is start past mem top?
+	jae	trim_clip	; if yes, end the list
+
+	add	ax,md_length[bx] ; get to the end
+	cmp	ax,cx		 ; is end past mem top?
+	jbe	trim_next	 ; if not, link to next
+
+	mov	ax,cx
+	sub	ax,md_start[bx]	 ; ax=usable memory left
+	mov	md_length[bx],ax ; shorten up this block
+	jmps	trim_next	 ;   and link to next
+
+trim_clip:
+	mov	md_link[si],0	; previous is now the last
+	mov	si,bx		; save start of severed list
+
+trim_scan:
+	mov	di,bx		; save last link
+	mov	bx,md_link[bx]	; look for the end of the
+	test	bx,bx		;   severed list
+	jnz	trim_scan
+
+	mov	ax,mdul		; save md unused root
+	mov	mdul,si		; redo the root
+	mov	md_link[di],ax	; and re-attach original
+
+trim_done:
+	ret
+
+
+;	set up the auxiliary ports
+
+do_aux_ports:
+	sub	dx,dx		; dx -> port 0
+	mov	al,config0_data	; baud rate, etc.
+	mov	ah,0		; init code
+	int	async_int	; through the ros
+	inc	dx		; port 1
+	mov	al,config1_data
+	mov	ah,0
+	int	async_int
+
+;	now we set up for interrupt driven auxin auxout
+
+	cli			; best not be disturbed
+	sub	dx,dx		; dx = 0
+	mov	cl,aux_pic0	; port 0 pic mask
+	call	do_one_port	; if extant, enable ints
+	mov	dx,1
+	mov	cl,aux_pic1	; port 2 pic mask
+	call	do_one_port
+	ret
+
+
+;	set up interrupts for one aux port
+;	entry:	dx = port number (0 or 1)
+;		cl = pic mask
+
+do_one_port:
+	push	dx
+	call	point_aux		; bx -> aux block
+	mov	dx,aux_port_int_id
+	call	aux_port_in		; get test int ident
+	test	al,0F8h			; zf set if present
+	pop	dx
+	jnz	erase_port		; hardware is absent
+
+	call	do_aux_int		; set up port hardware
+	mov	bx,dx			; bx = port number
+	cmp	su_ser_con[bx],0FFh	; if not serial console
+	jnz	do_one_done		;   then we're finished
+
+;	according to setup data, dedicate this port to a serial console
+
+	call	erase_port		; wipe out the aux vectors
+	call	set_ser_con		; set up serial console vectors
+
+do_one_done:
+	ret
+
+
+;	set up the aux interrupt hardware
+
+do_aux_int:
+	push	dx
+	and	pic_mask_image,cl	; mask in our interrupt
+
+	mov	dx,aux_port_int_en	; here we enable interrupts
+	mov	al,r_t_p_mask		;   for receive, transmit,
+	call	aux_port_out		;   and protocol changes.
+
+	mov	dx,aux_port_m_ctrl	; now we set the modem control
+	mov	al,i_en+dtr_bit+rts_bit	;   register to enable ints
+	call	aux_port_out		;   with all protocol on.
+
+	mov	dx,aux_port_int_id	; reading the int ident reg
+	call	aux_port_in		;   clears pending xmit ints
+	pop	dx
+	ret
+
+;	if port is not present, wipe out this port's branch vectors
+;	entry:	dx = port number
+
+erase_port:
+	mov	bx,dx
+	shl	bx,1			  ; bx = port word index
+	mov	ax,offset aux_null	  ; address of null aux routine
+	mov	aux_in_vector[bx],ax	  ; zap auxin calls
+	mov	aux_out_vector[bx],ax	  ; zap auxout calls
+	mov	auxin_stat_vector[bx],ax  ; zap input status
+	mov	auxout_stat_vector[bx],ax ; zap output status
+	ret				  ; that's it
+
+;	set up the serial conosole jump vectors
+;	entry:	dx = port number
+
+set_ser_con:
+	mov	bx,dx
+	shl	bx,1			; bx = port word index
+	mov	ds:ser_conin_vec[bx],offset aux_in
+	mov	ds:ser_conout_vec[bx],offset aux_out
+	mov	di,auxout_blk_ptr[bx]	; di -> auxout block
+	and	aux_prot[di],not xon_xoff
+
+	mov	al,lcb_size		; size of acb's too
+	mul	dl
+	mov	di,offset acb_tab	; point to first acb
+	add	di,ax			; di -> our acb
+	mov	lcb_attach[di],0FEDCh	; insert a phony pd
+
+	add	bx,num_vir_cons*2	; point above virtuals
+	mov	bx,ccb_list[bx]		; point to serial ccb
+	mov	c_state[bx],0		; set to foreground, dynamic
+	ret				; that's it
+
+
+;	take care of all of the interrupt stuff
+;	if an interrupt vector is currently zero (uninitialized)
+;	then set it to the unexpected interrupt handler
+
+do_interrupts:
+	cli				; an interrupt now would be bad
+	sub	di,di			; int vector pointer
+	mov	es,di			; int vector base address
+	mov	cx,256			; number of interrupts
+int_save_loop:
+	mov	ax,es:[di]		; fetch the current vector
+	or	ax,es:.2[di]		;   and if it has a value
+	jnz	int_save_next		;   then leave it alone
+
+	mov	es:[di],offset i_unexpected
+	mov	es:.2[di],cs		; if not, fill it in
+int_save_next:
+	add	di,4			; to the next vector
+	loop	int_save_loop		; through the whole table
+
+;	now set up our particular interrupts
+
+	mov	si,offset int_tbl	; offsets and vectors
+	mov	cx,int_tbl_len		; number of entries
+	cld
+int_setup_loop:
+	lodsw				; get destination
+	mov	di,ax			;   and stash it
+	lodsw				; get vector
+	stosw				;   and store it
+	mov	ax,cs			; all vectors to sysdat
+	stosw
+	loop	int_setup_loop		; through the table
+
+;	now set up timer interrupt
+
+	mov	ax,timer_60_hz
+	out	timer_0_reg,al
+	xchg	ah,al
+	out	timer_0_reg,al
+	ret				; to main line
+
+
+;	print the sign on message with equipment configuration
+
+sign_on:
+	mov	si,offset banner
+	call	print_msg	; name, copyright, etc.
+sign_on_loop:
+	cmp	word ptr [si],0	; if next equip ptr = 0
+	jz	sign_on_done	;   then we're done
+	  push	si
+	  call	print_equip	; print one item
+	  pop	si
+	  add	si,equip_record_len
+	  jmps	sign_on_loop	; back for another
+sign_on_done:
+	lodsw			; clear the pointer
+	jmp	print_msg	; final cr,lf,lf
+
+print_equip:
+	lodsw
+	xchg	ax,bx		; bx -> equip count
+	mov	ax,[bx]		; ax = equip count
+	test	ax,ax		; if count = 0
+	jz	pr_equip_done	;   then don't print
+	  push	ax		; save the count
+	  call	print_msg	; print the name first
+	  pop	ax
+	  call	print_num	;   and then the count
+pr_equip_done:
+	ret
+
+print_msg:
+	lodsb			; fetch a character
+pr_msg_loop:
+	push	si
+	call	print_char	; print just one
+	pop	si
+	lodsb			; fetch another
+	test	al,al
+	jnz	pr_msg_loop	; when char = 0, done
+	ret
+
+print_num:
+	mov	dh,0		; skip 0's till dh > 0
+	div	one_hundred	; al = hund's, ah = rem
+	call	print_digit	; print hundred's place
+	mov	al,ah
+	cbw			; ready for divide
+	div	ten
+	call	print_digit	; print ten's place	
+	mov	al,ah
+;	jmps	print_digit	; print one's place
+
+print_digit:
+	push	ax		; save the number
+	or	dh,al		; have we started printing
+	jz	pr_digit_done	;   skip if 0 and no
+	  push	dx
+	  or	al,'0'		; make into ascii
+	  call	print_char	; and print it
+	  pop	dx
+pr_digit_done:
+	pop	ax		; restore number
+	ret
+
+print_char:
+	mov	cl,al		; char to cl
+	mov	dl,0
+	jmp	io_conout	; print it
+
+
+;	finally, enable the interrupts
+
+enable_ints:
+	mov	al,pic_mask_image	; restore the pic mask
+	out	pic_mask,al
+	sti				; now we can handle ints
+	ret				; to main line
+
+eject
+
+;************************************************
+;*						*
+;*	    INITIALIZATION DATA AREA		*
+;*						*
+;************************************************
+
+reorg17	equ	offset $
+	dseg
+	org	reorg17
+
+memory_top	rw	1	; for memory_trim
+
+config0_data	db	43h	; 300 baud, 1, none, 8
+config1_data	db	43h	; same here
+config_data	equ	word ptr config0_data
+
+init_video_mode	rb	1	; which crt to default
+pic_mask_image	rb	1	; set at the top of init
+pc_pt_bootable	db	0	; 80h if pc partition bootable
+boot_drive	rb	1	; ROS code for the boot drive
+
+banner	db '---------------------------------------------------',cr,lf
+	db 'Concurrent for the IBM PC and XT           04/23/85',cr,lf
+	db 'Serial No. XXXX-0000-654321     All Rights Reserved',cr,lf
+	db 'Copyright (C) 1982,83,84,85   Digital Research Inc.',cr,lf
+	db '---------------------------------------------------',cr,lf,lf
+	db 'Hardware Supported :',cr,lf,0
+
+	dw num_flop
+	db cr,lf,'             Diskette Drive(s) : ',0
+	dw num_hard
+	db cr,lf,'                  Hard Disk(s) : ',0
+	dw num_print
+	db cr,lf,'      Parallel Printer Port(s) : ',0
+	dw num_port
+	db cr,lf,'                Serial Port(s) : ',0
+	dw num_ndp
+	db cr,lf,'        Numeric Data Processor : ',0
+	dw num_mmkb
+	db cr,lf,'              Main Memory (Kb) : ',0
+last_eq	dw num_mdkb
+	db cr,lf,'                    MDisk (Kb) : ',0
+
+equip_record_len	equ	offset $ - offset last_eq
+	dw 0				; equipment end
+	db cr,lf,lf,0			; last message
+
+one_hundred	db	100	; for print_number divisions
+ten		db	10
+
+
+;	Interrupt setup table
+
+int_tbl	dw	divide_interrupt*4,	i_divide
+	dw	nmi_interrupt*4,	i_nmi
+	dw	overflow_interrupt*4,	i_overflow
+	dw	clock_interrupt*4,	i_clock
+	dw	tick_interrupt*4,	i_tick
+	dw	keyboard_interrupt*4,	i_keyboard
+	dw	aux1_interrupt*4,	i_aux_1
+	dw	aux0_interrupt*4,	i_aux_0
+	dw	disk_interrupt*4,	i_disk
+	dw	hd_code_interrupt*4,	hd_dummy_int
+	dw	flag_interrupt*4,	i_fidds_flag
+	dw	fidds_interrupt*4,	i_dummy_fidds
+	dw	xios_interrupt*4,	xios_v1_entry
+
+int_tbl_len	equ	(offset $ - offset int_tbl) / 4
+
+month_length	dw	0,31,59,90,120,151	; days in prior months
+		dw	181,212,243,273,304,334
+
+;	now, make sure there is enough room for aux input buffers
+
+init_code_len	equ	offset $ - aux_buf_in0
+extra_buf_len	equ	2 * auxin_buf_size - init_code_len
+
+if not (extra_buf_len or 7FFFh)		; if e_b_l is positive
+	rb	extra_buf_len		; then save some more
+	db	0DBh			; for good old gencmd
+endif
+
+                                                                                                                                                                                                                                   

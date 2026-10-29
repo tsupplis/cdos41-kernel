@@ -1,0 +1,1983 @@
+;
+;		The DIR portion of the TMP module
+;
+
+;13-AUG-84 GLP	Modified to accept ^C termination (look for *GLP*2*)
+
+EJECT
+
+;-----------------------------------------------------------------------
+;
+;      DIR Command
+;
+;      DIR             list directory of current default drive
+;      DIR <X>:        list directory of drive <X>
+;      DIR <AFN>       list all files on the current default drive
+;                      with names that match <AFN>
+;      DIR <X>:<AFN>   list all files on drive <X> with names that
+;                      match <AFN>
+;
+;-----------------------------------------------------------------------
+
+dir:
+	mov stack_save,sp
+	mov es_save,es
+
+
+;start		*GLP*2*
+;		Turn ^C flag
+	mov	es,sysdatseg
+	mov	bx,es:S_RLR
+	and	es:P_SFLAG[bx],not PSF_CTLC
+;end		*GLP*2*
+
+	push ds ! pop es
+
+	mov dl,0ffh
+	mov cl,F_ERRMODE		;set error return code
+	call bdos
+
+;	push es
+;	mov cl,P_PDADR			;
+;	call bdos			;get system data segment
+;	mov sysdatseg,es		;
+;	pop es
+
+					;initialize wide listing flag
+					;initialize pause flag
+					;initialize system flag
+					;initialize file counter
+					;initialize drive to default
+					;initialize line counter
+					;time and date stamps good till proven bad
+
+	mov lflag,0 ! mov pflag,0 ! mov sflag,0
+	mov fcount,0
+	mov lused,false
+	mov day,0 ! mov month,0 ! mov year,0
+	mov minute,0 ! mov hour,0
+	mov dirdrive,0ffh
+	mov line,1 ! mov stamp,TRUE
+	mov sysdir,FALSE
+
+notlbl:
+	mov bx,offset clicb_cmd		;initialize bx to point to input buffer
+
+	call upcase			;uppercase the command buffer
+
+	mov bx,offset clicb_cmd		;reset bx
+	call eatblanks			;move up against first string
+
+	call go_past_dir		;go past the name of this function
+
+	call dirfn1      		;get file spec, force *.* if none
+
+	call mediatyp			; determine the media type
+
+	call	ch_ctlc			; terminate on ^C	*GLP*2*
+
+        call searchfirst ! jnz dirs2	;find first file spec
+					;DX -> dfcb from search
+	call	ch_ctlc			; terminate on ^C	*GLP*2*
+
+	    cmp ah,0 ! jne derr1
+	    cmp sysdir,TRUE ! jne derr1
+		call sysdirout
+		jmp ccpret
+derr1:
+	    cmp ah,0 ! jne derr2
+		mov ah,16
+derr2:
+	    jmp error			;did not find file spec
+dirs2:
+	call dirln			;call crlf with drive at beginning
+
+	call prtdir			;print file spec
+
+	mov noletter,TRUE		;no drive letter
+	call dirln			;call crlf
+
+	mov noletter,FALSE
+	call numfls			;print "17 file(s)"
+
+	call diskspace			;print "99999 bytes free"
+
+	call sysdirout			;print "System files exist"
+
+        jmp ccpret
+
+
+EJECT
+
+;start		*GLP*2*
+
+ch_ctlc:
+;
+;     If ^C has been pressed we will terminate the current built-in we are in
+;
+;	ENTRY
+;		none
+;
+;	EXIT
+;		all registers the same
+;
+
+	push	bx
+	push	ds
+	mov	ds,sysdatseg
+	mov	bx,S_RLR
+	test	P_SFLAG[bx],PSF_CTLC	; see if ^C has been pressed
+	jz	no_ctlc			; NO
+	pop	ds
+	jmp	ccpret			; YES -- will restore state
+
+no_ctlc:
+	pop	ds
+	pop	bx
+
+	ret
+
+;end		*GLP*2*
+
+EJECT
+
+dirfn1:
+	mov bx,bufferadr			;bx -> command buffer
+	call eatblanks				;ignore leading blanks
+	or bx,bx ! jnz dirfn2			;if bx = 0 then no file spec
+        					;no, we have a file spec
+	    xor ax,ax
+	    call select
+	    mov byte ptr dfcb,0
+            mov di,offset dfcb+1		;skip drive byte
+	    mov cx,11				;if just drive then fill with 11 ?'s
+flwild:
+	    mov wildflg,TRUE
+	    mov al,'?'				;flwild is the generic ? fill routine
+	    rep stosb				;fills bytes pointed at by di with
+            ret					;cx question marks
+	
+dirfn2:
+	mov di,bx				;bx points to input string
+	cmp al,'.' ! jnz notper			;check for  dir .bat (= dir *.bat)
+						;if first character is period then
+	    dec bx				;stuff a '*' at the beginning and 
+	    mov byte ptr [bx],'*'		;decrement string pointer
+	    jmps notper2
+notper:
+	    inc di				;if first char is not a period then
+	    cmp byte ptr [di],':' ! jnz notper2	;check for dir b:.bat (= dir b:*.bat) 
+
+						;see if second character is a colon.
+		inc di				;if it is then check third character
+		cmp byte ptr [di],'.' ! jnz notper2
+						;for period.
+
+		    sub di,3			;if so then shift drive and colon back
+		    mov si,di ! inc si		;a space and insert the '*'
+		    movsb ! movsb	;move drive letter back
+					;move colon back
+		    mov byte ptr [di],'*'	;insert star
+		    dec bx			;back off string pointer by one
+notper2:
+	mov dx,offset dfcb			;now try and parse the line
+        call gfn				;parse file name
+	call weedout				;no fair doing dir's  on physical devs
+        mov di,offset dfcb+1			;if fcb(1)=' ' this means dir d:*.*
+        cmp byte ptr [di],' ' ! jnz gdrfn4	;is first space blank?
+
+        					;if not then forget first half.
+	    mov cx,8				;fill 8 bytes with ?'s starting at di
+	    call flwild				;filler up...
+gdrfn4:	
+	mov di,offset dfcb+9			;now check for dir hello. or dir hello
+	cmp byte ptr [di],' ' ! jnz nofill	;dir hello  =  dir hello.*
+	cmp period,TRUE ! jz nofill		;if tail blank then check for period 
+						;if no period then dont fill
+	    mov cx,3				;fill three bytes starting at di
+	    call flwild				;fill with ?'s
+nofill:
+	ret
+
+
+EJECT
+
+prtdir:
+	call ch_ctlc			; terminate on ^C	*GLP*2*
+	mov bl,1			;initialize columns to 1
+	cmp lflag,TRUE ! jz notwd	;if long flag is on then
+					;reset number of columns
+	    mov bl,5			;reset number of columns to 5 for wide
+notwd:
+	mov ch,bl ! inc ch		;initialize column counter
+
+;
+;display the filename and any associated parameters for the FULL listing
+;
+
+ptdir1:
+	    inc fcount			;increment file counter
+	    dec ch ! jnz ptdir3		;current column
+        				;if not end of line yet then no crlf
+		call dirln		;resets # cols, prints crlf
+ptdir3:
+	    cmp lflag,TRUE ! jz nocoln	;if this is the wide listing
+					;then each file is preceded
+		mov al,':'		;by a colon and a space.
+		call pfc		;(this includes the first file name
+
+		cmp drivetype,DOSMEDIA ! jnz ntslash
+					;is it dos media?
+					;no - no subdirectories
+		    mov di,dx
+		    add di,16		;check attribute byte to see
+		    mov al,byte ptr [di] ;if we picked up a sub-directory entry
+		    test al,040h ! jz ntslash
+			mov al,'\' ! call pfc
+			jmps nocoln
+ntslash:
+		call space		;which has in front of it "C: ")
+nocoln:
+	    push dx			;save dx
+	    call pfn			;print file name
+            pop dx			;restore dx
+	    call space                  ;pad with space
+	    cmp lflag,FALSE ! jz notful	;long listing?
+					;skip parameter calculations
+		call gtprms		;full listing - get parameters 
+notful:
+	    push cx ! push bx		;save current column and #columns
+	    call ch_ctlc		; terminate on ^C	*GLP*2*
+	    call searchnext		;search for another match
+	    pop bx ! pop cx		;restore #columns and current column
+
+        jnz ptdir1			;found a match print the next file 
+
+	ret				;else no more to print - done
+
+
+EJECT
+
+weedout:
+	mov cx,4			;is the file a physical device name?
+	mov di,offset weeds		;di -> list of physical devices
+mrweeds:
+	    mov si,dx ! inc si		;si -> fcb
+	    				;si -> filename
+	    push cx			;save number of devices left to try
+	    mov cx,5			;number of characters in device
+	    rep cmpsb			;compare characters in name
+	    pop cx			;restore number of devices left to try
+
+	jz nogood			;if z set then fcb matched device
+	loop mrweeds			;else try more names
+
+	ret				;normal return
+nogood:
+	jmp error			;fcb matched name of a physical device 
+
+
+EJECT
+
+gtprms:
+	push ax ! push bx		;get parms is the routine which goes
+					;to the directory entry and retrieves
+	push cx ! push dx		;information such as the filesize, date
+					;and time, converts it to printable 
+					;form and puts it into dirstuf for printing
+
+	mov di,offset dirstuf		;initialize dirstuf to blanks
+	mov ax,'  ' ! mov cx,13
+	rep stosw
+
+	cmp drivetype,CPMMEDIA ! jnz not_cpm	;CP/M disk?  no get dos parameters
+	jmp notdos
+
+not_cpm:
+	    mov bx,dx ! add bx,22	;point to date in extended fcb
+	    mov ax,[bx]			;move time stamp into ax
+
+	    mov dx,ax ! and ax,0f800h
+	    mov cl,11 ! shr ax,cl
+
+	    mov cl,00h
+	    cmp al,13h ! jbe skip13
+		mov cl,06h
+skip13:
+	    cmp al,09h ! jbe skip9
+		add cl,06h
+skip9:
+	    add al,cl
+
+	    mov hour,al			;al = hour of day
+
+	    mov ax,dx ! and ax,07e0h
+	    mov cl,5 ! shr ax,cl
+	    mov minute,al		;al = minute of day
+
+	    add bx,2			;
+	    mov ax,[bx]			;move date stamp into ax
+	    mov morstuf,' '		;
+	    cmp ax,0 ! jnz dateok	;if entire date stamp field is 0 then
+					;leave date field blank
+		mov morstuf,'$'		;
+		jmp nodate			;else continue
+dateok:
+		mov dx,ax
+		shr ax,1 ! xor al,al
+		xchg ah,al ! add ax,1980
+		mov year,ax			;ax = year
+
+		mov ax,dx
+		shr ax,cl ! and al,0fh
+		mov month,al		;al = month
+
+		and dl,01fh
+		mov day,dl			;dl = day
+
+		add bx,4 ! mov ax,[bx]			;low(filesize)
+		mov lowfile,ax
+
+		add bx,2 ! mov ax,[bx]	;high(filesize)
+		mov highfile,ax
+
+		jmp same
+
+notdos:
+	    push dx
+
+	    push dx ! push bx		; poke user byte with drive
+	    mov al,dfcb ! and al,07Fh	;  for good open
+	    mov bx,dx ! mov [bx],al
+	    pop bx ! pop dx
+
+	    mov cl,F_SIZE
+	    call bdos
+
+	    mov bx,dx
+
+	    add bx,33 ! mov ax,[bx]
+	    add bx,2 ! mov cl,[bx]
+
+	    cmp ax,0 ! jnz rrnot0
+	    cmp cl,0 ! jnz rrnot0
+		mov ax,1		; default is zero
+
+rrnot0:
+	    mov bl,cl ! mov cl,7
+	    sub ax,1 ! sbb bl,0
+	    xor bh,bh
+
+	    mov dh,bl ! mov dl,ah
+	    shl bx,cl ! shl dx,cl
+
+	    mov bl,dh ! shl ax,cl
+	    pop dx
+
+	    mov si,dx ! add si,13
+	    xor ch,ch ! mov cl,byte ptr [si]
+	    or cx,cx ! jnz not0
+
+		mov cx,128
+not0:
+	    add ax,cx ! adc bx,0
+	    mov lowfile,ax
+	    mov highfile,bx
+
+	    cmp stamp,FALSE ! jz badstmp
+		mov cl,F_TIMEDATE
+		call bdos
+		inc al ! jnz gdstmp
+		    mov stamp,FALSE
+badstmp:
+		mov morstuf,'$'
+		jmp nodate
+gdstmp:
+		mov bx,dx
+		add bx,24 ! mov ax,[bx]
+		cmp ax,0 ! jnz stampok
+		add bx,4
+		mov ax,[bx]
+	    cmp ax,0 ! jz badstmp
+
+stampok:
+	push bx
+	call trans_date
+	pop bx
+
+	mov year,cx
+	mov month,dh ! mov day,dl
+
+	add bx,2 ! mov ax,[bx]
+
+	mov hour,al ! mov minute,ah
+	mov al,minute
+
+	push dx ! push cx		; convert packed decimal to binary
+	xor dx,dx ! mov cx,4		; time
+	mov dl,minute ! shr dx,cl
+	mov al,10 ! mul dl
+	mov ah,minute ! and ah,0fh
+	add al,ah
+	pop cx ! pop dx
+	mov minute,al
+
+same:
+	mov cl,'a'			;initialize am/pm to am
+	cmp hour,12h ! jb is_am		;if hour is > 12 then
+					;set am/pm to pm
+	    mov cl,'p'			;and subtract 12 from the
+	    sub hour,012h		;number of hours
+is_am:
+	mov dirstuf+25,cl		;mov am/pm byte into output buffer
+	cmp hour,0 ! jnz not12		;if hour is 0 then change
+					;it to be 12
+	    mov hour,12h
+not12:
+
+	cmp hour,10h ! jb skip12
+	    sub hour,6
+skip12:
+
+	mov di,offset dirstuf+20		;di points to place for time in buffer
+	call convtime			;convert time into output format 
+	mov di,offset dirstuf + 6	;dx points to place for date in buffer
+	call convdate			;convert date to output format
+nodate:
+	cmp drivetype,CPMMEDIA ! jz notdir	;CP/M drive?
+					; yes, can't be a subdirectory
+	    mov di,offset buf+16	;check attribute byte to see
+	    mov al,byte ptr [di]	;if we picked up a sub-directory entry
+	    mov di,offset dirstuf	;40h is a directory entry 
+	    test al,040h ! jz notdir			;
+		mov si,offset directorymsg	;if so then instead of the file size,
+		mov cx,8			;move in the string "<DIR>   "
+		rep movsb			;move it..
+		jmps isdir			;skip calculation of file size
+notdir:
+	    mov ax,lowfile		;
+	    mov cx,highfile		;
+	    mov di,offset dirstuf	;
+	    call conv2asci		;di -> dirstuf  convert cx:ax to
+isdir:
+	mov dx,offset dirstuf	;printable form and then (finally)
+	call print_ds_string		;print the string!
+
+	pop dx ! pop cx			;restore registers
+	pop bx ! pop ax			;
+	ret				;
+
+
+EJECT
+
+;------------------------------------------------------------------------------
+;convert to ascii accepts 2 word values and a destination pointer.
+;The destination pointer (di) points to an 8 byte output buffer 
+;which will be filled with 8 ascii characters describing the decimal 
+;number corresponding to the value of cx:ax. Leading zeros are 
+;suppressed unless the value is zero, in which case one zero is
+;printed. 
+;
+conv2asci:
+	push bx ! push di
+	mov bx,9680h
+	mov si,0098h
+	mov dx,0
+do_it:
+		inc dx
+		sub ax,bx			
+	    sbb cx,si ! jns do_it
+	    add ax,bx
+	    adc cx,si
+	    dec dx
+	    call printc
+	    test si,si ! jz nothy
+
+	    cmp si,0098h ! jnz not1
+		mov si,000fh
+		mov bx,4240h
+		jmp do_it
+not1:
+	    cmp si,000fh ! jnz not2
+		mov si,0001h
+		mov bx,86A0h
+		jmp do_it
+not2:
+		xor si,si
+		mov bx,2710h
+		jmp do_it
+nothy:
+	    push ax
+	    mov ax,bx ! mov bx,10 
+	    div bx ! mov bx,ax			
+	    pop ax
+	    test bx,bx ! jz donec
+		jmp do_it
+donec:
+	pop di ! push si
+	mov si,di ! add si,7
+	cmp byte ptr [si],' ' ! jnz siok
+	    mov byte ptr [si],'0'
+siok:
+	pop si ! pop bx
+	ret
+
+
+EJECT
+
+printc:
+	push si
+	mov si,di ! dec si
+
+	test dx,dx ! jnz digit
+	cmp byte ptr [si],' ' ! jnz digit
+supres:
+	    mov byte ptr [di],' '
+	    jmps pret
+digit:
+	    add dx,'0'
+	    mov byte ptr [di],dl
+	    xor dx,dx
+pret:
+	inc di
+	pop si
+	ret
+
+
+EJECT
+
+asci:
+	xor ah,ah ! xor cx,cx
+	call conv2asci
+	ret
+
+
+EJECT
+
+convtime:				;convtime puts the time of day
+
+	mov al,minute			;in the string pointed at by
+	sub di,3			;di.
+	call asci
+
+	mov al,hour			;it uses values found in minute and
+	sub di,3			;hour for the calculations
+	call asci
+
+	cmp byte ptr 9[di],' ' ! jnz dir2	;don't supress first 0 in minute field
+	    mov byte ptr 9[di],'0'
+dir2:
+	mov byte ptr 8[di],':'		;put colon between hour and minute	
+	ret
+
+
+EJECT
+
+convdate:				;convdate puts the current date
+
+	mov ax,year			;into the string pointed at by di
+	xor cx,cx ! add di,4
+	call conv2asci			;it uses values in the variables
+
+					;day month and year.
+	mov al,day ! sub di,3
+	call asci
+
+	mov al,month ! sub di,3
+	call asci
+
+	cmp byte ptr 9[di],' ' ! jnz dir1	;don't suppress first 0 in day field
+	    mov byte ptr 9[di],'0'
+dir1:
+	mov byte ptr 8[di],'-'		;put hyphen between month and day
+	mov byte ptr 11[di],'-'		;put hyphen between day and year
+	ret
+
+
+EJECT
+
+diskspace:
+	mov dx,offset password
+	call setbuf
+
+	mov cx,4 ! mov ax,'  '
+	mov di,offset dirstuf+18
+	rep stosw
+
+	mov cl,DRV_SPACE ! mov dl,newdrive
+	call bdos
+
+	mov bx,offset password
+	mov ax,[bx] ! mov dl,2[bx]
+	mov cl,7 ! xor dh,dh
+	shl dx,cl
+ 
+	mov si,ax ! shr ah,1
+	or dl,ah ! mov ax,si
+	shl ax,cl
+
+	mov cx,dx
+	mov di,offset dirstuf + 17
+	mov byte ptr [di],' '
+	inc di
+	call conv2asci
+
+	mov dx,offset dirstuf + 18
+	call print_ds_string
+
+	mov dx,offset bytesfree
+	call print_string
+
+	mov noletter,TRUE
+	call dirln
+
+	mov noletter,FALSE ! mov dx,offset buf
+	call setbuf
+
+	ret
+
+
+EJECT
+
+numfls:
+	call space
+	mov ax,fcount			;ax = number of files printed
+
+	xor cx,cx			;cx = 0
+	mov di,(offset filecount)+1 	;compute number of files
+	call conv2asci			;convert number to ascii
+
+	mov dx,offset filecount		;print message "786 File(s)"
+	call print_ds_string
+
+	ret
+
+
+EJECT
+
+sysdirout:
+	cmp sysdir,FALSE ! jz sorry
+
+	    cmp sflag,TRUE ! jz sysfls
+
+		mov dx,offset systring
+		call print_string
+		jmps	both
+sysfls:
+		mov dx,offset dirstring
+		call print_string
+
+both:
+	    mov dx,offset existring
+	    call print_string
+sorry:
+	ret
+
+
+EJECT
+
+;------------------------------------------------------------------------------
+error:
+
+	xor cx,cx
+	mov cl,ah
+
+	mov si,(offset pherrtab) - 4
+
+ err1:
+	add si,4
+	cmp cs:word ptr [si],-1 ! je err2
+	cmp cx,cs:[si] ! jne err1
+
+err2:
+	call crlf
+	mov dx,cs:2[si]
+	call print_string ! call crlf
+
+
+;	cmp sysdir,FALSE ! jz notfnd
+;	    call sysdirout
+;	    jmps err_ex	
+;notfnd:
+;	    mov dx,offset fnf
+;	    call print_string
+;err_ex:
+
+	jmp ccpret
+
+
+EJECT
+;------------------------------------------------------------------------------
+
+select:
+	dec al				;specified on the command line is 
+	cmp al,0ffh ! jz drvok		;valid.
+					;default -- no need to check drive
+	    push ax 			;save disk to test
+	    mov cl,DRV_GET		;get current disk
+	    call bdos
+
+	    mov dirdrive,al		;save current disk
+	    pop dx			;restore disk to test
+	    mov cl,DRV_SET		;if ah <> 0ffh then reselect default
+	    call bdos			;else print message and 
+					;fall through to abort routine
+	    inc al ! jnz drvok
+	    mov dx,offset fdrverr
+	    call print_string
+
+	    jmp ccpret
+drvok:
+	ret
+
+
+EJECT
+
+restore:
+	cmp dirdrive,0ffh ! jz defdrv
+	    mov dl,dirdrive		;restore default drive before 
+	    mov cl,DRV_SET		;terminating program.
+	    call bdos			;
+defdrv:
+	ret
+
+
+EJECT
+
+drvtyp:
+	pushf ! push dx
+	call crlf
+
+	mov dx,offset dirmsg
+	call print_string
+
+	mov al,asciidrive
+	call pfc
+
+	pop bx ! push bx
+	cmp byte ptr [bx],20h ! jnz cpmtyp	;is drive byte 20h ?
+	cmp byte ptr 0fh[bx],80h ! jnz cpmtyp	;if drive byte = 20h and byte f = 80h
+						;then must be dos media
+	    mov drivetype,DOSMEDIA
+	    cmp lused,true ! jz usedos
+		mov bl,doslong
+		mov lflag,bl
+usedos:
+		mov dx,offset dosmsg
+		jmps msgout
+cpmtyp:
+	    mov drivetype,CPMMEDIA
+	    cmp lused,true ! jz used
+		mov bl,cpmlong
+		mov lflag,bl
+used:
+ 		mov dx,offset cpmmsg
+msgout:
+ 	call print_string
+
+	mov noletter,TRUE
+	call dirln
+
+	mov noletter,FALSE
+
+	pop dx ! popf
+	ret
+
+
+EJECT
+
+mediatyp:
+
+	mov cl,DRV_GET
+	call bdos
+
+	mov asciidrive,al ! add asciidrive,41h
+	mov newdrive,al
+
+	call sbuf			; set up the DMA
+
+	mov cl,F_SFIRST			; get the first entry of the
+
+	mov al,dfcb ! push ax
+	mov dfcb,'?'			; drive.  CP/M or DOS it does
+	mov dx,offset dfcb		; not matter, we just want to
+	call bdos			; check media type
+
+	pop ax ! mov dfcb,al
+
+	mov dx,offset buf		; therefore no checks for indexing
+
+	call drvtyp
+
+	ret
+
+
+EJECT
+
+;************************************************************************
+;
+;       BDOS FUNCTION INTERFACE - Non FCB functions
+;
+;************************************************************************
+
+sbuf:
+	mov dx,offset buf
+	call setbuf
+        ret
+
+
+EJECT
+
+;******************************************************************************
+;
+;       BDOS FUNCTION INTERFACE - Functions with a FCB Parameter
+;
+srchf:
+	mov cl,F_SFIRST          	;set search first function
+        call srch
+	ret
+
+
+
+srchn:
+	mov cl,F_SNEXT                  ;set search next function
+
+
+
+srch:
+ 	push cx
+	call sbuf			;set dma to buf
+	pop cx
+
+	mov al,dfcb
+	cmp al,'?' ! jz srch1
+	    or al,080h
+srch1:
+	mov dfcb,al
+	mov dx,offset dfcb          ;dx -> fcb
+        call bdos
+
+	cmp al,0ffh ! jz return			; if a file was found then
+
+	    mov dx,offset buf
+	    cmp drivetype,CPMMEDIA ! jnz nomul
+		mov cx,ax ! mov al,32
+		mul cl
+		add dx,ax ! mov ax,cx
+nomul:
+	    mov bx,dx
+	    cmp drivetype,CPMMEDIA ! jz chksys		; if DOS media and 
+	    test byte ptr 16[bx],20h ! jz chksys
+						; it is a hidden file then
+		or byte ptr 10[bx],80h		; ... treat as system file
+
+chksys:
+	    cmp sflag,TRUE ! jz system		;did the user ask for system files
+						;if so then give him sys files only
+		test byte ptr 10[bx],80h ! jz return	;do not return system files
+		    mov sysdir,TRUE
+		    jmps srchn
+system:
+	    test byte ptr 10[bx],80h ! jnz return
+		mov sysdir,TRUE
+		jmps srchn
+return:
+	inc al
+	ret
+
+
+EJECT
+
+searchfirst:
+
+
+;	mov al,dfcb
+
+
+;	mov dfcb,'?'
+
+;	push ax
+;	call srchf
+
+;	call drvtyp
+;	pop ax
+
+;	mov dfcb,al
+
+	call srchf
+	push ax
+	cmp lflag,0 ! jz no_sav		;	       .. we can do a simple  
+					;search first .. search next routine..
+	    call save_bdos_state
+no_sav:
+	pop ax
+	cmp al,0
+	ret
+
+
+EJECT
+					
+searchnext:				
+	cmp lflag,0 ! jz sn			
+	    cmp drivetype,CPMMEDIA ! jz sav_all			
+sn:
+	    jmp srchn
+sav_all:
+	    call restore_bdos_state
+	    call srchn
+	    call save_bdos_state
+	    cmp al,0
+	    ret
+
+
+EJECT
+
+save_bdos_state:
+;	entry:	none
+;	exit:	none
+;	ds,es,ax,dx preserved
+
+	push ax ! push ds! push es ! push dx
+
+	mov ax,ds! mov es,ax			;setup for string move
+
+	mov ds,sysdatseg
+
+	mov bx,word ptr .68H			;get CCP/M process descriptor addr
+	mov ax,word ptr 10H[bx]			;get CCP/M UDA segment
+
+	mov ds,ax				;setup DS to UDA segment
+
+	mov cx,28/2
+	mov di,offset bdos_struct
+	mov si,2				;start of BDOS data within UDA (DS)
+
+	rep movsw
+
+	pop dx ! pop es! pop ds! pop ax
+	ret
+
+
+EJECT
+
+restore_bdos_state:
+;	entry:	none
+;	exit:	none
+;	ds,es,dx preserved
+
+	push es ! push dx
+
+	mov es,sysdatseg
+
+	mov bx,es: word ptr .68H		;get CCP/M process descriptor addr
+	mov ax,es: word ptr 10H[bx]		;get CCP/M UDA segment
+
+	mov es,ax				;setup ES to UDA segment
+
+	mov cx,28/2
+	mov si,offset bdos_struct
+	mov di,2				;start of BDOS data within UDA (ES)
+
+	rep movsw
+
+	pop dx ! pop es
+	ret
+
+
+EJECT
+
+eatblanks:				;bx -> string to be deblanked
+eatmor:
+	mov al,byte ptr 0[bx]	;Eatblanks points bx to next
+        cmp al,BLANK		;string.
+	jz eat1			;Eatblanks also eats options 
+	cmp al,TAB			;as per optck a routine that
+	jz eat1			;recognizes and set flags for
+	cmp al,0			;any of the valid options of
+	jz eos			;dir.
+	cmp al,'/'
+	jnz fullup
+	call optnck
+	jmp eatmor
+fullup:
+	ret
+eat1:
+	inc bx
+        jmp eatmor
+eos:
+	xor bx,bx
+	ret
+
+
+EJECT
+
+optnck:
+	inc bx				;optchk recognizes and processes
+	mov al,byte ptr [bx]		;options that are valid for dir.
+	cmp al,'L' ! jnz notl		;in this case W (wide) and 
+					;P (pause).
+	    mov lflag,0ffh		;bx is left pointing to the next
+     	    mov lused,true
+	    jmps nots
+notl:
+	cmp al,'W' ! jnz notw
+	    mov lflag,0
+	    mov lused,true
+	    jmps nots
+notw:
+	cmp al,'P' ! jnz notp		;character after the option.
+	    mov pflag,0ffh
+	    jmps nots
+notp:
+	cmp al,'S' ! jnz nots
+	    mov sflag,0ffh
+nots:
+	inc bx
+	ret
+
+
+EJECT
+
+;------------------------------------------------------------------------------
+;
+;       is character a delimiter?
+;
+;       input:  ndelim  - # of delimiters
+;               delimptr -> delimiter string list
+;               AL      - input character
+;
+;	output: ZF      - set if character is a delimiter
+;                         reset if character is not a delimiter
+;
+
+separator:
+
+        push di ! push cx		;save registers
+
+        mov ch,0 ! mov cl,ndelim
+        mov di,word ptr delimptr
+
+	repne scasb			;while(cx > 0 &(char ~= delimiter(i++))
+
+        pop cx ! pop di
+        ret
+
+
+EJECT
+
+;------------------------------------------------------------------------------
+;               change every lower case alphabetic input character 
+;               to its equivalent upper case character.
+;
+;               count the number of option identifiers (/) found
+;
+upcase:
+	mov al,byte ptr [bx]
+upstart:
+	cmp al,0 ! jnz up0    		;BX -> input string
+	ret
+up0:
+	    cmp al,'a' ! jnb up1	;if input char < 'a' then skip
+	    jmps up2
+up1:
+	    cmp al,'z'+1 ! jnb up2	;if input > 'z' then skip
+        	sub byte ptr 0[bx],20h	;make uppercase
+up2:
+	    inc bx			;next character
+            mov al,byte ptr [bx]
+            jmps upstart		;while not end of string
+
+
+EJECT
+
+go_past_dir:
+	    mov al,byte ptr [bx]
+	    cmp al,'.' ! jz next
+		call separator
+		jnz next
+		    mov  bufferadr,bx
+		    ret
+next:
+	    inc bx
+	jmps go_past_dir
+
+
+EJECT
+
+;------------------------------------------------------------------------------
+;
+;       FILE NAME PARSER  -  get file name 
+;
+;       BDOS FUNCTION 152 INTERFACE
+;
+;       entry:  bx -> input buffer
+;               DX -> .fcb
+;       exit:   bx =  0  if no more input
+;                               ~= 0 if more    
+;
+
+gfn:
+	mov period,FALSE
+	push bx				;check for period in string
+	inc bx				;first check for drive spec
+	cmp byte ptr [bx],':' ! jz gfn1	;if colon in byte 2 then start
+					;in byte 3 else start first
+	    sub bx,2			;byte
+gfn1:
+	    inc bx
+	    mov al,byte ptr [bx]	;set al to byte in question
+	    call separator ! jnz gfn1	;is it a delimeter?
+	    				;if no then inc bx and do it again
+	cmp al,'.' ! jnz gfn2		;if yes then is it a period?
+					;if yes then mark it
+
+	    mov period,TRUE		;and we're done
+
+gfn2:
+	pop bx ! mov ptrinbuffer,bx
+	push dx ! mov dx,pfncb		;.parse file block 
+
+        mov cl,F_PARSE
+        call ccpm			;parse filename (152)
+
+        pop dx				;restore .fcb
+        				;from 152, BX = 0 (no more)
+                                        ;              = 0FFFFh (error)
+                                        ;              = addr of next string
+                                        ;                with delimiter
+	inc bx ! jnz gfn3
+
+	    call clierror
+	    jmp ccpret
+;	    jmp error
+
+gfn3:
+	dec bx				;if BX = 0 then end of string
+	call eatblanks
+	or bx,bx ! jz gfn4
+
+	    mov al,byte ptr [bx]	;move past delimiter
+	    call separator ! jnz gfn4
+
+		inc bx
+gfn4:
+	mov ptrinbuffer,bx		;update pointer -> next string
+	push bx ! push dx
+
+	push dx
+	mov al,pfcb ! call select	;select drive and check for legality.
+	pop dx
+
+	mov bx,offset pfcb		;BX -> parsed FCB
+        mov cl,16
+        mov di,dx ! mov si,bx
+	rep movsb			;copy
+
+        pop dx ! pop bx
+gfnend:
+	ret
+
+
+EJECT
+
+;------------------------------------------------------------------------------
+;------------------------------------------------------------------------------
+;
+;       SUBROUTINES 
+;
+;------------------------------------------------------------------------------
+;------------------------------------------------------------------------------
+pausesub:		
+	push dx ! push cx ! push bx
+
+	mov dx,offset pausmsg
+	call	getc
+
+	pop bx ! pop cx ! pop dx
+	ret
+
+
+EJECT
+
+;------------------------------------------------------------------------------
+getc:
+	call print_string
+getc1:
+	push dx
+
+	mov dl,0fdh
+	mov cl,C_RAWIO
+	call bdos
+
+	pop dx
+	ret
+
+
+EJECT
+
+trans_date:
+;------------------------------------------------------------------------------
+;	entry:	AX = Rollander Date
+;	exit:	CX = Binary year
+;		DH = Binary month
+;		DL = Binary day of month
+
+
+	sub ax,730			;normalize to 1980
+	mov cx,ax			;save day count
+	xor dx,dx
+	mov di,dx			;save zero leap days
+	sub ax,60			;less than 60 days
+	jc no_leap_days	;means no leap days to subtract
+	  mov bx,1461			;1461 = days in four years
+	  div bx			;get number of leap years since 1980
+	  inc ax
+	  sub cx,ax			;normalize years to 365 days
+	  mov di,ax			;save proper leap day count
+no_leap_days:
+	mov ax,cx
+	xor dx,dx
+	mov bx,365
+	div bx				;get number of years since 1980
+	or dx,dx			;check for zero days left
+	jnz days_left
+	  dec ax			;dec year count
+	  mov dx,365			;set day count to last day of last year
+days_left:
+	mov si,ax			;save year count
+	add ax,1980			;make real date
+	push ax				;Save MS years
+	xor bx,bx
+	mov cx,12
+get_month:				;find the appropriate month
+	cmp dx,totaldays[bx]! jbe got_month
+	  add bx,2
+	  loop get_month
+got_month:
+	shr bx,1
+	push bx	;save MS month
+	dec bx
+	shl bx,1
+	mov ax,si			;restore year count
+	mov cx,di			;restore leap days
+	cmp bx,2! jne not_leap_yr	;jump if not FEB
+	  test ax,3! jnz not_leap_yr
+	    shr ax,1! shr ax,1		;divide years by 4
+	    inc ax		
+	    cmp ax,cx! jne not_leap_yr
+	      inc dx
+not_leap_yr:
+	sub dx,totaldays[bx]		;get days into month
+	pop ax				;get MS month back
+	mov dh,al			;put month in DH, days already in DL
+	pop cx				;get MS year back
+	ret
+
+
+EJECT
+
+;------------------------------------------------------------------------------
+;
+;      print message followed by newline
+;
+;      entry:  dx -> message string
+;
+dirln:
+	call crlf
+	mov ch,bl                   	;number of columns for DIR
+	cmp pflag,FALSE ! jz nopaus
+	    inc line
+	    cmp line,23 ! jb nopaus
+		call pausesub
+		mov line,0
+		call crlf
+nopaus:
+	push ax				;if al = 0ffh then no drive letter
+	cmp noletter,TRUE ! jz nodriv
+	cmp lflag,0 ! jnz nodriv
+	    mov al,asciidrive
+	    call pfc
+nodriv:
+	pop ax
+	ret
+
+
+EJECT
+
+crlf:
+	push ax
+
+	mov al,CR ! call pfc
+
+	mov al,LF ! call pfc
+
+	pop ax
+	ret
+
+
+EJECT
+
+;-----------------------------------------------------------------------
+;
+;      print file name
+;
+pfn:
+	inc dx ! mov bh,8		;go past drive byte
+        				;set # characters to print, clear # printed
+        call pfn1			;print name field
+        call space
+        mov bh,3			;set # characters to print
+pfn1:
+	    mov si,dx                   ;get character
+            mov al,[si]
+            and al,7fh
+            call pfc			;print it if not
+            inc dx
+        dec bh ! jnz pfn1		;loop if more to print
+	ret
+
+
+EJECT
+
+;------------------------------------------------------------------------------
+;
+space:
+	mov al,' '
+pfc:
+	push ax ! push cx
+        push dx ! push bx
+
+        call    putc
+
+        pop bx ! pop dx
+        pop cx ! pop ax
+        ret
+
+
+EJECT
+
+;------------------------------------------------------------------------------
+putc:
+
+	cmp al,LF ! jnz putc1
+putcy:
+	    mov dl,CR
+	    call putc2
+putc0:
+	    mov al,LF
+putc1:
+	mov dl,al
+putc2:
+	mov	cl,C_WRITE
+	call	bdos
+
+	ret
+
+
+EJECT
+
+;------------------------------------------------------------------------------
+
+ccpret:
+	call restore			;restore default drive
+	call crlf
+	mov es,es_save ! mov sp,stack_save
+	ret
+
+
+EJECT
+
+bdos:
+	push bx ! push dx
+
+	call ccpm
+
+	pop dx ! pop bx
+	ret
+
+
+EJECT
+
+;*****************************************************
+;*
+;*	CONSTANTS (IN SHARED CODE SEGMENT)
+;*
+;*****************************************************
+
+clierrtab	dw	E_NULLCMD,	0	;null command
+		dw	E_NO_MEMORY,	memerr	;No memory
+		dw	E_NO_PD,	pderr	;No unused PD
+		dw	E_BADFNAME,	fnameerr;Ill. command
+		dw	E_ILLDISK,	fdrverr ;Ill. disk
+		dw	E_ILL_PASS,	fpasserr;Ill. password
+		dw	E_BADFTYPE,	ftyperr;Ill. type
+		dw	E_BAD_LOAD,	loaderr	;
+		dw	E_BAD_READ,	loaderr	;
+		dw	E_BAD_OPEN,	openerr	;
+		dw	E_Q_FULL,	qfullerr;
+		dw	E_ABORT,	aborterr;
+		dw	E_ILLCON,	assignerr;
+		dw	E_NO_PROC,	assignerr;
+		dw	E_NO_CONS_MATCH,assignerr;
+		dw	E_NOT_OWNER,	assignerr;
+		dw	E_CANT_ATTACH,	assignerr;
+		dw	E_BAD_TYPE,	ftyperr;
+		dw	E_NO_BATCH,	batcherr;
+		dw	4,		fdrverr;
+		dw	1,		fdskerr;
+			; a few extra entries for future errors
+
+		dw	E_NOT_ENOUGH_MEM, notenoughmem
+		dw	0ffffh,		catcherr;
+		dw	0ffffh,		catcherr;
+		dw	0ffffh,		catcherr;
+
+
+pherrtab	dw	0,		fdrverr
+		dw	1,		fdskerr
+		dw	4,		fdrverr
+		dw	16,		fnf
+		dw	0FFFFh,		fnf
+
+
+prompt		db	'>$'
+
+crlfstr		db	CR,LF,'$'
+
+errstr		db	'Concurrent Error: $'
+
+notenoughmem	db	'Insufficient Memory to Load Program$'
+
+memerr		db	'Not Enough Memory$'
+
+pderr		db	'PD Table Full$'
+
+fnameerr	db	'Bad Filename$'
+
+ftyperr		db	'Bad Filetype$'
+
+fpasserr	db	'Bad Password$'
+
+fdrverr		db	'Invalid Drive$'
+
+fdskerr		db	'Disk I/O Error$'
+
+catcherr	rb	0			;Unknown Errs give
+loaderr		db	'Load Error$'		;  Load Error Msg
+
+llerr		db	CR,LF,'ERROR: BATCH command line length exceeds 128 characters,',CR,LF
+		db	'the rest of the line will be ignored.',CR,LF,'$'
+
+openerr		db	'Can''t Find Command$'
+
+qfullerr	db	'RSP Command Que Full$'
+
+aborterr	db	'CLI Abort$'
+
+assignerr	db	'Can''t Assign Console$'
+
+batcherr	db	'Can''t Find BATCH.CMD$'
+
+
+cmdstr		db	'Command = $'
+
+
+usererrmsg	db	CR,LF,'Invalid User Number,'
+		db	' IGNORED',CR,LF,'$'
+usermsg		db	CR,LF,'User Number = $'
+user_warning	db	CR,LF,'Note:  User numbers only apply to CP/M media.'
+		db	CR,LF,'$'
+
+
+memerrmsg	db	CR,LF,'Invalid Memory Allocation Size,'
+		db	' IGNORED',CR,LF,'$'
+memmsg		db	CR,LF,'Memory Allocation Size = $'
+
+
+addmemerrmsg	db	CR,LF,'Invalid Additional Memory Allocation,'
+		db	' IGNORED',CR,LF,'$'
+addmemmsg	db	CR,LF,'Additional Memory Allocation = $'
+
+
+ordrerrmsg	db	CR,LF,'Invalid ORDER file type,'
+		db	' IGNORED',CR,LF,'$'
+ordermsg	db	CR,LF,'Search Order = $'
+
+
+stoperrmsg	db	CR,LF,'Invalid file name or window number,'
+		db	CR,LF,'Program not stopped',CR,LF,CR,LF,'$'
+
+
+printemsg	db	CR,LF,'Invalid Printer Number,'
+		db	' IGNORED',CR,LF,'$'
+printermsg	db	CR,LF,'Printer Number = $'
+
+
+notinstalled	db	CR,LF,'8087 not installed',CR,LF,'$'
+at87emsg	db	CR,LF,'Invalid 8087 State,'
+		db	' IGNORED',CR,LF,'$'
+at87msg		db	CR,LF,'8087 = $'
+
+
+suspendemsg	db	CR,LF,'Invalid Suspend State,'
+		db	' IGNORED',CR,LF,'$'
+suspendmsg	db	CR,LF,'Suspend = $'
+
+
+pausemsg	db	'Strike a key when ready . . .$'
+
+dircmd		db	'DIR      '
+usercmd		db	'USER     '
+memcmd		db	'COMSIZE  '
+addmemcmd	db	'ADDMEM   '
+ordercmd	db	'ORDER    '
+printercmd	db	'PRINTER  '
+at87cmd		db	'8087     '
+suspendcmd	db	'SUSPEND  '
+remcmd		db	'REM      '
+syscmd		db	'SYS      '
+pausecmd	db	'PAUSE    '
+delcmd		db	'DEL      '
+delqcmd		db	'DELQ     '
+cdcmd		db	'CD       '
+mdcmd		db	'MD       '
+rdcmd		db	'RD       '
+rencmd		db	'RENAME   '
+stpcmd		db	'STOP     '
+
+
+stopcmd		db	'STOP.CMD   '
+renamecmd	db	'REN.EXE    '
+erasecmd	db	'ERASE.EXE  '
+eraqcmd		db	'ERAQ.CMD   '
+chdircmd	db	'CHDIR.CMD  '
+mkdircmd	db	'MKDIR.CMD  '
+rmdircmd	db	'RMDIR.CMD  '
+
+affirmative	db	'ON  '
+negatory	db	'OFF '
+
+typ		db	'CMD '
+		db	'COM '
+		db	'EXE '
+		db	'BAT '
+
+supmsg		db	'Start up command: $'
+fnf	        db      'File not found $'
+pausmsg		db	'Strike a key when ready . . . $'  
+dirmsg		db	'Directory of Drive $'
+dosmsg		db	'  (DOS Media)$'
+cpmmsg		db	'  (CP/M Media)$'
+systring	db	'System $'
+dirstring	db	'Directory $'
+existring	db	'files exist $'
+bytesfree	db	' bytes free $'
+
+
+codeend		rb	0
+		org	(((offset codeend - offset codebeg)+0fh) and 0fff0h)
+brucescode	rb	0		;alligned on a paragraph boundary.
+
+
+EJECT
+
+;*****************************************************
+;*
+;*	TMP Data Area - this area is copied once for
+;*		each system console.  The 'defconsole'
+;*		field is unique for each copy
+;*		- Each Data Area is run by a common
+;*		shared code segment.
+;*
+;*****************************************************
+
+	DSEG
+
+	org	RSP_TOP
+
+databeg		rb	0
+
+PUBLIC	sysdatseg			;by the function translator
+PUBLIC	fcb
+PUBLIC	clicb
+
+sysdatseg	dw	0
+sdatvar		dw	S_NCNS
+defconsole	db	0,0
+		dw	0,0,0,0,0
+
+
+IF TMP
+	org	RSP_PD
+
+pd		dw	0,0		; link fields
+		db	PS_RUN		; status
+		db	198		; priority
+		dw	PF_SYS+PF_KEEP	; flags
+		db	'PCTmp'		; Name
+pd_ascii_num   	db	'   '		; Ascii number field set by GENSYS
+		dw	(offset uda-offset sysdatseg)/10h	
+					; uda seg
+TMP_diskuser	rw	0		; disk,user
+diskuserb	db	0,0
+                db      0,0             ; ldisk,luser
+		dw	0ffffh		; mem
+		dw	0,0		; dvract,wait
+                db      0,0             ; org,net
+                dw      0               ; parent
+TMP_console     db      0,0             ; cns,abort
+                db      0,0             ; cin,cout
+TMP_list        db      0,0             ; lst,sf3
+                db      0,0             ; sf4,sf5
+		dw	0,0		; reserved
+                dw      0,0             ; pret,scratch
+
+	org	RSP_UDA
+
+uda		dw	0,0,0,0			;0-7 note: no default DMA
+		dw	0,0,0,0			;8-fh
+		dw	0,0,0,0			;10-17
+		dw	0,0,0,0			;18-1f
+		dw	0,0,0,0			;20-27
+		dw	0,0,0,0			;28-2f
+		dw	0,0,offset stack_top,0	;30-37
+		dw	0,0,0,0			;38-3f
+		dw	0,0,0,0			;40-47
+		dw	0,0,0,0			;48-4f
+		dw	0,0,0,0			;50-57
+		dw	0,0,0,0			;58-5f
+		db	1			;60 INSYS <> 0
+						;don't switch from
+						;from UDA stack
+						;on entry to SUP
+		db	0			;61
+		dw	0,0			;62-64
+		db	0			;66
+		dw	0			;67-68
+		db	0			;69
+
+
+ENDIF
+
+
+
+	dw	0cccch,0cccch,0cccch		;6A-6F
+	dw	0cccch,0cccch,0cccch,0cccch	;70
+	dw	0cccch,0cccch,0cccch,0cccch
+	dw	0cccch,0cccch,0cccch,0cccch	;80
+	dw	0cccch,0cccch,0cccch,0cccch
+	dw	0cccch,0cccch,0cccch,0cccch	;90
+	dw	0cccch,0cccch,0cccch,0cccch
+	dw	0cccch,0cccch,0cccch,0cccch	;A0
+	dw	0cccch,0cccch,0cccch,0cccch
+	dw	0cccch,0cccch,0cccch,0cccch	;B0
+	dw	0cccch,0cccch,0cccch,0cccch
+	dw	0cccch,0cccch,0cccch,0cccch	;C0
+	dw	0cccch,0cccch,0cccch,0cccch
+	dw	0cccch,0cccch,0cccch,0cccch	;D0
+	dw	0cccch,0cccch,0cccch,0cccch
+	dw	0cccch,0cccch,0cccch,0cccch	;E0
+	dw	0cccch,0cccch,0cccch,0cccch
+	dw	0cccch,0cccch,0cccch,0cccch	;F0
+	dw	0cccch,0cccch,0cccch,0cccch
+	dw	0cccch,0cccch,0cccch,0cccch	;100
+	dw	0cccch,0cccch,0cccch,0cccch
+	dw	0cccch,0cccch,0cccch,0cccch	;110
+	dw	0cccch,0cccch,0cccch,0cccch
+	dw	0cccch,0cccch,0cccch,0cccch	;120
+	dw	0cccch,0cccch,0cccch,0cccch
+	dw	0cccch
+
+stack_top	dw	offset go	; code starting point
+		dw	0		; code seg - set by GENSYS
+		dw	0		; init. flags - set by GENSYS
+
+
+ms_func_jmp_addr	rd	0
+			dw	3
+ms_func_seg		dw	0
+
+
+MAXCMDLEN	equ	132
+
+	; the Read Console Buffer and the
+	; Cli Control Block share the same memory
+
+batch_cmd	db	0,'BAT'
+
+command		db	0
+
+
+read_buf	rb	0
+read_maxcmd	db	132
+clicb		rb	0
+read_blen	rb      1
+clicb_cmd       rb      MAXCMDLEN + 10
+
+
+long_line	db	FALSE
+cmdsent		db	FALSE
+
+parseret	dw	0
+
+pcb		dw	offset savebuf
+		dw	offset fcb
+
+ms_p_cli_struct	dw	0,0
+		dw	0,0
+		db	0
+
+sysdisk		db	0
+
+qfcb		dw	0
+qid		dw	0
+qzero		dw	0
+buffer		db	0
+
+
+
+IF TMP
+;
+;		Table of startup command name addresses
+;
+startup_tab	dw	offset startup0
+		dw	offset startup1
+		dw	offset startup2
+		dw	offset startup3
+		dw	offset startup4
+		dw	offset startup5
+
+ENDIF
+
+
+;
+; Abort Parameter Block
+;
+apb		dw	0
+		dw	0
+		db	0
+		db	0
+		rb	8
+
+
+fcb		db	0, 'STARTUP '
+
+startupnum	db	'   '
+		rb	20
+		db	0	;current record
+		rb	4	;function translator needs random record fields
+
+passflg		db	FALSE
+batpass		rb	8
+
+password	rb	8
+
+savebuf		rb	128
+		db	0	;ensure hex is formed
+
+
+
+IF BATCH
+
+wrongvers	db	'Requires Concurrent',CR,LF,'$'
+no_pcmode	db	'Requires PC-MODE Tmp',CR,LF,'$'
+PCTmp		db	'PCTmp'
+batch_priority	db	0
+subcont		db      'Terminate batch job (Y/N)? $'
+subnotfound	db	CR,LF,'Batch file missing',CR,LF,'$'
+subuser		db	0
+subfcb		db	0,'        BAT'
+		rb	24			;data and parameter buffers in
+subbuf		rs	128			;the emulator data area
+subparms	rs	128			;
+submit		dw	0			;
+subsavehigh	db	0
+subsavelow	dw	0
+colcnt		dw	0
+eof		db	0
+
+ENDIF
+
+
+
+
+delimit		db	'$'
+
+batchflag	db	0
+
+drive		db	0
+disk		db	0			;subflag in emulator data area
+fcbdrv		db	0
+
+typspec		db	FALSE
+gdopen		db	FALSE
+
+next_sub        dw      0
+knownptr        dw      0
+end$string      db      0
+
+pbuf		db	'    $'
+
+tcnt		db	0
+tget		db	0
+ttype		db	'   '
+		db	'   '
+		db	'   '
+		db	'   '
+
+cnt		db	4
+search_struct	db	0FFH
+cmdtyp		db	'CMD'
+comtyp          db      'COM'
+exetyp		db	'EXE'
+subtyp          db      'BAT'
+
+ms_cmd_sent	db	0	
+p_dec_flg	db	FALSE	
+
+dfcb		rb	36
+
+fcount		dw	0
+
+drivemsg	db	'A'
+directorymsg	db	'<DIR>   '
+
+pad		db	' '
+
+dirstuf		db	'       '
+dontsuprs1	db	' '
+morstuf		db	'   9-01-83  00:00p$'
+
+filecount	db	'          File(s) $'        
+delimiters	db	' ,![]><=:;/.',0h
+delimptr	dw	offset delimiters
+
+count		db	0
+
+cpmdate		db	0
+cpmtime		db	0
+
+hour		db	0
+minute		db	0
+second		db	0
+hundreth	db	0
+
+sysdsk		db	10h
+
+sflag		db	FALSE			;wide   option for dir
+lflag		db	FALSE
+
+pflag		db	FALSE			;pause  option for dir
+
+lused		db	FALSE
+
+cpmlong		db	FALSE
+doslong		db	FALSE
+
+period		db	0
+
+wildflg		db	0
+wldflag		db	0
+
+ndelim          db      0dh
+nknown          db      12
+line		db	0
+
+sysdir		db	0
+
+noletter	db	0
+
+
+buf		rb	128
+
+
+temp1		rb	12
+temp2		rb	12
+
+bdos_struct	rb	28
+
+bufferadr	dw	0
+
+day		db	0
+month		db	0
+year		dw	0
+
+weeds		db	'CON  '
+		db	'LPT1 '
+		db	'NUL  '
+		db	'PRN  '
+
+pfncb		dw	offset ptrinbuffer
+ptrinbuffer	dw	0
+pfnfcb		dw	offset pfcb
+
+pfcb		rs	36
+
+dirdrive	db	0
+newdrive	db	0
+asciidrive	db	0
+drivetype	db	CPMMEDIA
+
+totaldays	dw	0,31,59,90,120,151,181,212,243,273,304,334,0ffffh
+
+stamp		db	0
+
+lowfile		dw	0
+highfile	dw	0
+
+stack_save	dw	0
+es_save		dw	0
+
+
+
+IF BATCH
+
+NOCAT		equ	0
+NOHDS		equ	1
+HAVEHDS		equ	2
+
+CAT		equ	02eh
+
+hdmode		rb	1		; HD mode when batch started
+cathds		rw	1		; offset of CAT or HDS
+savedhds	rb	10		; HDS
+
+patch_data	db	'DATA PATCH AREA '
+		db	'DATA PATCH AREA '
+		db	'DATA PATCH AREA '
+		db	'DATA PATCH AREA '
+		db	'DATA PATCH AREA '
+		db	'DATA PATCH AREA '
+		db	'DATA PATCH AREA '
+		db	'DATA PATCH AREA '
+ENDIF
+
+
+
+
+IF TMP
+;
+;		Table of startup command names
+;
+startup0	db	'STARTUP1.BAT',0
+startup1	db	'STARTUP2.BAT',0
+startup2	db	'STARTUP3.BAT',0
+startup3	db	'STARTUP4.BAT',0
+startup4	db	'STARTUP5.BAT',0
+startup5	db	'STARTUP6.BAT',0
+
+ENDIF
+
+
+
+
+dataend		rb	0
+
+		org	(((offset dataend - offset databeg)+0fh) and 0fff0h)
+
+brucesdata	rb	0		;alligned on a paragraph boundary.
+
+;
+;	End of the Include module tmpdir.lib
+;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    

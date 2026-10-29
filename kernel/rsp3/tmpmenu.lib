@@ -1,0 +1,3037 @@
+
+
+title 'Terminal Message Processor & PC-MODE - CCP/M-86 3.2'
+
+;*****************************************************
+;*
+;*	Terminal Message Processor
+;*
+;*
+;*	The TMP determines the user interface to CCP/M.
+;*	Much of the interface is available though
+;*	system calls.  This TMP takes advantage of
+;*	as much as possible for simplicity.  The TMP
+;*	could, for instance,  be easily modified to
+;*	force logins and have non-standard defaults.
+;*
+;*	With a little more work, the TMP could do all
+;*	command parsing and File Loading instead of
+;*	using the CLI COMMAND FUNCTION.  
+;*	Suggestions are given in the CCP/M-86 SYSTEM'S GUIDE.
+;*
+;*****************************************************
+;*
+;*	Generation Procedure
+;*
+;*	Generating RSP:
+;*	  TMP flag TRUE; BATCH flag FALSE; CMD flag FALSE
+;*	  RASM86 tmppc $lo
+;*	  RASM86 ms $lo
+;*	  LINK86 tmppc.rsp = tmppc,ms[data[max[0],origin[0]]]
+;*
+;*	Generating DEBUG SYSTEM:
+;*	  TMP flag TRUE; BATCH flag FALSE; CMD flag TRUE
+;*	  RASM86 tmppc $lo
+;*	  RASM86 ms $lo
+;*	  LINK86 tmppc = tmppc,ms[data[max[0]]
+;*	  
+;*	Generating BATCH.CMD:
+;*	  TMP flag FALSE; BATCH flag TRUE; CMD flag TRUE
+;*	  RASM86 tmppc $lo
+;*	  LINK86 BATCH = tmppc[data[max[0]]
+;*
+;*****************************************************
+
+;
+;	Defines the compile time equ's for the Runmenu interface
+;	Defines external code references satisified in Runmenu
+;
+
+ESC		equ	01bh	; Ascii Escape character
+
+
+
+IF TMP
+
+RUNMENU 	equ	TRUE	; True for generating Runmenu interfaced tmp
+CCP		equ	TRUE	; True for generating VCCP interfaced tmp
+
+ENDIF
+
+
+
+IF BATCH
+
+RUNMENU 	equ	FALSE	; False for generated non-Runmenu interfaced tmp
+CCP		equ	FALSE	; False for generating non-VCCP interfaced tmp
+
+ENDIF
+
+
+
+IF RUNMENU
+
+	EXTRN	M_GETCMD:near
+	EXTRN	M_INIT:near
+ENDIF
+
+
+
+IF NOT BATCH
+
+	EXTRN	ms_init:near
+	EXTRN	ms_func:near
+
+ENDIF
+
+;	Some common equates
+
+CR		equ	13		; carriage return
+LF		equ	10		; linefeed
+TAB		equ	9		; tab char
+BLANK		equ	32		; blank character
+dma		equ	.80h		; default dma buffer (batch)
+default_fcb	equ	.5ch		; default fcb for batch
+
+;	CCP/M-86 system functions used by the TMP
+
+OSINT		equ	224		; interrupt number for CCP/M
+					; system calls
+
+C_READ		equ	1
+C_WRITE		equ	2		; console functions
+C_RAWIO		equ	6
+C_WRITEBUF	equ	9
+C_READSTR	equ	10
+C_DELIMIT	equ	110
+C_ATTACHC	equ	146
+C_DETACHC	equ	147
+C_SETNUM	equ	148
+
+L_SETNUM	equ	160		; list device functions
+L_GETNUM	equ	164
+
+F_OPEN		equ	15		; file functions
+F_CLOSE		equ	16
+F_SFIRST	equ	17
+F_SNEXT		equ	18
+F_READ		equ	20
+F_DMAOFF	equ	26
+F_SIZE		equ	35
+F_ERRMODE	equ	45
+F_DMASEG	equ	51
+F_TIMEDATE	equ	102
+F_PARSE		equ	152
+F_READRAND	equ	33
+
+DRV_SET		equ	14		; drive functions
+DRV_GET		equ	25
+DRV_FREE	equ	39
+DRV_SPACE	equ	46
+
+DIR_USERNUM	equ	32		; directory functions
+
+P_PRIORITY	equ	145
+P_CLI		equ	150		; process control functions
+P_PDADR 	equ	156		; get process descriptor address
+P_ABORT		equ	157
+
+Q_OPEN		equ	135
+
+S_BDOSVER	equ	12
+
+;	Some Process descriptor locations
+
+P_PRIOR		equ	05h	;process descriptor priority
+P_FLAG		equ	06h	;process descriptor flags
+P_NAME		equ	08h	;process descriptor name
+P_PARENT	equ	1Eh	;PD's parent
+P_UDA		equ	10h	;PD's UDA segment
+P_SFLAG		equ	word ptr 26h	;2nd set of flags
+
+U_INITCS	equ	.50H
+UDA_CS		equ	.50h	; offset in UDA of user's code segment
+
+;	Process descriptor flags
+
+PS_RUN		equ	00	; on ready list root
+PF_SYS		equ	001h	; system process
+PF_KEEP		equ	002h	; do not terminate
+
+;	Process descriptor 2nd flags
+
+PSF_CTLC	equ	0010h	; on if ^C has been entered in non-rawio
+PSF_RESET	equ	0020h	; ^C means reset disk system
+
+;	Media types
+
+CPMMEDIA	equ	0
+DOSMEDIA	equ	not CPMMEDIA
+
+
+;	Some locations in the system data segment
+
+S_CCPMSEG  equ	word ptr 40H	;begin CCPM segment
+S_SYSDISK  equ  byte ptr 4Bh	;system disk
+S_NCNS	   equ	byte ptr 47H    ;sys. consoles
+S_RLR	   equ	word ptr .68h	;system ready list root
+S_VERSION  equ	word ptr 78h	;ofst ver. str in SUP
+S_DSYSDISK equ	byte ptr 9dh	;default system disk
+
+
+;	Some RSP format equates
+
+RSP_TOP	     equ  0
+RSP_MD	     equ  008h
+RSP_PD	     equ  010h
+RSP_UDA	     equ  040h
+RSP_BOTTOM   equ  140h
+
+
+;	Error codes returned by the CLI
+
+E_NO_MEMORY	   equ	3   ; cant find memory
+E_NO_PD		   equ	12  ; no free pd's
+E_Q_FULL	   equ	15  ; full queue
+E_ILLCON	   equ	19  ; illegal console #
+E_NO_PROC	   equ	20  ; no process descriptor match
+E_NO_CONS_MATCH	   equ	21  ; no console match
+E_ILLDISK	   equ	23  ; illegal disk #
+E_BADFNAME	   equ	24  ; illegal filename
+E_BADFTYPE	   equ	25  ; illegal filetype
+E_BAD_LOAD	   equ	28  ; bad ret. from BDOS load
+E_BAD_READ	   equ	29  ; bad ret. from BDOS read
+E_BAD_OPEN	   equ  30  ; bad ret. from BDOS open
+E_NULLCMD	   equ	31  ; null command sent
+E_NOT_OWNER	   equ	32  ; no owner of resource
+E_CANT_ATTACH	   equ  36  ; can not attach to process
+E_ILL_LST	   equ	37  ; illegal list device
+E_ILL_PASS	   equ	38  ; illegal password
+E_ABORT            equ  40  ; aborted in CLI
+E_BAD_TYPE   	   equ	60  ; bad file type
+E_NO_BATCH	   equ  61  ; error opening BATCH processor
+E_NOT_ENOUGH_MEM   equ  62  ; not enough memory to load program
+
+EJECT
+
+;*****************************************************
+;*
+;*	TMP Shared Code and Constant Area
+;*
+;*****************************************************
+
+	cseg
+codebeg:
+	jmp start
+
+
+IF NOT BATCH
+
+	jmp ms_func
+
+ENDIF
+
+
+IF CCP
+
+	dw	ccp_data		    ; Pointer to the ccp interface data
+
+ENDIF
+
+
+	db	'COPYRIGHT(C)1983,84,'
+	db	'DIGITAL RESEARCH(05/23/84)'
+	db	'XXXX-0000-654321'
+
+
+IF BATCH
+
+patch_code:
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+
+ENDIF
+
+
+if BATCH
+
+
+	CSEG
+
+switchhd:
+
+	push	es
+	mov	es,sysdatseg
+	mov	bx,es:S_RLR
+	add	bx,CAT
+	mov	si,es:[bx]		; SI offset of batchs CAT
+	cmp	hdmode,NOCAT
+	je	switchcathds
+	call	gethds
+	cmp	hdmode,NOHDS
+	je	switchcathds
+
+			; hdmode is 2     ES:SI pt to 10 byte HDS
+	mov	bx,8
+	push di
+	mov	di,offset savedhds
+switchhd1:
+	mov	ax,es:[si+bx]		; will xchg saved hds with current
+	xchg	[di+bx],ax		; hds backwards
+	mov	es:[si+bx],ax
+	dec	bx
+	dec	bx
+	jnl	switchhd1
+	pop di
+
+	pop	es
+	ret 
+
+switchcathds:
+			; SI contains the offset of the CAT or HDS
+			; ES:BX pts CAT or HDS
+
+	xchg	cathds,si
+	mov	es:[bx],si
+	pop	es
+	ret
+
+
+savehd:
+
+	mov	cathds,0		; value if no CAT or HDS exists
+	mov	hdmode,NOCAT		; default (used to save code)
+	push	es
+	mov	es,sysdatseg
+	mov	bx,es:S_RLR
+	mov	si,es:CAT[bx]		; SI offset of batchs CAT
+	cmp	si,0
+	je	snocat			; save the fact we have no CAT
+
+	call	gethds			; enter -> SI offset of CAT
+	cmp	si,0
+	je	snohds			; save the fact we have no HDS
+
+		; ES:SI pts to 10 byte HDS
+
+	mov	hdmode,HAVEHDS
+	mov	ax,ds
+	push	es
+	pop	ds
+	mov	es,ax
+	mov	cx,5
+	mov	di,offset savedhds
+	rep	movsw
+	mov	ds,ax
+snocat:
+			; 1) hdmode set  2) ES on stack  3) HD saved
+	pop	es
+
+	ret
+
+snohds:
+	mov	hdmode,NOHDS
+	jmps	snocat
+
+gethds:
+	mov	al,subfcb
+	dec	al
+	xor	ah,ah
+	shl	ax,1
+	add	si,ax
+	mov	bx,si
+	mov	si,es:[si]
+	ret
+
+endif
+
+
+start:
+
+
+IF CMD or BATCH
+
+	mov	ax,ds			;set up stack in my ds 
+	pushf
+	pop 	bx
+	cli				;no interrupts!
+	mov	ss,ax			;ss -> ds
+	mov	sp,offset stack_top	;sp -> top of stack
+	push 	bx
+	popf				;interrupts back on
+ 
+
+IF BATCH
+
+	mov	cl,S_BDOSVER		;get version number
+	call	ccpm
+	and	bh,not 2		;strip network bit
+	cmp	bh,14h! jz okvers	;CCP/M?
+	  mov	dx,offset wrongvers
+	  mov	si,0
+	  call	print_ds_string
+	  xor	cx,cx
+	  mov	dx,cx
+	  call	ccpm
+okvers:
+
+ENDIF
+
+
+	;
+	; set priority better than parent
+	;
+
+	push	es
+	mov	cl,P_PDADR
+	call	ccpm
+	mov	sysdatseg,es
+	mov 	bx,es:P_PARENT[bx]	;get our parent's PD address
+	xor	dh,dh
+	cmp	bx,0! jne psetpar	;see if parent exists
+	  mov 	dl,197! jmps setp	;  no parent - set to better than TMP
+psetpar:
+	mov	dl,es:P_PRIOR[bx]	;get parents priority
+	dec	dl			;set to one better
+	cmp	dl,64! jae setp
+	  mov	dl,64			;don't compete with the system
+setp:
+
+
+IF BATCH
+
+	mov	batch_priority,dl
+
+ENDIF
+
+
+	mov	cl,P_PRIORITY		;set priority
+	call	ccpm
+	pop	es
+
+
+IF NOT BATCH
+
+	call	ms_init			;initialize bruce only if CMD
+
+ENDIF
+
+
+	mov	ms_func_seg,cs
+
+
+
+IF BATCH
+
+	call batchinit		;initialize BATCH buffers and fcb
+	push es
+	mov es,sysdatseg
+	mov di,es:S_RLR
+scan_again:
+	push di
+	add di,8		;point to name field
+	mov si,offset PCTmp
+	mov cx,5
+	repe cmpsb
+	pop di
+	or cx,cx
+	jz found_pd
+	  mov di,es:.P_PARENT[di]
+	  or di,di
+	  jnz scan_again
+	  jmps pd_not_found
+
+found_pd:
+	mov es,es:.P_UDA[di]
+	mov ax,es:U_INITCS
+	mov ms_func_seg,ax
+	pop es	
+	jmp  nextcommand
+
+pd_not_found:
+	pop es
+	mov dx,offset no_pcmode
+	mov si,0
+	call print_ds_string
+	xor cx,cx
+	mov dx,cx
+	call ccpm
+
+ENDIF
+
+
+	jmp nextcommand
+
+ENDIF
+
+
+
+
+;===
+go:	; PROGRAM MAIN - INITIALIZATION
+;===
+
+	mov ms_func_seg,cs	
+
+;	Set default console # = TMP#
+
+	mov dl,defconsole ! call setconsolenum
+
+
+;	Set default disk = system drive
+
+	push ds
+	mov ds,sysdatseg
+	mov dl,.S_DSYSDISK
+	pop ds				;get default system drive from
+
+	call setdisk			;system data segment
+
+
+IF TMP
+
+	xor dl,dl			;all TMPs come up user 0
+	call setuser
+  
+	call attach			;print version
+
+	push ds
+
+	mov ds,sysdatseg
+
+	mov dx,.S_VERSION
+	mov ds,.S_CCPMSEG
+
+	call print_ds_string
+	pop ds
+
+ENDIF
+
+
+
+
+IF NOT BATCH
+
+	call ms_init			;initialize function translator
+
+ENDIF
+
+
+
+
+IF TMP
+
+	call detach
+
+ENDIF
+
+
+
+
+IF BATCH
+
+	call batchinit
+
+ENDIF
+
+
+
+
+IF TMP
+
+;
+;		Startup code
+;		Depending on console number, we try to open the startup
+;		file.  If not sucessful, bag it.  If we find it, close
+;		the file and point the TMP command buffer to the file
+;		name and set the command ready flag.  Startup files are
+;		now bat files so they work as a command as well as a batch.
+;
+	xor bx,bx		; clear hi bits
+	mov bl,defconsole	; our console number
+	shl bx,1
+
+	mov si,offset fcb	; fcb to open the file
+	mov di,startup_tab[bx]	; source file name for our console
+	call parsefilename	; parse the name into our fcb
+
+	mov dx,offset fcb	; now try to open the file
+	mov cl,F_OPEN		;
+	call ccpm		;
+
+	test al,0ffh		; see if we got it open
+	jnz nostartup		; jmp if not
+	    mov dx,offset fcb		; close the file
+	    mov cl,F_CLOSE
+	    call ccpm
+
+	    xor bx,bx			; clear hi bits
+	    mov bl,defconsole		; get our console number again
+	    shl bx,1			; adjust for table
+	    mov ax,startup_tab[bx]	; get address of file name again
+
+	    mov CUR_PTR,ax		; store as current command
+	    push ds			; and store the segment
+	    pop CUR_SEG			; address into command pointer
+	    mov cmd_ready,TRUE		; and set command ready flag
+
+ENDIF
+
+
+
+
+IF	0				; delete this code (in case we blow it)
+
+	push ds ! pop es
+	mov si,offset pd_ascii_num
+	mov di,offset startupnum
+	mov cx,3
+	rep movsb
+
+	mov dx,offset fcb
+	mov cl,F_OPEN			;try to open the startup file
+	call ccpm			;on default drive which is
+	cmp al,0ffh			;the system drive
+	je nostartup
+	    mov dx,offset clicb_cmd	;use the CLI buffer for this
+	    mov cl,F_DMAOFF		;one time one sector read
+	    call ccpm
+	    mov dx,offset fcb
+	    mov cl,F_READ
+	    call ccpm
+	    push ax
+	    mov dx,offset fcb
+	    mov cl,F_CLOSE
+	    call ccpm
+	    pop ax
+	    test al,al
+	    jnz nostartup
+		mov ax,ds
+		mov es,ax
+		mov al,CR
+		mov cx,128
+		mov di,offset clicb_cmd
+		repne scasb
+		jne nostartup		;didn't find a carriage return
+		    inc di			;include CR LF in line
+		    mov byte ptr [di],'$'
+		    sub di,offset clicb_cmd
+		    mov ax,di
+		    sub ax, 2
+		    mov read_blen, al
+		    mov dx,offset supmsg
+		    call print_string
+		    mov dx,offset clicb_cmd
+		    call print_ds_string
+		    jmps startup
+
+ENDIF
+
+
+nostartup:
+		; THIS IS WHERE A LOGIN ROUTINE MIGHT
+		; BE IMPLEMENTED.  THE DATA FILE THAT
+		; CONTAINS THE USER NAME AND PASSWORD
+		; MIGHT ALSO CONTAIN AN INITIAL DEFAULT
+		; DISK AND USER NUMBER FOR THAT USER.
+
+
+EJECT
+
+;===========
+nextcommand:	; LOOP FOREVER
+;===========
+
+		; free drive
+	    mov dx,0ffffh ! call drive_free
+
+		; attach console
+	    call attach
+	    
+	    mov cl,0			;execute code to clean up translator
+	    callf ms_func_jmp_addr
+	    cmp ms_cmd_sent,TRUE	;if this command was sent to the int 21
+	    jnz not_ms			;translator, and terminated abnormally,
+	        mov ms_cmd_sent,FALSE
+
+
+IF BATCH
+
+		cmp submit,0 
+		jz not_ms		;if abnormal abort and within bat file,
+		    call chksub		;ask user if he wants to abort whole job
+
+ENDIF
+
+
+not_ms:					;print CR,LF if we just sent command
+
+
+
+IF RUNMENU
+
+;
+;		Get the next command from user or menu system
+;
+	call getuser		    ; copied from TMP
+	mov diskuserb+1,bl	    ; save default user number
+	call getdisk		    ; get default drive
+	mov diskuserb,bl	    ; save default drive
+
+
+	call M_GETCMD		    ; get a command from DMENU
+
+
+	jmp delret		    ; join code in progress
+
+ENDIF
+
+
+
+
+IF TMP
+
+;	    cmp batchflag,TRUE ! jne notbatch
+;	        mov cmdsent,FALSE  ! jmp noprompt
+
+ENDIF
+
+
+
+
+IF NOT RUNMENU
+
+notbatch:   cmp cmdsent,FALSE   ! je noclearline
+		mov cmdsent,FALSE
+		call crlf
+noclearline:
+
+					; set up and print user prompt
+					; get current default user # and disk
+					; this call should be made on every
+					; loop in case the last command
+					; has changed the default.
+					; (unless we just returned from the
+					; BATCH processor.)
+	    mov dl,CR ! call prchar
+	    call getuser
+
+
+IF TMP
+
+	    mov diskuserb+1,bl		;save default user number
+
+ENDIF
+
+
+
+
+IF BATCH
+
+	    mov dx,13h			;address of user in pd
+	    call set_parents_pd		;set pd in TMP
+
+ENDIF
+
+
+	    test bl,bl ! jz nozero	;don't print user 0 prompt
+	    mov dl,bl ! call prnum
+nozero:
+	    call getdisk
+
+
+IF TMP
+
+	    mov diskuserb,bl		;save default drive
+
+ENDIF
+
+
+
+
+IF BATCH
+
+	    mov dx,12h			;address of drive in pd
+	    call set_parents_pd		;set pd in TMP	
+
+ENDIF
+
+
+	    mov dl,'A' ! add dl,bl
+	    call prchar	
+	    mov dx,offset prompt
+	    call print_string
+
+
+EJECT
+
+					; Read Command from Console or Bat file.
+noprompt:
+	    call rcln
+startup:
+		; echo newline
+	    mov dl,LF ! call prchar
+;
+;		Code added for RUNMENU
+;
+
+ENDIF
+
+
+
+
+IF RUNMENU
+
+startup:
+
+ENDIF
+
+
+;
+;		End code added for RUNMENU
+;
+
+
+EJECT
+
+delret:
+	    mov bx,offset clicb
+	    xor cx,cx
+	    mov cl,read_blen
+strp:
+	    mov si,bx ! add si,cx
+	    cmp byte ptr [si],' ' ! jne strpdne
+		dec cx ! mov read_blen,cl
+		mov byte ptr [si],0
+		jmp strp
+
+strpdne:
+	    
+		; make sure not a null command
+	    lea bx,clicb_cmd
+	    cmp read_blen,0 ! jne delret1
+	    jmp gonextcmd
+delret1:
+		mov di,bx
+		dec di
+		call deblank
+		mov bx,di
+		cmp byte ptr [bx],0	;if command is blanks only then skip
+		je gonextcmd		;over it.
+noblanks:	
+	    lea ax,clicb_cmd ! cmp ax,bx ! je chksemi
+			; remove leading blanks
+		push ds ! pop es ! xor ch,ch ! mov cl,read_blen
+		mov di,ax ! mov si,bx ! cld ! rep movsb
+		mov bx,ax
+chksemi:		; see if line starts with semicolon or period
+	    cmp byte ptr [bx],';' ! je gonextcmd
+	    cmp byte ptr [bx],'.' ! je gonextcmd	
+;
+;		Code for CCP/VCCP command interface
+;		    If CCP is active and command is ESC only
+;		    then we substitute the command: VCCP for the escape
+;
+
+
+IF CCP
+
+		cmp byte ptr read_blen+2,0 ; is command 1 byte long?
+		jne not_ccp		; jump if not
+		cmp byte ptr [bx],ESC	; is first (and only) char an escape?
+		jne not_ccp		; jump if not
+		test CCP_ACT,0ffh	; see if ccp is active
+		jz not_ccp		; jump if not
+		mov cx,VCCP_LEN 	; it's true, make the substitution
+		mov si,offset VCCP_CMD	; set source
+		mov di,offset read_buf	; and destination
+		push ds ! pop es	; make es = ds
+		rep movsb		; and move them bytes
+not_ccp:
+
+ENDIF
+
+
+			; see if disk change
+			; if 'X:' change def disk to X
+		    cmp byte ptr read_blen+3,0 ! jne clicall
+		    cmp byte ptr 1[bx],':'
+		    jne clicall
+
+				; change default disk
+			mov dl,[bx]	;get disk name
+			and dl,5fh	;Upper Case
+			sub dl,'A'	;disk number
+
+				; check bounds
+			cmp dl,0 ! jb baddrive
+			cmp dl,15 ! ja baddrive
+
+				; select default disk
+			    call setdisk
+			    cmp al,0 ! je gonextcmd
+
+baddrive:   mov dx,offset errstr ! call print_string
+	    mov dx,offset fdrverr ! call print_string ! call crlf
+
+gonextcmd:  jmp nextcommand
+
+
+EJECT
+
+;=======
+clicall:	; SEND CLI COMMAND
+;=======
+			; put null at end of input
+		    mov bx,offset clicb_cmd
+		    mov al,read_blen ! mov ah,0
+		    add bx,ax ! mov byte ptr [bx],0
+
+			; copy command string for error
+			; reporting later and to check
+			; for built in commands...
+		    mov cx,64
+		    mov si,offset clicb_cmd
+		    mov di,offset savebuf
+		    push ds ! pop es
+		    rep movsw
+
+			; parse front to see if
+			; built in command
+		    mov si,offset fcb
+		    mov di,offset savebuf
+		    call parsefilename
+		    jcxz goodparse
+			sub bx,bx ! mov bl,read_blen
+			add bx,offset savebuf
+			mov byte ptr [bx],'$'
+		        call clierror
+			jmp nextcommand
+
+;			jmp clierror
+
+
+goodparse:
+
+		    mov parseret,bx
+		    cmp bx,0 ! jne haveatail
+			mov bl,read_blen
+			add bx,offset savebuf
+haveatail:
+		    mov byte ptr [bx],'$' ! inc bx
+try_typ:
+		    cmp fcb+9,' ' ! je try_drv
+			jmp transient
+try_drv:
+		    cmp fcb,0 ! je try_builtin
+			jmp transient
+			; is it USER command?
+
+parser:		    mov si,offset fcb ! inc si
+		    push cs ! pop es
+		    mov cx,9 ! repz cmpsb
+		    ret
+
+
+EJECT
+try_builtin:
+
+
+IF RUNMENU OR BATCH
+
+;
+;		Search for RUNMENU command
+;
+	mov di,offset rmenutext     ;
+	call parser		    ; is it RUNMENU?
+	jnz rmenu_not_active2	    ; no
+
+start_menu:
+	call M_INIT		    ; activate RUNMENU
+	jmp nextcommand 	    ; and get another command
+
+rmenutext     db  'RUNMENU  '
+
+ENDIF
+
+
+
+
+IF BATCH
+
+;
+;		Batch version of menu initialization.
+;		We find the TMP, there is a pointer in bytes 6 & 7 of code seg
+;		to a reserved area in the TMP data area.  Byte 1 of
+;		this area is a flag called CMD_READY which causes
+;		the TMP to assume that there is a command ready for processing
+;		in the buffer pointed to by bytes 2 through 5 in the same area.
+;		We move the command to that buffer and set the pointers so
+;		the TMP will process the command instead of us.
+;
+M_INIT:
+	mov cl,P_PDADR		    ;
+	call ccpm		    ; get our process descriptor
+m_init_05:
+	mov di,es:P_PARENT[bx]	    ; get our parent's PD addr
+	mov ax,es:P_NAME[di]	    ; get our parent's Name
+	cmp ax,'CP'		    ; see if PCTmp
+	je m_init_10		    ; ok so far
+
+m_init_07:
+	mov bx,di		    ; not the tmp, go back a level
+	jmp m_init_05		    ;
+
+m_init_10:
+	mov ax,es:P_NAME+2[di]	    ; check next 2 bytes
+	cmp ax,'mT'		    ;
+	jne m_init_07		    ; jmp if not the tmp
+
+	mov ax,es:P_UDA[di]	    ; get the tmp's UDA
+	mov es,ax		    ; to a segment address
+	mov bx,es:UDA_CS	    ; get code segment of TMP
+	mov es,bx		    ; to segment register
+	mov bx,es:.6		    ; offset to CCP_DATA in TMP data area
+	sub ax,4		    ; subtract 4 paragraphs from UDA to get
+				    ; start of TMP data area
+	mov es,ax		    ; get TMP data area into segment reg
+	mov es:byte ptr .1[bx],TRUE ; set command ready flag
+	mov cx,130		    ; 130 byte buffer in TMP data area
+	mov si,offset clicb_cmd     ; source (the command)
+	mov di,es:.6[bx]	    ; option buffer address in TMP data area
+	mov es:.2[bx],di	    ; store offset
+	mov es:.4[bx],es	    ; store the segment
+	rep movsb		    ; move them bytes
+	ret			    ; return to caller
+
+ENDIF
+
+
+
+
+IF RUNMENU OR BATCH
+
+rmenu_not_active2:
+
+ENDIF
+
+
+		    mov di,offset usercmd
+		    call parser
+		    jnz notuser
+			mov si,offset fcb
+			mov di,parseret
+			cmp di,0 ! je pruser
+			    inc di
+			    call parsefilename
+			    cmp cx,0 ! jne pruser
+			      mov si,offset fcb
+			      inc si
+			      mov dx,[si]
+			      mov ch,'0'
+			      call a_to_b
+			      cmp bl,15 ! ja usererr
+				mov dl,bl
+				call setuser
+				jmp pruser
+usererr:		      mov dx,offset usererrmsg
+			      call print_string
+pruser:			mov dx,offset usermsg
+			call print_string
+			call getuser
+			mov dl,bl ! call prnum
+			mov dx,offset user_warning
+			call print_string
+			call crlf
+			jmp nextcommand
+
+
+
+EJECT
+
+notuser:	    mov di,offset dircmd
+		    call parser
+		    jnz  not_dir
+	if TMP
+			mov cl,P_PRIORITY
+			mov dl,200
+			call ccpm
+	endif
+
+		        call dir
+
+	if TMP
+			mov cl,P_PRIORITY
+			mov dl,198
+			call ccpm
+	endif
+
+			jmp nextcommand
+
+
+EJECT
+
+not_dir:
+		    mov di,offset cdcmd
+		    call parser
+		    jnz notcd
+
+			mov ax,9
+			mov bx,offset chdircmd
+			jmp extbltin
+
+
+EJECT
+
+notcd:
+
+		    mov di,offset mdcmd
+		    call parser
+		    jnz notmd
+
+			mov ax,9
+			mov bx,offset mkdircmd
+			jmp extbltin
+
+
+EJECT
+
+notmd:
+		    mov di,offset rdcmd
+		    call parser
+		    jnz notrd
+			mov ax,9
+			mov bx,offset rmdircmd
+			jmp extbltin
+
+
+EJECT
+
+notrd:
+
+		    mov di,offset ordercmd
+		    call parser
+		    jz preorder ! jmp not_order
+preorder:
+			mov bx,parseret
+po1:
+			mov al,[bx]
+			cmp al,0 ! jz order
+			    cmp al,'.' ! jnz po2
+				mov al,'\'
+				mov [bx],al
+po2:
+			    inc bx ! jmp po1
+
+order:
+			mov si,offset fcb
+			mov di,parseret
+			cmp di,0 ! jne ok
+			jmp doneprs
+ok:
+			    inc di
+loop:
+			    call parsefilename
+			    mov parseret,bx
+			    cmp cx,0 ! jz loop1
+				jmp doneprs
+loop1:
+			    cmp bx,0 ! je starto
+				mov al,[bx]
+				cmp al,',' ! je starto
+				cmp al,' ' ! je starto
+				cmp al,9 ! je starto
+				jmp ordererr
+starto:
+			    mov dx,0
+			    mov di,offset typ
+again:
+			    mov si,offset fcb ! inc si
+			    mov cx,2
+			    call cmpit ! jz found
+
+				inc dx ! mov ax,dx
+				shl ax,1 ! shl ax,1
+				mov di,ax ! add di,offset typ
+
+				cmp dx,4 ! jne again
+			    	jmp ordererr
+found:
+			    push dx ! push es
+			    mov ax,ds ! mov es,ax
+			    xor ax,ax ! mov bx,FALSE
+while:
+			    cmp bx,FALSE ! jne movetyp
+			    cmp al,tcnt ! je movetyp
+				mov si,offset fcb ! inc si
+				mov di,ax ! add di,ax
+				add di,ax ! add di,offset ttype
+				mov cx,3
+				repz cmpsb ! jne retval
+				    mov bx,TRUE
+retval:
+				inc al ! jmps while
+movetyp:
+			    pop es ! pop dx
+			    cmp bx,FALSE ! jne ordererr
+m1:
+				mov si,dx
+				shl si,1 ! shl si,1
+				add si,offset typ
+
+				xor ax,ax ! mov al,tcnt
+				add al,tcnt ! add al,tcnt
+				mov di,ax ! add di,offset ttype
+
+				push es ! mov ax,ds
+				mov es,ax
+				push ds ! mov ax,cs
+				mov ds,ax
+				mov cx,3 ! repz movsb
+				pop ds ! pop es
+
+				inc tcnt
+				jmp order
+
+doneprs:
+			cmp tcnt,0 ! jz prorder
+			    push es ! mov ax,ds
+			    mov es,ax
+			    mov si,offset tcnt
+			    mov di,offset cnt
+			    mov cx,7 ! repz movsw
+			    pop es
+
+			    mov tget,00h
+			    mov cl,6 ! mov dx,offset tget
+			    callf ms_func_jmp_addr	;set new structure
+
+			    jmps prorder
+ordererr:
+			mov dx,offset ordrerrmsg
+			call print_string
+
+prorder:
+			mov dx,offset ordermsg
+			call print_string
+
+			mov search_struct,0FFh
+			mov cl,6 ! mov dx,offset search_struct
+			callf ms_func_jmp_addr
+
+			mov cnt,0
+			mov bx,offset cmdtyp
+prordr1:
+			cmp cnt,4 ! jz prordr2
+			cmp byte ptr [bx],20h ! jz prordr2
+			    inc cnt
+			    add bx,3
+			    jmps prordr1
+prordr2:
+
+			cld
+			xor ax,ax ! mov al,cnt
+			mov si,offset cmdtyp
+prdrlp:
+			mov bx,offset pbuf
+			cmp al,cnt ! je lp1
+			    mov cl,44
+			    mov [bx],cl
+			    jmp lp2
+lp1:
+			    mov cl,32
+			    mov [bx],cl
+lp2:
+			push es ! mov dx,ds
+			mov es,dx
+			mov di,offset pbuf
+			inc di ! mov cx,3
+			repz movsb
+			pop es
+			mov dx,offset pbuf
+			push ax
+			call print_ds_string
+			pop ax
+			dec ax ! jnz prdrlp
+			call crlf
+			mov tcnt,0 ! mov si,0
+			mov cl,32
+tmpfill:
+			    mov ttype[si],cl
+			    inc si
+			cmp si,12 ! jne tmpfill
+			jmp nextcommand
+
+
+
+EJECT
+
+not_order:
+
+		    mov di,offset memcmd
+		    call parser
+		    jnz notmem
+			mov si,offset fcb
+			mov di,parseret
+			cmp di,0 ! je prmem
+			    inc di
+			    call parsefilename
+			    cmp cx,0 ! jne prmem
+			      mov si,offset fcb
+			      inc si
+			      mov ch,[si]
+			      inc si
+			      mov dx,[si]
+			      call a_to_b
+				cmp bx,0ffffh
+				jz memerror
+				  mov cl,6
+				  shl bx,cl
+				  mov dx,bx
+				  mov cl,2		;set ms_minmem
+				  callf ms_func_jmp_addr
+				jmp prmem
+memerror:	              mov dx,offset memerrmsg
+			      call print_string
+prmem:			mov dx,offset memmsg
+			call print_string
+			mov cl,2			;get ms_minmem
+			mov dx,0FFFFH			;get operation
+			callf ms_func_jmp_addr
+			mov cl,6
+			shr ax,cl
+			call print_dec
+			mov dl,'K'
+			call prchar
+			call crlf
+			jmp nextcommand
+
+
+
+EJECT
+
+notmem:	    	    mov di,offset addmemcmd
+		    call parser
+		    jnz notaddmem
+			mov si,offset fcb
+			mov di,parseret
+			cmp di,0 ! je praddmem
+			    inc di
+			    call parsefilename
+			    cmp cx,0 ! jne praddmem
+			      mov si,offset fcb
+			      inc si
+			      mov ch,[si]
+			      inc si
+			      mov dx,[si]
+			      call a_to_b
+				cmp bx,0ffffh
+				jz addmemerror
+				  mov cl,6
+				  shl bx,cl
+				  mov dx,bx
+				  mov cl,8		;set ms_addmem
+				  callf ms_func_jmp_addr
+				jmp praddmem
+addmemerror:	              mov dx,offset addmemerrmsg
+			      call print_string
+praddmem:		mov dx,offset addmemmsg
+			call print_string
+			mov dx,0FFFFH
+			mov cl,8			;get ms_addmem			mov dx,0FFFFH			;get operation
+			callf ms_func_jmp_addr
+			mov cl,6
+			shr ax,cl
+			call print_dec
+			mov dl,'K'
+			call prchar
+			call crlf
+			jmp nextcommand
+
+
+
+EJECT
+
+notaddmem:	    mov di,offset at87cmd
+		    call parser	
+		    jz	is8087
+		    jmp not8087
+
+is8087:			mov si,offset fcb
+			mov di,parseret
+			cmp di,0 ! je pr8087
+			    call deblank	
+			    call parsefilename
+			    cmp cx,0 ! jne pr8087
+			      mov si,offset fcb + 1
+			      mov di,offset negatory	
+			      mov cx,2
+			      call cmpit
+			      jnz not_off1
+				  mov cl,3		;8087 function
+				  xor dl,dl		;turn 8087 off
+				  callf ms_func_jmp_addr
+			      jmps pr8087
+not_off1:		      mov si,offset fcb
+			      inc si
+			      mov di,offset affirmative
+			      mov cx,2
+			      call cmpit
+			      jnz at87err1
+				  push es ! mov es,sysdatseg
+				  mov bx,8ch 
+				  cmp es: word ptr [bx],0ffffh
+				  pop es
+				  jnz isinstalled
+				      mov dx,offset notinstalled
+				      call print_string
+				      jmps pr8087
+isinstalled:
+				  mov cl,3		;8087 function
+				  mov dl,1		;turn 8087 on
+				  callf ms_func_jmp_addr
+			      jmps pr8087
+
+at87err1:		      mov dx,offset at87emsg
+			      call print_string
+
+pr8087:		        mov dx,offset at87msg
+			call print_string
+			mov cl,3		;8087 function
+			mov dl,0FFH		;get 8087 status
+			callf ms_func_jmp_addr
+			or al,al
+			jz at87off
+			call on
+			jmps at87on
+at87off:		call off
+at87on:			call crlf
+			jmp nextcommand
+
+
+EJECT
+
+not8087:	    mov di,offset delcmd
+		    call parser
+		    jnz notdel
+			mov ax,8
+			mov bx,offset erasecmd
+			jmp extbltin
+
+
+EJECT
+
+notdel:		    mov di,offset delqcmd
+		    call parser
+		    jnz notdelq
+			mov ax,7
+			mov bx,offset eraqcmd
+			jmp extbltin
+
+
+EJECT
+
+notdelq:    	    mov	di,offset rencmd
+		    call parser
+		    jnz notren
+			mov ax,5
+			mov bx,offset renamecmd
+			jmp extbltin
+
+
+EJECT
+
+notren:		    mov di,offset remcmd
+		    call parser	
+		    jnz  notrem
+			 jmp nextcommand
+
+
+EJECT
+		    
+notrem:		    mov di,offset syscmd
+		    call parser			    	
+		    jnz notsys
+                         jmp nextcommand
+
+
+EJECT
+
+notsys:
+		    mov di,offset pausecmd
+		    call parser
+		    jnz	notpause
+			mov dx,offset pausemsg
+			call print_string
+			call getrawchar
+
+
+IF BATCH
+
+			cmp al,3
+			jnz not_c
+			call ctl_c
+
+ENDIF
+
+
+not_c:			call crlf
+			jmp nextcommand
+
+
+EJECT
+
+notpause:	    mov di,offset suspendcmd
+		    call parser
+		    jnz notsuspend
+			mov si,offset fcb
+			mov di,parseret
+			cmp di,0 ! je prsuspend
+			    call deblank
+			    call parsefilename
+			    cmp cx,0 ! jne prsuspend
+			      mov si,offset fcb + 1
+			      mov di,offset negatory	
+			      mov cx,2
+			      call cmpit
+			      jnz not_off
+				mov cl,4		;suspend function
+				xor dl,dl		;turn suspend off
+				callf ms_func_jmp_addr
+			      jmps prsuspend
+not_off:		      mov si,offset fcb
+			      inc si
+			      mov di,offset affirmative		 	
+			      mov cx,2
+			      call cmpit
+			      jnz suspenderr
+				mov cl,4		;suspend function
+				mov dl,1		;turn suspend on
+				callf ms_func_jmp_addr
+			      jmps prsuspend
+
+suspenderr:		      mov dx,offset suspendemsg
+			      call print_string
+prsuspend:		mov dx,offset suspendmsg
+			call print_string
+			mov cl,4		;suspend function
+			mov dl,0FFH		;get suspend status
+			callf ms_func_jmp_addr
+			or al,al
+			jz suspoff
+			call on
+			jmps suspon
+suspoff:		call off
+suspon:			call crlf
+			jmp nextcommand
+
+
+EJECT
+
+notsuspend:
+		    mov di,offset stpcmd
+		    call parser
+		    jz isstop ! jmp notstop
+isstop:
+			mov si,offset fcb
+			mov di,parseret
+			cmp di,0 ! jz plnstop
+
+			    inc di
+			    call parsefilename
+			    mov parseret,bx
+			    cmp cx,0 ! jnz stoperr
+			    cmp bx,0 ! jz stoperr
+
+				mov si,offset fcb ! inc si
+				mov bx,offset apb
+				mov di,bx ! add di,6
+				mov cx,4
+				push es
+				push ds ! pop es
+				repnz movsw
+				pop es
+
+				mov si,offset fcb
+				mov di,parseret
+
+				    inc di
+				    call parsefilename
+				    cmp cx,0 ! jnz stoperr
+
+					mov parseret,bx
+					mov si,offset fcb
+					inc si
+					mov ch,[si]
+					inc si
+					mov dx,[si]
+					call a_to_b
+					cmp bx,0FFFFh ! jz stoperr
+
+					    mov cx,bx
+					    dec cx
+					    mov bx,offset apb
+					    mov 4[bx],cl
+
+					    mov cl,P_ABORT
+					    mov dx,offset apb
+					    call ccpm
+					    cmp ax,0FFFFh ! jnz stopend
+
+stoperr:
+				mov dx,offset stoperrmsg
+				call print_string
+
+stopend:
+			    jmp nextcommand
+
+plnstop:
+			    mov ax,7
+			    mov bx,offset stopcmd
+			    jmp extbltin
+
+
+EJECT
+
+notstop:
+		    mov di,offset printercmd	
+		    call parser
+		    jnz transient
+			mov si,offset fcb
+			mov di,parseret
+			cmp di,0 ! je prprinter
+			    inc di
+			    call parsefilename
+			    cmp cx,0 ! jne prprinter
+			      mov si,offset fcb
+			      inc si
+			      mov dx,[si]
+			      mov ch,'0'	
+			      call a_to_b
+			      cmp bl,0ffh
+			      je printererr
+
+
+IF BATCH
+
+				mov dx,24h   		;address of lst in pd
+				call set_parents_pd	;set pd in TMP 
+
+ENDIF
+
+
+				mov dl,bl
+				call setlist
+				jcxz prprinter
+printererr:		      mov dx,offset printemsg
+			      call print_string
+prprinter:		mov dx,offset printermsg
+			call print_string
+			call getlist
+			mov dl,bl ! call prnum
+			call crlf
+			jmp nextcommand
+
+
+EJECT
+
+on:	mov dl,'O' ! call prchar
+	mov dl,'N' ! call prchar
+	ret
+off: 	mov dl,'O' ! call prchar
+	mov dl,'F' ! call prchar
+	mov dl,'F' ! call prchar
+	ret
+
+
+
+
+EJECT
+
+transient:
+	push ds ! pop es		; point es to ds
+
+	mov drive,TRUE			; initialize drive to "was specified"
+	cmp byte ptr fcb,0 ! jnz specfd	; if drive byte zero then set drive to
+	    mov drive,FALSE		; "not specified".
+
+specfd:
+	call getdisk			; in case transient specifies default
+	inc al ! mov fcbdrv,al		; make al one relative
+
+	mov typspec,FALSE
+	call whattype        		; check validity of type field.
+	or al,al ! jz trans1 		; if type = blanks, then search type
+	    mov typspec,TRUE
+
+trans1:
+	cmp typspec,TRUE ! jz notq
+	cmp drive,TRUE ! je notq	; if drive specified, then not a queue
+					; else try queue open
+	    mov cl,Q_OPEN		; function 135
+	    mov dx,offset qfcb		; point dx to queue area
+	    call ccpm			; int 224
+	    inc al ! jz notq		; check error code not queue-try rest of the types.
+		mov drive,TRUE		; don't bother figuring in drive. 
+		jmp cpmcli		; queue open was succesful-go to P_CLI.
+
+notq:
+
+   	; dma for password protected files
+
+	mov dx,offset password
+	call setbuf
+
+;	push es
+;	mov es,sysdatseg
+;	mov al,es:.S_DSYSDISK
+;	pop es
+;	inc al
+;	mov sysdsk,al
+
+	mov cl,6
+	mov bx,offset search_struct
+	mov byte ptr [bx],0FFh
+	mov dx,bx
+	callf ms_func_jmp_addr
+
+	mov cl,F_ERRMODE		; set error return mode
+	mov dl,0FFh			; return and display mode
+	call ccpm
+
+	mov byte ptr ms_p_cli_struct+8,0	; indicate default user load
+
+	mov count,0
+	mov gdopen,FALSE
+
+	cmp typspec,TRUE ! jne srchloop
+	    mov dx,offset fcb
+	    call openit		; type now specified, try to open
+	    jmp openck
+					; found it - break out of here
+
+srchloop:
+		call settype
+		mov dx,offset fcb
+		call openit
+srchlp1:
+	    cmp gdopen,TRUE ! jz openck
+	    inc count ! mov cl,count
+	    cmp cl,cnt ! jb srchloop
+
+openck:
+	mov cl,F_ERRMODE ! xor dl,dl
+	call ccpm
+
+	cmp gdopen,TRUE ! jz openckgd 
+	jmp open_err
+
+openckgd:
+	    mov bx,offset fcb		; last character in type field 
+	    mov al,byte ptr 11[bx]
+	    and al,7FH			; mask off attribute bits
+	    cmp al,'D' ! jnz notcpm		; is this a .CMD file?
+		mov drive,TRUE
+		jmp cpmcli			; else jmp to P_CLI
+
+notcpm:
+	mov al,byte ptr 9[bx]
+	and al,7FH			; mask off attribute bit
+        cmp al,'B' ! jnz trans5       	; is fcb a .BAT
+					; not sub so simply call bruce
+
+
+
+IF BATCH
+
+	mov si,offset fcb		; internal fcb
+	mov di,offset default_fcb	; default fcb in base page
+	mov cx,6 ! rep movsw		; if command is BATCH command
+	mov si,offset clicb_cmd		; then put command and tail into
+	mov di,offset dma+1		; this base page - then reinitialize
+	mov cx,127 ! rep movsb	 	; submit and jump into the new file.
+	call batchinit
+	mov sp,offset stack_top
+	jmp nextcommand
+
+ENDIF
+
+
+
+
+IF TMP
+
+	jmp invoke_batch		; invoke BATCH processor
+
+ENDIF
+
+
+trans5:
+
+
+IF BATCH
+	    mov dl,batch_priority
+	    mov cl,P_PRIORITY
+	    call ccpm
+ENDIF
+
+
+	    mov dx,offset password
+	    call setbuf
+	
+	    mov read_blen,0			; leading 0
+	    mov dx,offset clicb		; dx -> 0command0
+	    mov cmdsent,TRUE		; did send a command
+	    mov ms_cmd_sent,TRUE		; did send a dos command
+	    mov batchflag,FALSE		; did not send a BATCH command
+
+	    mov bx,offset ms_p_cli_struct
+	    mov [bx],offset fcb
+	    mov 2[bx],ds ! mov 4[bx],dx ! mov 6[bx],ds
+
+	    mov dx,offset ms_p_cli_struct
+	    mov cl,1			; ms_p_cli function
+	    callf ms_func_jmp_addr		; call function translator
+
+	    cmp bx,0 ! je get_nextcommand
+		call clierror
+		jmps get_nextcommand
+
+open_err:
+	mov drive,TRUE			; don't worry about handling drive for cli
+	mov cx,E_BAD_OPEN
+	call clierror
+
+get_nextcommand:
+
+	jmp nextcommand			; do it again
+
+
+EJECT
+
+extbltin:
+
+	    push es ! push ds
+
+	    push ds ! pop es
+
+	    std
+	    mov si,offset clicb_cmd + 132
+	    mov di,si
+	    add di,ax
+
+	    mov cx,132
+	    rep movsb
+	    dec si
+	    add byte ptr [si],al
+	    cld
+
+	    push cs ! pop ds
+	    mov di,offset clicb_cmd
+	    mov si,bx
+	    mov cx,11
+	    rep movsb
+
+	    pop ds ! pop es
+	jmp delret
+
+
+EJECT
+
+openit:
+	call openfile
+	inc al ! jz openit9
+	jmp openit2
+
+openit9:
+	    cmp drive,TRUE ! jnz openit8
+	    jmp openit1
+
+openit8:
+
+	    mov al,sysdsk
+;	    cmp al,0FFh ! jz openit1
+
+	    push es
+	    mov es,sysdatseg
+	    mov bx,es:S_RLR
+	    test es:P_SFLAG[bx],08h
+	    pop es
+	    jnz openit1
+
+		mov fcb,al
+		mov dx,offset fcb
+
+		call openfile
+		inc al ! jz openit3
+
+		    test byte ptr fcb+10,80h ! jnz openit4
+
+			mov dx,offset fcb
+			call closefile
+			call getuser
+			push ax ! mov dl,0
+			call setuser
+			mov dx,offset fcb
+
+			call openfile
+			inc al ! jnz openit6
+
+			    test byte ptr fcb+10,80h ! jz openit7
+
+				mov byte ptr ms_p_cli_struct+8,0FFh
+				mov gdopen,TRUE
+				mov al,fcb
+				mov fcbdrv,al
+;				mov dx,offset fcb
+;				call closefile
+				jmps openit5
+
+openit7:
+				mov dx,offset fcb
+				call closefile
+
+openit6:
+			    mov fcb,0
+
+openit5:
+			pop dx
+			call setuser
+			jmps openit1
+
+openit4:
+			mov gdopen,TRUE
+			mov al,fcb
+			mov fcbdrv,al
+;			mov dx,offset fcb
+;			call closefile
+			jmps openit1
+
+openit3:
+		    mov fcb,0
+		    jmps openit1
+
+openit2:
+	    mov gdopen,TRUE
+;	    mov dx,offset fcb
+;	    call closefile
+
+openit1:
+	ret
+
+
+EJECT
+
+;------------------------------------------------------------------------------
+;                          SUPPORT ROUTINES
+;------------------------------------------------------------------------------
+
+
+;------------------------------------------------------------------------------
+;  whattype determines what type is specified in the last 3 bytes of the file
+;  name.   if the type is blanks then we will have to use the search order.
+;
+
+whattype:
+        mov bx,offset fcb+9
+        cmp byte ptr [bx],' ' ! jnz what0
+	mov al,0 ! jmp what3
+
+what0:
+	mov cx,4
+what1:
+	    push cx
+	    mov dx,cx
+	    dec dx
+	    shl dx,1 ! shl dx,1
+	    mov di,offset typ
+	    add di,dx
+
+	    mov si,offset fcb+9
+
+	    push es
+	    mov dx,cs ! mov es,dx
+	    mov cx,3
+	    repz cmpsb
+	    pop es
+	    pop cx
+
+	    jz what2
+	loop what1
+
+	mov cx,E_BAD_TYPE
+	call clierror
+	jmp nextcommand
+
+what2:
+	mov al,1
+what3:
+        ret
+
+
+EJECT
+
+;------------------------------------------------------------------------------
+; settype is used to fill in new type so that the cli can attempt to open the
+; next file in the search order. The type is specified by the value of count
+;
+settype:
+	mov di,offset fcb+9
+	mov si,offset cmdtyp
+	xor dx,dx ! mov dl,count
+	add dl,count ! add dl,count
+	add si,dx
+	mov cl,3 ! rep movsb
+        ret
+
+
+EJECT
+
+rcln:
+	push	ds
+	pop	es
+
+
+IF BATCH
+
+	call	sublin			;get line from submit i/o buffer
+
+ENDIF
+
+
+
+
+IF TMP	
+
+;*** Have ^C reset disk system if hit during command input	*GLP*
+	push	ds
+	mov	ds,sysdatseg
+	mov	di,S_RLR		; get our PD offset
+	or	P_SFLAG[di],PSF_RESET	; turn on ^C to mean reset
+	pop	ds
+
+	mov	batchflag,FALSE
+	mov	read_maxcmd,128		;get line from the console
+	mov     cl,C_READSTR            ;read a line into clicb_cmd
+	mov     dx,offset read_buf	;point to beginning of buffer
+	call	ccpm			;int 224
+
+	push	ds
+	mov	ds,sysdatseg
+	mov	di,S_RLR		; get our PD offset
+	and	P_SFLAG[di],not PSF_RESET	; turn on ^C to mean abort
+	pop	ds
+
+
+ENDIF
+
+
+gotlin:
+	xor bh,bh
+	mov bl,read_blen
+	add bx,offset clicb_cmd			;bx -> eol
+
+	mov di,bx
+
+	mov cx,offset clicb_cmd+132
+	sub cx,bx
+
+	xor al,al
+	rep stosb				;zero out rest of read buffer
+
+
+IF BATCH
+
+	mov delimit,0				;set string delimiter to 0
+	mov dx,offset clicb_cmd			;dx -> command line
+	call print_ds_string			;print string
+
+	mov delimit,'$'
+
+	cmp long_line,TRUE ! jne notll
+
+	    mov dx,offset llerr
+	    call print_string
+	    mov long_line,FALSE
+notll:
+
+	mov dl,CR
+	call prchar
+
+ENDIF
+
+
+	ret
+
+
+EJECT
+
+IF BATCH
+
+sublin:
+
+	call getbuf				;refresh the submit buffer
+						; for each command
+						;handles those that change the
+						;BATCH file on the fly
+	xor bl,bl				;bl = eol flag = FALSE
+	xor ah,ah				;ah = command length = 0
+	mov si,submit				;si = buffer pointer = submit
+	mov di,offset read_buf+1		;di = command pointer = rb+1
+
+subagn:
+	    call movchar			;get character from file.
+	    cmp submit,FALSE ! jnz contsub	;is submit done?
+		xor cx,cx			;program. else continue
+		mov dx,cx
+		call ccpm
+
+contsub:
+	    cmp dl,CR ! jnz ntcr		;is character a carriage ret?
+		mov bl,TRUE			;yes - eol = TRUE
+		call movchar			;    and check for line feed
+		cmp dl,LF ! jz iscrlf		;    if next char line feed
+		    dec ah			;    destination pointer
+		    dec si			;    if not line feed then
+		    dec di			;    back off by decrementing
+		    jmp donsub			;    pointers
+
+iscrlf:
+		    dec di
+		    dec ah
+		    jmp donsub
+
+ntcr:
+		cmp dl,LF ! jnz donsub		;is character line feed
+		    mov bl,TRUE			;yes - eol = TRUE
+
+donsub:
+	inc bl ! jnz subagn			;is eol TRUE?
+
+	dec di					;yes - ignore eol character
+	cmp submit,FALSE ! jz dontcg		;did we reach end of file?
+	    mov submit,si			;else update submit pointer
+
+dontcg:
+	mov bx,offset read_buf			;bx->command buffer
+
+	mov al,255				;al = 255 
+	mov [bx],ax				;ah = buffer length
+
+	mov bx,ax ! xchg bh,bl
+
+	xor bh,bh				;mov bx,ah 
+	add bx,offset clicb_cmd-1		;bx->eos in command line
+
+	mov byte ptr [bx],0			;insert 0 in command line
+
+	ret
+
+
+EJECT
+
+;------------------------------------------------------------------------------
+; movchar gets a character from the submit buffer and puts it into the command
+; line. Movechar automatically handles % symbols by substituting the parameter
+; for the %n where n represents the number of the parm in the command line.
+;
+
+movchar:
+	inc si ! inc di					;increment buffer pointer, command line pointer
+	inc ah						;increment buffer counter
+	cmp eof,TRUE ! jne movchar1
+	    mov submit,FALSE				;end of submit file
+	    mov dl,' '
+	    jmps notpct
+
+movchar1:
+	    cmp si,offset subbuf+128 ! jb bufok		;if si is past end of buffer
+							;then get a new buffer else
+		add subsavelow,1			;increment saved rrn's
+		adc subsavehigh,0			;
+		push bx
+		call getbuf				;continue on.
+		pop bx
+
+bufok:
+	    mov dl,byte ptr [si]			;dl gets next character
+	    cmp dl,1ah ! jnz notend			;is it eof?
+		mov eof,TRUE				;yes - terminate submit
+		mov dl,CR				;put a carriage return in dl
+
+notend:
+	    cmp dl,'%' ! jnz notpct			;is it a percent sign?
+		inc si					;yes - point si to parm number
+		cmp si,offset subbuf+128 ! jb bufok1
+							;if si is past end of buffer
+		    add subsavelow,1			;increment saved rrn's
+		    adc subsavehigh,0			;
+		    push bx
+		    call getbuf				;continue on.
+		    pop bx
+
+bufok1:
+		mov dl,byte ptr [si]			;is parm number another %
+		cmp dl,'%' ! jz notpct			;yes - continue
+		    push si ! push bx
+		    call subparm			;corresponding parameter
+		    pop bx ! pop si			;restore buffer pointer
+		    dec di				;do not put blank in com line
+		    dec ah				;decrement pointers
+		    ret					;return
+
+notpct:
+	cmp ah,081h ! jae notpct1
+	    mov byte ptr [di],dl				;move character into com line
+	    jmps notpct2
+notpct1:
+	    mov long_line,TRUE
+	    dec ah
+	    dec di
+notpct2:
+	ret						;(character is blank if eof)
+
+
+EJECT
+
+;------------------------------------------------------------------------------
+; getbuf supplies the BATCH processor with a new buffer of commands when 
+; needed. Getbuf does random i/o and opens and closes the BATCH file each
+; time it is invoked.
+;
+
+getbuf:
+	push ax
+
+	mov dx,offset subbuf		;set dma to subbuf
+	call setbuf				;
+
+	call getuser
+
+	push ax
+	mov dl,subuser
+	call setuser
+
+	push di
+	call	switchhd		;points us to correct sub directory
+	pop di
+
+	mov dx,offset subfcb		;try to open subfcb
+	call openfile			;if it is not found, somebody
+	pop dx				;restore default user
+
+;	push dx				;save default user
+;	push ax				;save open return code
+;	call setuser
+;	pop ax				;restore open return code
+;	pop dx				;balance stack in case of error
+
+	inc al ! jnz fndsub		;may have changed disks on us.
+	    call setuser		;restore user
+	    call switchhd		;restore sub directory for BDOS
+	    mov dx,offset subnotfound		;if so then output message
+	    call print_ds_string			;
+	    xor cx,cx				;and terminate
+	    xor dx,dx
+	    call ccpm
+
+fndsub:
+	push dx				;save default user number
+
+;	mov dl,subuser			;get BATCH file user number
+;	call setuser
+
+	mov bx,offset subfcb+33		;bx->low random rec number 
+	mov dx,subsavelow			;dx = saved low rrn
+	mov [bx],dx				;set low rrn
+
+	add bx,2				;bx->high random rec number
+	mov dl,subsavehigh			;dl = saved high rrn
+	mov byte ptr [bx],dl		;set high rrn
+
+	mov dx,offset subfcb		;dx->subfcb
+	mov cl,F_READRAND			;
+	call ccpm				;read record from subfcb
+
+	push ax				;save error code
+	mov dx,offset subfcb		;dx->subfcb
+	mov cl,F_CLOSE			;close file
+	call ccpm				;int 224
+	pop ax				;balance stack
+
+	pop dx				;restore default user number
+
+
+	push ax				;save error code from read
+	call setuser
+
+	push di
+	call	switchhd		;restore default sub directory
+	pop di
+
+	mov dx,offset clicb_cmd		;reset dma buffer
+	call setbuf				;
+	pop ax				;retrieve error code
+	dec al! js reedok		;if 0 then read was ok
+	    mov submit,FALSE		;else terminate submit
+	    mov byte ptr subbuf,LF	;move line feed into buffer
+reedok:
+	mov si,offset subbuf		;reset si to beginning of buffer
+	pop ax
+	ret
+
+
+EJECT
+
+;------------------------------------------------------------------------------
+; subparm is called during BATCH processing when a % is encountered. it is 
+; with the next character in dl. subparm then reduces that character to a 
+; number and inserts the corresponding parameter in the buffer subprm into
+; the command line.	
+;
+
+subparm:
+	sub dl,30h			;dl now a number
+	mov si,offset subparms		;si -> subparms
+
+sub2:
+	cmp dl,0 ! jz fondit		;if dl = 0 then  si is pointing
+					;to proper parm, else inc si
+	    mov al,byte ptr [si]	;until another space is found,
+
+	    cmp al,' ' ! jz nxtprm	;dec di and try again
+	    cmp al,0 ! jnz goagn
+nxtprm:
+		dec dl
+goagn:
+	    inc si
+	    jmp sub2			;di not zero yet
+
+fondit:
+	mov dl,byte ptr [si]		;now move parm into command line
+	cmp dl,' ' ! jz subdon		;is dl a blank?
+	cmp dl,0 ! jz subdon		;is dl a zero?
+	    mov byte ptr [di],dl	;else move character into line
+	    inc ah			;inc si, inc di and do it again
+	    inc si ! inc di
+	    jmp fondit
+
+subdon:
+	mov dl,' '			;when done with parm insert a
+	ret				;blank at the end
+
+
+EJECT
+
+;------------------------------------------------------------------------------
+; clearsub is called when the TMP realizes it will be processing a BATCH file.
+; its purpose is to clear out the parameter buffer and command buffer.
+;
+
+clearsub:
+	mov submit,offset subbuf+128
+	mov al,0
+	mov di,offset subparms
+	mov cx,128
+	rep stosb
+	mov byte ptr subfcb+32,0
+	ret
+
+
+EJECT
+
+;------------------------------------------------------------------------------
+; initsub moves the BATCH fcb into subfcb and initializes the random record #
+;
+
+initsub:
+	mov subsavehigh,0			;ran rec = 0
+	mov subsavelow,0			;ran rec = 0 
+
+	mov si,offset default_fcb		;si -> default fcb in base page
+	mov di,offset subfcb			;di -> subfcb
+	mov cl,9				;move 9 bytes
+	rep movsb
+
+	mov bx,051h
+	cmp byte ptr 2[bx],0 ! je initsub1
+
+	    mov passflg,TRUE
+
+	    mov al,' ' ! mov cl,8
+	    mov di,offset batpass
+	    rep stosb
+
+	    mov si,[bx]
+	    mov di,offset batpass
+	    mov cl,2[bx]
+	    rep movsb
+
+initsub1:
+
+	cmp byte ptr subfcb,0 ! jnz cont_initsub	;if default drive - change to
+							; correct drive number
+	    call getdisk
+	    inc al ! mov subfcb,al
+
+cont_initsub:
+	mov eof,FALSE			;end of file set to FALSE
+	call getuser
+	mov subuser,al			;save user number of submit file
+	mov submit,offset subbuf-1
+	ret
+
+
+EJECT
+
+;------------------------------------------------------------------------------
+; BATCH init takes the command line (as it is received from the TMP or another
+; copy of the BATCH processor) stores away the file name, and processes the 
+; parameter list - storing each parameter in a table
+;
+batchinit:
+	call clearsub		; else initialize submit buffers
+	call initsub			; move fcb into subfcb and init rrn
+	call	savehd			; save off current location of x.BAT
+	mov cl,' '
+	mov si,offset subparms      ; si->parameter buffer area
+	mov bx,offset dma+1		; bx->command line
+mrprms:
+	mov al,byte ptr 0[bx]		; move character into al
+	cmp al,end$string ! jz nomore	; this code parses the remaining
+					; command line for a BATCH file.
+
+;	    call separator ! jnz notdli		; it takes the command tail, converts
+
+	    push cx
+	    xor cx,cx ! mov cl,3
+	    mov di,offset delimiters
+	    repne scasb ! pop cx
+	    jnz notdli
+
+	    cmp cl,' ' ! jz wassp			; delimeters to a single space between
+					; arguments, and stores it into a
+	    mov al,' '			; buffer called subparms
+notdli:
+	    mov byte ptr [si],al	;
+	    inc si			; this buffer will be used when
+wassp:
+	    inc bx			; commands in the BATCH file  
+	    mov cl,al			; use %0, %1  etc.
+	jmp mrprms
+
+nomore:
+	mov byte ptr [si],' '
+	inc si
+	mov byte ptr [si],0
+	ret
+
+
+EJECT		
+
+;------------------------------------------------------------------------------
+; checksub is called after each dos program in a BATCH file. Its purpose is to
+; check the return code and, if necessary, ask the user if he wants to abort
+; the job.
+;
+
+chksub:
+	mov cl,5
+	mov dx,0FFFFH			;get ms_retcode
+	callf ms_func_jmp_addr
+
+	cmp ax,0fffeh ! jz ctl_c	; was it an abnormal abort
+	    ret				; no  - return
+ctl_c:
+	mov cl,5
+	xor dx,dx
+	callf ms_func_jmp_addr		; reset ms_retcode
+
+	push si
+	push word ptr delimit
+	mov delimit,'$'
+	call crlf			; output carriage return
+dummy:
+	mov dx,offset subcont
+	call print_ds_string		; output message
+
+	mov cl,C_RAWIO			; read character
+	mov dl,0fdh				; from console
+        call ccpm				; (use raw mode)
+
+	cmp al,20H ! jb not_printable
+	    mov dl,al				; echo character to
+	    push ax				;
+	    call prchar				; screen
+	    pop ax
+
+not_printable:
+
+	push ax
+	call crlf
+	pop ax
+
+	cmp al,3				; check for control-C
+	je trmsub
+
+	cmp al,'y'				; if al = y or Y then abort.
+	je trmsub				; if al = n or N then continue
+
+	cmp al,'Y'
+	je trmsub
+
+	cmp al,'N'
+	je dontstp
+
+	cmp al,'n'
+	jne dummy				; bad character so get another
+
+dontstp:
+	pop word ptr delimit
+	pop si
+	ret
+
+trmsub:
+	mov submit,FALSE			; terminate submit - 
+	mov sp,offset stack_top		; balance stack
+	jmp nextcommand			; jmp to top of loop
+
+ENDIF
+
+
+
+
+EJECT
+
+
+;------------------------------------------------------------------------------
+; setbuf sets the dma to the address in dx
+;
+
+setbuf:
+	mov cl,F_DMAOFF
+      	push dx
+	call ccpm			;dma offset
+
+	mov cl,F_DMASEG
+	mov dx,ds
+	call ccpm			;dma segment
+
+	pop dx
+
+	ret
+
+EJECT
+
+;------------------------------------------------------------------------------
+; closefile closes the file pointer to by dx 
+;
+
+closefile:
+
+	push bx
+
+	mov cl,F_CLOSE
+	call ccpm
+
+	pop bx
+
+	ret
+
+
+EJECT
+
+;------------------------------------------------------------------------------
+; openfile opens the file pointed to by dx in read-only mode
+;
+
+openfile:			; open FCB in DX
+	push bx
+
+	mov bx,dx
+	or byte ptr 6[bx],80h
+
+	cmp passflg,TRUE ! jne open1
+
+	    mov cl,52			; Get rhe current DMA address
+	    call ccpm
+
+	    mov si,offset batpass	; Then move in the password
+	    mov di,ax
+	    mov cl,8
+	    rep movsb
+
+open1:
+
+        mov cl,F_OPEN
+        call ccpm
+
+	pop bx
+
+        ret
+
+
+EJECT
+
+IF BATCH
+
+set_parents_pd:				;set byte in my pd and my parents pd 
+	push bx				;according to offset in dx and value 
+	push es				;in al.
+	mov ax,bx			;
+	mov es,sysdatseg		;es:bx points to address of 
+	mov bx,68h			;ready list root.
+	mov cx,es:word ptr [bx]		;es:cx points to my pd.
+	mov bx,cx			;es:bx points to my pd 
+	add bx,dx			;add offset into pd to bx.
+	mov es:byte ptr [bx],al		;put byte in al into my pd.
+	mov bx,cx			;es:bx points to my pd
+	add bx,1eh			;offset of parent field
+	mov cx,es:word ptr [bx]		;cx points to parents pd
+	mov bx,cx			;
+	add bx,dx			;es:bx points to proper field in 
+	mov es:byte ptr [bx],al		;parents pd   -   insert value.
+	pop es				;restore es
+	pop bx				;restore bx
+	ret
+
+ENDIF
+
+
+
+EJECT
+
+print_string:	
+
+
+IF BATCH
+
+		mov si,0ffffh
+		call print_ds_string
+		mov si,0
+		ret
+
+ENDIF
+
+
+
+
+IF TMP
+
+		push ds
+		mov ax,cs ! mov ds,ax
+		call print_ds_string 
+		pop ds ! ret
+
+ENDIF
+
+
+
+
+EJECT
+
+
+IF BATCH
+
+check_control:
+		push dx
+		mov cl,C_RAWIO ! mov dl,0FFH	;check for character typed
+		call ccpm			;check for ^S, ^Q & ^C
+		or al,al ! jz check_control_ret
+		  cmp al,3 ! jne not_ctlc
+got_ctlc:
+		    call ctl_c
+		    jmps check_control_ret
+not_ctlc:
+		  cmp al,13H ! jne check_control_ret	;is is ^S
+not_ctlq:
+		    mov cl,C_RAWIO ! mov dl,0FDH	;wait for ^Q char
+		    call ccpm
+		    cmp al,3 ! je got_ctlc
+		    cmp al,11H ! jne not_ctlq	;try again
+check_control_ret:
+		pop dx
+		ret
+
+ENDIF
+
+
+EJECT
+
+prchar:
+
+
+IF BATCH
+
+		call check_control
+		mov cl,C_WRITE ! call ccpm		;output the character
+		call check_control
+		ret
+
+ENDIF
+
+
+
+
+IF TMP
+
+		mov cl,C_WRITE ! jmp ccpm
+
+ENDIF
+
+
+
+
+EJECT
+
+p_dec:
+		div cx
+		push dx
+		cmp p_dec_flg,TRUE ! je p_dec1
+		or ax,ax ! jz p_dec_ret
+p_dec1:
+		mov p_dec_flg,TRUE		;printed a number
+		mov dl,al			;so don't suppress blanks
+		add dl,'0'
+		call prchar
+p_dec_ret:
+		pop ax ! xor dx,dx
+		ret
+
+
+EJECT
+
+print_dec:
+		mov p_dec_flg,FALSE		;suppress leading zeros
+		xor dx,dx
+		mov cx,10000
+		call p_dec
+		mov cx,1000
+		call p_dec
+		mov cx,100
+		call p_dec
+		mov cx,10
+		call p_dec
+		mov dl,al
+		add dl,'0'
+		call prchar
+		ret
+
+
+EJECT
+
+print_ds_string:
+
+
+IF TMP
+
+	mov 	cl,C_WRITEBUF 
+	jmp	ccpm
+
+ENDIF
+
+
+
+
+IF BATCH
+
+	mov	bx,dx	
+more:	cmp	si,0ffffh
+	jnz	notcs
+	mov	dl,cs:byte ptr [bx]
+	jmps	notds
+notcs:	mov	dl,byte ptr [bx]
+notds:	mov	ax,colcnt
+	cmp	dl,delimit
+	jz	dollar
+	cmp	dl,13			;carriage return? if so reset col count
+	jnz	notcr			;no - go on
+	mov	ax,0			;reset column counter
+notcr:	cmp	ax,8			;8 columns? if so reset col counter 
+	jb	not8			;no - go on
+	mov	ax,0			;
+not8:	cmp	dl,9
+	jnz	notab
+;	call	outtab
+	mov 	dl,20
+notab:	push	bx
+	push	ax
+	call	prchar
+	pop	ax
+	pop	bx
+	inc	bx
+	jmps	more
+dollar:	mov	colcnt,ax
+	ret
+
+outtab: cmp	al,0
+	jz	tabout
+	dec	al
+	push	ax
+	push	bx
+	mov	cl,C_RAWIO
+	mov	dl,' '
+	call	ccpm
+	pop	bx
+	pop	ax
+	jmps	outtab
+tabout:	ret
+
+ENDIF
+
+
+
+clierr1:
+clierr2:		
+
+invoke_batch:	mov command,'C'		;This is the place where by stuffing in
+		mov read_maxcmd,'H'	;the drive spec, the last 3 chars in
+		mov read_blen,' '	;"BATCH " may have been lost previously.
+		cmp byte ptr drive,FALSE ! jnz dont_insert_drive	;FALSE - no drive specified
+		    push ds ! pop es
+		    mov cx,132
+		    mov di,offset clicb_cmd+132
+		    mov si,di
+		    dec si ! dec si
+		    std			;move everything down 2 bytes in buffer
+		    rep movsb
+		    cld
+		    mov al,fcbdrv		;get drive number
+		    add al,'A'-1
+		    mov byte ptr read_blen+1,al
+		    mov byte ptr read_blen+2,':'
+dont_insert_drive:
+		lea dx,batch_cmd	;a drive. must blank it out if not
+		mov batchflag,TRUE	;using it this time.
+		jmps startearly		;don't issue prompt when done with .bat
+
+cpmcli:
+		mov dx,0ffffh 
+		call drive_free
+
+		mov dx,offset password ! call setbuf
+
+IF BATCH
+
+		mov dl,batch_priority
+		mov cl,P_PRIORITY
+		call ccpm
+
+ENDIF
+
+
+	   	mov command,0
+		lea dx,command		;start with dx pointing two bytes early
+		cmp drive,FALSE		;if I had to force in the drive 
+		jz startearly		;then leave dx here
+		inc dx ! inc dx		;else add 2 to dx.
+		mov read_blen,0		;and zero out first byte
+startearly:	mov cmdsent,TRUE	;command was sent
+		mov cl,P_CLI		;
+	    	call ccpm		;invoke P_CLI
+		cmp bx,0 ! je noerr	;
+		cmp batchflag,TRUE
+;		jnz clierror
+		jz blah
+		call clierror
+		jmp nextcommand
+blah:
+		mov batchflag,FALSE
+		mov cx,E_NO_BATCH
+;		jmp clierror
+		call clierror
+		jmp nextcommand
+
+noerr:		mov drive,TRUE		;reinitialize drive flag
+        	jmp nextcommand		;do it again
+
+
+EJECT
+
+;========
+clierror:
+;========
+; Cli call unsuccesful, analyze and display err msg
+;	input: CX = ERROR CODE
+
+	mov si,(offset clierrtab)-4
+nexterr:
+	add si,4
+	cmp cs:word ptr [si],0ffffh ! je unknownerr
+	cmp cx,cs:[si] ! jne nexterr
+unknownerr:
+	mov dx,cs:2[si]
+	; jmps showerr
+
+
+showerr:	; Print Error String
+;-------	; input: DX = address of Error
+		;             string in CSEG
+		;	 if DX=0 then NULL COMMAND
+
+	cmp dx,0 ! jne perr
+	    mov cmdsent,FALSE ! ret
+
+perr:
+	push dx ! call crlf
+
+	mov dx,offset errstr ! call print_string
+
+	pop dx ! call print_string ! call crlf
+
+	mov dx,offset cmdstr ! call print_string
+
+	mov dx,offset savebuf ! call print_ds_string ! call crlf
+
+;	jmp nextcommand	
+	ret
+
+
+EJECT
+;
+;	REGISTER PARAMETERS
+;
+;	ENTRY	di: pointer to string
+;
+;	EXIT	di: points to nonblank char
+;
+
+deblank:
+	    inc di
+	cmp byte ptr [di],' ' ! jz deblank
+	cmp byte ptr [di],TAB ! jz deblank
+	cmp byte ptr [di],'=' ! jz deblank
+	ret
+
+
+EJECT
+
+moveit:
+	mov ax,cs ! push ds   ! push es  
+	mov ds,ax ! mov es,ax 
+	rep movsw 
+	pop es ! pop ds 
+	ret
+
+
+EJECT
+
+cmpit:
+	push es
+	mov ax,cs ! mov es,ax
+	repz cmpsw
+	pop es
+	ret
+
+
+EJECT
+;
+;		returns ax = address of next delimiter in command or zero
+;
+
+parsefilename:
+
+	mov cx,F_PARSE
+	mov bx,offset pcb
+	mov [bx],di ! mov 2[bx],si
+	mov dx,bx
+	call ccpm
+
+	push cx ! push es
+
+	push ds ! pop es	; make es = ds
+	mov cx,4
+	mov si,offset fcb+16 ! mov di,offset password
+	rep movsw
+
+	pop es ! pop cx
+	ret
+
+
+EJECT
+
+a_to_b:		;dl = 1st char, dh = 2nd char.
+		;ch = highest order character (for minmem only)
+		push cx ! push dx
+		cmp dh,' ' ! jne atob2char
+		    mov dh,dl ! mov dl,ch
+		    mov ch,'0'
+		cmp dh,' ' ! jne atob2char
+		    mov dh,dl ! mov dl,ch	
+atob2char:	cmp dh,'0' ! jb atoberr
+		cmp dh,'9' ! ja atoberr
+		cmp dl,'0' ! jb atoberr
+		cmp dl,'9' ! ja atoberr
+		cmp ch,'0' ! jb atoberr
+		cmp ch,'9' ! ja atoberr
+
+		    sub dh,'0' ! sub dl,'0'
+		    sub ch,'0'	
+		    mov ax,0 ! mov al,dl
+		    push dx ! mov cl,10
+		    mul cl 
+		    mov si,ax
+		    mov cl,100 ! mov al,ch
+		    mul cl
+		    add ax,si		
+		    pop dx
+		    mov dl,dh ! mov dh,0
+		    add ax,dx
+		    mov bx,ax ! jmps atobdon
+atoberr:	mov bx,0ffffh 
+atobdon:	    pop dx ! pop cx ! ret
+prnum:		; dl = num (0-15)
+		cmp dl,10 ! jb prnum_one
+		    push dx
+		    mov dl,'1' ! call prchar
+		    pop dx ! sub dl,10
+prnum_one:	add dl,'0'
+		jmp prchar
+
+EJECT
+
+getuser:
+	mov dl,0ffh
+setuser:
+	mov cl,DIR_USERNUM ! jmp ccpm
+
+getrawchar:
+	mov dl,0fdh ! mov cl,C_RAWIO ! jmps ccpm
+
+setconsolenum:
+	mov cl,C_SETNUM   ! jmps ccpm
+
+setdisk:
+	mov cl,DRV_SET    ! jmps ccpm
+
+getdisk:
+	mov cl,DRV_GET    ! jmps ccpm
+
+setlist:
+	mov cl,L_SETNUM   ! jmps ccpm
+
+getlist:
+	mov cl,L_GETNUM   ! jmps ccpm
+
+attach:
+	mov cl,C_ATTACHC  ! jmps ccpm
+
+detach:
+	mov cl,C_DETACHC  ! jmps ccpm
+
+drive_free:
+	mov cl,DRV_FREE   !;jmps ccpm
+
+;====
+ccpm:	; INTERFACE ROUTINE FOR SYSTEM ENTRY POINTS
+;====
+
+	int OSINT ! ret
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                          
