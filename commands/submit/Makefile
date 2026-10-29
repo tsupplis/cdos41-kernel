@@ -1,6 +1,7 @@
-# SUBMIT — ASM86 build.
-# all builds local outputs; check validates them; clean removes generated files.
+# SUBMIT — local command build.
+# all builds the declared tools; check validates them; clean removes generated files.
 
+CMDINFO=cmdinfo
 ASM86=cpm86_asm86
 GENCMD=cpm86_gencmd
 
@@ -8,22 +9,19 @@ TOOLS=submit.cmd
 
 .PHONY: all check clean
 .DELETE_ON_ERROR:
-
 all: $(TOOLS)
 
 submit.cmd: submit.h86 Makefile
 	$(GENCMD) $<
-	cmdinfo $@
+	$(CMDINFO) $@
 
-# Assemble absolute groups for GENCMD.
-%.h86: %.a86 Makefile $(wildcard *.lib *.def *.equ *.inc)
+%.h86: %.a86 Makefile
 	$(ASM86) $<
 
-# Remove generated outputs only; preserve sources and reference files.
 clean:
 	rm -f *.sys *.loc *.cmd *.obj *.h86 *.sym *.lin *.lst *.prn
 	rm -f *.loc *.mp? *.lnk
 
-# Validate the structure of each rebuilt command/component.
+# Structural validation; byte comparisons or runtime checks are separate where available.
 check: all
-	@set -e; for f in $(TOOLS); do cmdinfo $$f; done
+	@set -e; for file in $(TOOLS); do $(CMDINFO) $$file; done

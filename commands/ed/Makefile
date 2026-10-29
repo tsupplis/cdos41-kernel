@@ -1,6 +1,7 @@
-# ED — Intel PL/M-86 / Intel ASM86 build.
-# all builds local outputs; check validates them; clean removes generated files.
+# ED — Intel PL/M compilation, link/locate, then GENCMD packaging.
+# all builds the declared tools; check validates them; clean removes generated files.
 
+CMDINFO=cmdinfo
 INTEL_PLM86=intel_plm86
 INTEL_ASM86=intel_asm86
 INTEL_LOC86=intel_loc86
@@ -12,7 +13,6 @@ TOOLS=ed.cmd
 
 .PHONY: all check clean
 .DELETE_ON_ERROR:
-
 all: $(TOOLS)
 
 # BBB and MMM for gencmd's data[bBBB,mMMM,xfff], derived from ed.mp2:
@@ -28,31 +28,27 @@ ed.cmd: ed.h86 Makefile
 	@test -n "$(ED_BASE)" -a -n "$(ED_MEM)" || \
 	  { echo "ed: cannot derive DATS/MEMORY from ed.mp2"; exit 1; }
 	$(GENCMD) $< 'data[b$(ED_BASE) m$(ED_MIN) xfff]'
-	cmdinfo $@
+	$(CMDINFO) $@
 
 ed.loc: ed.obj scd.obj Makefile
 	$(INTEL_LINK86) scd.obj, $(basename $@).obj to $(basename $@).lnk
 	$(INTEL_LOC86) $(basename $@).lnk 'od(sm(code,dats,data,stack,const))' \
 		'ad(sm(code(0),dats(10000h)))' 'ss(stack(+32))'  to $(basename $@).loc
 
-# Convert the located Intel object to H86.
 %.h86: %.loc Makefile
 	$(INTEL_OH86) $<
 	mv $*.hex $*.h86
 
-# Assemble relocatable objects; retain the module-specific linker layout.
-%.obj: %.a86 Makefile $(wildcard *.lib *.equ *.def *.inc)
+%.obj: %.a86 Makefile
 	$(INTEL_ASM86) $<
 
-# Compile PL/M sources; declarations and Makefile changes trigger recompilation.
-%.obj: %.plm Makefile $(wildcard *.lit *.ext)
+%.obj: %.plm Makefile $(wildcard *.lit *.def *.equ *.lib *.h *.dcl *.inc)
 	$(INTEL_PLM86) $< debug 'optimize(3)' xref
 
-# Remove generated outputs only; preserve sources and reference files.
 clean:
-	rm -f *.sys *.loc *.cmd *.obj *.h86 *.sym *.lin *.lst *.prn
+	rm -f *.sys *.loc *.cmd *.obj *.h86 *.sym *.lin *.lst *.prn ccpmtest.img
 	rm -f *.loc *.mp? *.lnk
 
-# Validate the structure of each rebuilt command/component.
+# Structural validation; byte comparisons or runtime checks are separate where available.
 check: all
-	@set -e; for f in $(TOOLS); do cmdinfo $$f; done
+	@set -e; for file in $(TOOLS); do $(CMDINFO) $$file; done
