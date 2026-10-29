@@ -64,3 +64,10 @@ check-type: all
 	python3 tools/type_check.py
 	python3 tools/type_check.py --passwords
 	python3 tools/type_check.py --large
+
+.PHONY: check-show
+check-show: all
+	python3 tools/show_check.py
+	python3 tools/show_check.py --no-label
+	python3 tools/show_check.py --create
+	python3 tools/show_check.py --access

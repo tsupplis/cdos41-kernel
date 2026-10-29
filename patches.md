@@ -175,3 +175,17 @@ Unbracketed P/PNN and [P] are rejected, as are zero, lengths above 23,
 malformed options and extra arguments. Detailed behavior is documented in
 commands/type/README.md. Regression checks cover the numeric limits,
 case-insensitivity, EOF boundaries and rejection of the removed syntax.
+
+## SHOW: 3.3 disk/user/label parity
+
+The imported CCP/M source now matches SHOW 3.3's rejection of USERS/LABEL
+on DOS media, its implicit SPACE drive limit (A:..M:), and option dispatch:
+OPEN is invalid; all L-prefixes select LABEL, including LOCKED. The private
+media probe restores the caller's DMA offset. Creation stamping
+is read from label bit 10h instead of an uninitialized local variable.
+
+The existing DPB and Y2K fixes remain. make check-show compares the OEM and
+rebuilt commands on disposable CP/M/FAT12 images and independently checks
+free space, capacities, users, label timestamps and media guards. Detailed
+coverage and the retained source version identifier are documented in
+commands/show/README.md.

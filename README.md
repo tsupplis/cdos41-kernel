@@ -17,7 +17,7 @@ accompany the sources, with CP/M-Plus-style usability improvements.
 
 The build follows the CCP/M project's source organization and toolchain.
 All build inputs are local to this repository. [Source pedigree and component
-status](SOURCE-MAP.md) and `sources.json` record the origins and source hashes.
+status](source-map.md) and `sources.json` record the origins and source hashes.
 
 ## CP/M-Plus usability improvements
 
@@ -150,7 +150,8 @@ behavior; intentional extensions are documented with each command.
 
 Compatibility details live with each tool: [SDIR](commands/sdir/README.md)
 covers DOS directories and options; [TYPE](commands/type/README.md) covers
-DOS EOF, passwords and bracketed paging.
+DOS EOF, passwords and bracketed paging; [SHOW](commands/show/README.md)
+covers disk/user/label reporting and DOS-media restrictions.
 
 | Tool | Purpose | Binary (`base/`) | Source (`commands/`) |
 | --- | --- | --- | --- |
@@ -194,7 +195,7 @@ DOS EOF, passwords and bracketed paging.
 | `sdir.cmd` | Detailed, sorted directory listing | Original | Recompiled from CCP/M-86 3.1 and adapted for parity |
 | `set` | Set file and drive attributes | Original | Recompiled from CCP/M-86 3.1 and adapted |
 | `setup` | Customize system hardware settings | Original | —; original OEM binary retained |
-| `show` | Display disk space and drive information | Original | Recompiled from CCP/M-86 3.1 and adapted, Y2K patched |
+| `show.cmd` | Display disk space and drive information | Original (3.3) | Recompiled from CCP/M-86 3.1 and adapted for parity |
 | `submit` | Run SUB command files | — | Recompiled from CCP/M-86 3.1 and adapted |
 | `sysdisk` | Display or change the system search path | — | Recompiled from CDOS 4.1; SD-mode D.A86 wrapper |
 | `systat` | Inspect processes and system resources | Original | Recompiled from CCP/M-86 3.1 and adapted |
@@ -231,7 +232,7 @@ The OEM disks also preserve BACK, REST, BRINST, FM, SPL, DISKSTAT, N,
 SETPORT and STOP, with their support data. REN.EXE is retained
 for the shell's RENAME alias. These remain **Original** binaries while the
 corresponding source work is considered individually.
-[Complete disk contents](media/README.md) · [Source map](SOURCE-MAP.md).
+[Complete disk contents](media/README.md) · [Source map](source-map.md).
 
 ## Y2K utilities
 
@@ -270,6 +271,7 @@ system and the live regression checks.
 | `make check` | Command headers, DATE parser, system layout, cursor, boot track and every packaged file/size |
 | `make check-pce` | Boot, console switching, line editing/recall, DIR, PIP, CLS, USER and SYSDISK |
 | `make check-type` | OEM/rebuilt TYPE comparison, DOS/CP/M EOF, passwords and paging |
+| `make check-show` | OEM/rebuilt SHOW comparison, media guards, capacity/free space, users and labels |
 | `make check-sdir` | OEM/rebuilt SDIR comparison on CP/M/FAT12, directory markers/counts, options and paging |
 | `make check-redirection` | PUT capture/append, GET/RDR input, copied bytes and return to shell |
 | `make check-aliases` | TMP/BATCH DEL execution, argument preservation and common PAUSE text |

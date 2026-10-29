@@ -1871,7 +1871,9 @@
 
     Use the SHOW options to  display  drive  characteristics,  active
     user  numbers,  or the directory label. SHOW HELP displays a list
-    of available options.
+    of available options. SPACE and DRIVE work on CP/M and DOS media.
+    USERS and LABEL require CP/M media; DOS disks report that restriction.
+    Default SPACE listings omit N:/O:/P:, as in the OEM SHOW command.
 
     ///2EXAMPLES
     Examples:

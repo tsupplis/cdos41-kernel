@@ -218,3 +218,12 @@ The maintained TYPE is recompiled from CCP/M-86 3.1 and adapted for parity.
 The parse/open/password/record logic matches; DOS byte-length EOF is corrected
 and bracketed PAGE/P01..P23 paging replaces the old P/PNN forms. See commands/type/README.md and
 make check-type for the behavioral comparison and documented differences.
+
+## SHOW compatibility
+
+The retained base/show.cmd is SHOW 3.3 with a Concurrent 3.2 startup header,
+SHA-256 0295f31a30830ab50e4e344175fe8ee44578b4d8cf71c92f2a153ddb7e7940b0.
+SHOW is recompiled from CCP/M-86 3.1 and adapted for parity: DOS-media guards,
+implicit drive selection and dispatch follow that binary. See the tool README
+and make check-show for the capacity/user/label/date comparisons. Its source
+SHOW 2.1 identifier remains a cosmetic difference in invalid-option output.

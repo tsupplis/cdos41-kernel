@@ -5036,7 +5036,9 @@
     {
       "path": "commands/show/show.plm",
       "origin": "ccpm86-kernel/commands/show/show.plm",
-      "sha256": "00adb564a465acefeca278b73e856d8e709aabbb3d0d857a7aca04d0035b8a28"
+      "sha256": "ced984162a2dc37a285a5479edd473993b16f3b121f564a4519a2c56717ac649",
+      "original_sha256": "00adb564a465acefeca278b73e856d8e709aabbb3d0d857a7aca04d0035b8a28",
+      "modifications": "Adapted for SHOW 3.3 parity: DOS media guards, implicit drive range, option dispatch and deterministic label flags. See commands/show/README.md."
     },
     {
       "path": "commands/show/vaxcmd.lit",
@@ -5418,9 +5420,9 @@
     {
       "path": "commands/help/help.dat",
       "origin": "ccpm86-kernel/commands/help/help.dat",
-      "sha256": "b2ec00da7abbe7bf0294cf2ff4b8191dfb231cbe86e3c13627e420c2a78a215d",
+      "sha256": "14a56665de87578d35b9d5efc11d01db224cbdc224ec25dfafec073fecd94c67",
       "original_sha256": "be082138ed971b145f4e44678fb8add340002dbdb86a4bbfd640859428cb61c7",
-      "modifications": "Document SDIR parity changes and TYPE EOF/password/bracketed paging."
+      "modifications": "Document SDIR/TYPE/SHOW compatibility and current options."
     },
     {
       "path": "commands/print/sqlink.inp",
