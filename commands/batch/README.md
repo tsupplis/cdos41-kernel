@@ -13,6 +13,11 @@ IF/GOTO/FOR/ECHO/SHIFT are not implemented.
 
 `make check-batch-live` checks messages, CLS/DEL and an unrelated sentinel
 on disposable CP/M images. `make check-dir-options` also executes a BAT
-on CP/M media while DIR lists a FAT drive. A separate direct FAT-hosted BAT
-fixture produced a close-checksum error before command execution and remains
-a follow-up; these checks do not establish all FAT script-loading paths.
+on CP/M media while DIR lists a FAT drive.
+
+`make check-fat-batch` covers FAT-hosted scripts with four short-name case
+flag combinations, CR/LF and Ctrl-Z endings, record padding, command-buffer
+refills and execution of ERA.CMD from FAT. It checks deletion targets and an
+unrelated sentinel. The original close-checksum failure was a FAT-to-FCB
+attribute conversion bug in the kernel, corrected in `kernel/con/black.a86`;
+see the root patch notes.
