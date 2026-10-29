@@ -1,0 +1,545 @@
+eject
+;	HDOPTION.LIB include file for HDMAINT 2.0 as of 20-Jul-84
+;	modified 20-Jul-84 to use ESC for exit key by M.P. Vano
+	cseg $
+;==============================================================================
+; LEVEL 2 |
+;---------
+;
+;	DISPLAY/CHANGE PARTITION OPTIONS:
+;	Called by MAIN MENU only, allows display/change of volume names
+;	or cp/m physical label option flags.
+;	Exits to MAIN MENU.
+;
+;==============================================================================
+P_OPTIONS:
+;  first need to decide if more than 1 disk has a partition we care about here.
+	XJE DSK_INFO_num_cpm_or_dos+offset hdisk1,0,P_OPT20
+	  XJE DSK_INFO_num_cpm_or_dos+offset hdisk0,0,P_OPT30
+	    XCLRBOX 1,3,77,22				;need to choose a disk
+	    XPUTS_AT 18,4,p_opt0_msg			;menu title
+	    XCALL CHOOSE_DISK
+	    XJMP P_OPT_GO
+;
+P_OPT20:
+	XMCALL disk0 ! XJMP P_OPT_GO			;else must be disk 0
+;
+P_OPT30:
+	XMCALL disk1					;else must be disk 1
+;
+P_OPT_GO:
+	XCLRBOX 1,3,77,22
+	XCALL SHOW_PM_STATUS				;display status
+;
+	XBRIGHT ! XPUTS_AT 32,10,p_opt0A_msg ! XDIM	;show prompt
+	XSETW keymask,F_ESC				;exit key always works
+	XKBOX_MSG 20,11,2,p_opt1_msg			;volume label change
+	XADDW keymask,F2				;always works
+;
+	XJE WORK_cpmexists,0,P_OPT_NOCPM
+	  XKBOX_MSG 20,14,4,p_opt2_msg			;cp/m options if CP/M
+	  XADDW keymask,F4
+;
+P_OPT_NOCPM:
+	XKBOX_MSG 20,20,0,p_opt3_msg			;exit key always ok
+	XKEYCASE keymask				;branch on choice
+	  dw	P_OPT_DONE
+	  dw	0,VOLUME_NAMES		;F2 - change/display volume names
+	  dw	0,CPM_OPTIONS		;F4 - change/display cpm options
+	  dw	0,0
+	  dw	0,0
+	  dw	0,0
+	XRET
+
+P_OPT_DONE:
+	XRET
+eject
+;==============================================================================
+; LEVEL 3 |
+;---------
+;	CHANGE/CREATE VOLUME NAMES (Directory Labels)
+;
+;==============================================================================
+VOLUME_NAMES:
+	XCLRBOX 1,3,77,22
+	XJNE WORK_disk,0,VN_DISK1
+	  XPUTS_AT 5,4,vnm7_msg
+	  XJMP VN_SHOW
+VN_DISK1:
+	  XPUTS_AT 5,4,vnm8_msg
+VN_SHOW:
+	XPUTS vnm9_msg
+;
+VNS_AGAIN:
+	XJE WORK_cpmexists,0,VN_SHOW1
+	  XMCALL get_cpm_name
+	  XJE cpm_label_ok,0,VN_SHOW1			;no label & can't make!
+	    XPUTS_AT 20,6,vnm5_msg
+	    db '"' ! XPUTS cur_cpm_name ! db '.'
+	    XPUTS cur_cpm_name1 ! db '"'
+;
+VN_SHOW1:
+	XJE WORK_dosexists,0,VNS_LOOP
+	  XMCALL get_dos_name		
+	  XJE dos_label_ok,0,VNS_LOOP			;no lbl,can't make one!
+	    XPUTS_AT 20,7,vnm6_msg
+	    db '"' ! XPUTS cur_dos_name ! db '"'
+;
+VNS_LOOP:
+	XBRIGHT ! XPUTS_AT 32,10,vnm0_msg ! XDIM	;show prompt
+	XSETW keymask,F_ESC				;exit key always works
+;
+	XJE WORK_cpmexists,0,VNS_1
+	  XJE protected_label,0,VN_CPM1			;if password protected
+	    XPUTS_AT 20,12,pwd_msg1			;do not allow rename
+	    XPUTS_AT 20,13,pwd_msg2			;..explain the problem
+	    XJMP VNS_1
+VN_CPM1:
+	  XJE cpm_label_ok,0,VNS_0			;exists or room for it?
+	    XKBOX_MSG 20,12,1,vnm1_msg			;yes, cpm name key
+	    XADDW keymask,F1
+	    XJMP VNS_1
+VNS_0: XPUTS_AT 20,12,vnm22_msg				;sorry, can't do it
+	  XPUTS_AT 20,13,vnm23_msg
+;
+VNS_1:
+	XJE WORK_dosexists,0,VNS_3
+	  XJE dos_label_ok,0,VNS_2			;exists or room for it?
+	    XKBOX_MSG 20,15,3,vnm2_msg			;yes,dos name key
+	    XADDW keymask,F3
+	    XJMP VNS_3
+VNS_2:
+	  XPUTS_AT 20,15,vnm20_msg			;else sorry,can't do it
+	  XPUTS_AT 20,16,vnm21_MSG
+;
+VNS_3:
+	XKBOX_MSG 20,20,0,vnm3_msg			;exit key
+;
+	XKEYCASE keymask
+	  dw	VNS_DONE				;ESC back to caller
+	  dw	CPM_NAME,0				;F1 change cpm name
+	  dw	DOS_NAME,0				;F3 change DOS name
+	  dw	0,0
+	  dw	0,0
+	  dw	0,0
+	XCLRBOX 1,10,77,22
+	XJMP VNS_AGAIN
+
+VNS_DONE:
+	XPOP ! XRET
+
+eject
+;==============================================================================
+;	SUBROUTINE TO EDIT CP/M VOLUME NAME
+;==============================================================================
+CPM_NAME:
+	XCLRBOX 1,10,77,22
+	XBRIGHT ! XPUTS_AT 23,10,vnm10_msg ! XDIM	;show prompt
+	XPUTS_AT 10,12,vnm12_msg			;and directions
+	XPUTS_AT 10,13,vnm13_msg
+	XPUTS_AT 10,15,vnm16_msg			;and edit keys
+	XPUTS_AT 10,16,vnm17_msg
+;
+	XPOSITION 30,19 ! db '"            "'		;prepare entry arena
+	XCURSOR_ON ! XPOSITION 31,19
+	XGETS 12,name_buffer				;get string
+	XCURSOR_OFF ! XSTOP
+;
+	push ds ! pop es
+;
+	cld ! mov di,offset cur_cpm_name
+	mov al,' ' ! mov cx,8 ! rep stosb		;zero name first
+	mov byte ptr[di],0
+;
+	mov di,offset cur_cpm_name1			;and extension
+	mov cx,3 ! rep stosb
+	mov byte ptr[di],0
+;
+	mov si,offset name_buffer ! mov cx,8		;convert and copy 8
+	mov di,offset cur_cpm_name
+cpm_name1:
+	lodsb ! cmp al,'.' ! je cpm_name2		;do extension if '.'
+	  cmp al,0 ! je cpm_name4			;done if end of string
+	  call to_upper ! stosb ! loop cpm_name1	;else move them
+cpm_name2:
+	mov di,offset cur_cpm_name1 ! mov cx,3		;now move extension
+	cmp byte ptr[si],'.' ! jne cpm_name3
+	  lodsb						;discard any period
+cpm_name3:
+	lodsb ! cmp al,0 ! je cpm_name4			;until end or 3 char
+	  cmp al,'.' ! je cpm_name4			;deal with 2 periods
+	  call to_upper ! stosb ! loop cpm_name3
+cpm_name4:
+	call put_cpmname				;write it out
+	call MENU_BOL					;and return
+	XRET
+
+eject
+;==============================================================================
+;	SUBROUTINE TO EDIT DOS VOLUME NAME
+;==============================================================================
+DOS_NAME:
+	XCLRBOX 1,10,77,22
+	XBRIGHT ! XPUTS_AT 23,10,vnm11_msg ! XDIM	;show prompt
+	XPUTS_AT 10,12,vnm14_msg			;and directions
+	XPUTS_AT 10,13,vnm15_msg
+	XPUTS_AT 10,15,vnm16_msg			;and edit keys
+	XPUTS_AT 10,16,vnm17_msg
+;
+	XPOSITION 30,19 ! db '"           "'		;prepare entry arena
+	XCURSOR_ON ! XPOSITION 31,19
+	XGETS 11,name_buffer				;get string
+	XCURSOR_OFF ! XSTOP
+;
+	push ds ! pop es ! mov di,offset cur_dos_name	;copy it to dos name
+;
+	cld ! push di
+	mov al,' ' ! mov cx,11 ! rep stosb		;zero it first
+	mov al,0 ! stosb ! pop di
+;
+	mov si,offset name_buffer ! mov cx,11		;copy it all
+dos_name1:
+	lodsb ! cmp al,0 ! je dos_name2			;done if end of string
+	  stosb ! loop dos_name1			;else just move them
+dos_name2:
+	call put_dosname				;write it out
+	call MENU_BOL					;and return
+	XRET
+
+eject
+;------------------------------------------------------------------------------
+;	Low level subroutine gets the current dos directory label.
+;
+;	If no label exists, it tries to find a free entry to create one.  If
+;	no directory space, it sets a flag for display routines.  If it can't
+;	read the directory, this is considered a fatal hardware error.  It then
+;	builds a label and gives it the current tod.
+;
+;	In any case, the new/old name is then copied it to a local string and
+;	the dir_buffer pointer and dir entry number are saved for later write.
+;------------------------------------------------------------------------------
+get_dos_name:
+	mov dos_label_ok,0			;assume we will fail
+	call dos_calc_partition			;make sure bootrec info current
+	call dos_get_vlabel			;find the label
+	cmp al,0 ! je get_dos_name10		;physical error reading dir?
+	  mov hd_error,HDERR_RCPM ! jmp main_menu86	;OOPS!, fatal error
+get_dos_name10:
+	cmp dx,-1 ! jne get_dos_name20		;does any label exist?
+	  call dos_freedir			; no, find a free dir entry
+	  cmp al,0 ! je get_dos_name21		;physical error reading dir?
+	    mov hd_error,HDERR_RCPM ! jmp main_menu86	;OOPS! fatal error
+get_dos_name21:
+	    cmp dx,-1 ! je get_dos_name_ret	;exit if no space to make one
+;
+	      cld ! push ds ! pop es ! mov di,bx ; else move in the template
+	      mov si,offset ibm_label_fcb
+	      mov cx,32/2 ! rep movsw		;"I dub thee '           '"
+;
+	      push dx ! push bx			;(OK, OK, no GODFATHER jokes!!)
+	      call dos_fcb_stamp		;give it current time and date
+	      pop bx ! pop dx
+;
+get_dos_name20:
+	mov dos_dirptr,bx ! mov dos_dirno,dx		;save return info
+	push ds ! pop es ! mov di,offset cur_dos_name
+	cld ! mov si,bx ! mov cx,11 ! rep movsb		;copy name to buffer
+;
+	mov dos_label_ok,0ffh
+get_dos_name_ret:
+	ret
+
+eject
+;------------------------------------------------------------------------------
+;	subroutines modifies current dos disk label by copying current local
+;	name to fcb in dir_buffer, and then flushes dir_buffer.
+;	Note that a DOS label timestamp is the date of VOLUME creation and so
+;	timestamp is not updated.  There is no label update timestamp.
+;------------------------------------------------------------------------------
+put_dos_name:
+	cmp dos_label_ok,0 ! je put_dos_name1	;skip write if bad label
+;
+	  mov si,offset cur_dos_name
+	  push ds ! pop es ! mov di,dos_dirptr	;copy local name back to label
+	  cld ! mov cx,11 ! rep movsb
+;
+	  mov ax,dos_dirno ! mov cl,4		;calculate dir sector
+	  shr ax,cl ! mov cx,ax			;and go write it
+	  call write_dos_dirsector ! or al,al ! jz put_dos_name1
+	    mov hd_error,HD_ERR_WCPM ! jmp main_menu86	;OOPS!, fatal error
+put_dos_name1:
+	ret
+
+eject
+;------------------------------------------------------------------------------
+;	Low level subroutine gets the current CPM directory label.
+;
+;	If no label exists, it tries to find a free entry to create one.  If
+;	no directory space, it sets a flag for display routines.  If it can't
+;	read the directory, this is considered a fatal hardware error.  It then
+;	builds a label and gives it the current tod.
+;
+;	In any case, the new/old name is then copied it to a local string and
+;	the dir_buffer pointer and dir entry number are saved for later write.
+;
+;	If the label has a password, a flag is set for the display routines
+;	to use that inhibits modification of the label.
+;------------------------------------------------------------------------------
+get_cpm_name:
+	mov cpm_label_ok,0 ! mov protected_label,0	;assume failure
+	call cpm_findlbl				;look for the cpm label
+	cmp al,0 ! je get_cpm_name1			;phys error?
+	  mov hd_error,HDERR_RCPM ! jmp main_menu86	;OOPS! fatal error
+get_cpm_name1:
+	cmp dx,-1 ! jne get_cpm_name30			;got it?
+	  call cpm_findfree				;no, try to find room
+	  cmp al,0 ! je get_cpm_name10			;phys error?
+	    mov hd_error,HDERR_RCPM ! jmp main_menu86	;OOPS again!
+get_cpm_name10:
+	  cmp dx,-1 ! jne get_cpm_name20		;no room? just exit
+	    jmp get_cpm_name_ret
+get_cpm_name20:
+	  mov es,esbase ! mov di,bx			;else build a lable
+	  mov si,offset cpm_label_xfcb			;from template
+	  cld ! mov cx,32/2 ! rep movsw			;(enable nothing)
+;
+	  push bx ! push dx ! call cpm_stamp_c		;create timestamp it
+	  pop dx ! pop bx				;will fix sfcb, if any
+;
+get_cpm_name30:						;here we have a label
+	cld ! mov cpm_dirptr,bx ! mov cpm_dirno,dx
+	test es:byte ptr 12[bx],1 ! jnz get_cpm_name35	;valid name field?
+	  push ds ! pop es ! mov al,' '			;no, name doesn't exist
+	  mov di,offset cur_cpm_name			;so use blanks
+	  mov cx,8 ! rep stosb
+  	  mov di,offset cur_cpm_name1
+	  mov cx,3 ! rep stosb
+	  jmps get_cpm_name40
+;
+get_cpm_name35:
+	push ds						;copy name to temp
+	push ds ! pop es ! mov si,bx ! inc si
+	mov ds,esbase ! mov di,offset cur_cpm_name
+	mov cx,8 ! rep movsb
+	mov di,offset cur_cpm_name1
+	mov cx,3 ! rep movsb
+	pop ds
+;
+get_cpm_name40:
+	mov es,esbase ! lea di,16[bx]			;now check password
+	mov al,0 ! mov cx,8 ! repe scasb		;check for all zero
+	je get_cpm_name31
+	  lea di,16[bx]
+	  mov al,' ' ! mov cx,8 ! repe scasb		;all blanks is the same
+	  mov al,0 ! je get_cpm_name31
+	    not al
+get_cpm_name31:
+	mov protected_label,al				;set password flag
+	mov cpm_label_ok,0ffh				;and set success
+;
+get_cpm_name_ret:
+	ret
+
+
+eject
+;------------------------------------------------------------------------------
+;	subroutines modifies current CPM disk label by copying current local
+;	name to fcb in dir_buffer, updating timestamp and then flushing
+;	dir_buffer.
+;------------------------------------------------------------------------------
+put_cpm_name:
+	cmp cpm_label_ok,0 ! je put_cpm_name1		;forget it, not there
+	  mov es,esbase ! mov di,cpm_dirptr ! inc di
+	  mov si,offset cur_cpm_name
+	  cld ! mov cx,8 ! rep movsb
+	  mov si,offset cur_cpmname1
+	  mov cx,3 ! rep movsb
+;
+	mov dx,cpm_dirno ! mov bx,cpm_dirptr
+	or es:byte ptr 12[bx],1				;enable name
+	call cpm_stamp_u				;go fill in update tod
+;
+	  mov cx,cpm_dirno
+	  call cpm_flush_lbl ! or al,al ! jz put_cpm_name1	;go write it
+	    mov hd_error,HD_ERR_WCPM ! jmp main_menu86		;OOPS!, fatal
+put_cpm_name1:
+	ret
+
+
+;	converts al to upper case if it needs it (used by name editor)
+to_upper:
+	cmp al,'a' ! jb to_upper1
+	cmp al,'z' ! ja to_upper1
+	  sub al,' '
+to_upper1:
+	ret
+
+	dseg $
+dos_label_ok	db	0		;flag: true if ok to modify label
+dos_dirptr	dw	0		;dir buffer pointer to new/old label
+dos_dirno	dw	0		;dir entry number of new/old label
+;
+cpm_label_ok	db	0		;same for cpm volume
+cpm_dirptr	dw	0		;CAUTION: this is in eseg buffer!
+cpm_dirno	dw	0
+protected_label	db	0		;flag is true if cpm label is protected
+;	
+cur_dos_name	db	'           ',0	;display buffer for current dos name
+cur_cpm_name	db	'        ',0	;display buffer for current cpm name
+  cur_cpm_name1	db	'   ',0		;  (and its extension)
+name_buffer	db  '              ',0	;edit name buffer used for scratch
+
+	cseg $
+eject
+;==============================================================================
+; LEVEL 3 |
+;---------
+;	DISPLAY/CHANGE CP/M OPTIONS
+;	Although this subroutine is normally called by level 1 menus, it
+;	is also directly called by partition options menu function
+;	if desired by operator.
+;
+;==============================================================================
+CPM_OPTIONS:				;enter here from options menu
+	XSETB copt_call,0				;show stand-alone use
+	XCALL CPM_OPTIONS_ACTION
+	XSTOP
+	mov bx,offset work ! call calc_cpm_checksum	;need to fix checksum
+	mov WORK_chks,ax				;and write to disk
+	call put_cpm_label ! or al,al ! jz cpm_opt_okexit
+	  mov hd_error,HD_ERR_WCPM ! jmp main_menu86	; oops, write failed
+cpm_opt_okexit:
+	call MENU_BOL ! XJMP MAIN_MENU			;then exit
+
+
+;	this is the sequence if called from create menu
+CPM_OPTIONS_NEW:
+	XSETB WORK_diratmax,0			;dir at min since new
+	XSETB copt_call,1			;show extra message
+
+eject
+;	this is common code used both if called from main or from create
+CPM_OPTIONS_ACTION:
+	XCLRBOX 1,3,77,22
+	XSETW keymask,F_ESC+F3			;enable vfy switch and exit now
+;
+	XMCALL get_cpm_options			;copy curr options to temp
+	XJE WORK_diratmax,0,CPM_OPT_ACTION1	;display options screen
+	  XPUTS_AT 19,9,cpmopt1_msg		;show dir already at max
+	  XPDECW WORK_maxdir
+	  XPUTS cpmopt2_msg
+	  XJMP CPM_OPT_ACTION2			;and continue
+CPM_OPT_ACTION1:
+	  XADDW keymask,F1			;enable the key
+	  XPUTS_AT 10,4,cpmopt4_msg		;else setup dir switch option
+	  XPUTS_AT 10,5,cpmopt5_msg
+	  XPUTS_AT 10,6,cpmopt6_msg
+	  XPUTS_AT 10,7,cpmopt7_msg
+	  XCALL SHOW_CPM_SWDIR			;and keybox with prompt
+;
+CPM_OPT_ACTION2:
+	XPUTS_AT 10,12,cpmopt9_msg		;always show verify switch
+	XPUTS_AT 10,13,cpmopt10_msg
+	XCALL DISPLAY_VFY_OPTIONS
+	XKBOX_MSG 20,20,0,cpmopt15_msg		;and exit key
+;
+;	then loop here until operator is happy
+CPM_OPT_ACT10:
+	XKEYCASE keymask			;go to it
+	  dw	CPM_OPT_EXIT		;ESC
+	  dw	CPM_SW_DIR,0		;F1
+	  dw	CPM_SW_VFY,0		;F3
+	  dw	0,0
+	  dw	0,0
+	  dw	0,0
+;
+	XJMP CPM_OPT_ACT10			;UNTIL EXIT
+
+
+;	all done, update and return to caller
+CPM_OPT_EXIT:					;all done, update real copy
+	XPOP					;discard loop return address
+	XMCALL put_cpm_options
+	XRET					;and return to caller
+
+
+CPM_SW_DIR:
+	XTOGGLE copt_min			;toggle directory size
+	XJMP SHOW_CPM_SWDIR			;and refresh display
+
+
+CPM_SW_VFY:					;toggle will/wont verify
+	XTOGGLE copt_will
+	XJMP DISPLAY_VFY_OPTIONS		;refresh display
+eject
+;------------------------------------------------------------------------------
+;	display subroutines used by CP/M option modification menus
+;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+;	this is called to show/refresh dir switch value and keybox
+;------------------------------------------------------------------------------
+SHOW_CPM_SWDIR:
+	XKBOX 20,8,1
+	XJE copt_min,0,CPM_SW_DIR1
+	  XBRIGHT
+CPM_SW_DIR1:
+	XPDECW WORK_mindir ! XDIM ! db '/'
+	XJNE copt_min,0,CPM_SW_DIR2
+	  XBRIGHT
+CPM_SW_DIR2:
+	XPDECW WORK_maxdir ! XDIM
+	XPUTS cpmopt8_msg
+	XRET
+
+;------------------------------------------------------------------------------
+;	show verify options keybox and current switch state
+;------------------------------------------------------------------------------
+DISPLAY_VFY_OPTIONS:
+		XKBOX 20,14,3 ! db 'CP/M'
+		XJE copt_will,0,DISPLAY_VFY_OPT1
+		  XBRIGHT
+DISPLAY_VFY_OPT1:
+		XPUTS cpmopt11_msg ! XDIM ! db '/'
+		XJNE copt_will,0,DISPLAY_VFY_OPT2
+		  XBRIGHT
+DISPLAY_VFY_OPT2:
+		XPUTS cpmopt12_msg ! XDIM	
+		XPUTS cpmopt13_msg		
+		XJNE copt_call,0,DISPLAY_VFY_OPT3
+		  XPUTS_AT 13,18,cpmopt14_msg
+DISPLAY_VFY_OPT3:
+		 XRET
+eject
+;------------------------------------------------------------------------------
+;	subroutine copies current cpm options to temporary variables
+;------------------------------------------------------------------------------
+get_cpm_options:
+	mov al,WORK_cpmoptions			;set current 'will verify'
+	ror al,1 ! sbb al,al ! mov copt_will,al	; toggle
+	mov copt_min,0FFh			;set current 'dirsize' toggle
+	ret
+
+;------------------------------------------------------------------------------
+;	subroutine copies back current cpm options from temporary variables
+;------------------------------------------------------------------------------
+put_cpm_options:
+	mov al,copt_will ! and al,1	;set options according to will/wont
+	mov ah,WORK_cpmoptions
+	and ah,0FEh ! or al,ah ! mov WORK_cpmoptions,al
+;
+	mov al,copt_min ! or al,al ! jnz cpm_opt_exit_20
+	  mov ax,word ptr WORK_maxdir		;change dir to max if needed
+	  mov word ptr WORK_mindir,ax
+	  mov WORK_diratmax,0FFh
+	  mov ax,word ptr WORK_cpmdrm
+	  add ax,ax ! inc ax ! mov word ptr WORK_cpmdrm,ax
+cpm_opt_exit_20:
+	ret
+
+	dseg	$
+copt_min	db	0FFh		;local copies of current options
+copt_will	db	0
+copt_call	db	0
+	cseg $
+                                                                                                                                                                                                                         

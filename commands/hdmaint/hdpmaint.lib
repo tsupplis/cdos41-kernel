@@ -1,0 +1,862 @@
+eject
+;	HDPMAINT.LIB include file for HDMAINT 2.0 as of 06-Aug-84
+;	revised 20-Jul-84 to make ESC key exit key by M.P. Vano
+;	revised 06-Aug-84 to fix bug in get partition size display by M.P. Vano
+	cseg $
+;==============================================================================
+; LEVEL 1 |
+;---------
+;
+;	Partition maintenance MENU sequence (RETURNS TO CALLER/MAIN MENU)
+;	Only entered from main menu
+;
+;==============================================================================
+PMAINT:	XJE num_hard_disks,1,PMAINT_1DISK	;skip if only one disk
+	  XCLRBOX 1,3,77,22			;clear inside of box
+	  XPUTS_AT 22,4,pm1_msg			;print header
+	  XCALL CHOOSE_DISK			;go choose which disk
+	  XJMP PMAINT_CHOOSE			;then continue
+;
+PMAINT_1DISK:
+	XJE HDISK0+offset DSK_INFO_hdinf+offset HDINF_heads,0,PMAINT_DISK2
+	  XMCALL disk0 ! XJMP PMAINT_CHOOSE	;disk 0, go set it up
+PMAINT_DISK2:
+	  XMCALL disk1				;else must be disk 1
+;
+PMAINT_CHOOSE:
+	XCLRBOX 1,3,77,22			;clear main box
+	XCALL SHOW_PM_STATUS			;display partition status
+;
+	XSETW keymask,F_ESC			;exit key is always legal
+	XSETB pmaint_nothing,0ffh		;assume no options
+;
+;	if cpm exists allow CHANGE OR DELETE
+	XJE WORK_cpm_exists,0,PMAINT_C1		;if cp/m exists, show F3 and F5
+	  XKBOX_MSG 2,11,3,pm5_msg		;allow Change CPM
+	  XKBOX_MSG 2,14,5,pm3_msg		;allow delete cpm
+	  XADDW keymask,F3+F5
+	  XSETB pmaint_nothing,0		;clear nochoice flag
+	  XJMP PMAINT_D0
+;	if no cpm exists yet AND if there is room, allow CREATE (only)
+PMAINT_C1:
+	XJE WORK_roomforcpm,0,PMAINT_D0		;else if no room for it, skip
+	  XKBOX_MSG 2,11,3,pm5B_msg		;else create CP/M message only
+	  XADDW keymask,F3
+	  XSETB pmaint_nothing,0		;clear nochoice flag
+;
+;	if dos exists, allow CHANGE OR DELETE
+PMAINT_D0:
+	XJE WORK_dosexists,0,PMAINT_D1		;skip if no dos
+	  XKBOX_MSG 39,11,4,pm5A_msg		; change dos allowed
+	  XKBOX_MSG 39,14,6,pm3A_msg		; delete dos allowed
+	  XADDW keymask,F4+F6
+	  XSETB pmaint_nothing,0		;clear nochoice flag
+	  XJMP PMAINT_D2
+;	if no dos exists yet AND if there is room, allow CREATE (only)
+PMAINT_D1:
+	XJE WORK_roomfordos,0,PMAINT_D2
+	  XKBOX_MSG 39,11,4,pm5C_msg		;if room, allow create dos
+	  XADDW keymask,F4
+	  XSETB pmaint_nothing,0		;clear nochoice flag
+;
+PMAINT_D2:
+	XJNE pmaint_nothing,0ffh,PMAINT_D3	;do this if no other choices
+	  XPUTS_AT 8,12,pm_nada0_msg		; explain the problem to op
+	  XPUTS_AT 8,13,pm_nada1_msg		; and refer him elsewhere.
+	  XPUTS_AT 8,14,pm_nada2_msg
+	  XPUTS_AT 8,15,pm_nada3_msg
+	  XPUTS_AT 8,16,pm_nada4_msg
+	  XJMP PMAINT_D4			;don't bother with prompt
+;
+PMAINT_D3:
+	XBRIGHT ! XPUTS_AT 32,10,pm2_msg ! XDIM	;prompt message
+PMAINT_D4:
+	XKBOX_MSG 39,20,0,pm6_msg		;return to main always present
+;
+	XKEYCASE keymask
+	  dw	MAIN_MENU		;ESC key
+	  dw	0,0
+	  dw	CREATE_CPM,CREATE_DOS	;F3,F4
+	  dw	DELETE_CPM,DELETE_DOS	;F5,F6
+	  dw	0,0
+	  dw	0,0
+;
+	XRET					;NOT NORMALLY USED
+
+	dseg $
+pmaint_nothing	rb	1			;flag, no options exist if true
+	cseg $
+eject
+;==============================================================================
+; LEVEL 2 |
+;---------
+;	CREATE (OR DELETE AND RECREATE) a DOS PARTITION
+;
+;==============================================================================
+CREATE_DOS:
+	XSETB create_type,1			;set create type=DOS sysID
+	XJE WORK_dos_exists,0,CREATE_DOS10
+	  XCALL DELETE_DOS_WARNING
+	  XSETW keymask,F_ESC+F9
+	  XKEYCASE keymask
+	    dw	MAIN_MENU			;ESC goes back to main
+	    dw	0,0
+	    dw	0,0
+	    dw	0,0
+	    dw	0,0
+	    dw	0,0				;F9 falls through
+
+	  XCALL DELETE_DOS_ENTRY		;go do it
+	  XSETB WORK_dos_exists,0
+	  XSETB must_reboot,0ffh
+;
+CREATE_DOS10:
+	XMCALL proposal				;get hdmaint's preferences
+CREATE_DOS_AGAIN:
+	XCLRBOX 1,3,77,22
+	XCALL SHOW_PM_STATUS
+	XCALL GET_PSTART			;get partition start from op
+	XCALL GET_PSIZE				;get partition size from op
+
+	XCALL MAKE_DOS
+	XJNE WORK_dos_exists,0,CREATE_DOS20
+	  XCALL CREATE_FAILURE			;operation failed, abort?
+	  XMCALL new_proposal			;no get a new set of defaults
+	  XJMP CREATE_DOS_AGAIN			;and go back again
+;
+CREATE_DOS20:					;all created
+	XCLRBOX 24,8,77,8			;pause so op can see screen
+	XSETW keymask,F_ESC
+	XPUTS_AT 24,8,create8_msg
+	XKBOX_MSG 20,20,0,create9_msg
+	XCALL WAIT_KEYMASK_KEY
+	XJMP MAIN_MENU				;then back to main
+
+eject
+;==============================================================================
+; LEVEL 3 |
+;---------
+;	CREATE a DOS partition: main entry point
+;	called by DOS create routine, returns to caller (or MAIN_MENU)
+;	This is the action routine that builds the partition set up
+;	by earlier interactive frames
+;==============================================================================
+MAKE_DOS:
+	XCLRBOX 1,3,77,22
+;
+	XPUTS_AT 8,5,cr_dos0_msg
+	XJNE WORK_disk,0,MAKE_DOS1		;print correct disk name
+	  XPUTS create0A_msg ! xjmp MAKE_DOS2
+MAKE_DOS1:
+	  XPUTS create0B_msg
+MAKE_DOS2:
+	XPUTS create1_msg
+	XPNUM3 proposed_start ! db '-' ! XPNUM3 proposed_end
+	XKBOX_MSG 20,20,0,create2_msg		;set up abort keybox
+;
+	XCALL CR_ABORT_CHECK			;check for abort
+;
+MAKE_DOS10:
+	XCALL CR_ABORT_CHECK			;check break again
+	XCLRBOX  1,8,77,8			;clear last message
+	XPUTS_AT 30,8,create4_msg
+	XSTOP
+;
+	call dos_calc_partition			;update bootrecord from PT
+	call dos_build_boot			;build boot sector from that
+	call dos_put_boot ! or al,al ! jz make_dos20
+	  jmp dos_bad_sys_area			;if can't write boot,trouble
+;
+make_dos20:
+	call cr_abort_check86
+	call dos_build_fat			;go make the initial fat
+	call dos_put_both_fats			;and write them out
+	or al,al ! jz make_dos30		;if can't write fats, trouble
+	  jmp dos_bad_sys_area
+;
+make_dos30:
+	call cr_abort_check86
+	call dos_initdir ! or al,al ! jz make_dos40	;init directory
+	  jmp dos_bad_sys_area
+;
+make_dos40:
+	call cr_abort_check86
+	call dos_putsys ! or al,al ! jz make_dos50	;write loader/fake DOS
+	  jmp dos_bad_sys_area
+;
+make_dos50:
+	call MENU_BOL					;now test file area
+	XCLRBOX 1,8,77,8				;clear last message
+	XSETW num_bad_clusters,0
+	XPUTS_AT 30,8,create5_msg
+	XPNUM3 IBM_cylinder + offset dos_wr_iopb	;show last write cyl.
+	XPOSITION 17,10 ! XPNUM3 num_bad_clusters
+	XPUTS create6_msg
+	XSTOP
+;
+;	now test all remaining clusters, displaying status as we go
+	call dos_test_limits				;get start/end clusters
+	mov dos_test_current,ax				; still needing testing
+	mov dos_test_end,bx
+	mov dos_last_cyl,-1				;ensure re-display
+make_dos60:
+	mov ax,IBM_cylinder + offset dos_wr_iopb	;save current cyl #
+	xchg dos_last_cyl,ax
+	cmp dos_last_cyl,ax ! je make_dos61		;need to display?
+	  call cr_abort_check86				;check break once/cyl
+	  call MENU_BOL ! XPOSITION 47,8
+	  XPNUM3 dos_last_cyl ! XSTOP			;show cyl as it changes
+make_dos61:
+	mov cx,dos_test_current
+	call dos_test_cluster				;test & map out if bad
+	or al,al ! jz make_dos65
+	  inc num_bad_clusters				;%%%need bad limit
+	  call MENU_BOL ! XPOSITION 17,10
+	  XPNUM3 num_bad_clusters ! XSTOP		;show new bad count
+make_dos65:
+	inc dos_test_current ! mov ax,dos_test_end
+	cmp ax,dos_test_current ! je make_dos70
+	  jmps make_dos60
+
+make_dos70:
+	call cr_abort_check86
+	call dos_put_both_fats ! or al,al ! jz make_dos75 ;rewrite the fats
+	  jmp dos_bad_sys_area				;HUH? it worked before?
+;
+make_dos75:
+	call MENU_BOL ! XCLRBOX 1,8,77,8		;clear last message
+	XPUTS_AT 30,8,create7_msg ! XSTOP		;show "ENABLING" msg
+	call cr_abort_check86				;write out the new pt
+	mov must_reboot,0ffh				;irrevocable change
+	call put_partition_table ! or al,al ! jz make_dos80
+	  mov hd_error,HD_ERR_WPT ! jmp main_menu86	;OOPS, can't write it
+;
+make_dos80:
+	mov WORK_dos_exists,0ffh
+dos_bad_sys_area:
+	call MENU_BOL ! XRET
+
+	dseg $
+;	dos make local variables
+dos_test_current	dw	0	;current cluster under test
+dos_test_end		dw	0	;first cluster NOT to test
+dos_last_cyl		dw	0	;cyl number of last write
+num_bad_clusters	dw	0	;total bad clusters found so far
+	cseg $
+eject
+;==============================================================================
+; LEVEL 2 |
+;---------
+;	CREATE a CP/M partition: main entry point
+;	Entered from partition maintenance menu, returns to main menu
+;
+;==============================================================================
+CREATE_CPM:
+	XSETB create_type,HD_SYS_ID		;set create type=CPM sysID
+	XJE WORK_cpm_exists,0,CREATE_CPM10	;skip delete if no cp/m
+	  XCALL DELETE_WARNING			;else do "are you sure"
+	  XSETW keymask,F_ESC+F9
+	  XKEYCASE keymask
+	    dw	MAIN_MENU			;esc=abort back to main menu
+	    dw	0,0
+	    dw	0,0
+	    dw  0,0
+	    dw	0,0
+	    dw	0,0				;F9 = proceed, falls through
+	XCALL DELETE_ENTRY			;delete from pt
+	XSETB must_reboot,0ffh
+	XSETB WORK_cpm_exists,0
+;
+CREATE_CPM10:
+	XMCALL proposal				;get hdmaint's best idea
+;
+CREATE_CPM_AGAIN:
+	XCLRBOX 1,3,77,22			;clear box
+	XCALL SHOW_PM_STATUS
+	XCALL GET_PSTART
+	XCALL GET_PSIZE
+;
+	XSTOP					;update cpm variables
+	call cpm_label_setup			;build empty cpm label
+	mov ax,proposed_start ! mov WORK_pstart,ax	;fill in label fields
+	mov ax,proposed_end ! mov WORK_pend,ax		;(subsequent calc are
+	mov ax,proposed_size ! mov WORK_plength,ax	;based on these fields)
+	call calc_from_start_end			;fix info based on them
+	call MENU_BOL
+;
+	XSETB WORK_cpmoptions,0			;set default no verify
+	XCALL CPM_OPTIONS_NEW			;get dir size, write-verify
+	XCALL MAKE_CPM				;and go make the partition
+	XJNE WORK_cpm_exists,0,CREATE_CPM20
+	  XCALL CREATE_FAILURE
+	  XMCALL new_proposal			;get hdmaint's next bright idea
+	  XJMP CREATE_CPM_AGAIN
+;
+CREATE_CPM20:					;all created
+	XCLRBOX 24,8,77,8			;pause so op can see screen
+	XSETW keymask,F_ESC
+	XPUTS_AT 24,8,create8_msg
+	XKBOX_MSG 20,20,0,create9_msg
+	XCALL WAIT_KEYMASK_KEY
+	XJMP MAIN_MENU				;then back to main
+
+eject
+;==============================================================================
+; 	ACTION SEQUENCE FOR CREATING CPM (part of create partition sequence)
+;==============================================================================
+MAKE_CPM:
+	XSETB WORK_cpmexists,0
+	XCLRBOX 1,3,77,22
+;
+	XPUTS_AT 8,5,create0_msg
+	XJNE WORK_disk,0,MAKE_CPM1		;print correct disk name
+	  XPUTS create0A_msg ! xjmp MAKE_CPM2
+MAKE_CPM1:
+	  XPUTS create0B_msg
+MAKE_CPM2:
+	XPUTS create1_msg
+	XPNUM3 WORK_pstart ! db '-' ! XPNUM3 WORK_pend
+	XKBOX_MSG 20,20,0,create2_msg
+;
+	XCALL CR_ABORT_CHECK				;check for abort
+;
+	XMCALL init_remap_table				;set remap variables
+	XCALL CR_ABORT_CHECK				;should we quit now?
+	XCLRBOX 20,8,77,8
+	XPUTS_AT 30,8,create4_msg
+;
+	XSTOP					;test sys track by writing sys.
+	mov ax,WORK_pstart ! mov test_cyl_no,ax
+	call put_cpm_system ! or al,al ! jz create_part25
+	  jmp cpm_bad_sys_area				;failed
+create_part25:
+	inc test_cyl_no ! mov test_block_no,0	;sys trk ok,test directory
+create_part30:
+	call cr_abort_check86				;check for abort
+	call test_block ! or al,al ! jz create_part35	;test one block
+	  jmp cpm_bad_sys_area				;failed
+create_part35:
+	mov ax,test_block_no			;until dir all tested
+	cmp ax,WORK_enddir ! je create_part40
+	  inc test_block_no ! jmps create_part30
+;
+create_part40:
+	call init_remap_table			;these two lines are
+	mov num_bad_blocks,0			; unnecessary.
+;
+	call MENU_BOL				;testing status message
+	XCLRBOX 20,8,77,8
+	XPUTS_AT 30,8,create5_msg
+	XPNUM3 test_cyl_no
+	XPOSITION 17,10 ! XPNUM3 num_bad_blocks
+	XPUTS create6_msg		
+	XSTOP
+;
+	mov ax,WORK_pstart			;test user area of disk
+	inc ax ! mov test_cyl_no,ax		;starting with dir cylinder
+create_part50:
+	call MENU_BOL
+	XPOSITION 47,8 ! XPNUM3 test_cyl_no	;show cyl under test
+	XSTOP
+	call test_cyl				;test, check brk,map out if bad
+	mov ax,test_cyl_no			;all cylinders been checked?
+	cmp ax,WORK_pend ! je create_part60	;until all tested
+	  inc test_cyl_no ! jmps create_part50
+;		
+create_part60:
+	call finish_remap_table			;done checking, cleanup table
+	call MENU_BOL ! XCLRBOX 20,8,77,8
+	XPUTS_AT 30,8,create7_msg 		;show 'enabling partition' msg
+	XSTOP
+	mov bx,offset work ! call calc_cpm_checksum
+	mov WORK_chks,ax			;checksum label
+;
+	call cr_abort_check86				;check for break
+	call put_cpm_label				;write out CP/M label
+	or al,al ! jz create_part70			; (& new remap table)
+	  mov hd_error,HD_ERR_WCPM ! jmp main_menu86	;oops, can't write it
+;
+create_part70:
+	call cr_abort_check86				;check for break
+	mov must_reboot,0ffh				;OS tables now wrong
+	call put_partition_table			;write new part. table
+	or al,al ! jz create_part80
+	  mov hd_error,HD_ERR_WPT ! jmp main_menu86	;OOPS, can't write it
+;
+create_part_80:
+	mov WORK_cpmexists,0ffh				;set success
+cpm_bad_sys_area:
+	call MENU_BOL
+	XRET						;and back to caller
+
+eject
+;==============================================================================
+; LEVEL 3 |
+;---------
+;	ABORT CREATE CONFIRMATION MENU SEQUENCE
+;	returns to caller if no key pressed, else returns after beep if
+;	key is not F9, else checks if operator really means it.
+;	If operator confirms abort, the main menu is re-entered, else
+;	we just return to caller.
+;	(called only by CREATE sequence)
+;
+;==============================================================================
+cr_abort_check86:					;8086 code entry
+	call MENU_BOL
+	XCALL CR_ABORT_CHECK ! XSTOP ! ret
+
+CR_ABORT_CHECK:						;NORMAL ML code entry
+	XJNKEY CR_ABORT_CHECK_NO			;any key pressed?
+	  XGETCHAR inchar
+	  XJE inchar,ESC,CR_ABORT_CHECK_YES		;if ESC, process it
+	    XBEEP					;else beep and return
+CR_ABORT_CHECK_NO:
+	XRET
+
+CR_ABORT_CHECK_YES:
+	XBRIGHT ! XPUTS_AT 20,15,abort0_msg ! XDIM
+	XKBOX_MSG 20,17,9,abort1_msg
+	XKBOX_MSG 20,20,0,abort2_msg
+	XSETW keymask,F_ESC+F9
+	XKEYCASE keymask
+	  dw	CR_ABORT_YES	;ESC
+	  dw	0,0,0,0,0,0
+	  dw	0,0
+	  dw	CR_ABORT_NO,0	;F9
+
+CR_ABORT_NO:						;blank confirm msg
+	XPOP
+	XCLRBOX 20,15,77,19
+	XRET						;and return
+
+CR_ABORT_YES:
+	XPOP ! XJMP MAIN_MENU				;abort - back to main
+
+eject
+;==============================================================================
+;
+;	BAD SYSTEM AREA FRAME (part of CREATE sequence)
+;	Gives user the bad news that the partition he selected is unusable.
+;	Allows him to decide what he wants to do about it.
+;
+;==============================================================================
+CREATE_FAILURE:
+	XPUTS_AT 10,10,create10_msg			;display the msg
+	XPNUM3 proposed_start
+	XPUTS_AT 10,11,create11_msg
+	XPUTS_AT 10,13,create12_msg
+	XPUTS_AT 10,14,create13_msg
+	XPUTS_AT 10,15,create14_msg
+	XKBOX_MSG 20,17,9,create15_msg
+	XKBOX_MSG 20,20,0,create16_msg
+	XSETW keymask,F_ESC+F9
+	XKEYCASE keymask				;continue or quit only
+	  dw	BAD_SYS_STOP				;ESC to stop
+	  dw	0,0,0,0,0,0
+	  dw	0,0
+	  dw	BAD_SYS_GO,0				;F9 to continue
+BAD_SYS_GO:
+	XRET						;back to caller
+
+BAD_SYS_STOP:				;quit... back to main menu
+	XSETB must_reboot,0ffh
+	XPOP ! XJMP MAIN_MENU
+
+
+eject
+;------------------------------------------------------------------------------
+;	Subroutines used to demonstrate that artificial intelligence will
+;	never take over the earth.
+;
+;	These routines calculate HDMAINT's proposal for start and end cylinders
+;	when you are creating a partition.
+;
+;------------------------------------------------------------------------------
+
+;	subroutine generates initial proposal on first trip through
+;	a create sequence.
+proposal:
+	call update_freespace	;delete old pt entry, and update WORK_freespace
+	call build_map		;make a complete freespace map by cylinder
+	call pt_find_biggest	;find largest space/set defaults accordingly
+	ret
+
+;	Subroutine generates a new proposal if called after a create fails
+;	do to a bad cylinder in the system area last used.  It will remove
+;	that cylinder from its free space table and then find the next most
+;	likely place to start.  Note that this is not particularly good
+;	strategy for doing this, but is adequate for most use since the
+;	operator may override any proposal based on this information.
+;
+;	if no space >9 cyl remains viable, sets proposed start = -1 and
+;	exits with Too many bad blocks error code to fatal error level
+new_proposal:
+	mov si,proposed_start ! mov freemap[si],0ffh	;mark unavailable
+	call pt_find_biggest				;try for new space
+	cmp proposed_start,-1 ! jne new_prop1		;continue if ok
+	  mov hd_error,HD_ERR_BAD ! jmp main_menu86	;fatal if no space
+new_prop1:
+	call update_work_pt				
+	ret
+
+;	updates partition table and display variables as needed to reflect
+;	current proposed partition.
+update_freespace:
+	mov si,offset WORK_xtlbl			;first delete partition
+	mov al,create_type ! call delete_pt_entry	;(to release its space)
+	mov bp,offset WORK ! call build_freespace	;then rebuild freespace
+	mov ax,WORK_cylused ! mov cyl_really_used,ax	;save real cyl in use
+;
+	mov ax,(8196*2)-1 ! xor dx,dx		;max # sctrs for CPM (32 bit)
+	mov bl,WORK_heads ! inc bl ! xor bh,bh
+	div bx
+	mov bl,WORK_pspt ! xor dx,dx ! div bx	;(was constant 17 before)
+	add ax,2 ! mov proposed_max86,ax	;max part size for cp/m-86
+;
+	ret
+
+
+;	build a new pt entry based upon latest proposal/responses
+;	also updates display variables used by partition status
+;	(in subjunctive mode!)
+update_work_pt:
+	mov si,offset WORK_xtlbl			;then recreate entry
+	mov al,create_type				;using current proposal
+	mov cx,proposed_start
+	mov dx,proposed_size
+	mov bh,WORK_heads ! mov bl,WORK_pspt
+	call make_pt_entry
+;
+	mov bx,offset WORK ! call sort_partition_table	;resort table
+	mov bp,offset WORK ! call xlate_pt_cyl		;update display table
+;
+;
+	mov ax,cyl_really_used ! add ax,proposed_size	;show proposed used
+	mov WORK_cylused,ax				;in display variable
+;
+	mov WORK_toobig,0				;flag:too big for CP/M
+	cmp create_type,HD_SYS_ID ! jne cpm86_fits	;(only if making cpm)
+	  mov ax,proposed_size				;(ie CCP/M only)
+	  cmp ax,proposed_max86 ! jle cpm86_fits
+	    mov WORK_toobig,0FFh
+cpm86_fits:
+	call update_sizeK				;update size in K bytes
+	ret	
+
+
+;	make a cylinder by cylinder map of freespace where 0=available,0ffh=not
+build_map:
+	cld ! push ds ! pop es ! mov di,offset freemap
+	mov cx,FREEMAP_SIZE
+	mov al,0ffh ! rep stosb				;mark all as used
+;
+	mov dx,NUM_FREESPACE_ENTRIES
+	mov si,offset WORK_freespace			;from list
+build_map_loop:
+	lodsw ! mov di,ax ! lodsw ! mov cx,ax		;start=di,end=cx
+	cmp ax,-1 ! je build_map_next			;empty entry?
+	  sub cx,di ! inc cx				;cx=length
+	  lea di,freemap[di]				;index to start
+	  sub al,al ! rep stosb				;and mark available
+build_map_next:
+	dec dx ! jnz build_map_loop
+build_map_done:
+	ret
+
+
+;	returns start in ax, end in bx, updates proposal variables.
+pt_find_biggest:
+	cld ! mov si,0					;si--> map index
+	mov dx,0 ! mov bx,0				;dx=start, bx=size
+pt_findbig_start:
+	cmp freemap[si],0 ! jne pt_findbig_next		;start of a run?
+	  mov di,si ! inc si				;save start
+pt_findsize_loop:
+	  cmp freemap[si],0ffh ! je pt_findsize_end	;exit if end of free
+	  cmp si,FREEMAP_SIZE-1 ! je pt_findsize_end
+	    inc si ! jmps pt_findsize_loop		;while not end of map
+pt_findsize_end:
+	  mov ax,si ! sub ax,di ! cmp ax,bx ! jb pt_findbig_next
+	    mov bx,ax ! mov dx,di			;else save, best yet
+pt_findbig_next:
+	cmp si,FREEMAP_SIZE-1 ! je pt_findbig_end	;no more runs
+	  inc si ! jmps pt_findbig_start		;else go look for head
+pt_findbig_end:
+	mov ax,dx ! cmp bx,9 ! ja pt_setbig		;return if good
+	  mov ax,-1 ! mov bx,-1				;else set invalid
+pt_setbig:
+	mov proposed_start,ax
+	mov proposed_max,bx
+	cmp bx,proposed_max86 ! jb pt_setbig1
+	  mov bx,proposed_max86
+pt_setbig1:
+	mov proposed_size,bx
+	add ax,bx ! dec ax ! mov proposed_end,ax
+	call update_sizeK			;calculate that size in K bytes
+	ret
+
+
+;	subroutine to update proposed_sizeK in kbytes based on current
+;	proposed_size in cylinders. (assumes 512 byte sectors only)
+;	sizeK is the TOTAL size of the partition in k bytes.
+update_sizeK:
+	mov al,WORK_heads ! cbw ! inc ax
+	mul proposed_size
+	mov dl,WORK_pspt ! sub dh,dh ! mul dx		;ax=# 512 byte sectors
+	cmp proposed_start,0 ! jne update_sizeK1
+	  dec ax					;deal with cyl 0
+update_sizeK1:
+	shr ax,1 ! mov proposed_sizeK,ax
+;
+	mov warn_cpm,0 ! mov ax,proposed_max		;decide if need cpm
+	cmp ax,proposed_max86 ! jb pt_nowarn		;warning enabled.
+	  mov warn_cpm,0ffh				;yes, >8Mb possible
+pt_nowarn:
+	ret
+
+	dseg $
+cyl_really_used dw	0		;(stores value of WORK_cylused)
+proposed_start	dw	0		;start cylinder proposed
+proposed_size	dw	0		;number of cylinders proposed
+proposed_end	dw	0		;end cylinder that means
+proposed_max	dw	0		;largest possible size with this start
+proposed_max86	dw	0		;max cpm partition in cyl
+proposed_sizeK	dw	0		;current size in KBYTES.
+proposed_used	dw	0		;cylinders in use for display purposes
+warn_cpm	db	0		;flag is true if need to warn about
+					;cpm86 size limitation.  (not needed if
+					;not that much freespace on disk!)
+	cseg $
+
+eject
+;==============================================================================
+;	Subroutine collects a start cylinder from the operator
+;==============================================================================
+GET_PSTART:
+	XCLRBOX 1,9,77,22
+	XSETB setsizeflag,0ffh		;enable cpm oversize display
+GET_PSTART_LOOP:
+	XMCALL update_work_pt			;update the pt
+	XCALL SHOW_PM_STATUS
+	XPUTS_AT 8,10,cyl1_msg			;show fine print
+	XPUTS_AT 8,11,cyl2_msg
+	XPUTS_AT 8,12,cyl3_msg
+	XPUTS_AT 8,13,cyl4_msg
+	XKBOX_MSG 20,20,10,cyl5_msg		;show f10 keybox for approval
+	XPNUM3 proposed_start			;show current proposal
+	XBRIGHT
+	XPUTS_AT 20,18,cyl6_msg ! XDIM		;show entry prompt
+	  db '___',BS,BS,BS
+	XSETW inword,-1				;set default (accept flag)
+	XGETDEC 3,inword,F10_KEY		;get input or accept
+	XSTOP
+	mov ax,inword ! cmp ax,-1 ! jne get_pstart1
+	  call MENU_BOL ! XRET			;accepted as is, return
+;
+;	else check new value as a legal start and set defaults if good
+get_pstart1:
+	call pstart_check ! or al,al ! jnz get_pstart_bad
+	  call MENU_BOL
+	  XJMP GET_PSTART_LOOP			;and go back again
+
+get_pstart_bad:
+	call MENU_BOL ! XBEEP ! XJMP GET_PSTART_LOOP	;else beep and go back
+	XRET
+
+;	determine if start cylinder passed in AX is in suitable free space
+;	and if so update other proposed_ variables dependent on it.
+;	NOTE that this test IGNORES the other freespace array built by HDMAINT
+;	that includes knowledge of previous failures.  While HDMAINT uses that
+;	array to avoid proposing partitions based on bad cylinders found in
+;	this session, it will allow you to enter any start cylinder that does
+;	not conflict with partitions.
+;
+;	return al=0 if good, else al=NZ
+pstart_check:
+	mov cx,NUM_FREESPACE_ENTRIES
+	mov bx,offset WORK_freespace			;bx-->freespace table
+pstart_check_loop:
+	cmp ax,[bx] ! jl pstart_check_next		;in this hole?
+	  push ax ! add ax,9
+	  cmp ax,2[bx] ! pop ax ! jg pstart_check_next	;>9 cyl after us
+	    mov bx,2[bx]				;ax=start,bx=end
+	      mov proposed_start,ax			;set start
+	      sub bx,ax ! inc bx			;calculate size
+	      mov proposed_max,bx			;set max
+	      cmp bx,proposed_max86 ! jna pstart_chk1	;check end/max
+	        mov bx,proposed_max86
+pstart_chk1:  mov proposed_size,bx
+	      add ax,bx ! dec ax ! mov proposed_end,ax
+	      call update_sizeK				;update size in K bytes
+	      sub ax,ax ! jmps pstart_check_ret		;return success
+pstart_check_next:
+	add bx,4 ! loop pstart_check_loop		;until all searched
+pstart_check_bad:
+	mov ax,-1					;not found, return err
+pstart_check_ret:
+	ret
+	
+eject
+;==============================================================================
+;	Subroutine collects a partition size from the operator
+;==============================================================================
+GET_PSIZE:
+	XCLRBOX 1,9,77,22		;clear interaction area
+	XSETB setsizeflag,0ffh		;set flag meaning no entry yet
+;
+GET_SIZE_AGAIN:
+	XMCALL update_work_pt
+	XCALL SHOW_PM_STATUS		;update status display
+	XPUTS_AT 8,10,psize1_msg	;show instructions
+	XPUTS_AT 8,11,psize2_msg
+	XPUTS_AT 8,12,psize3_msg
+	XJE create_type,1,GET_SIZE1	;skip cpm warnings if dos
+	  XJE warn_cpm,0,GET_SIZE1	;or if no space > 8M available
+	    XJE WORK_toobig,0,GET_SIZE0	; else bright up if already oversize
+	      XBRIGHT
+GET_SIZE0:  XPUTS_AT 8,14,psize4_msg	;and print cpm-86 limit warning message
+	    XPUTS_AT 8,15,psize5_msg
+	    XPUTS_AT 8,16,psize6_msg
+	    XPDECW proposed_max86
+	    XPUTS psize7_msg
+;
+GET_SIZE1:
+	XKBOX_MSG 20,20,10,psize9_msg	;show keybox and default
+	XPNUM3 proposed_size
+	db  '         '				;bug fixed 6-Aug-84,MPV
+	db	BS,BS,BS,BS,BS,BS,BS,BS		;bug fixed 6-Aug-84,MPV
+	db '(' ! XPDECW proposed_sizeK ! db 'K)'
+	XBRIGHT ! XPUTS_AT 20,18,psize8_msg	;prompt
+	  XDIM ! db '___',BS,BS,BS
+	XSETW inword,-1
+	XGETDEC 3,inword,F10_KEY		;get 3 dig or F10
+;
+	XSTOP ! mov ax,inword			;check if default
+	cmp ax,-1 ! jne get_size10		;"accept"?
+	  mov setsize_flag,0			;if oversize here, deliberate
+	  call MENU_BOL ! XRET
+;
+get_size10:
+	cmp ax,10 ! jl get_size_fail		;must be at least 10 cyl
+	cmp ax,proposed_max ! jg get_size_fail	;too big for hole?
+	mov proposed_size,ax			;else make it current proposal
+	mov WORK_toobig,0			;clear cpm oversize flag
+	cmp create_type,HD_SYS_ID ! jne get_size20
+	 cmp ax,proposed_max86 ! jna get_size20 ;unless oversize and making cpm
+	 mov WORK_toobig,0ffh
+get_size20:
+	mov bx,ax ! add ax,proposed_start
+	dec ax ! mov proposed_end,ax
+	call update_sizeK			;update size in K bytes
+	call MENU_BOL ! XJMP GET_SIZE_AGAIN	;and go back again
+;
+get_size_fail:
+	call MENU_BOL ! XBEEP
+	XJMP GET_SIZE_AGAIN
+	XRET
+
+eject
+;==============================================================================
+; LEVEL 2 |
+;---------
+; 		DELETE CPM PARTITION MENU SEQUENCE
+;		called by partition maintenance menu, returns to caller
+;
+;==============================================================================
+DELETE_CPM:
+	XCALL DELETE_WARNING			;really delete?
+	XSETW keymask,F_ESC+F9
+	XKEYCASE keymask
+	  dw	0			;ESC just falls through to return
+	  dw	0,0
+	  dw	0,0
+	  dw	0,0
+	  dw	0,0
+	  dw	DELETE_YES_ENTRY,0	;F9
+	XRET
+
+DELETE_YES_ENTRY:
+	XSETB must_reboot,0ffh				;force reboot at exit
+	XCLRBOX 1,15,77,22
+	XPUTS_AT 30,18,del5_msg				;show deleting msg
+;
+DELETE_ENTRY:						;silent delete routine
+	XMCALL del_cpm_silently
+	XSETB WORK_cpmexists,0
+	XRET
+
+eject
+;==============================================================================
+; LEVEL 2 |
+;---------
+; 		DELETE DOS PARTITION MENU SEQUENCE
+;		called by partition maintenance menu, returns to caller
+;
+;==============================================================================
+DELETE_DOS:
+	XCALL DELETE_DOS_WARNING			;really delete?
+	XSETW keymask,F_ESC+F9
+	XKEYCASE keymask
+	  dw	0			;ESC just falls through to return
+	  dw	0,0
+	  dw	0,0
+	  dw	0,0
+	  dw	0,0
+	  dw	DELETE_DOS_YES_ENTRY,0	;F9
+	XRET
+
+DELETE_DOS_YES_ENTRY:
+	XSETB must_reboot,0ffh				;force reboot at exit
+	XCLRBOX 1,15,77,22
+	XPUTS_AT 30,18,del5_msg				;show deleting msg
+;
+DELETE_DOS_ENTRY:					;silent delete routine
+	XMCALL del_dos_silently
+	XSETB WORK_dosexists,0
+	XRET
+
+eject
+;==============================================================================
+;  	Really delete?  Display the warning frame
+;==============================================================================
+;	USE THIS ENTRY FOR CP/M WARNING
+DELETE_WARNING:
+	XCLRBOX 1,9,77,22		;clear bottom part of box
+	XPUTS_AT 10,11,del0_msg
+	XPUTS_AT 10,12,del1_msg
+	XJMP DELETE_WARN1
+
+;	USE THIS ENTRY FOR DOS WARNING
+DELETE_DOS_WARNING:
+	XCLRBOX 1,9,77,22
+	XPUTS_AT 10,11,del0A_msg
+	XPUTS_AT 10,12,del1A_msg
+	XJMP DELETE_WARN1
+;
+DELETE_WARN1:
+	XBRIGHT ! XPUTS_AT 20,15,del2_msg ! XDIM
+	XKBOX_MSG 20,17,9,del3_msg
+	XKBOX_MSG 20,20,0,del4_msg
+	XRET
+
+
+eject
+;==============================================================================
+;	8086 subroutines to actually perform a partitionectomy
+;==============================================================================
+;	deletes cpm silently
+del_cpm_silently:
+	mov al,HD_SYS_ID ! jmps del_silently
+
+
+;	deletes dos silently
+del_dos_silently:
+	mov al,1
+;
+del_silently:
+	mov si,offset WORK_xtlbl ! call delete_pt_entry	;remove from pt
+	call put_partition_table ! or al,al ! jz del_yes_ok ;write PT out
+	  mov hd_error,HD_ERR_WPT ! jmp main_menu86	;oops, can't write
+del_yes_ok:
+	ret
+                                                                                                                                                                                                                

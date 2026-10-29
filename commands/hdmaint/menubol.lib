@@ -1,0 +1,871 @@
+eject
+;	MENUBOL.LIB include file for HDMAINT 2.0 as of 9-Jun-84
+;	Revised 20-Jul-84 to change "Esc" legend to "ESC" by M.P. Vano
+	cseg $
+
+;	MENUBOL interpreter library
+;	9-Jun-84
+;
+;	interpreter entry point (called to escape into menu inerpreter.)
+;
+;	interpreter saves all registers and begins executing next byte after
+;	call as Menu language until XSTOP instruction which resumes 
+;	8086 execution.
+;
+;	AX is destroyed.
+MENU_BOL:
+	pop ax					;get return address
+	push es ! push ds ! push si ! push di
+	push bx ! push cx ! push dx
+
+	cld ! xchg si,ax			;move it to VPC
+
+menu_next:
+	cld ! lods menu_byte
+	cmp al,0ffh ! je menu_bol2
+menu_bol1:
+	  push si ! mov cl,al ! call putc	;just print it
+	  pop si ! jmps menu_next
+
+menu_bol2:
+	lods menu_byte ! cmp al,0ffh ! je menu_bol1 	; check for literal
+	  cbw ! shl ax,1				;branch on opcode
+	  mov bx,ax ! call menu_interp[bx]
+	  jmps menu_next
+
+menu_interp	rw	0
+	dw	mstop,mputs_at,mputs
+	dw	mputc,mposition,mcursoron
+	dw	mcursoroff,mpnum3,mbox
+	dw	mclrbox,mkbox,mkbox_msg
+	dw	mbright,mdim,mblink
+	dw	mnoblink,mjump_eq,mjump_neq
+	dw	mjump,mcal,mret
+	dw	mmcall,mpdecw,mdebug
+	dw	mkeycase,minit,mgetchar
+	dw	mgetfn,mgetdec,mbeep
+	dw	msplitbox,msetw,msetb
+	dw	maddw,maddb,mtoggle
+	dw	mpop,mjkey,mjnkey
+	dw	mgets
+
+menu_word	rw	0
+menu_byte	rb	0
+
+eject
+;	normally continue by jumping to menu_next
+;	(EACH MUST UPDATE VPC TO REMOVE PARAMETERS ITSELF)
+
+;	return to 8086 execution at next byte of code segment
+mstop:	mov ax,si				;VPC is new program counter
+	pop dx ! pop dx ! pop cx ! pop bx	;interp return addr discarded
+	pop di ! pop si ! pop ds ! pop es
+	jmp ax
+
+;	position cursor to following x,y, then print string next word points to
+mputs_at:
+	call mposition
+	;jmp mputs
+
+;	print the string the next word points to
+mputs:	lods menu_word ! mov dx,ax ! jmp print_string
+
+;	print the ascii character pointed to by the next word
+mputc:	lods menu_word
+	mov bx,ax ! mov ax,[bx] ! jmp putc
+
+mposition:
+	lods menu_word ! jmp xyadr
+
+mcursoron:
+	jmp cursor_on
+
+mcursoroff:
+	jmp cursor_off
+
+;	print the variable the next word points to as 3 dec digits
+mpnum3:	lods menu_word
+	mov bx,ax ! mov ax,word ptr[bx]
+	jmp pr_3dec_ax
+
+mbox:	lods menu_word ! mov dx,ax
+	lods menu_word ! mov cx,ax
+	call boxer ! ret
+
+msplitbox:
+	lods menu_word ! mov dx,ax
+	lods menu_byte ! mov cl,al
+	call splitter ! ret
+
+mclrbox:
+	lods menu_word ! mov dx,ax
+	lods menu_word ! mov cx,ax
+	call clearer ! ret
+
+;	draws a keybox at specified XY complete with specified number and arrow
+;	note that if key number 0 is specified, the keybox will show 'Esc'
+mkbox:	lods menu_word
+	mov dx,ax					;get ul corner
+	mov cx,205h ! add cx,dx				;add box size
+	push ax ! call boxer ! pop ax			;build the box
+	add ax,102h ! call xyadr			;move to key # position
+	lods menu_byte ! mov ah,' '			;assume key 0-9
+	cmp al,0 ! jne mkbox_num			;escape box?
+	  mov al,'E' ! call putc			;print the word 'Esc'
+	  mov al,'S' ! call putc
+	  mov al,'C' ! call putc
+	  jmps mkbox_arrow
+mkbox_num:
+	push ax ! mov al,'F' ! call putc ! pop ax
+	cmp al,9 ! jle mkbox1				;continue if so
+	  add al,'0'-10 ! mov ah,1 ! xchg ah,al		;else fixup for 10-19
+mkbox1:	push ax ! add al,'0' ! call putc ! pop ax	;print first digit
+	mov al,ah ! call putc				;print second digit
+mkbox_arrow:
+	mov dx,offset key_arrow_msg ! call print_string	;and arrow
+	ret
+
+
+;	as keybox, but then prints specified message in key prompt field
+mkbox_msg:
+	call mkbox ! jmp mputs
+
+mbright:
+	jmp set_bright
+
+mdim:	jmp set_dim
+
+mblink:	jmp setblink
+
+mnoblink:
+	jmp setnoblink
+
+mjump_eq:
+	lods menu_word ! mov bx,ax
+	lods menu_byte ! cmp al,byte ptr[bx]
+	lods menu_word ! jne mjump_eq1
+	  mov si,ax
+mjump_eq1:
+	ret
+
+mjump_neq:
+	lods menu_word ! mov bx,ax
+	lods menu_byte ! cmp al,byte ptr[bx]
+	lods menu_word ! je mjump_neq1
+	  mov si,ax
+mjump_neq1:
+	ret
+
+;	jump if char waiting in kb buffer
+mjkey:	call constat ! or al,al
+	lods menu_word ! jz mjkey_1
+	  mov si,ax
+mjkey1:	ret
+
+;	jump if no char waiting in kb buffer
+mjnkey:	call constat ! or al,al
+	lods menu_word ! jnz mjnkey1
+	  mov si,ax
+mjnkey1:
+	ret
+
+;	interpreter jump unconditional
+mjump:	lods menu_word ! mov si,ax ! ret
+
+;	interpreter call
+mcal:	lods menu_word
+mcal1:	mov bx,mint_sp ! dec bx ! dec bx	;entry used by keycase
+	mov word ptr[bx],si ! mov mint_sp,bx	;does indirect call(ax)
+	mov si,ax ! ret
+
+;	interpreter subroutine return
+mret:	mov bx,mint_sp ! mov si,word ptr[bx]
+	inc bx ! inc bx ! mov mint_sp,bx ! ret
+
+;	discard most recent return address (unless there is none)
+mpop:	mov ax,mint_sp					;get current sp
+	cmp ax,offset mint_stack_top ! jb mpop1		;ok to pop?
+	  mov ax,mint_stack_top-2			;no, force a reset
+mpop1:	inc ax ! inc ax ! mov mint_sp,ax		;adjust stack
+	ret
+
+;	8086 routine call
+mmcall:	lods menu_word ! push si ! pushf		;save si and dir flag.
+	call ax
+	popf ! pop si ! ret
+
+minit:	mov mint_sp,offset mint_stack_top		;reset VSP
+	mov cl,110 ! mov dx,0 ! int 224			;set 0 string delimiter
+	mov ax,'6' ! call put_esc			;fnkey expansion off
+	mov dx,10001110b ! mov cl,109 ! int 224		;set raw mode console
+	mov bl,0 ! xchg bl,byte ptr .80h		;do this ONLY ONCE
+	and bx,00ffh  ! jz minit1			;see if command line
+	  add bx,81h ! mov byte ptr[bx],0		;set end sentinel
+	  mov mint_cmd_ptr,81h				;set command pointer
+minit1:	ret
+
+mpdecw:	lods menu_word ! mov bx,ax
+	mov ax,word ptr[bx] ! jmp pr_dec_ax
+
+;	debug breakpoint useful for MENU debugging
+mdebug:	nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! ret				;room for a patch as well
+
+mkeycase:
+	lods menu_word ! mov bx,ax		;get the legal keymask
+	mov dx,word ptr[bx]
+mkey_case_agn:
+	push dx ! call get_fresh_c ! pop dx
+	cmp al,1bh ! jne mkeycase_nesc		;escape key?
+	  mov al,';'+127			;Yes: Zap, now Function key 0!
+mkeycase_nesc:
+	sub al,';'+127 ! jb mkeycase_bad	;check if in range function key
+	  cmp al,X_MAXKEY ! ja mkeycase_bad
+	    mov cl,al ! mov ax,1		;setup to build mask
+	    cmp cl,0 ! je mkeycase_0		;beware the 8086
+	      shl ax,cl
+mkeycase_0:
+	   test dx,ax ! jz mkeycase_bad		;in legal set?
+	     mov bl,cl ! sub bh,bh ! add bx,bx	;build branch index
+	     mov ax,cs:word ptr [bx+si]		;AX=call target address
+	     add si,(X_MAXKEY+1)*2		;VPC=default/return address
+	     or ax,ax ! jz mkeycase_nul		;if zero, continue after tbl
+	       jmp mcal1			;else do interp call (ax)
+mkeycase_nul: ret
+;
+mkeycase_bad:
+	push dx ! call mbeep ! pop dx		;sound bell
+	mov mint_cmd_ptr,0			;kill any re-direction
+	jmps mkeycase_agn			;go back and try again
+
+;	get the next character from the console to the specified variable
+mgetchar:
+	call conin ! mov bl,al
+	lods menu_word ! xchg ax,bx ! mov [bx],al
+	ret
+
+;	get the next FN key (ONLY) from console or input stream to the var.
+mgetfn:	call get_fresh_c
+	sub al,';'+127 ! jb mgetfn1
+	cmp al,X_MAXKEY ! ja mgetfn1
+	  mov bl,al ! lods menu_word ! xchg ax,bx
+	  mov [bx],al ! ret
+mgetfn1:
+	call mbeep ! jmp mgetfn
+
+eject
+;	get an n digit decimal number from the console to the specified var.
+;	Entry takes place until the specified number of digits is entered.
+;	If the specified delimiter  is the first character typed
+;	immediately return without altering the variable or disturbing screen.
+;	That delimiter is ignored once entry begins.
+;
+;	parameter indexing declarations:
+MGDEC_MAX	equ cs:byte ptr[si]		;max input digits requested
+MGDEC_VAR 	equ cs:word ptr 1[si]		;address of dest variable
+MGDEC_DELIM 	equ cs:byte ptr 3[si]		;"Accept default" delimiter
+MGDEC_PSIZE	equ 4				;size of parameter fram
+;
+mgetdec:
+	mov bx,MGDEC_VAR ! push word ptr [bx]		;save default
+mgetdec1:
+	call get_fresh_c				;get first character
+	cmp al,MGDEC_DELIM ! jne mgdec1			;exit if "ACCEPT" delim
+	  jmp mgdec_ret
+mgdec1:
+	call mgdec_isnum ! jne mgdec_bad1		;first MUST be a number
+	  sub bx,bx ! mov cx,bx ! jmps mgdec_good	;zero result & count
+mgdec_bad1:
+	call mgdec_err ! jmps mgetdec1			;else beep and wait
+;
+mgdec_loop:
+	push cx ! call get_fresh_c ! pop cx		;get a character
+	mov bx,MGDEC_VAR ! mov bx,[bx]			;get the result
+	call mgdec_isnum ! je mgdec_good		;if number, enter it
+	  cmp al,0dh ! jne mgdec_notcr			;cr is normal exit
+	    jmp mgdec_ret
+mgdec_notcr:
+	  call mgdec_isbksp ! jne mgdec_notbs		;check for backspace
+	    jcxz mgdec_bad				;beep if empty already
+	    dec cx ! mov ax,10 ! cwd			;else backspace
+	    xchg ax,bx ! div bx ! jmps mgdec_store
+mgdec_notbs:
+	  cmp al,'X' and 1fh ! jne mgdec_notdel		;clear entry?
+	    jcxz mgdec_bad				;already clear?
+	    mov cx,0 ! mov bx,0 ! jmps mgdec_store
+mgdec_notdel:
+	  call mgdec_isnum ! je mgdec_good		;must be number?
+mgdec_bad:  call mgdec_err ! jmps mgdec_loop		;else error, beep
+;	
+mgdec_good:						;bx=result,al=digit
+	cmp cl,MGDEC_MAX ! je mgdec_bad			;beep if already at max
+	  inc cx ! and ax,0fh ! push ax			;convert and save digit
+	  mov al,10 ! mul bx ! pop bx ! add ax,bx
+;
+mgdec_store:
+	  mov bx,MGDEC_VAR ! mov [bx],ax		;save new value
+;
+	  push cx ! push ax				;save count and number
+;
+	  mov dx,cx ! mov cl,MGDEC_MAX			;display leading blanks
+	  sub cx,dx ! jcxz mgdec_show			;if any
+mgdec_blanks:
+	  push cx ! mov al,'_' ! call putc
+	  pop cx ! loop mgdec_blanks
+;
+mgdec_show:
+	  pop ax ! pop cx ! push cx			;now print number
+	  jcxz mgdec_noshow				;in case deleted allc 
+	  call pr_ndec_ax				;(as many digits as in)
+;
+mgdec_noshow:
+	  mov cl,MGDEC_MAX
+mgdec_backup:
+	  push cx ! mov al,8 ! call putc		;and back up cursor
+	  pop cx ! loop mgdec_backup
+;
+	  pop cx
+	  jcxz mgdec_again
+	  jmp mgdec_loop			;and go back for more
+;
+mgdec_again:
+	  mov bx,MGDEC_VAR ! pop word ptr[bx]
+	  jmp mgetdec				;go back to default state
+;
+mgdec_ret:
+	pop bx ! add si,MGDEC_PSIZE ! ret		;clear parms and ret.
+
+
+;	subroutine used by mgetdec
+;	checks list of backspace keys and returns Z set if al= any of them
+mgdec_isbksp:
+	cmp al,80h or 'K' ! je mgdec_isbksp_ret		;left arrow?
+	cmp al,80h or 'S' ! je mgdec_isbksp_ret		;"del" key
+	cmp al,7fh ! je mgdec_isbksp_ret		;rubout?
+	cmp al,8					;and of course, BS
+mgdec_isbksp_ret:
+	ret
+
+;	returns z flag set if decimal digit, else non-zero
+mgdec_isnum:
+	cmp al,'0' ! jb mgdec_isnot_num
+	cmp al,'9' ! ja mgdec_isnot_num
+	  cmp al,al ! jmps mgdec_isnum_ret
+mgdec_isnot_num:
+	stc ! sbb ah,ah
+mgdec_isnum_ret:
+	ret
+
+;	generates a beep without disturbing cx
+mgdec_err:
+	push cx ! call mbeep ! pop cx ! ret
+
+
+eject
+;	generate a beep on the console
+mbeep:	mov al,7 ! call putc ! ret
+
+
+eject
+;	get an input string of maximum length parm1 (byte) to buffer at 
+;	ds:parm2 (word).
+;
+;	following control characters only have meaning:
+;	cr=end of entry, ^X=deletes entry, ^H deletes last character
+;	rubout deletes last character.  All other characters beep.
+;	if length exceeded, beeps.
+;	CAUTION: returned string is zero terminated.  Buffer must be one
+;	larger than requested input to allow for this zero.
+;
+mgets:	lods menu_byte ! mov cl,al		;cl=count (maximum)
+	lods menu_word ! mov di,ax		;di=buffer head
+	mov ch,0 ! mov byte ptr[di],0		;zero count and string
+;
+mgets_loop:						;INPUT LOOP HEAD
+	call mgets_fresh_c				;get next kb char
+	cmp al,'K'+128 ! je mgets_bs			;check for L.arrow
+	cmp al,'S'+128 ! je mgets_bs			;and "DEL"
+	cmp al,7fh ! je mgets_bs			;check for rubout
+	ja mgets_beep					;ignore other fn keys
+	cmp al,' '+1 ! jb mgets_notprint		;graphic?
+	  cmp ch,cl ! je mgets_beep			;yes, is buffer full?
+	    mov [di],al ! inc di ! mov byte ptr[di],0	;no, put character
+	    call mgets_echo ! inc ch ! jmps mgets_loop	;echo, and inc dount
+;
+mgets_notprint:
+	cmp al,0dh ! jne mgets_notcr			;cr?
+	    ret						;the only way home
+;
+mgets_notcr:
+	  cmp al,'X' and 1fh ! jne mgets_notdel		;delete line?
+	    cmp ch,0 ! je mgets_beep			;none to delete, beep
+mgets_del_loop:
+	      call mgets_rubout				;as many as were input
+	      cmp ch,0 ! jne mgets_del_loop		;till there are none
+	        jmps mgets_loop
+;
+mgets_notdel:
+	  cmp al,08h! jne mgets_beep			;backspace?
+mgets_bs:   cmp ch,0 ! je mgets_beep			;none to delete, beep
+	    call mgets_rubout ! jmps mgets_loop		;else do it and go back
+;
+mgets_beep:						;none of the above
+	push si ! push di ! push cx
+	call mbeep					;beep
+	pop cx ! pop di ! pop si ! jmps mgets_loop	;and go back
+
+
+;	subroutine deletes current character
+mgets_rubout:
+	   dec ch ! dec di ! mov byte ptr[di],0
+	   mov al,8 ! call mgets_echo			;do bs,space, bs
+	   mov al,' ' ! call mgets_echo
+	   mov al,8 ! jmps mgets_echo
+
+;	subroutine gets next char from console without destroying registers
+mgets_fresh_c:
+	push si ! push di ! push cx
+	call get_fresh_c
+	pop cx ! pop di ! pop si
+	ret
+
+;	subroutine echoes al to console without destroying needed registers
+mgets_echo:
+	push si ! push di ! push cx
+	call putc
+	pop cx ! pop di ! pop si
+	ret
+
+;	add second word to variable at address in first word
+maddw:	lods menu_word ! mov bx,ax
+	lods menu_word ! add [bx],ax ! ret
+
+;	add second parameter to byte variable at address in first word
+maddb:	lods menu_word ! mov bx,ax
+	lods menu_byte ! add [bx],al ! ret
+
+;	initialize the word variable in first word to value in second
+msetw:	lods menu_word ! mov bx,ax
+	lods menu_word ! mov [bx],ax ! ret
+
+;	initialize the byte value at first word to value in second byte
+msetb:	lods menu_word ! mov bx,ax
+	lods menu_byte ! mov [bx],al ! ret
+
+;	xor the byte at first word with 0ffh
+mtoggle:
+	lods menu_word ! mov bx,ax
+	not byte ptr[bx] ! ret
+
+eject
+;	these are the low level primitives (many are system dependent)
+
+;	flushes keyboard buffer
+flush_kb:
+	call get_check_con ! or al,al ! jnz flush_kb
+	ret
+
+;	flushes keyboard buffer then returns next character
+get_fresh_c:
+	call flush_kb
+	;jmps getc
+
+;	gets next character from console input (or command line if appropriate)
+get_c:	cmp mint_cmd_ptr,0 ! je get_c1
+	  call get_cmd_next ! cmp al,0 ! je get_c1	;command line empty now
+	   ret
+get_c1:	jmp conin
+
+
+;	send ESC,al to console
+put_esc:
+	push ax ! mov al,1bh ! call putc
+	pop ax
+	;jmp putc
+
+;	send al to console
+putc:	push cx ! push si
+	call conout
+	pop si ! pop cx ! ret
+
+;	move console cursor to row=ah, col=al
+xyadr:	add ax,2020h ! push ax
+	mov al,'Y' ! call put_esc
+	pop ax ! push ax
+	mov al,ah ! call putc
+	pop ax ! jmps putc
+
+;	print the string ds:dx points to until current delimiter is found
+print_string:
+	push si ! push es
+	mov cl,9 ! int 224
+	pop es ! pop si ! ret
+
+;	turn the cursor off
+cursor_off:
+	mov al,'f' ! jmp put_esc
+
+;	turn the cursor on
+cursor_on:
+	mov al,'e' ! jmp put_esc
+
+;	print ax as 3 decimal digits WITHOUT LEADING ZERO SUPPRESSION
+pr_3dec_ax:
+	mov cx,3
+pr_ndec_ax:			;enter here for other field sizes
+	mov bx,cx
+pr_3dec_ax1:
+	sub dx,dx ! div pr_dec_C10 ! add dl,'0'
+	push dx ! loop pr_3dec_ax1
+	mov cx,bx
+pr_3dec_ax2:
+	pop ax ! call putc ! loop pr_3dec_ax2
+	ret
+
+pr_dec_C10	dw	10		;constant for division
+
+;	print ax in as many digits as it takes with leading zero suppression
+pr_dec_ax:
+	sub cx,cx
+pr_dec_ax1:
+	sub dx,dx ! div pr_dec_C10 ! add dl,'0'	;must always loop at least once
+	push dx ! inc cx
+	or ax,ax ! jnz pr_dec_ax1
+pr_dec_ax2:
+	pop ax ! call putc ! loop pr_dec_ax2
+	ret
+
+;	draw a single line box on the screen
+;	dh=uly, dl=ulx, ch=lry, dl=lrx
+boxer:	push dx ! push cx
+	xchg ax,dx ! inc al ! call xyadr	;cursor to ulc + 1
+	pop cx ! pop dx
+;
+	mov ax,cx ! add ax,0101h		;get x,y size
+	sub ax,dx 				;ch=vert size, cl=h. size
+;
+	push ax ! cbw				;draw top, l-r and ur corner
+	mov dx,offset lrline_end
+	sub dx,ax ! call print_string
+;
+	pop ax ! push ax			;draw line down and lr corner
+	mov al,4 ! mul ah
+	mov dx,offset dnline_end
+	sub dx,ax ! call print_string
+;
+	pop ax ! push ax  ! cbw			;draw bottom and ll corner
+	mov bx,3 ! mul bx
+	mov dx,offset rlline_end
+	sub dx,ax ! call print_string
+;
+	pop ax ! mov al,ah ! cbw		;draw left side and ul corner
+	mov bx,5 ! mul bx
+	mov dx,offset upline_end
+	sub dx,ax ! call print_string
+;
+	ret
+
+;	horizontally splits a single line box with a single line
+;	dh=uly,dl=ulx, cl=rx
+splitter:
+	push dx ! push cx ! mov ax,dx
+	call xyadr				;move to left edge
+	mov al,0c6h ! call putc			;print left tee
+	pop ax ! cbw				;ax=r.edge x
+	pop dx ! mov dh,0 ! sub ax,dx		;ax=# of chars left to print
+	mov dx,offset barline_end ! sub dx,ax
+	call print_string
+	ret
+
+;	clear to blanks with current attribute the specified box
+;	dh=uly, dl=ulx, ch=lry, dl=lrx
+clearer:
+	mov bx,cx ! add bx,101h ! sub bx,dx	;ch=# loops, cl=#char
+	mov cl,bh ! mov ch,0			;cx=#loops
+	mov ax,dx				;ah=uly,al=ulx
+	mov bh,0 ! mov dx,offset blank_end
+	sub dx,bx				;dx--> start of clear string
+clearer_1:
+	push cx ! push ax ! push dx ! call xyadr ;position cursor
+	pop dx ! push dx ! call print_string	 ;clear that line
+	pop dx ! pop ax ! pop cx
+	inc ah ! loop clearer_1			;move down 1 line and loop
+	ret
+
+set_bright:
+	mov al,'r' ! jmp put_esc
+
+set_dim:
+	mov al,'u' ! jmp put_esc
+
+set_blink:
+	mov al,'s' ! jmp put_esc
+
+set_noblink:
+	mov al,'t' ! jmp put_esc
+
+blank_to_end:
+	ret
+
+;	return 0 if no console char waiting, else Non-zero AL
+constat:
+	mov dl,0feh ! jmps direct_io
+
+;	return 0 if no console character waiting, else char in AL
+get_check_con:
+	mov dl,0ffh ! call direct_io
+if ENABLE_XBREAK
+	cmp al,mprint_sw ! jne get_check_con1	;check for print_screen char
+	  call mprint_screen
+	  mov al,0 ! ret
+get_check_con1:
+endif
+	ret
+
+;	return next console input character in AL
+conin:	mov dl,0fdh ! call direct_io
+if ENABLE_XBREAK
+	cmp al,mprint_sw ! jne conin1		;check for print screen char
+	  call mprint_screen ! jmps conin
+conin1:
+endif
+	ret
+
+;	output al to console (al must be < 0FCH)
+conout:	mov dl,al
+direct_io:
+	push si ! push es
+	mov cl,6 ! int 224
+	pop es ! pop si ! ret
+
+get_cmd_next:
+	push si ! mov si,mint_cmd_ptr
+get_cmd_loop:
+	lodsb ! cmp al,0 ! je get_cmd_done
+	cmp al,'[' ! je get_cmd_loop
+	cmp al,' ' ! je get_cmd_loop
+	cmp al,',' ! je get_cmd_loop
+	cmp al,'F' ! je get_cmd_loop
+	cmp al,'f' ! je get_cmd_loop
+	cmp al,'0' ! jb get_cmd_done
+	cmp al,'9' ! ja get_cmd_done
+	cmp al,'1' ! jne get_cmd_1digit
+	mov ah,byte ptr [si]			;get possible second digit
+	  cmp ah,'0' ! jb get_cmd_1digit
+	  cmp ah,'9' ! ja get_cmd_1digit
+	  lodsb ! add al,10
+get_cmd_1digit:
+	add al,128 -1 + ';' - '0'
+	jmps get_cmd_ret
+get_cmd_done:
+	xor ax,ax ! mov si,ax
+get_cmd_ret:
+	mov mint_cmd_ptr,si ! pop si ! ret
+
+eject
+if ENABLE_XBREAK
+
+;	does a Quasi-Graphic screen dump of PHYSICAL IBM CRT to current list
+;	device.  (Intended for debug and documentation only.)
+Mscreen	equ	es:word ptr .0
+mprint_screen:
+	push ax ! push bx ! push cx ! push dx
+	push si ! push di ! push bp
+	push ds ! push es ! pushf
+;
+	mov al,0ch ! call mput_list
+	mov cx,12
+mprint_top_m:						;leave some top margin
+	push cx ! call mprint_crlf ! pop cx ! loop mprint_top_m
+;
+	mov si,0 ! mov ax,0B800h ! mov es,ax		;see which screen
+	cmp es:byte ptr[si],0dah ! je mprint1		;not always guaranteed
+	  mov ax,0b000h ! mov es,ax			;else b & W crt
+mprint1:
+	mov cx,25
+mprint_loop:
+	push cx ! call mprint_line ! call mprint_crlf
+	pop cx ! loop mprint_loop
+;
+mprint_screen_ret:
+	popf ! pop es ! pop ds
+	pop bp ! pop di ! pop si
+	pop dx ! pop cx ! pop bx ! pop ax
+	ret
+
+
+;	prints one line
+mprint_line:
+	mov cx,80
+mprint_char:
+	push cx
+	lods mscreen ! cmp al,' ' ! jnb mprintc1	;visible char?
+	  cmp al,16 ! mov al,' ' ! jne mprint_it	;print blank if not ->
+	    mov al,'>' ! jmps mprint_it			;else fake a l.arrow
+mprintc1:
+	cmp al,0c4h ! jne mprintc2			;translate graphics
+	  mov al,'-' ! jmps mprint_it			;horizontal line
+mprintc2:
+	cmp al,0cdh ! jne mprintc3			;double H. line
+	  mov al,'=' ! jmps mprint_it
+mprintc3:
+	cmp al,0b3h ! jne mprintc4			;vert line
+	  mov al,'|' ! jmps mprint_it
+mprint_c4:
+	cmp al,0dah ! je mprint_corner			;all corners are '+'
+	cmp al,0c6h ! je mprint_corner
+	cmp al,0b5h ! je mprint_corner
+	cmp al,0bfh ! je mprint_corner
+	cmp al,0c3h ! je mprint_corner
+	cmp al,0b4h ! je mprint_corner
+	cmp al,0c0h ! je mprint_corner
+	cmp al,0d9h ! je mprint_corner
+	cmp al,127 ! jb mprint_it			;print alpha chars
+	  mov al,' ' ! jmps mprint_it			;don't print any others
+mprint_corner:
+	mov al,'+'					;print fake corner
+mprint_it:
+	call mput_list
+	pop cx ! loop mprint_char
+	ret
+
+
+;	send crlf to printer
+mprint_crlf:
+	mov al,0dh ! call mput_list
+	mov al,0ah ! call mput_list
+	mov cx,6
+mprint_lmargin:
+	push cx ! mov al,' ' ! call mput_list
+	pop cx ! loop mprint_lmargin
+	ret
+
+;	send al to printer
+mput_list:
+	push es ! push si
+	mov dl,al ! mov cl,5 ! int 224
+	pop si ! pop es ! ret
+
+ endif
+
+eject
+	dseg $
+;	interpreter stack and stack pointer
+mint_sp		dw	offset mint_stack_top
+mint_stack	rw	64
+mint_stack_top	rw	0
+mint_cmd_ptr	dw	0			;command buffer pointer
+
+;	graphic messages for interpreter primitives
+
+;	--> arrow message for keyboxes
+key_arrow_msg	db	1bh,'C',1bh,'C',' --',16,' ',0
+
+;	left to right line drawing array
+lrline_msg	db	0c4h,0c4h,0c4h,0c4h,0c4h,0c4h,0c4h,0c4h
+		db	0c4h,0c4h,0c4h,0c4h,0c4h,0c4h,0c4h,0c4h
+		db	0c4h,0c4h,0c4h,0c4h,0c4h,0c4h,0c4h,0c4h
+		db	0c4h,0c4h,0c4h,0c4h,0c4h,0c4h,0c4h,0c4h
+		db	0c4h,0c4h,0c4h,0c4h,0c4h,0c4h,0c4h,0c4h
+		db	0c4h,0c4h,0c4h,0c4h,0c4h,0c4h,0c4h,0c4h
+		db	0c4h,0c4h,0c4h,0c4h,0c4h,0c4h,0c4h,0c4h
+		db	0c4h,0c4h,0c4h,0c4h,0c4h,0c4h,0c4h,0c4h
+		db	0c4h,0c4h,0c4h,0c4h,0c4h,0c4h,0c4h,0c4h
+		db	0c4h,0c4h,0c4h,0c4h,0c4h,0c4h,0bfh,0	;ur corner
+lrline_end	db	0
+
+;	left edge top to bottom line drawing array
+dnline_msg	db	8,1bh,'B',0b3h,8,1bh,'B',0b3h
+		db	8,1bh,'B',0b3h,8,1bh,'B',0b3h
+		db	8,1bh,'B',0b3h,8,1bh,'B',0b3h
+		db	8,1bh,'B',0b3h,8,1bh,'B',0b3h
+		db	8,1bh,'B',0b3h,8,1bh,'B',0b3h
+		db	8,1bh,'B',0b3h,8,1bh,'B',0b3h
+		db	8,1bh,'B',0b3h,8,1bh,'B',0b3h
+		db	8,1bh,'B',0b3h,8,1bh,'B',0b3h
+		db	8,1bh,'B',0b3h,8,1bh,'B',0b3h
+		db	8,1bh,'B',0b3h,8,1bh,'B',0b3h
+		db	8,1bh,'B',0b3h,8,1bh,'B',0b3h
+		db	8,1bh,'B',0b3h,8,1bh,'B',0b3h
+		db	8,1bh,'B',0d9h,  0,0,0,0		;lr corner
+dnline_end	db	0
+
+;	right to left line message used to draw bottom line
+rlline_msg	db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c4h,8,8,0c4h
+		db	8,8,0c0h, 0,0,0		;lower left corner
+rlline_end	db	0
+
+;	bottom to top line drawing array used to draw left edge of boxes
+upline_msg	db	1bh,'D',1bh,'A',0b3h,1bh,'D',1bh,'A',0b3h
+		db	1bh,'D',1bh,'A',0b3h,1bh,'D',1bh,'A',0b3h
+		db	1bh,'D',1bh,'A',0b3h,1bh,'D',1bh,'A',0b3h
+		db	1bh,'D',1bh,'A',0b3h,1bh,'D',1bh,'A',0b3h
+		db	1bh,'D',1bh,'A',0b3h,1bh,'D',1bh,'A',0b3h
+		db	1bh,'D',1bh,'A',0b3h,1bh,'D',1bh,'A',0b3h
+		db	1bh,'D',1bh,'A',0b3h,1bh,'D',1bh,'A',0b3h
+		db	1bh,'D',1bh,'A',0b3h,1bh,'D',1bh,'A',0b3h
+		db	1bh,'D',1bh,'A',0b3h,1bh,'D',1bh,'A',0b3h
+		db	1bh,'D',1bh,'A',0b3h,1bh,'D',1bh,'A',0b3h
+		db	1bh,'D',1bh,'A',0b3h,1bh,'D',1bh,'A',0b3h
+		db	1bh,'D',1bh,'A',0dah, 0,0,0,0,0
+upline_end	db	0
+
+;	array used to draw DOUBLE horizontal split lines in single line boxes
+barline_msg	db	0cdh,0cdh,0cdh,0cdh,0cdh,0cdh,0cdh,0cdh
+		db	0cdh,0cdh,0cdh,0cdh,0cdh,0cdh,0cdh,0cdh
+		db	0cdh,0cdh,0cdh,0cdh,0cdh,0cdh,0cdh,0cdh
+		db	0cdh,0cdh,0cdh,0cdh,0cdh,0cdh,0cdh,0cdh
+		db	0cdh,0cdh,0cdh,0cdh,0cdh,0cdh,0cdh,0cdh
+		db	0cdh,0cdh,0cdh,0cdh,0cdh,0cdh,0cdh,0cdh
+		db	0cdh,0cdh,0cdh,0cdh,0cdh,0cdh,0cdh,0cdh
+		db	0cdh,0cdh,0cdh,0cdh,0cdh,0cdh,0cdh,0cdh
+		db	0cdh,0cdh,0cdh,0cdh,0cdh,0cdh,0cdh,0cdh
+		db	0cdh,0cdh,0cdh,0cdh,0cdh,0cdh,0b5h
+barline_end	db	0
+
+
+
+blank_msg	db	'                                        '
+		db	'                                        '
+blank_end	db	0
+	cseg $
+                                                                                                                                                                                                                                                                                                                                   

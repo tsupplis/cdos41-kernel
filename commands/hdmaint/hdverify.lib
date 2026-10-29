@@ -1,0 +1,358 @@
+eject
+;	HDVERIFY.LIB include file for HDMAINT 2.0 as of 20-Jul-84
+;	modified to make ESC exit key 20-Jul-84 by M.P. Vano
+	cseg $
+;==============================================================================
+; LEVEL 1 |
+;---------
+;  	MENU SEQUENCE TO VERIFY A DOS OR CP/M PARTITION
+;	called by main menu, returns to caller
+;
+;==============================================================================
+VERIFY:
+;	first we need to decide if there is more than one disk with a
+;	partition we are interested in, if so, we must choose a disk
+	XJE DSK_INFO_num_cpm_or_dos+offset hdisk1,0,VERIFY_DISK0
+	  XJE DSK_INFO_num_cpm_or_dos+offset hdisk0,0,VERIFY_DISK1
+	    XCLRBOX 1,3,77,22			;need to select disk
+	    XPUTS_AT 25,4,vfy2_msg		;show identifier line
+	    XCALL CHOOSEDISK			;and choose which disk
+	    XJMP VERIFY_CHOOSE_OS
+;
+VERIFY_DISK0:
+	  XMCALL disk0 ! XJMP VERIFY_CHOOSE_OS
+VERIFY_DISK1:
+	  XMCALL disk1			;only disk 1 has a cp/m partition 
+;
+VERIFY_CHOOSE_OS:
+	XJE WORK_cpmvalid,0,VERIFY_DOS		;NO CPM, go verify dos
+	  XJE WORK_dosexists,0,VERIFY_CPM	;NO DOS, go verify cpm
+;
+	   XCLRBOX 1,3,77,22				;else must choose
+	   XCALL SHOW_PM_STATUS				;show partitions
+	   XBRIGHT ! XPUTS_AT 32,10,vfy_which_msg0 ! XDIM ; prompt
+	   XSETW keymask,F_ESC+F1+F3
+	   XKBOX_MSG 20,11,1,vfy_which_msg1		;F1 verify cpm
+	   XKBOX_MSG 20,14,3,vfy_which_msg2		;F3 verify DOS
+	   XKBOX_MSG 20,20,0,vfy_which_msg3		;ESC back to main
+	   XKEYCASE keymask
+	     dw	0					;ESC falls through
+	     dw	VERIFY_CPM,0
+	     dw	VERIFY_DOS,0
+	     dw	0,0
+	     dw	0,0
+	     dw	0,0
+	   XRET						;all return to main
+
+eject
+;==============================================================================
+; LEVEL 3 |
+;---------
+;	VERIFIES DOS PARTITION ON CURRENT DISK
+;
+;==============================================================================
+VERIFY_DOS:
+	XMCALL dos_calc_partition		;calculate dos parameters
+	XSETW vfy_dos_bad_cnt,0			;zero bad block count
+;
+	XSTOP
+	mov si,offset WORK_xtlbl ! mov al,1	;find partition start
+	call find_pt_entry			;from partition table
+	mov al,XT_PT_start_cylinder[bx]		;convert from "IBM standard"
+	mov ah,XT_PT_start_sector[bx]
+	rol ah,1 ! rol ah,1 ! and ah,3
+	mov vfy_dos_cyl_no,ax			;used for display only
+	call MENU_BOL
+;
+	XCLRBOX 1,3,77,22
+	XPUTS_AT 11,5,vfy3_dos_msg		;print title line
+;
+	XJNE WORK_disk,0,VERIFY_DOS1		;show which disk
+	  XPUTS vfy3A_msg ! XJMP VERIFY_DOS2
+VERIFY_DOS1:
+	  XPUTS vfy3B_msg
+;
+VERIFY_DOS2:
+	XPUTS vfy4_msg
+	XSTOP					;calculate cluster limits
+
+;	now read the fat and check that it really is a FAT.
+;	(IF THIS FAILS, WE CANNOT PROCEED SINCE WE CANNOT IDENTIFY BAD BLOCKS)
+	call dos_get_fat ! or al,al ! jnz dos_vfy_badfat	;if ok, proceed
+	  cmp dos_fat,0FFF8H ! jne dos_vfy_badfat		;good fat?
+	    cmp byte ptr dos_fat+2,0FFH ! je dos_vfy_fatok	;yes, proceed
+dos_vfy_badfat:
+	    call MENU_BOL ! XPUTS_AT 28,12,vfy9A_msg		;print message
+	    XBEEP ! XBEEP ! XJMP DOS_VFY_DONE			;and quit
+;
+dos_vfy_fatok:
+	call dos_max_cluster			;get first cluster after end
+	mov vfy_dos_loop_limit,ax		;set as loop end test
+	mov vfy_dos_curr_cluster,2		;start cluster is always 2
+	call dos_get_bad_clusters
+	mov vfy_dos_known_bad,ax		;save for display
+	call MENU_BOL
+;
+	XPOSITION 28,8 ! XPNUM3 vfy_dos_known_bad
+	XPUTS vfy5_msg
+	XPOSITION 28,9 ! XPNUM3 vfy_dos_bad_cnt
+	XPUTS vfy6_msg
+	XPUTS_AT 28,15,vfy7_msg			;show current bad count
+	XPNUM3 vfy_dos_cyl_no			;and current cylinder
+;
+	XKBOX_MSG 18,20,0,vfy8_msg
+;
+	XCALL VFY_ABORT_CHECK			;quit already?
+	XSTOP
+;
+;	now do a simple read test of everything up to filestart
+;	(we must do it in pieces that fit in our safe cluster buffer: max 8K).
+	mov cx,WORK_filestart 			;get system area size
+	mov dx,0				;start at rel sector 0
+dos_vfy_sysloop:
+	cmp cx,16 ! jna dos_vfy_sys1		; less than 8k left?
+	  push cx ! push dx			; no, read only 8k
+	  mov es,esbase ! mov bx,offset cluster_buffer
+	  mov cx,16 ! call dos_disk_read
+	  pop dx ! pop cx ! or al,al ! jnz dos_vfy_sysbad	;read failed?
+	    add dx,16 ! sub cx,16 ! jmps dos_vfy_sys_loop	;no, go back
+dos_vfy_sys1:
+	mov es,esbase ! mov bx,offset cluster_buffer
+	call dos_disk_read ! or al,al ! jz dos_vfy_loop		;do last read
+;
+dos_vfy_sysbad:
+	call MENU_BOL ! XPUTS_AT 28,11,vfy9_msg
+	XSTOP
+
+;	now check all the clusters that are not mapped out
+dos_vfy_loop:
+	mov ax,IBM_cylinder + offset dos_rd_iopb		;see if new cyl
+	xchg vfy_dos_cyl_no,ax					;and update
+	cmp ax,vfy_dos_cyl_no ! je dos_vfy_cl1			;skip if same
+	  call MENU_BOL						;else show it
+	  XCALL VFY_ABORT_CHECK
+	  XPOSITION 46,15 ! XPNUM3 vfy_dos_cyl_no
+	  XSTOP
+dos_vfy_cl1:
+	mov ax,vfy_dos_curr_cluster ! mov bx,ax			;see if known
+	shl bx,1 ! add bx,ax ! shr bx,1				; * 1.5
+	mov bx,dos_fat[bx]		;get entry
+	test ax,1 ! jz dos_vfy_cl2				;odd entry?
+	  mov cl,4 ! shr bx,cl
+dos_vfy_cl2:
+	and bx,0fffh ! cmp bx,0ff7h ! je dos_vfy_cl_ok		;skip,known bad
+	  mov dx,vfy_dos_curr_cluster
+	  call read_dos_cluster ! or al,al ! jz dos_vfy_cl_ok	;reads ok?
+	    call MENU_BOL					;no, it's bad
+	    XADDW vfy_dos_bad_cnt,1				;inc count
+	    XPOSITION 28,9 ! XPNUM3 vfy_dos_bad_cnt		;and show it
+	    XSTOP
+dos_vfy_cl_ok:
+	inc vfy_dos_curr_cluster
+	mov ax,vfy_dos_loop_limit
+	cmp ax,vfy_dos_curr_cluster ! jne dos_vfy_loop	;until all done
+
+	call MENU_BOL
+DOS_VFY_DONE:
+	XCLRBOX 1,15,77,22
+	XPUTS_AT 28,15,vfy10_msg
+	XKBOX_MSG 18,17,9,vfy11_msg
+	XKBOX_MSG 18,20,0,vfy12_msg
+	XSETW keymask,F_ESC+F9
+	XKEYCASE keymask			;wait so op can see screen
+	  dw	DOS_VFY_RET			;ESC goes back to main
+	  dw	0,0
+	  dw	0,0
+	  dw	0,0
+	  dw	0,0				;f8 just falls through
+	  dw	0,0
+	XJMP VERIFY_DOS				;f8 does it again
+
+DOS_VFY_RET:
+	XPOP ! XRET				;back to our caller
+
+eject
+;------------------------------------------------------------------------------
+;	subroutine returns  the number of mapped out clusters in FAT for
+;	the disk currently in WORK_.  Result is returned in AX.
+;	Note that this code works because fat entries for cluster 0 and 1
+;	can never be equal to reserved bad cluster symbol (ff7h).
+;------------------------------------------------------------------------------
+dos_get_badclusters:
+	call dos_max_cluster ! mov cx,ax		;get loop count
+	sub ax,ax ! mov dx,ax				;set count, start cl.
+dos_gbadcl_lp:
+	mov bx,dx ! shl bx,1 ! add bx,dx ! shr bx,1	;index=cluster * 1.5
+	mov bx,dos_fat[bx]				;get the entry
+	test dx,1 ! jnz dos_gbadcl_odd			;odd cluster?
+	  and bx,0fffh ! cmp bx,0ff7h ! jne dos_gbadcl_next
+	    jmps dos_gbadcl_yes				;bad one, go increment
+dos_gbadcl_odd:
+	  and bx,0fff0h ! cmp bx,0ff70h ! jne dos_gbadcl_next
+dos_gbadcl_yes:
+	    inc ax
+dos_gbadcl_next:
+	inc dx ! loop dos_gbadcl_lp			;until all tested
+	ret
+
+	dseg $
+;	local variables for DOS verify
+vfy_dos_cyl_no		dw	0	;current cylinder # (for display only)
+vfy_dos_bad_cnt		dw	0	;new bad clusters found
+vfy_dos_curr_cluster	dw	0	;current cluster being tested
+vfy_dos_loop_limit	dw	0	;last cluster in partition + 1
+vfy_dos_known_bad	dw	0	;clusters mapped out in FAT already
+	cseg $
+eject
+;==============================================================================
+; LEVEL 3 |
+;---------
+;	VERIFIES CP/M PARTITION ON CURRENT DISK
+;
+;==============================================================================
+VERIFY_CPM:
+	XSETW vfy_bad_cnt,0			;zero bad block count
+;
+	XSTOP
+	mov ax,WORK_pstart ! mov vfy_cyl_no,ax	;begin at the beginning
+	call MENU_BOL
+;
+	XCLRBOX 1,3,77,22
+	XPUTS_AT 11,5,vfy3_msg
+	XJNE WORK_disk,0,VERIFY_ACT1
+	  XPUTS vfy3A_msg ! XJMP VERIFY_ACT2	;show "first" disk
+VERIFY_ACT1:
+	  XPUTS vfy3B_msg			;else "second" disk
+VERIFY_ACT2:
+	XPUTS vfy4_msg	
+	XPOSITION 28,8 ! XPNUM3 WORK_mapcnt
+	XPUTS vfy5_msg
+	XPOSITION 28,9 ! XPNUM3 vfy_bad_cnt
+	XPUTS vfy6_msg
+	XPUTS_AT 28,15,vfy7_msg
+	XPNUM3 vfy_cyl_no
+	XKBOX_MSG 18,20,0,vfy8_msg
+;
+	XCALL VFY_ABORT_CHECK			;quit?
+	XSTOP
+;
+	mov es,esbase ! mov bx,offset cpm_buffer
+	mov cx,WORK_pstart
+	mov dl,WORK_disk ! xor dh,dh
+	call read_cpm_system ! or al,al ! jnz sys_area_notgood ;sys track bad?
+;
+	  call MENU_BOL				;yes, now check the directory
+	  XADDW vfy_cyl_no,1			;start with next cylinder,
+	  XSETW vfy_block_no,0			;  first remap block
+	  XPOSITION 46,15 ! XPNUM3 vfy_cyl_no	;show cylinder
+	  XSTOP
+;
+vfy_next_dir_block:				;loop through directory
+	  call vfy_block ! or al,al ! jnz sys_area_notgood ;oops, found bad one
+	  mov ax,WORK_enddir
+	  cmp ax,vfy_block_no ! jz sys_area_check_over
+	    inc vfy_block_no ! jmps vfy_next_dir_block
+;
+sys_area_not_good:
+	call MENU_BOL ! XPUTS_AT 28,11,vfy9_msg		;show bad sys area msg
+	XSTOP
+;
+sys_area_check_over:					;scan remapped area
+	mov vfy_bad_cnt,0
+	mov ax,WORK_pstart ! inc ax ! mov vfy_cyl_no,ax
+vfy_main_loop:
+	call MENU_BOL
+	XPOSITION 46,15 ! XPNUM3 vfy_cyl_no 		   ;show current cyl #
+	XCALL VFY_ABORT_CHECK				   ;Break?
+	XSTOP
+	call vfy_cyl					   ;scan it
+	mov ax,WORK_pend ! cmp ax,vfy_cyl_no ! je vfy_done ;quit when done
+	  inc vfy_cyl_no ! jmp vfy_main_loop		   ;else loop
+;
+vfy_done:
+	call MENU_BOL
+	XCLRBOX 1,15,77,22
+	XPUTS_AT 28,15,vfy10_msg			;display done msg
+	XKBOX_MSG 18,17,9,vfy11_msg
+	XKBOX_MSG 18,20,0,vfy12_msg
+	XSETW keymask,F_ESC+F9
+	XKEYCASE keymask				;wait so op can see it
+	  dw	VERIFY_RET		;ESC returns to main menu
+	  dw	0,0
+	  dw	0,0
+	  dw	0,0
+	  dw	0,0			;F8 just falls through
+	  dw	0,0
+;
+	XJMP VERIFY_CPM			;loop back and do it again
+
+VERIFY_RET:
+	XPOP ! XRET			;back to our caller
+eject
+;------------------------------------------------------------------------------
+;	subroutines used by CP/M verify
+;------------------------------------------------------------------------------
+
+;	loops through each block of cylinder testing it and updating bad count
+vfy_cyl:
+	mov ax,vfy_cyl_no ! call get_block_info	;get start remap block & count
+						;now cx = number of blocks
+	mov vfy_block_no,ax			;    ax = block number
+vfy_cyl_block_loop:
+	push cx ! call vfy_block ! pop cx
+	inc vfy_block_no ! loop vfy_cyl_block_loop
+	ret
+
+
+vfy_block:
+	mov es,esbase ! mov bx,0
+	mov ax,vfy_block_no
+	mov dl,WORK_disk ! xor dh,dh
+	mov cx,offset WORK_hdlb
+	call read_cpm_block ! or al,al ! jz vfy_block_ok ;return if read is OK
+	  call MENU_BOL					;else if bad:
+	  XADDW vfy_bad_cnt,1				; add it to count
+	  XPOSITION 28,9 ! XPNUM3 vfy_bad_cnt		; redisplay count
+	  XSTOP ! mov al,0FFh				; return error code
+vfy_block_ok:
+	ret
+
+	dseg	$
+vfy_cyl_no	dw	0
+vfy_block_no	dw	0
+vfy_bad_cnt	dw	0
+	cseg $
+eject
+;==============================================================================
+;
+;	SUBROUTINE TO CHECK FOR USER BREAK IN VERIFY SEQUENCES.
+;	RETURNS TO CALLER IF NO BREAK OR NOT CONFIRMED, ELSE EXITS TO
+;	MAIN MENU.
+;
+;==============================================================================
+VFY_ABORT_CHECK:					;normal ML entry
+	XJNKEY VFY_ABORT_CHECK_NO			;any key pressed
+	  XGETCHAR inchar				;yes, pick it up
+	  XJE inchar,ESC,VERIFY_ABORT			;if ESC go confirm it
+	    XBEEP					;else beep and return
+VFY_ABORT_CHECK_NO:
+	XRET
+
+VERIFY_ABORT:
+	XBRIGHT ! XPUTS_AT 18,16,vfy0_msg ! XDIM
+	XKBOX_MSG 18,17,9,vfy1_msg		
+	XSETW keymask,F_ESC+F9
+	XKEYCASE keymask
+	  dw	VFY_ABORT_YES	;ESC again exits
+	  dw	0,0
+	  dw	0,0
+	  dw	0,0
+	  dw	0,0		;F9 falls through to continue
+	  dw	0,0
+;
+	XCLRBOX 18,16,77,19			;clear sub-prompt
+	XRET					;back to caller
+
+VFY_ABORT_YES:
+	XPOP ! XJMP MAIN_MENU			;yes .. return to main menu
+                                                                                                                                                                        

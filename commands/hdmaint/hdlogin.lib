@@ -1,0 +1,391 @@
+eject
+;	HDLOGIN.LIB include file for HDMAINT 2.0 as of 12-Jun-84
+	cseg $
+;------------------------------------------------------------------------------
+;	Subroutine collects all useful info about all drives that are attached
+;	and completely updates all DSK_INFO data structures and GLOBAL disk
+;	summary variables.  This is normally done at each entry to MAIN MENU
+;	only.
+;------------------------------------------------------------------------------
+login_all_disks:
+	mov al,0 ! mov num_cpm_or_dos,al		;reset globals
+	mov num_cpm,al ! mov num_dos,al
+;
+	cld ! push ds ! pop es ! mov dx,DSK_INFO_SIZE	;zero disk info tables
+	mov di,offset hdisk0 ! mov cx,dx ! rep stosb	;for BOTH DISKS
+	mov di,offset hdisk1 ! mov cx,dx ! rep stosb
+;
+	mov ch,num_hard_disks ! mov cl,0		;set first disk
+login_all_loop:
+	push cx ! mov ch,0 ! call login_disk ! pop cx	;do current disk
+	or al,al ! jz login_all_next			;did it succeed?
+	  dec num_hard_disks ! jnz login_all_next	;no, one less drive
+	    mov hd_error,HD_ERR_RPT ! jmp main_menu86	;fatal error, none left
+login_all_next:
+	inc cl ! cmp cl,ch ! jne login_all_loop		;until all done
+;
+	mov al,DSK_INFO_partitions + offset hdisk0	;update global with
+	mov num_boot,al					;# partitions on disk 0
+	ret
+
+eject
+;------------------------------------------------------------------------------
+;	logs in disk whose physical number is in cx
+;	updates global info on partition totals and that disk's info
+;	structures
+;	returns AL=0 if succeeds, else al=0ffh
+;	(assumes that data table has been cleared to 0 at entry by others)
+;------------------------------------------------------------------------------
+login_disk:
+; Setup base pointer in BP to point to this disk's info structure
+	mov ax,DSK_INFO_SIZE ! mul cx			;bp--> table entry
+	add ax,offset hdisk0 ! mov bp,ax		;BP must be preserved!
+;
+; set physical disk number entry
+	mov DSK_INFO_disknum[bp],cl
+;
+; collect physical parameters for drive from ROM BIOS
+	lea bx,DSK_INFO_hdinf+offset HDINF_heads[bp]	;point to physical info
+	push ds ! pop es ! mov dx,cx
+	push bp ! push bx ! call get_disk_parms		;call ros to fill in
+	pop bx ! pop bp ! or al,al ! jz login1		;does it exist?
+	  mov byte ptr [bx],0				;else set # heads=0
+	  mov al,0ffh ! jmp login_ret			;and return with error
+login1:
+	mov al,[bx] ! inc al				;get number of heads
+	mul byte ptr 1[bx]				;* number of sectors
+	mov DSK_INFO_cylsize[bp],ax			;cylsize= #heads * #spt
+;
+	mov ax,2[bx] ! inc ax				;get max cyl number
+	mov DSK_INFO_numcyl[bp],ax			;numcyl=maxcyl+1
+;
+;  try to read this disk's partition table and boot record
+	xor dh,dh ! mov dl,DSK_INFO_disknum[bp]
+	lea bx,DSK_INFO_xtlbl[bp]
+	push ds ! pop es
+	push bp ! call get_partition_table ! pop bp
+	or al,al ! jz pt_in_ok
+	  mov hd_error,HD_ERR_RPT ! jmp main_menu86 	;OOPS, can't read it
+pt_in_ok:
+	lea bx,DSK_INFO_xtlbl[bp]			;VALID PT?
+	cmp XTLBL_id[bx],IBM_SYS_ID ! je pt_is_ok	;IBM flag there?
+	  mov cx,4 * XT_PT_REC_SIZE			;else zero it out
+	  lea di,offset XTLBL_part1[bx]
+	  push ds ! pop es ! cld
+	  mov al,0 ! rep stosb
+	  mov XTLBL_id[bx],IBM_SYS_ID			;and install IBM flag
+pt_is_ok:
+	mov DSK_INFO_ptexists[bp],0FFh			;partition table exists
+	mov bx,bp ! call sort_partition_table		;put in ascending order
+	mov bx,bp ! call xlate_pt_cyl			;UN-IBM cyl. numbers
+	call build_freespace				;build freespace table
+;
+; if a CP/M exists, get its label info, else make a new label from default copy
+	cmp DSK_INFO_cpmexists[bp],0 ! je no_cpm_on_this_disk
+	  call login_cpm				;try to log it in
+	  cmp DSK_INFO_cpmvalid[bp],0 ! jne login_good	; did it work?
+no_cpm_on_this_disk:
+	  cld ! push ds ! pop es
+	  lea di,DSK_INFO_hdlb[bp]			;copy default label to
+	  mov si,offset default_cpm + 600h		; current label area.
+	  mov cx,HD_LABEL_SIZE ! rep movsb
+;
+login_good:
+	sub al,al
+login_ret:
+	ret
+
+eject
+;------------------------------------------------------------------------------
+;
+;	This code walks the partition table to construct the freespace table
+;
+;	at entry, SS:BP--> current DSK_INFO data structure for drive being
+;	analyzed. (DS=SS in this program)
+;
+;	Generally bp = base of data area
+;		  si = offset from base to current partition table entry
+;		  di = offset from base to next entry in freespace table
+;		  dx = start cyl. of current candidate for a freespace entry
+;		  cx = loop counter
+;
+;	- If a partition is in use, the 'cylused' variable is updated.
+;	- If a partition is in use, but not CP/M, the space up to its head is
+;	  added to the freespace table unless it's too small.
+;	- If a partition is in use, and is CP/M, various pointers and variables
+;	  are setup.
+;
+;------------------------------------------------------------------------------
+build_freespace:
+	lea di,DSK_INFO_freespace[bp]		;clear freespace table entries
+	push ds ! pop es ! cld
+	mov cx,2 * NUM_FREESPACE_ENTRIES	;(2 words each)
+	mov ax,-1 ! rep stosw			;fill unused entries with ffff
+;
+	mov DSK_INFO_cylused[bp],0		;init these variables before we
+	mov DSK_INFO_cpmexists[bp],0 		;walk thru the partition table 
+;
+	mov si,offset DSK_INFO_xtlbl + offset XTLBL_part1
+	mov di,offset DSK_INFO_freespace
+	mov cx,4				;4 partitions to search
+	mov dx,0				;initial candidate for new os
+;
+part_test_loop:
+	cmp XT_PT_system[bp+si],0 ! je part_test_next	;skip empty partitions
+;
+	  mov bl,XT_PT_start_cylinder[bp+si]			;bx=start cyl
+	  mov bh,XT_PT_start_sector[bp+si]
+	  rol bh,1 ! rol bh,1 ! and bh,3
+;
+	  mov al,XT_PT_end_cylinder[bp+si]			;ax=end cyl #
+	  mov ah,XT_PT_end_sector[bp+si]
+	  rol ah,1 ! rol ah,1 ! and ah,3
+;
+	  push ax						;save end cyl
+	  sub ax,bx ! inc ax					;calculate size
+	  add DSK_INFO_cylused[bp],ax				;add to 'used'
+	  inc DSK_INFO_partitions[bp]				;add to count
+	  pop ax
+
+;
+;  if this is the DOS partition, save a pointer to the pt entry, and its start
+;  and end cylinder numbers for further use and set the DOS exists flag.
+	  cmp XT_PT_system[bp+si],1 ! jne part_notdos	;dos system id?
+	    mov DSK_INFO_dosexists[bp],0ffh
+	    inc DSK_INFO_num_cpm_or_dos[bp]
+	    inc num_cpm_or_dos
+	    inc num_dos
+	    jmps part_test_cont
+;
+;  if this is the CP/M partition, just save a pointer to the pt entry, and its
+;  start cyl and end cylinders for further use and set the CP/M exists flag
+part_notdos:
+	  cmp XT_PT_system[bp+si],HD_SYS_ID ! jne part_test_cont
+	    mov DSK_INFO_pend[bp],ax
+	    mov HDLB_pstart+offset DSK_INFO_hdlb[bp],bx
+	    mov DSK_INFO_cpmexists[bp],0FFh
+;
+part_test_cont:
+	call freespace_check				;put any free in table
+part_test_next:
+	add si,XT_PT_REC_SIZE ! loop part_test_loop	;repeat for each part.
+;
+;  We are done scanning the partition table, now finish the freespace table.
+;
+;  First add an entry for any space left over on disk after the last partition.
+	mov bx,DSK_INFO_numcyl[bp]
+	call freespace_check				;add to table if >10cyl
+;
+;  Then see if these entries are suitable for building a partition
+done_making_freespace:
+	mov al,DSK_INFO_cpm_exists[bp]		;if either exists, there's room
+	mov DSK_INFO_roomforcpm[bp],al
+	mov al,DSK_INFO_dos_exists[bp]
+	mov DSK_INFO_roomfordos[bp],al
+;
+	cmp di,offset DSK_INFO_freespace	;did we find any space?
+	je no_room_for_new_os			;nope, no room for a new OS
+	  cmp XT_PT_system + offset XTLBL_part4 + offset DSK_INFO_xtlbl[bp],0
+	  jne no_room_for_new_os		;no room if no pt space either
+	  mov DSK_INFO_roomforcpm[bp],0ffh	;else there's room
+	  mov DSK_INFO_roomfordos[bp],0ffh
+no_room_for_new_os:
+	ret
+
+
+;	SUBROUTINE USED BY ABOVE
+;	if the current freespace segment whose start is in BX and end in AX
+;	is greater than 10 cylinders, it is added to the freespace table
+;
+;	In any case, the cylinder number = AX+1 is set as a new freespace
+;	start in DX
+;
+;	at entry:
+;		AX=end cyl of current partition
+;		BX=beginning of current partition
+;		DX=first cylinder after end of last partition
+;		DS:[BP+DI] --> current table entry
+;	destroys BX, updates DX, DI and table entry
+freespace_check:
+	  sub bx,10					;10 cyl. free in front?
+	  cmp bx,dx ! jl skip_freespace10		;nope, just continue
+	    add bx,9					;yep, 
+	    mov [bp+di],dx ! mov 2[bp+di],bx		;enter in table
+	    add di,4
+skip_freespace10:
+	  inc ax ! mov dx,ax				;else set new candidate
+	  ret
+
+eject
+;------------------------------------------------------------------------------
+;	get CP/M label info
+;	reads in and checks label info for current disk's cpm partition
+;	(BP--> disk info table for disk)
+;	updates disk info table correctly and also updates global
+;	num_cpm if good cpm is found.
+;	sets DSK_INFO_cpmvalid[bp] true or false depending on success.
+;------------------------------------------------------------------------------
+login_cpm:
+;  first try to read label into DSK_INFO_hdlb
+	mov dl,DSK_INFO_disknum[bp] ! xor dh,dh
+	lea bx,DSK_INFO_hdlb[bp]
+	mov cx,HDLB_pstart[bx] ! push ds ! pop es
+	push bp ! call get_cpm_label ! pop bp
+	or al,al ! jnz cpm_label_is_bad			;could we read it?
+;
+	  mov bx,bp ! call calc_cpm_checksum		;is checksum OK?
+	  cmp ax,HDLB_chks+offset DSK_INFO_hdlb[bp]
+	  jne cpm_label_is_bad				;no .. checksum is bad
+;
+	    push ds ! pop es 				;is ID string there?
+	    lea si,DSK_INFO_hdlb+2[bp]			;(DR copyright note)
+	    mov di,2+offset default_cpm + 600h
+	    mov cx,31 ! repe cmpsb ! jne cpm_label_is_bad ; no ID string, exit
+;
+	      mov DSK_INFO_cpmvalid[bp],0FFh		;label OK mark cpm OK
+	      inc DSK_INFO_num_cpm_or_dos[bp]
+	      inc num_cpm_or_dos
+	      inc num_cpm				;add to cpm count
+	      mov bx,bp ! call calc_from_dpb		;fill in rest of data
+	      ret					;and exit
+;
+cpm_label_is_bad:
+	  mov DSK_INFO_cpmvalid[bp],0 ! ret		;login failed, no CPM
+
+eject
+;------------------------------------------------------------------------------
+;	Subroutine that will translate the partition table start and end
+;	cylinder records from IBM weird format into integers in the
+;	corresponding entries of the same table.
+;	Called with BP--> the "diskn" structure containing the table
+; 	to fix up.
+;------------------------------------------------------------------------------
+xlate_pt_cyl:
+	mov cx,4
+	lea si,DSK_INFO_xtlbl + offset XTLBL_part1[bp]
+	lea di,DSK_INFO_part1_start[bp]
+	push ds ! pop es ! cld
+;
+xlate_pt_cyl_loop:
+	mov al,XT_PT_start_cylinder[si]
+	mov ah,XT_PT_start_sector[si]
+	rol ah,1 ! rol ah,1 ! and ah,3
+	stosw
+;
+	mov al,XT_PT_end_cylinder[si]
+	mov ah,XT_PT_end_sector[si]
+	rol ah,1 ! rol ah,1 ! and ah,3
+	stosw
+;
+	add si,XT_PT_REC_SIZE ! loop xlate_pt_cyl_loop
+	ret
+
+;------------------------------------------------------------------------------
+;	CALCULATE REMAP BLOCKS FOUND ON GIVEN CYLINDER
+;	This routine is entered with a cylinder number in AX
+;	On return AX has the remap block number for the start of the cylinder
+;	          CX has the number of remap blocks in this cylinder 
+;------------------------------------------------------------------------------
+get_block_info:
+	sub ax,WORK_pstart ! dec ax	;ax now has relative cyl number
+	mov cx,WORK_cylsize		;cx has cyl size in sectors
+	mul cx				;ax now has sectors to start of cyl.
+	shr ax,1 ! shr ax,1		;ax now has block number for start
+	shr cx,1 ! shr cx,1		;number of remap blocks per cyl.
+	ret
+
+eject
+;------------------------------------------------------------------------------
+;	CALCULATIONS MADE FROM DPB DATA
+;	max directory size (from AL0,AL1)
+;	min directory size (from DRM)
+;	flag: directory at max size (from above)
+;	enddir: last remap block for directory (from above)
+;	cpmsize: size of partition in K (from DSM and BLM)
+;------------------------------------------------------------------------------
+calc_from_dpb:
+	push si ! lea si,DSK_INFO_hdlb[bx]		;si--> label
+;
+	mov al,HDLB_cpmblm[si]				;get alloc block size
+	inc al ! xor ah,ah ! push ax			;adjust & save
+;
+	mov dh,HDLB_cpmal0[si] ! mov dl,HDLB_cpmal1[si]	; get AL0,AL1
+	mov cx,16 ! mov ax,0
+count_al_bits:
+	rol dx,1 ! adc al,0 ! loop count_al_bits	;count bits in AL0,AL1
+;	
+	pop cx ! push cx ! mul cl		;* alloc blk size (in sctrs)
+	mov cx,4 ! mul cx			;* 4 = # possible dir. entries
+	mov DSK_INFO_maxdir[bx],ax
+;
+	mov cx,HDLB_cpmdrm[si]				;get actual dir size
+	inc cx ! mov DSK_INFO_mindir[bx],cx
+;
+	mov DSK_INFO_diratmax[bx],0			;assume dir not at max
+	cmp cx,ax ! jnz calc_enddir			;is max dir = min dir?
+	  mov DSK_INFO_diratmax[bx],0FFh 		;yes .. dir IS at max
+calc_enddir:
+	mov ax,DSK_INFO_maxdir[bx]			;last remap block=# of
+	mov cl,6 ! shr ax,cl ! dec ax			;dir entries / 64 - 1
+	mov HD_INF_enddir + offset DSK_INFO_hdinf[bx],ax
+;
+	mov ax,HDLB_cpmdsm[si]
+	inc ax ! pop cx			;size = (dsm + 1) * alloc block size
+	shr cx,1 ! shr cx,1 ! shr cx,1
+	mul cx ! mov DSK_INFO_cpmsize[bx],ax
+;
+	pop si ! ret
+
+eject
+;------------------------------------------------------------------------------
+;	CALCULATE CP/M LABEL CHECKSUM 
+;	This is chosen so that the sum of all the WORDS in the label is 0000.
+;	On entry DS:BX points to the base of the disk info area
+;------------------------------------------------------------------------------
+calc_cpm_checksum:
+	push di ! push si ! cld
+	lea si,DSK_INFO_hdlb+2[bx]
+	mov cx,255 ! mov di,0
+cksum_loop:
+	lodsw ! add di,ax ! loop cksum_loop
+	mov ax,di ! neg ax
+	pop si ! pop di ! ret
+
+;------------------------------------------------------------------------------
+;	SORT THE PARTITION TABLE (using a slow brute force method)
+;	On entry DS:BX points to the base of the disk info area
+;
+;	The sort arranges the assigned partitions (system <> 0) according to
+; ascending cylinder number order.  The unused partition entries follow the
+; used ones.  	This order is different than that produced by IBM's FDISK.
+;------------------------------------------------------------------------------
+sort_partition_table:
+	mov si,offset DSK_INFO_xtlbl + offset XTLBL_part1 ;SI-->1st entry
+	mov cx,3					  ;3 passes needed
+;
+sort_pt_loop:
+	lea di,XT_PT_REC_SIZE[si]			;di-->following Part.
+;
+part_loc_compare:			;switch if next in use but not this one
+	cmp XT_PT_system[bx+di],0 ! je part_compare_next ;next is empty ignore
+	  cmp XT_PT_system[bx+si],0 ! je switch_order	;this one empty, switch
+;
+part_loc_comp:				;both in use - switch them if needed
+	    mov ax,XT_PT_relsect[bx+di]		;32 bit compare
+	    sub ax,XT_PT_relsect[bx+si]		;sets borrow if needed
+	    mov ax,XT_PT_relsect+2[bx+di]
+	    sbb ax,XT_PT_relsect+2[bx+si] 	;flags should be correct here
+	      jns part_compare_next		;continue if second > first
+;
+switch_order:   push cx ! push bx ! mov cx,XT_PT_REC_SIZE	;swap 2 entries
+switch_order1:	mov al,[bx+si] ! xchg [bx+di],al ! mov [bx+si],al
+	        inc bx ! loop switch_order1
+	        pop bx ! pop cx
+;
+part_compare_next:
+	add di,XT_PT_REC_SIZE				;end of table?
+	cmp di,offset DSK_INFO_xtlbl + offset XTLBL_part4 + XT_PT_REC_SIZE
+	jnz part_loc_compare
+	  add si,XT_PT_REC_SIZE! loop sort_pt_loop	;else move to next base
+	    ret						;all done
+                                                                                                                                                                                                                        

@@ -1,0 +1,800 @@
+eject
+;	Source Library file HDDOSLIB.LIB: PC-DOS specific disk subroutines
+	cseg $
+;==============================================================================
+;	Higher level subroutines used by dos partition create sequence
+;==============================================================================
+
+;------------------------------------------------------------------------------
+;	builds a boot record and other needed data for the dos partition
+;	described in the partition table currently in WORK_.
+;------------------------------------------------------------------------------
+dos_calc_partition:
+	mov si,offset WORK_xtlbl ! mov al,1		;find dos pt entry
+	call find_pt_entry				;always will find it
+	lea di,WORK_dos_btrec				; point to boot data
+;  setup constant data first
+	mov DOS_BT_secsiz[di],512			;512 bytes/sector
+	mov DOS_BT_rsrvd[di],1				;1 reserved sector
+	mov DOS_BT_nfats[di],2				;2 fats
+	mov DOS_BT_fatid[di],0f8h			;f8 media descriptor
+	mov DOS_BT_disk[di],80h				;boot only from drive 0
+	mov DOS_BT_syssiz[di],10			;IBMBIO boot length
+;  now do physical drive data fields
+	sub ax,ax
+	mov al,WORK_pspt ! mov DOS_BT_spt[di],ax	;physical spt
+	mov al,WORK_heads ! inc al
+	mov DOS_BT_nheads[di],ax			;number of heads
+;  now do data dependent upon partition table
+	mov ax,XT_PT_rel_sect[bx] ! mov DOS_BT_hidden[di],ax	;hidden sectors
+	mov ax,XT_PT_size[bx] ! mov DOS_BT_totsec[di],ax 	;total dos size
+;  calculate cluster size, dirsize, fatsize based upon total size
+	cmp ax,7fA8h ! jb d_calc1			;huge?
+	  mov dx,1024 ! mov ch,16 ! mov cl,4		;set dirsiz, spc, shift
+	  jmps d_calc_fsize
+d_calc1:
+	cmp ax,2001h ! jb d_calc2			;big?
+	  mov dx,512 ! mov ch,8 ! mov cl,3		;as above
+	  jmps d_calc_fsize
+d_calc2:
+	cmp ax,801h ! jb d_calc3			;medium?
+	  mov dx,256 ! mov ch,4 ! mov cl,2
+	  jmps d_calc_fsize
+d_calc3:
+	cmp ax,201h ! jb d_calc4			;small?
+	  mov dx,112 ! mov ch,2 ! mov cl,1
+	  jmps d_calc_fsize
+d_calc4:
+	cmp ax,40h ! jb dos_calc_err			;tiny?
+	  mov dx,64 ! mov ch,1 ! mov cl,0
+;  update dirsize and spc, then calculate fatsize
+d_calc_fsize:
+	mov DOS_BT_dirsiz[di],dx
+	mov DOS_BT_clussiz[di],ch
+;  calculate fatsize
+	dec ch ! add al,ch ! adc ah,0			;round sectors up
+	cmp cl,0 ! je d_calc_fsize1			;to full clusters
+	  shr ax,cl					;and calc # clusters
+d_calc_fsize1:
+	inc ax ! and ax,0fffeh				;round to even words
+	mov dx,ax ! shr ax,1 ! add ax,dx		;/1.5=fatsize in bytes
+	add ax,DOS_BT_secsiz[di] ! dec ax		;round up to sectors
+	sub dx,dx ! div DOS_BT_secsiz[di]		; calculate # sectors
+	mov DOS_BT_fatsiz[di],ax
+;
+	shl ax,1 ! add ax,DOS_BT_rsrvd[di]		;calculate filestart
+	mov cx,ax ! mov ax,32 ! mul DOS_BT_dirsiz[di]	;only for 512 bps?
+	add ax,511 ! xor dx,dx ! div DOS_BT_secsiz[di]
+	add ax,cx ! mov WORK_filestart,ax		;save it for reference
+dos_calc_err:						;bad values, leave 0
+	ret
+
+eject
+;------------------------------------------------------------------------------
+;	updates boot record parameters in default secondary dos boot
+;	without disturbing constant fields in template
+;	everything between secsiz and syssiz is copied, 
+;	  o jump and  vendor ID at head are undisturbed
+;	  o FDC parameters following are undisturbed
+;
+;	"I's the b'y that builds the boots..."
+;------------------------------------------------------------------------------
+dos_build_boot:
+	push ds ! pop es ! cld				;inset variables
+	mov di,offset dos_boot_sector + offset DOS_BT_secsiz
+	mov si,offset WORK_dos_btrec + offset DOS_BT_secsiz
+	mov cx,DOS_BTREC_SIZE-offset DOS_BT_secsiz
+	rep movsb
+	ret
+
+;------------------------------------------------------------------------------
+;	writes default secondary dos boot to current dos partition
+;	via "safe" buffer
+;------------------------------------------------------------------------------
+dos_put_boot:
+	mov si,offset dos_boot_sector		;copy to safe buffer
+	mov es,esbase ! mov di,offset label_buffer
+	cld ! mov cx,256 ! rep movsw
+;
+	mov cx,1 ! mov dx,0			;write rel sector 0
+	mov bx,offset label_buffer
+	call dos_disk_write
+	ret
+
+eject
+;------------------------------------------------------------------------------
+;	constructs a null fat at dos_fat in data segment
+;------------------------------------------------------------------------------
+dos_build_fat:
+	cld ! push ds ! pop es
+	mov cx,((4096*3)/2)/2 ! mov di,offset dos_fat
+	mov ax,0 ! rep stosw
+	mov di,offset dos_fat
+	mov ax,0fff8h ! stosw		;write media id and 2 bytes of 0ffh
+	mov al,ah ! stosb
+	ret
+
+;------------------------------------------------------------------------------
+;	writes 2 copies of current default fat in dos_fat to disk using
+;	esbase:cluster_buffer
+;------------------------------------------------------------------------------
+dos_put_both_fats:
+	cld ! mov es,esbase ! mov di,offset cluster_buffer
+	mov si,offset dos_fat
+	mov cx,((4096*3)/2)/2 ! rep movsw		;move whole thing
+;
+	mov cx,WORK_bt_fatsiz				;write first copy
+	mov dx,WORK_BT_rsrvd				;fats are after rsrvd
+	mov bx,offset cluster_buffer
+	push bx ! push dx ! push cx
+	call dos_disk_write				;write first fat
+	pop cx ! pop dx ! pop bx
+	or al,al ! jnz dos_put2_fats1			;exit if failed
+	  add dx,cx ! call dos_disk_write		;and go write second
+dos_put2_fats1:
+	ret
+
+eject
+;------------------------------------------------------------------------------
+;	uses cluster buffer to test directory and then leave it full of 00h.
+;------------------------------------------------------------------------------
+dos_initdir:
+	mov cx,WORK_bt_dirsiz				;get directory siz
+	add cx,15					;round up to sectors
+	shr cx,1 ! shr cx,1 ! shr cx,1 ! shr cx,1	;find # of sectors
+	mov dx,WORK_bt_fatsiz ! add dx,dx		;get start sector
+	add dx,WORK_bt_rsrvd
+d_idir_lp:
+	cmp cx,16 ! jna d_idir_last			;check max test size
+	  push cx ! push dx
+	  mov cx,16 ! call dos_test_block		;if > 16, test 16
+	  pop dx ! pop cx ! or al,al ! jnz d_idir_ret	; exit if error
+	  add dx,16 ! sub cx,16 ! jmps d_idir_lp	;else do till <= 16
+d_idir_last:
+	call dos_test_block
+d_idir_ret:
+	ret
+
+;------------------------------------------------------------------------------
+;	this calculates the clusters used by ibmbio and ibmdos and
+;	links them sequentially in the fat.  It also must update the
+;	start cluster number for IBMDOS (ibmbio always starts at #2) in its
+;	directory entry template.  Then it writes those files (the DRI loader
+;	and a dummy) files out to their respective clusters.  It then
+;	reads in the first directory sector and updates the first two entries
+;	in it and writes out the directory.  After this, It flushes the new
+;	fat out to both FATS on disk.   CAUTION:  THIS MUST ONLY BE USED
+;	WHEN CREATING THE SYSTEM.  A DIFFERENT PROCEDURE MUST BE USED WHEN
+;	UPDATING AN EXISTING PARTITION.
+;------------------------------------------------------------------------------
+dos_putsys:
+	call dos_calc_bios_size			;get number of clusters in bios
+	push ax					;save bios size, we'll need it
+	mov cx,ax ! mov bx,2 ! call dos_links	;create fat links and eof
+;
+	call dos_calc_dos_size			;now get ibmdos size
+	pop bx					;get bios size
+	add bx,2 ! mov dridos_start,bx		;dos starts right after bios
+	mov cx,ax ! call dos_links		;so go link dos clusters
+;
+	call dos_wr_sysclus ! or al,al ! jnz dos_putsys1
+	  push ds ! pop es ! mov di,offset dir_buffer	;clear dir buffer
+	  cld ! sub ax,ax				;(since new partition)
+	  mov cx,512/2 ! rep stosw
+	  call dos_wr_sysdir ! or al,al ! jnz dos_putsys1 ;make dir entries
+	    call dos_put_both_fats		;write out the fats
+dos_putsys1:
+	ret
+
+eject
+;------------------------------------------------------------------------------
+;	assuming that dirbuff has the current contents of the first
+;	directory sector, this subroutine will update the first two fcbs
+;	to contain proper directory entries for dribio and dridos and
+;	then write out the directory buffer to disk.  (also zeroes rest of
+;	that directory entry).
+;	(commented out code creates a null DOS directory label as well.)
+;------------------------------------------------------------------------------
+dos_wr_sysdir:
+;;;;	mov bx,offset ibm_label_fcb ! call dos_fcb_stamp ;set label date/time
+	push ds ! pop es ! mov di,offset dir_buffer	;copy template fcbs
+	cld ! mov si,offset dribio_fcb			;(dribio,dridos,label)
+;;;;	mov cx,3 * (32 / 2) ! rep movsw			;copy all 3 fcbs out
+	mov cx,2 * (32 / 2) ! rep movsw			;copy both fcbs out
+	mov cx,(512-64)/2 ! xor ax,ax ! rep stosw	;zero rest of sector
+	mov cx,0 ! call write_dos_dirsector		;write first dir sector
+	ret
+
+;------------------------------------------------------------------------------
+;	writes out the data clusters for dummy PC BIOS and PC DOS files
+;	to current disk.
+;	(also runs write/verify tests on all clusters involved.  This
+;	ensures that the rest of the clusters involved are set to 00 and
+;	are good.)
+;------------------------------------------------------------------------------
+dos_wr_sys_clus:
+	call dos_calc_bios_size
+	push cx ! call dos_calc_dos_size
+	pop ax ! add cx,ax			;size of the two in clusters
+	mov dx,2				;always start at cluster 2
+dos_chk_sys_clus:
+	push cx ! push dx ! mov cx,dx		;go test the clusters
+	call dos_test_cluster
+	pop cx ! pop dx ! or al,al ! jnz dos_wr_sys_clus1	;exit if bad
+	loop dos_chk_sys_clus
+	call dos_write_sys_only
+dos_wr_sys_clus1:
+	ret
+
+eject
+;------------------------------------------------------------------------------
+;	writes out ONLY THE DATA SECTORS for the cpm loader to the
+;	current dos disk.  Does not update fat or directory entry.
+;	user clusterbuffer
+;------------------------------------------------------------------------------
+dos_write_sys_only:
+	cld ! mov si,offset dos_system		;(really cpm loader)
+	mov es,esbase ! mov di,offset cluster_buffer
+	mov cx,1024 ! rep movsw			;assume 2K bytes
+;
+	mov cl,WORK_bt_syssiz ! mov ch,0	;now go write it
+	mov bx,offset cluster_buffer
+	mov dx,WORK_filestart
+	call dos_disk_write
+	ret
+
+;------------------------------------------------------------------------------
+;	links fat entries for a contiguous file of CX clusters in size
+;	starting with cluster BX.  Deals with end of chain mark as well.
+;	CAUTION:  THIS ASSUMES FAT CLUSTER ENTRIES ARE zeroed out at entry.
+;------------------------------------------------------------------------------
+dos_links:
+	mov dx,bx					;dx will be even link
+	push cx ! mov cl,4
+	mov di,bx ! shl di,cl ! pop cx			;di will be odd link
+d_lnk_lp:
+	inc dx ! add di,16				;increment link ptrs
+	mov si,bx ! shl si,1 ! add si,bx ! shr si,1	; si--> fat entry
+	cmp cx,1 ! jne d_not_eof			;if only 1 left, eof
+	  mov dx,0fffh ! mov di,0fff0h			;change to EOF marks
+d_not_eof:
+	test bx,1 ! jnz d_odd_lnk
+	  or dos_fat[si],dx ! jmps d_nxt_lnk		;install even entry
+d_odd_lnk:
+	  or dos_fat[si],di				;else do odd one
+d_nxt_lnk:
+	inc bx ! loop d_lnk_lp				;until all done
+	ret
+
+eject
+;------------------------------------------------------------------------------
+;	tests cluster whose number is passed in CX. return values same as
+;	dos_test_block (below).  Also maps out cluster in FAT as per DOS spec.
+;	If dos_fast_test switch is set, uses read/only test on data clusters.
+;------------------------------------------------------------------------------
+dos_test_cluster:
+	push cx
+	mov dx,cx ! call calc_dos_cluster ! mov dx,ax	;translate to sectors
+	cmp dos_fast_test,0 ! je dos_test_slow		;see which mode to use
+	  call dos_disk_read				;use read only test
+	  push IBM_cylinder + offset dos_rd_iopb	;keep cyl display happy
+	  pop IBM_cylinder + offset dos_wr_iopb		;(as if it was a write)
+	  jmps dos_test_cl_chk
+dos_test_slow:
+	call dos_test_block				;else read/write test
+dos_test_cl_chk:
+	pop cx ! or al,al ! jz dos_test_cl_ret		;exit now if OK
+	  mov si,cx ! add si,si ! add si,cx ! shr si,1	;  find fat index
+	  test cx,1 ! jnz dos_test_cl_odd		;  odd or even?
+	    mov ax,0ff7h ! jmps dos_test_cl1		;  mask for even entry
+dos_test_cl_odd:
+	  mov ax,0ff70h					;  mask for odd entry
+dos_test_cl1:
+	  or dos_fat[si],ax ! mov ax,-1			;  return error code
+dos_test_cl_ret:
+	ret
+
+
+;------------------------------------------------------------------------------
+;	Write/verify test specified dos sectors (up to 8K or one cluster).
+;
+;	patterns used are:
+;	  6DB6h MFM worst case pattern	(note that this is B66Dh INTEL style)
+;	  0000h DIRECTORY INITIALIZATION pattern
+;
+;	dos relative start sector is passed in DX, number of sectors to test
+;	in CX.  Returns AX=0 if good, else NZ.
+;
+;	uses esbase:cluster buffer and esbase:verify buffer for test
+;------------------------------------------------------------------------------
+dos_test_block:
+	push dx ! push cx
+	mov bx,0b66dh ! call dos_fill_testbuf
+	pop cx ! pop dx ! push dx ! push cx
+	call dos_disk_write ! or al,al ! jnz dos_test_block1
+;
+	pop cx ! pop dx ! push dx ! push cx
+	mov bx,0 ! call dos_fill_testbuf
+	pop cx ! pop dx ! push dx ! push cx
+	call dos_disk_write
+dos_test_block1:
+	pop cx ! pop dx ! ret
+
+;------------------------------------------------------------------------------
+;	subroutine used by dos_test_block:
+;	fills cluster buffer for CX sectors with pattern specified in BX
+;	leaves ES:BX--> cluster buffer ready to write
+;------------------------------------------------------------------------------
+dos_fill_testbuf:
+	mov ax,WORK_bt_secsiz ! mul cx ! shr ax,1
+	mov cx,ax ! mov ax,bx
+	cld ! mov es,esbase ! mov di,offset cluster_buffer
+	rep stosw
+	mov bx,offset cluster_buffer
+	ret
+
+eject
+;------------------------------------------------------------------------------
+;	returns number of first cluster AFTER IBMDOS.COM end in ax
+;	and number of first cluster AFTER LAST CLUSTER in partition in BX
+;------------------------------------------------------------------------------
+dos_test_limits:
+	call dos_calc_bios_size			;get and save bios size
+	push ax ! call dos_calc_dos_size	;get dos size
+	pop bx ! add ax,bx ! add ax,2		;add them up and add reserved
+	push ax ! call dos_max_cluster ! inc ax	;add 1 to max cluster as limit
+	xchg bx,ax ! pop ax			;and return ax and bx
+	ret
+
+;------------------------------------------------------------------------------
+;	Returns size in bytes of dribios file
+;------------------------------------------------------------------------------
+dos_calc_bios_size:
+	mov ax,dribio_size			;get size in bytes of bios file
+	jmp dos_rnd_to_clusters			;go change to clusters
+
+;------------------------------------------------------------------------------
+;	Returns size in bytes of dridos file
+;------------------------------------------------------------------------------
+dos_calc_dos_size:
+	mov ax,dridos_size			;get size in bytes of DOS file
+	jmp dos_rnd_to_clusters			;go change to clusters
+
+;------------------------------------------------------------------------------
+;	given a file size in ax < 64k bytes, returns the number of
+;	clusters that that file occupies for current partition.
+;------------------------------------------------------------------------------
+dos_rnd_to_clusters:
+	add ax,WORK_bt_secsiz ! dec ax		;round up to full sector
+	xor dx,dx ! div WORK_bt_secsiz		;and divide by sector size
+	mov cl,WORK_bt_clussiz ! xor ch,ch	;find out how many clusters
+	add ax,cx ! dec ax			;round up to clusters
+	xor dx,dx ! div cx			;ax=size in clusters
+	ret
+
+;------------------------------------------------------------------------------
+;	returns the HIGHEST legal cluster number for the current DOS partition
+;------------------------------------------------------------------------------
+dos_max_cluster:
+	mov ax,WORK_bt_totsec ! sub ax,WORK_filestart
+	mov cl,WORK_bt_clussiz ! mov ch,0
+	xor dx,dx ! div cx
+	inc ax ! ret				;remember, clusters start at 2!
+
+
+eject
+;------------------------------------------------------------------------------
+;	checks if possible to write dos system files to current dos partition
+;	returns AL=0 if operation succeeds, AL=NZ if physical error
+;	results are returned in bx, 0=ok to write dos files
+;	1= No/insufficient space reserved for system files.
+;	2= DRI files already exist, somewhere they don't belong.
+;------------------------------------------------------------------------------
+dos_ok_to_putsys:
+;	first see if dridos.com exists anywhere else except where it belongs
+;	  if so, return with an error
+	mov dx,offset dridos_fcb ! call dos_search
+	or al,al ! jnz dos_okputsys_ret			;exit if phys error
+	  cmp dx,-1 ! je dos_okputsys5			;if no file, continue
+	    cmp dx,1 ! je dos_okputsys5			;or file 1, continue
+	      mov bx,2 ! jmp dos_ok_putsys_ret		;else exit with code 2
+dos_okputsys5:
+;
+;	then see if dribio.com exists
+;	  if so, there are two possibilities:
+;	      if it is not the first file, exit with error code 2, else
+;	      go see if it is big enough.
+;	  if doesn't exist, go look for ibmbio.com instead
+	mov dx,offset dribio_fcb ! call dos_search	;look for dribio.com
+	  or al,al ! jnz dos_okputsys_ret		;exit, phys error
+	    cmp dx,-1 ! je dos_okputsys10		;does it exist?
+	      cmp dx,0 ! je dos_okputsys20		;is first entry?
+	        mov bx,2 ! jmps dos_ok_putsys_ret	;no, exit with error
+;
+;	the other alternative, is that the ibmbio file exists, check for it
+dos_okputsys10:
+	mov dx,offset ibmbio_fcb ! call dos_search
+	  or al,al ! jnz dos_okputsys_ret		;exit if phys error
+	  cmp dx,-1 ! jne dos_ok_putsys11		;if no ibmbio, trouble
+	    mov bx,1 ! jmps dos_okputsys_ret		;return nospace err
+dos_ok_putsys11:
+	  cmp dx,0 ! je dos_okputsys20			;first entry?
+	    mov bx,1 ! jmps dos_okputsys_ret		;else nospace error
+;
+;	now check if (whatever its name is) the first file is big enough
+;	for the dri loader to be written.
+dos_ok_putsys20:
+	  mov dx,28[bx] ! cmp dx,2048			;big enough?
+	  mov bx,0 ! ja dos_ok_putsys_ret		;yes, exit
+	    mov bx,1 ! jmps dos_ok_putsys_ret		;else exit with error
+dos_okputsys_ret:
+	ret						;al still= phys errcode
+;  Sound complicated?  ...That's because it is!
+
+eject
+;------------------------------------------------------------------------------
+;	subroutine reads a disk label from the current dos partition and
+;	returns DX=directory entry number of the entry, BX=pointer to
+;	directory entry in dir_buffer.  AL=0 if operation succeeded,
+;	else al=NZ on physical errors. If the entry is not found
+;	BX and DX are returned = -1. The directory sector itself is in
+;	dir_buffer and may be modified for update there.
+;	NOTE: make sure dos parameters have been updated BEFORE calling this.
+;------------------------------------------------------------------------------
+dos_get_vlabel:
+	sub dx,dx					;dx=dir count
+dos_vl0:
+	push dx
+	mov cl,4 ! shr dx,cl ! mov cx,dx		;calc dir sector
+	call read_dos_dirsector				;read it
+	pop dx ! or al,al ! jnz dos_vl_ret		;exit if phys error
+	  mov cx,WORK_bt_dirsiz ! sub cx,dx		;calc # unsearched
+	  cmp cx,16 ! jna dos_vl1
+	    mov cx,16					;if >=16, use 16
+dos_vl1:  mov di,offset dir_buffer			;set search dest ptr
+dos_vl2:  cmp byte ptr [di],0 ! je dos_vl3		;make sure in use
+	    cmp byte ptr[di],0e5h ! je dos_vl3		;check both empty flags
+	      test byte ptr 11[di],8 ! jnz dos_vl_found	;ok, is it the label?
+dos_vl3:  inc dx ! add di,32 ! loop dos_vl2		;inc dircnt, di->next
+	    cmp dx,WORK_bt_dirsiz ! jne dos_vl0		;go back if more
+	      mov di,-1 ! mov dx,di			;else set end flags
+dos_vl_found:
+	  xor ax,ax ! mov bx,di				;bx=buff ptr or -1
+dos_vl_ret:
+	ret						;dx=dircount or -1
+
+
+;------------------------------------------------------------------------------
+;	find a free DOS directory entry (return values as above)
+;------------------------------------------------------------------------------
+dos_freedir:
+	sub dx,dx					;dx=dir count
+dos_fr_dir1:
+	push dx
+	mov cl,4 ! shr dx,cl ! mov cx,dx		;calc dir sector
+	call read_dos_dirsector				;read it
+	pop dx ! or al,al ! jnz dos_fr_dir_ret		;exit if phys error
+	  mov cx,WORK_bt_dirsiz ! sub cx,dx		;calc # unsearched
+	  cmp cx,16 ! jna dos_fr_dir2
+	    mov cx,16					;if >=16, use 16
+dos_fr_dir2:
+	  mov di,offset dir_buffer			;set search dest ptr
+dos_fr_dir3:
+	  cmp byte ptr [di],0 ! je dos_fr_dir_found	;virgin entry?
+	  cmp byte ptr [di],0e5h ! je dos_fr_dir_found ;empty?
+	    inc dx ! add di,32 ! loop dos_fr_dir3	;inc dircnt, di->next
+	      cmp dx,WORK_bt_dirsiz ! jne dos_fr_dir1	;go back if more
+	        mov di,-1 ! mov dx,di			;else set end flags
+dos_fr_dir_found:
+	  xor ax,ax ! mov bx,di				;bx=buff ptr or -1
+dos_fr_dir_ret:
+	ret						;dx=dircount or -1
+
+eject
+;------------------------------------------------------------------------------
+;	sets the date and time in the dos fcb bx--> to current values
+;	from CCPM system time.
+;------------------------------------------------------------------------------
+dos_fcb_stamp:
+	push bx
+	mov dx,offset tod_day ! mov cl,105 ! int 224 ;get tod
+;
+	mov al,tod_hour ! call bcd_to_bin		;convert hour
+	mov cl,5 ! ror ax,cl ! mov bx,ax		;adjust and save
+	mov al,tod_min ! call bcd_to_bin		;convert minutes
+	mov cl,5 ! shl ax,cl ! or ax,bx			;ignore seconds
+	pop bx ! push bx ! mov 22[bx],ax		;set time in fcb
+;
+	mov cx,tod_day ! call date_convert		;get binary dd/mm/yyyy
+	sub cx,1980 ! shl cx,1				;cx=yr,al=day,ah=month
+	mov dh,cl ! mov dl,al				;build yr,day in dx
+	mov cl,3 ! shr ax,cl ! and ax,1e0h ! or ax,dx	;combine with month
+	pop bx ! mov 24[bx],ax				;move result to fcb
+;
+	ret
+
+
+;------------------------------------------------------------------------------
+;	converts packed bcd number an AL to unsigned binary word in AX
+;	(WARNING: the bcd number is not checked for range.)
+;------------------------------------------------------------------------------
+bcd_to_bin:
+	push cx ! mov cl,4
+	mov ah,al ! shr ah,cl ! and al,0fh ! aad
+	pop cx ! ret
+
+
+	dseg $
+tod_day		dw	0
+tod_hour	db	0
+tod_min		db	0
+		db	0				;seconds aren't used
+	cseg $
+
+eject
+;------------------------------------------------------------------------------
+;	This is Yet Another Attempt to convert CCP/M date into binary values.
+;
+;	Call with CCPM date in CX.
+;	Returns AL=day (1-31), AH=month (1-12), CX=year(1977-?).
+;	WARNING: Does not deal with LEAP CENTURY (if you care).
+;
+;   leap_based_date = ccpm_date + DATE_FIXUP;
+;   year = BASE_YEAR + ((temp = leap_based_date / DAYS_IN_LEAP_CYCLE) * 4);
+;   if ((leap_based_date % DAYS_IN_LEAP_CYCLE)==(DAYS_IN_LEAP_CYCLE-1))
+;	{  year +=4 ; day = 29 ; month = 2; }	/* leap day fixup */
+;   else
+;	{ 
+;	year += temp / DAYS_IN_A_NORMAL_YEAR;
+;	day   = temp % DAYS_IN_A_NORMAL_YEAR;
+;	for (month=3, i=0; day > day_tbl[i] ; day -= day_tbl[i++]) ;
+;	if (month > 12)
+;	    { month -=12; year++ ; }
+;	day++;					/* make day 1 based */
+;	}
+DATE_LEAP equ	(4 * 365) + 1				;days in a leap cycle
+DATE_FIXM equ	365-59					;days Mar 1 to Jan 1
+DATE_FIX  equ	365 + DATE_FIXM -1  			;makes day 0 1-Mar-1976
+;
+date_convert:
+	mov ax,cx ! add ax,DATE_FIX ! cwd		;day 0 now 1-Mar-1976
+	mov cx,1976					;init base year
+	div date_leap_C					;ax=# of leap cycles
+	shl ax,1 ! shl ax,1 ! add cx,ax			;add leap cycles * 4
+	mov ax,dx ! cmp ax,DATE_LEAP-1 ! jne date_conv1	;if not leap year,skip
+	  mov ax,((2*256) + 29) ! add cx,4 ! ret	;  else it's leap day
+date_conv1:
+	cwd ! div date_year_C ! add cx,ax		;add normal years
+	mov bx,offset date_mdays ! mov ah,3		;set table ptr, month
+date_conv_mloop:
+	mov al,dl ! sub dx,cs:[bx] ! jb date_conv_d
+	  inc ah ! inc bx ! inc bx ! jmps date_conv_mloop
+date_conv_d:
+	cmp ah,12 ! jle date_conv_ret			;year wrap?
+	  inc cx ! sub ah,12				;yes, fix it
+date_conv_ret:
+	inc al ! ret					;make days 1 based
+
+date_leap_C	dw	DATE_LEAP		;days in one leap cycle
+date_year_C	dw	365			;days in one normal year
+;
+;	table of days/month (non-leap year)
+date_mdays	dw	31,30,31,30,31,31	;Mar,Apr,May,Jun,Jul,Aug
+		dw	30,31,30,31,31,255	;Sep,Oct,Nov,Dec,Jan,Feb
+eject
+;==============================================================================
+;	dos disk access subroutines
+;	These ALL assume that needed info tables are in WORK_ data structure.
+;
+;	These do IO via the hd_rom and gdk_write_unmapped entry points
+;	in HDISKIO.LIB
+;==============================================================================
+
+;------------------------------------------------------------------------------
+;	Search directory of MSDOS partition on current volume for
+;	file specified by fcb passed in DX.  If found, return BX=offset in
+;	dir_buffer of entry and DX= directory entry number for it (0= 1st
+;	sector of dir) else BX = -1 and DX = -1.
+;	If no physical error, al=0 on return, else if physical error, AL=NZ.
+;	NOTE: passed fcb is NOT UPDATED.
+;	NOTE: uses cluster_buffer for search
+;------------------------------------------------------------------------------
+dos_search:
+	mov si,dx ! sub dx,dx				;si-->fcb, dx=dir count
+d_srch_lp:
+	push dx ! push si
+	mov cl,4 ! shr dx,cl ! mov cx,dx		;calc dir sector
+	call read_dos_dirsector				;read it
+	pop si ! pop dx ! or al,al ! jnz d_srch_ret	;exit if phys error
+	  mov bx,WORK_bt_dirsiz ! sub bx,dx		;calc # unsearched
+	  cmp bx,16 ! jna d_srch_dirbuf
+	    mov bx,16					;if >=16, use 16
+d_srch_dirbuf:
+	  cld ! push ds ! pop es			;dest in dataseg
+	  mov di,offset dir_buffer			;set dest
+d_srch1:
+	  push si ! push di				;save pointers
+	  mov cx,11 ! repe cmpsb			;scan 1 entry
+	  pop di ! pop si ! je d_srch_found		;exit if match
+	    inc dx ! add di,32				;inc dircnt, di->next
+	    dec bx ! jnz d_srch1			;else try next entry
+	      cmp dx,WORK_bt_dirsiz ! jne d_srch_lp	;go back if more
+	        mov di,-1 ! mov dx,di			;else set end flags
+d_srch_found:
+	  xor ax,ax ! mov bx,di				;dx=buff ptr or -1
+d_srch_ret:
+	ret						;dx=dircount or -1
+
+eject
+;------------------------------------------------------------------------------
+;	reads the specified sector (passed in cx) of the directory into
+;	the directory buffer on the current disk
+;------------------------------------------------------------------------------
+read_dos_dirsector:
+	mov al,WORK_bt_nfats ! cbw ! xchg bx,ax
+	mov ax,WORK_bt_fatsiz ! mul bx
+	add ax,WORK_bt_rsrvd ! add ax,cx ! mov dx,ax
+	mov cx,1
+	mov es,esbase ! mov bx,offset  cluster_buffer
+	call dos_disk_read ! or al,al ! jnz rd_dos_dsec_ret
+	  push ds
+	  cld ! push ds ! pop es
+	  mov ds,esbase ! mov si,offset cluster_buffer
+	  mov di,offset dir_buffer
+	  mov cx,256 ! rep movsw
+	  pop ds
+rd_dos_dsec_ret:
+	ret
+
+;------------------------------------------------------------------------------
+;	as above but writes directory sector
+;------------------------------------------------------------------------------
+write_dos_dirsector:
+	push cx						;save sector number
+	cld ! mov es,esbase ! mov di,offset cluster_buffer
+	mov si,offset dir_buffer
+	mov cx,256 ! rep movsw
+	mov al,WORK_bt_nfats ! cbw ! xchg bx,ax
+	mov ax,WORK_bt_fatsiz ! mul bx
+	add ax,WORK_bt_rsrvd
+	pop dx ! add dx,ax
+	mov cx,1 ! mov bx,offset cluster_buffer
+	call dos_disk_write
+	ret
+
+eject
+;------------------------------------------------------------------------------
+;	Reads current disk's dos boot into esbase:label_buffer.
+;	(normally only used to verify boot.)
+;	WORK must contain disk info for the disk.
+;
+;	NOTE ....DOS BOOT is not a German war movie.
+;------------------------------------------------------------------------------
+read_dos_boot:
+	mov cx,1 ! mov dx,0			;read rel sector 0
+	mov es,esbase
+	mov bx,offset label_buffer
+	call dos_disk_read
+	ret
+
+
+;------------------------------------------------------------------------------
+;	reads first fat from current disk into dos_fat
+;------------------------------------------------------------------------------
+dos_get_fat:
+	call read_fat ! or al,al ! jnz dos_gfat_ret
+	push ds
+	push ds ! pop es ! mov di,offset dos_fat
+	mov ds,esbase ! mov si,offset fat_buffer
+	cld ! mov cx,((4096*3)/2)/2 ! rep movsw
+	pop ds
+dos_gfat_ret:
+	ret
+	
+
+;------------------------------------------------------------------------------
+;	reads both fats (as described by current WORK) to esbase:FAT buffer)
+;	(NOTE that second fat clobbers verify buffer, but that does no harm
+;	since the second is only read this way to verify it).
+;------------------------------------------------------------------------------
+read_fat:
+	mov es,esbase
+	mov bx,offset fatbuffer
+	mov ax,WORK_bt_fatsiz ! mov ah,WORK_bt_nfats
+	mul ah ! mov cx,ax
+	mov dx,WORK_bt_rsrvd
+	call dos_disk_read
+	ret
+
+
+;------------------------------------------------------------------------------
+;	reads DOS cluster from current disk whose cluster number is passed
+;	in DX into esbase:cluster buffer.  Normally only used by verify.
+;	using WORK_ disk information.
+;------------------------------------------------------------------------------
+read_dos_cluster:
+	call calc_dos_cluster
+	mov dx,ax ! mov bx,offset cluster_buffer
+	mov es,esbase ! call dos_disk_read
+	ret
+
+;------------------------------------------------------------------------------
+;	writes cluster #dx from esbase:cluster_buffer to current disk (WORK)
+;	and verifies write.
+;------------------------------------------------------------------------------
+write_dos_cluster:
+	call calc_dos_cluster
+	mov dx,ax
+	mov es,esbase ! mov bx,offset cluster_buffer
+	call dos_disk_write
+	ret
+
+;------------------------------------------------------------------------------
+;	returns first rel sector of dos cluster number passed in DX in AX
+;	and cluster size in CX
+;------------------------------------------------------------------------------
+calc_dos_cluster:
+	sub dx,2					;clusters start at 2
+	mov al,WORK_bt_clussiz ! sub ah,ah
+	mov cx,ax ! mul dx				;find sector number
+	add ax,WORK_filestart				;add reserved and dir
+	ret
+eject
+;------------------------------------------------------------------------------
+;	reads cx sectors starting from dos relative sector number in DX
+;	on current disk (as per WORK) from buffer ES:BX-->
+;	(assumes ES:BX--> somewhere with no 64K boundaries)
+;------------------------------------------------------------------------------
+dos_disk_read:
+	push si ! push di ! push bp
+	mov di,offset dos_rd_iopb
+	call dos_build_iopb
+	mov bx,di ! call hd_rom
+	pop bp ! pop di ! pop si
+	ret
+
+;------------------------------------------------------------------------------
+;	writes cx sectors starting from dos relative sector number in DX
+;	on current disk (as per WORK) from buffer ES:BX-->
+;	and then verifies them.
+;------------------------------------------------------------------------------
+dos_disk_write:
+	push es ! push si ! push di ! push bp
+	mov di,offset dos_wr_iopb
+	call dos_build_iopb
+	mov es,esbase				;for write, ES--> safe seg
+	mov bx,di ! call gdk_write_unmapped	;  so verify works
+	pop bp ! pop di ! pop si ! pop es
+	ret					;error state in al
+
+
+;------------------------------------------------------------------------------
+;	translates parameters passed in registers using current disk data
+;	structures into IOPB parameters of IOPB di-->
+;------------------------------------------------------------------------------
+dos_build_iopb:
+	mov al,WORK_disk ! mov IBM_lun[di],al	;set unit
+	mov IBM_count[di],cl			;count
+	mov IBM_xfer_ofs[di],bx			;xfer ptr
+	mov IBM_xfer_seg[di],es
+	mov ax,dx ! add ax,WORK_bt_hidden	;find offset to base sector
+	xor dx,dx ! div WORK_bt_spt		;find track and sector
+	inc dl ! mov IBM_sector[di],dl		;set sector number
+	xor dx,dx ! div WORK_bt_nheads		;find head and cylinder
+	mov IBM_cylinder[di],ax
+	mov IBM_head[di],dl
+	ret
+
+	dseg $
+
+dos_rd_iopb	db	IBM_READF,0,0,0		;fn,err,lun,head
+		dw	0			;cyl
+		db	0,1			;sector, count
+		dw	0,0			;xfer address
+
+dos_wr_iopb	db	IBM_WRITEF,0,0,0	;fn,err,lun,head
+		dw	0			;cyl
+		db	0,1			;sector, count
+		dw	0,0			;xfer address
+	cseg $
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            

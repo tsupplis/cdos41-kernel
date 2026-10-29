@@ -1,0 +1,456 @@
+eject
+;	HDMAIN.LIB include file for HDMAINT 2.0 as of 29-Aug-84
+;	20-Jul-84 Revised to make ESC exit key by M.P. Vano
+;	06-Aug-84 Revised to fix files_open bug by M.P. Vano
+;	06-Aug-84 Revised to disallow remote consoles by M.P. Vano
+;	06-Aug-84 Revised program version number=3.2
+;	29-Aug-84 Revised release date
+;	31-Aug-84 Revised release date
+
+	cseg $
+;******************************************************************************
+;
+;	Program initialization code begins here
+;
+;******************************************************************************
+begin:	jmp skip_copyright				;enter here when loaded
+	jmp patch_area
+
+	  db ' COPYRIGHT (C) 1983,1984,1985 DIGITAL RESEARCH '
+	  db ' HDMAINT 2.00: Concurrent 4.1, 04/19/84'
+patch_area:
+;
+eject
+	org	100h
+skip_copyright:						;The real beginning!
+	pushf ! pop bx ! cli				;setup local stack
+	mov ax,ds ! mov ss,ax				;...Thanks to INTEL
+	mov sp,offset stack_end ! push bx ! popf
+;
+	mov ax,es					;fix ES so disk buffer
+	add ax,3ffh ! and ax,0fc00h			;has no 64k boundary
+	mov es,ax ! mov es_base,ax			;...Thanks to IBM
+;
+	call init_system ! or al,al ! jz init1		;setup system
+	  jmp exit_to_dos				;quit now if fails
+;
+init1:	call init_disk ! or al,al ! jz init2		;setup hard disk IO
+	  mov dx,offset msg_err_bados ! jmp init_fail	;quit if bad version
+;
+init2:	call get_num_hard ! mov num_hard_disks,al	;see how many exist
+	or al,al ! jnz init3				;quit if none exist
+	  mov dx,offset msg_err_nodisks ! jmp init_fail
+;
+init3:
+	mov must_reboot,0			;clear exit mode flag
+	mov hd_error,0				;clear fatal error code
+	call MENU_BOL				;switch to interpreter
+	  XRESET
+	  XCURSOROFF
+	    db ESC,'E'				;clear screen
+	  XBOX 0,0,78,23			;build main box
+	  XSPLITBOX 0,2,78			;split the box
+	  XPUTS_AT 12,1,progname_msg		;print heading
+	  XCALL MAIN_MENU			;call base level menu
+	  XSTOP					;doesn't actually return here
+
+
+;	in most cases, this is entered by a JUMP.
+exit_to_dos:						;normal exit back to OS
+	call uninit_system
+	call uninit_diskio
+	mov cx,F_TERMINATE ! mov dx,cx ! int BDOS	;and stop process
+
+
+;	come here to abort with a message if initialization fails
+;	Note that we must print the string ourselves since we may be
+;	aborting due to an obsolete OS that doesn't support 0 delimiter.
+init_fail:						;abort init with msg
+	call print_zstring				;print message til 0
+stop_init:
+	jmp exit_to_dos
+
+eject
+;==============================================================================
+;==============================================================================
+; LEVEL 0 |
+;---------
+;			MAIN MENU LEVEL
+;
+;	This resets all stacks since this is ZERO NESTING LEVEL OF PROGRAM
+;	All HDMAINT operations return to here (one way or another).  If
+;	hd_error contains a FATAL error code, this level exits via a fatal
+;	error handler.  Otherwise, it is up to the operator to exit by
+;	selection of the correct menu key.
+;
+;	Note that most HDMAINT operations invalidate the OS hard disk tables
+;	since we prefer to treat fixed disks as permanent media.  As a result,
+;	such HDMAINT functions set the must_reboot flag non-zero to tell
+;	the exit routines NOT TO DO A NORMAL DOS RETURN at exit.  Note that
+;	since several such functions may be executed in a given session, the
+;	must_reboot flag may never be cleared by a function, only set.
+;
+;==============================================================================
+;==============================================================================
+main_menu86:					;8086 code entry
+	call MENU_BOL
+;
+MAIN_MENU:					;NORMAL RE-ENTRY POINT
+	XRESET					;reset interpreter stack
+	XSTOP ! mov sp,offset stack_end		;reset machine stack
+	call MENU_BOL				;switch back to M-code
+	XJNE hd_error,0,FATAL_EXIT		;exit if someone reported error
+;
+	XMCALL login_all_disks			;get latest disk info
+	XJNE hd_error,0,FATAL_EXIT		;goto exit if login failed
+;
+	XCLRBOX 1,3,77,22			;clear inside of main box
+	XPUTS_AT 35,4,mm1_msg
+	XBRIGHT ! XPUTS_AT 32,6,mm2_msg ! XDIM	;prompt message
+	XSETW keymask,F_ESC+F1			;always legal keys
+;
+;  selectively draw keyboxes
+	XKBOX_MSG 20,8,1,mm3_msg		;partition maintenance/display
+;
+	XJE num_cpm_or_dos,0,MAIN_NO_VFY	;skip if no cpm or dos part.
+	  XADDW keymask,F3			;  else show verify partition
+	  XKBOX_MSG 20,11,3,mm4_msg
+;
+MAIN_NO_VFY:
+	XJE num_boot,0,MAIN_NO_BOOTDISK		;skip if disk 0 is unused
+	  XKBOX_MSG 20,14,5,mm4A_msg		;  else show boot option key
+	  XADDW keymask,F5			;    and enable it
+;
+MAIN_NO_BOOTDISK:
+	XJE num_cpm_or_dos,0,MAIN_NO_OPT	;skip if no cpm or dos
+	  XKBOX_MSG 20,17,7,mm5_msg		; else partition options key
+	  XADDW keymask,F7
+;
+MAIN_NO_OPT:
+	XKBOX_MSG 20,20,0,mm6_msg		;always show exit key
+;
+	XKEYCASE keymask		;branch to correct handler
+	  dw RETURN_TO_OS		;ESC exit this program
+	  dw PMAINT,0			;F1  display/change partition table
+	  dw VERIFY,0			;F3  scan/verify CP/M partition
+	  dw BOOT_OPTIONS,0		;F5  boot option menu
+	  dw P_OPTIONS,0		;F7  set/change dir size, write-verify
+	  dw 0,0			;F9,10 not used
+;
+	XJMP MAIN_MENU			;most routines do not return here
+
+eject
+;	MAIN MENU Exit routines
+
+;	Normal exit from main menu.  This checks whether the "must_reboot"
+;	flag is set, if so, it guides user through OS reload.  If that flag
+;	is not set, it merely clears the screen and calls exit_to_dos which
+;	restores anything needing release in the system and then exits.
+RETURN_TO_OS:					;normal return to DOS
+	XJNE must_reboot,0,REBOOT_EXIT		;if flag set, must reboot
+	  db ESC,'E',0				;else clear screen
+	  XMCALL exit_to_dos			;and exit (doesn't return)
+
+
+;	Fatal error has occurred, display it then REBOOT.
+FATAL_EXIT:						;M-Lang fatal exit
+	XBEEP ! XBEEP					;ring the bells
+	XSTOP
+;
+	push ds ! pop es ! cld				;kill batch input
+	mov di,80h ! mov al,0				;buffer
+	mov cx,128 ! rep stosb
+;
+	mov si,offset msg_fatal_status			;use XIOS status line
+	call write_status_line
+	call MENU_BOL
+;
+FATAL_WAIT_FOR_GO:
+	XGETCHAR inchar
+	XJE inchar,'D',FATAL_GO				;wait for "D" or "d"
+	  XJNE inchar,'d',FATAL_WAIT_FOR_GO
+FATAL_GO:
+	XMCALL restore_status_line
+	XCLRBOX 1,3,77,22				;clear whole box
+	XPUTS_AT 11,5,exit0_msg
+	XJNE hderror,HD_ERR_WPT,FATAL1			;display error type
+	  XPUTS exit1_msg
+FATAL1:	XJNE hderror,HD_ERR_RPT,FATAL2
+	  XPUTS exit2_msg
+FATAL2:	XJNE hderror,HD_ERR_WCPM,FATAL3
+	  XPUTS exit3_msg
+FATAL3:	XJNE hderror,HD_ERR_RCPM,FATAL4
+	  XPUTS exit4_msg
+FATAL4:	XJNE hderror,HD_ERR_BAD,FATAL5
+	  XPUTS exit5_msg
+FATAL5:	XJMP REBOOT_NOCLEAR			;when op approves,reboot
+
+eject
+;==============================================================================
+;  LEVEL 1 |
+;----------
+;
+;	MENU frame for Normal exit requiring OS reload
+;	This is only entered from the main menu and never returns.
+;
+;==============================================================================
+REBOOT_EXIT:						;setup reboot screen
+	XCLRBOX 1,3,77,22				;clear box interior
+REBOOT_NOCLEAR:
+	XPUTS_AT 10,12,exit6_msg
+	XPUTS_AT 10,13,exit7_msg
+	XBRIGHT ! XPUTS_AT 18,17,exit8_msg ! XDIM
+	XKBOX_MSG 20,20,9,exit9_msg
+;
+	XSETW keymask,F9				;wait for F9 key
+	XCALL WAIT_KEYMASK_KEY				;only
+;
+	XSTOP
+	mov ax,IBM_DSEG ! mov ds,ax			;flag a warm start
+	mov ibm_rstcode,IBM_RPATTERN			;in ROM BIOS
+	jmpf IBM_RESET					;restart ROM BIOS
+
+eject
+;******************************************************************************
+;	LOW LEVEL MACHINE INTERFACE ROUTINES
+;******************************************************************************
+
+;------------------------------------------------------------------------------
+;	setup OS and console device as needed for program.
+;	returns 0 if succeeds in AL, else non-zero.
+;------------------------------------------------------------------------------
+init_system:
+	mov cl,F_BDOSVERSION ! int BDOS			;get product/version
+	mov dx,offset msg_err_bados
+	cmp ax,CCPM_VERSION_MIN ! jb init_system_quit	;CCPM ONLY ! 
+	cmp ax,CCPM_VERSION_MAX ! ja init_system_quit	;(several versions)
+;
+	mov cl,F_GETSYSDAT ! int BDOS			;get system data ptr
+	mov sysdat_seg,es ! mov sysdat_ofs,bx
+;
+	mov dl,150 ! mov cl,145 ! int BDOS		;raise our priority
+;
+	mov cl,F_GETPDADR ! int BDOS			;find our UDA
+	mov ax,es:10h[bx] ! mov uda,ax			;save it
+;
+	call setup_ccpm_console				;lock up the console
+	or al,al ! jnz init_system_err
+;
+	mov cl,F_OPENQ ! mov dx,offset mxdisk_qpb 	;open MXDISK
+	int BDOS ! or ax,ax ! jnz init_system_quit	;must be wrong OS?
+	mov cl,F_READQ ! mov dx,offset mxdisk_qpb 	;read the MX message
+	int BDOS ! or ax,ax ! jnz init_system_quit	;pretty weird if err?
+	mov system_locked,0ffh				;show de-init needed
+;
+	call files_open ! or ax,ax ! jz files_ok	;skip if no files open
+	  mov dx,offset msg_err_files ! jmp init_system_quit1
+files_ok:
+	mov dl,200 ! mov cl,145 ! int BDOS		;reset normal priority
+	sub ax,ax ! ret					;return success
+
+
+;	print init failure message passed in DX and return failure code
+init_system_quit:
+	  mov dx,offset msg_err_bados
+init_system_quit1:
+	  call print_zstring
+init_system_err:
+	  mov al,0ffh ! ret				;return with failure
+
+eject
+;------------------------------------------------------------------------------
+;	subroutine locks up and inits ccp/m virtual console
+;	(if successful, also sets our process' keep bit)
+;------------------------------------------------------------------------------
+setup_ccpm_console:
+	mov cl,F_GETCON ! int BDOS ! mov console,ax	;get console #
+;
+	cmp al,max_console ! jbe not_remote_vc		;remote console?
+	  mov dx,offset msg_err_remote			;yes, print msg
+	  call print_zstring
+	  mov al,0ffh ! ret				;and exit with error
+not_remote_vc:
+;
+	les si,SYSDAT_PTR ! mov si,ES:XCCB[si]		;get ccb pointer
+	mov ax,CCB_LENGTH ! mul console ! add si,ax
+	pushf ! cmp es:ccb_state[si],0 ! je state_ok	;must be foreground
+	  popf ! mov dx,offset msg_err_state
+	  call print_zstring				;print "not dynamic"
+	  mov al,0ffh ! ret				;and return with error
+;
+state_ok:	
+	or es:ccb_state[si],NO_SWITCH ! popf		;set no switch state
+	mov ccb_ptr_s,es ! mov ccb_ptr_o,si		;save ccb ptr
+;
+	mov cx,F_GETPDADR ! int BDOS			;set process keep bit
+	or es:word ptr 6[bx],2
+;
+	mov con_locked,0ffh				;set locked flag
+;
+	call MENU_BOL ! XRESET
+	  db ESC,'z'					;setup crt attributes
+	  db ESC,'6'					;fn key expansion off
+	XSTOP ! xor al,al ! ret				;return success
+
+;------------------------------------------------------------------------------
+;	Returns AX non-zero if any files are currently open, else 0 in AX
+;	(CAUTION:  Can be invalid if called before we own MXdisk!)
+;------------------------------------------------------------------------------
+files_open:
+	mov cx,24 ! int BDOS				;save currently
+	mov login_vector,ax				;logged in drives
+	les bx,SYSDAT_PTR				;check for open files
+	sub ax,ax					;assume success
+	cmp es:word ptr 88h[bx],0 ! je no_files_open	;any bits set?
+	  not ax
+no_files_open:
+	ret
+
+
+;------------------------------------------------------------------------------
+;	called to setup hard disk interface and to show it as set up
+;------------------------------------------------------------------------------
+init_disk:
+	mov disk_init_flag,0			;show failure
+	mov al,1 ! call init_diskio		;library routine, 1=CCP/M mode
+	or al,al ! jnz init_d_ret		;exit if failure
+	  mov disk_init_flag,0ffh		;set flag so it gets restored
+init_d_ret:
+	ret
+
+eject
+;------------------------------------------------------------------------------
+;	called to restore system to normal state before exit
+;------------------------------------------------------------------------------
+uninit_system:
+	cmp system_locked,0 ! je uninit_sys1		;skip if never locked
+	  mov cl,F_WRITEQ ! mov dx,offset mxdisk_qpb ! int BDOS ;release mxdisk
+;
+	  call MENU_BOL
+	    db ESC,'z',ESC,'7'				;restore crt & fn keys
+	  XSTOP
+;
+	  call get_nfloppy				;get XIOS # floppies
+	  cbw ! mov cx,ax				;build "ignore" mask
+	  mov bx,1 ! mov ax,0ffffh ! jcxz reset_1
+reset_0:    xor ax,bx ! shl bx,1 ! loop reset_0
+reset1:   and ax,login_vector ! xor cx,cx		;reset all those left
+resetd:	  test ax,1 ! jz rst_nxtdrv
+	    push cx ! push ax
+	    xor dx,dx ! mov ax,9 ! call xios_call	;call xios directly
+	    or bx,bx ! jz rst_nodisk			;any dph?
+	      mov es:byte ptr 6[bx],0			;clear login sequence
+	      mov es:byte ptr 5[bx],0ffh		;SET media flag
+rst_nodisk: pop ax ! pop cx
+rst_nxtdrv:
+	  inc cx ! shr ax,1 ! or ax,ax ! jnz resetd	;until empty vector
+	  les si,SYSDAT_PTR ! les si,es:dword ptr .2ch	;get XIOS base addr
+	  mov es:byte ptr 0eh[si],0ffh			;set master media flag
+	  mov cl,13 ! int BDOS				;reset disk system
+;
+uninit_sys1:
+	cmp con_locked,0 ! je uninit_sys_ret		;need to release con:?
+	  les si,CCB_PTR		 		;restore console state
+	  and es:ccb_state[si],not NO_SWITCH		;clear "NOSWITCH"
+;
+	  mov cl,F_GETPDADR ! int BDOS			;clear "Keep" bit
+	  and es:word ptr 6[bx],not 2
+;
+uninit_sysret:
+	ret
+
+;------------------------------------------------------------------------------
+;	called to restore hard disk subsystem to known state
+;------------------------------------------------------------------------------
+uninit_diskio:
+	cmp disk_init_flag,0 ! je uninit_diskio_ret
+	  call restore_diskio				;make sure disk is ok
+uninit_diskio_ret:
+	ret
+
+;------------------------------------------------------------------------------
+;	subroutine used to print 0 terminated string the hard way.
+;	(used when the OS version is unknown).  DS:DX--> string
+;	Note that string must contain no characters > FCh.
+;------------------------------------------------------------------------------
+print_zstring:
+	push es ! push si ! mov si,dx ! cld
+print_zstring1:
+	lodsb ! mov dl,al ! or al,al ! jz print_zstring2
+	push si ! mov cl,F_DIRCIO ! int BDOS ! pop si
+	jmps print_zstring1
+print_zstring2:
+	pop si ! pop es ! ret
+
+
+eject
+;******************************************************************************
+;	BACK DOOR XIOS entry points (The men don't realize, but...)
+;******************************************************************************
+
+;------------------------------------------------------------------------------
+;	TURNS SYSTEM USE OF XIOS STATUS LINE OFF AND THEN DISPLAYS THE
+;	MESSAGE DS:SI POINTS TO ON THE XIOS STATUS LINE
+;------------------------------------------------------------------------------
+write_status_line:
+	mov cx,si ! jmps xios_status_call
+
+
+;------------------------------------------------------------------------------
+;	TURNS XIOS STATUS LINE UPDATES BACK ON
+;------------------------------------------------------------------------------
+restore_status_line:
+	mov cx,-1
+xios_status_call:
+	mov al,8 ! mov dx,ds
+	push cx ! call xios_call ! pop cx
+	or al,al ! jnz xios_status_call
+	ret
+
+
+;------------------------------------------------------------------------------
+;	Routine returns number of floppies according to XIOS in AL
+;------------------------------------------------------------------------------
+get_nfloppy:
+	mov cx,0 ! mov al,14 ! call xios_call	;get XIOS info ptr
+	mov ax,es:[bx] ! ret			;first word is # of floppies
+
+
+;------------------------------------------------------------------------------
+;	LOW LEVEL XIOS CALLING ROUTINE ENSURES CORRECT UDA, DSEG  PROVIDED
+;------------------------------------------------------------------------------
+xios_call:
+	mov es,uda
+	push ds ! mov ds,sysdat_seg
+	callf dword ptr .28h
+	push ds ! pop es			;return es--> XIOS DATA SEG
+	pop ds ! ret				;restore local ds
+
+eject
+;	Variables that are primarily local to this library
+	dseg $
+
+;	CCPM system information
+uda		rw	1	; pointer to our user data area
+console		rw	1	; our console number
+;
+ccb_ptr_o	dw	0	;offset of the state byte in the current CCB
+ccb_ptr_s	dw	0	;segment of the CCB data structures
+CCB_PTR	EQU	dword ptr ccb_ptr_o
+
+
+;	BDOS DISK Mutual Exclusion Q parameter block
+mxdisk_qpb	dw	0,0,0,0
+		db	'MXdisk  '
+
+system_locked	db	0	;means os needs to be unlocked at exit
+con_locked	db	0	;means console needs to be unlocked at exit
+disk_init_flag	db	0	;means fdisk io needs to be reset at exit
+login_vector	dw	0	;login vector at entry
+;
+sysdat_ofs	dw	0
+sysdat_seg	dw	0
+SYSDAT_PTR	equ dword ptr sysdat_ofs
+
+	cseg $
+                                                                                                                                                                                                                                                                                                                                                                                                                                                           

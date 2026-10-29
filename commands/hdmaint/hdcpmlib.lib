@@ -1,0 +1,523 @@
+eject
+;	HDCPMLIB.LIB include file for HDMAINT 2.0 as of 12-Jun-84
+	cseg $
+;******************************************************************************
+; 	CP/M specific subroutines used by various menus
+;******************************************************************************
+
+;------------------------------------------------------------------------------
+;	SET DATA DEPENDENT ON START/END/LENGTH
+;	in cpm label being built:
+;	  WORK_ibm_spt			;all based on current phys. constants
+;	  WORK_nheads
+;	  WORK_cpm_nsect
+;	  WORK_cpmspt
+;	  WORK_cpmsize			;in K,based on above and partition size
+;	  WORK dpb values		;based on partition size
+;	  WORK_mindir and WORK_maxdir 	;values for option display
+;	  WORK_diratmax 		;for option display
+;	  WORK_pstart and WORK_pend
+;	  WORK_toobig flag for cpm86
+;------------------------------------------------------------------------------
+calc_from_start_end:
+	mov al,WORK_heads			;number of heads
+	inc al ! mov WORK_nheads,al
+	mov al,WORK_pspt ! mov WORK_ibm_spt,al	;IBM sectors per track
+	mov WORK_cpm_nsect,4			;CP/M sectors per IBM sector
+	mul WORK_cpm_nsect ! mov WORK_cpmspt,ax	;get cp/m sectors per track
+	mov ax,WORK_plength ! sub ax,2
+	mov bx,WORK_cylsize ! shr bx,1
+	mul bx ! mov WORK_cpmsize,ax		;ax now has num K in partition
+;
+	cmp ax,16384 ! jle med_partition	;> than 16 megabytes?
+	  mov maxreserved,18
+	  mov WORK_cpmbsh,6			; No, use 8K alloc. blocks
+	  mov WORK_cpmblm,3fh
+	  mov WORK_cpmexm,1
+	  jmp calc_s_e_cont
+;
+med_partition:
+	cmp ax,1024 ! jle small_partition	;> than 1 megabyte?
+	  mov maxreserved,9
+	  mov WORK_cpmbsh,5			; Use  4K alloc. blocks
+	  mov WORK_cpmblm,1Fh
+	  mov WORK_cpmexm,1
+	  jmp calc_s_e_cont
+;
+small_partition:
+	mov maxreserved,2			;must be <= 1 MB
+	mov WORK_cpmbsh,4			; will use  2K alloc. blocks
+	mov WORK_cpmblm,0Fh
+	mov WORK_cpmexm,0			;will be fixed up if dsm<255
+;
+calc_s_e_cont:	
+	mov al,WORK_cpmblm			;adjust cpmsize for alloc size
+	shr al,1 ! shr al,1 ! shr al,1		; (rounding down)
+	xor ah,ah ! not ax ! mov bx,ax
+	and ax,WORK_cpmsize ! mov WORK_cpmsize,ax
+;
+calc_dsm_loop:
+	shr bx,1 ! jc calc_dsm_cont		;calculate DSM for the DPB.
+	  shr ax,1 ! jmps calc_dsm_loop
+calc_dsm_cont:
+	dec ax ! mov WORK_cpmdsm,ax		;got it! save it!
+;
+	or ah,ah ! jnz calc_dir_minmax		;if DSM < 256, adjust EXM.
+	  shl WORK_cpmexm,1 ! or WORK_cpmexm,1
+;
+calc_dir_minmax:
+	mov ax,WORK_cpmsize	
+	shr ax,1 ! shr ax,1 ! shr ax,1		;mindir=cpmsize in k / 8
+	mov bl,WORK_cpmblm ! xor bh,bh		;round up to alloc units
+	shl bx,1 ! shl bx,1 ! or bx,3
+	push bx
+	add ax,bx ! not bx ! and ax,bx
+	cmp ax,1024 ! jle dir_size_ok		;DIRMAX must not exceed 2048
+	  mov ax,1024				; (no more space in AL0, AL1)
+dir_size_ok:
+	mov WORK_mindir,ax			;store value in mindir
+	shl ax,1 ! mov WORK_maxdir,ax		;double it into maxdir
+	mov WORK_diratmax,0
+;						;ax has maxdir
+	pop cx ! inc cx				;set AL0, AL1 per maxdir
+	xor dx,dx ! div cx
+	mov cx,ax ! xor ax,ax
+al_build_loop:
+	shr ax,1 ! or ax,8000h ! loop al_build_loop
+;
+	mov WORK_cpmal0,ah ! mov WORK_cpmal1,al
+;
+	mov ax,WORK_mindir			;set DRM according to mindir
+	dec ax ! mov WORK_cpmdrm,ax
+;
+	mov ax,8000h ! cmp removable_disk,0 ! je not_semi_remov
+	  sub ax,ax				;else show semi-removable
+not_semi_remov:
+	mov WORK_cpmcks,ax			;this IS a fixed disk
+;
+	mov al,WORK_nheads ! cbw		;offset=nheads*(start cyl + 1)
+	mov cx,WORK_pstart ! inc cx
+	mul cx ! mov WORK_cpmoff,ax
+;
+	mov WORK_mapspb,16			;always 2K remap blocks
+;						;max number of remap entries:
+	mov WORK_mapmax,(HD_LABEL_SIZE-offset HDLB_map_table)/2
+	mov WORK_mapcnt,0			;no remap entries used yet
+;
+	mov ax,WORK_plength			;calc. # of remap blocks
+	dec ax					;in the part.(incl. remap area)
+	mov bl,WORK_ibm_spt ! xor bh,bh
+	mul bx ! mov bl,WORK_nheads ! mul bx
+	shr ax,1 ! shr ax,1 ! mov WORK_mapspareend,ax
+;
+	mov ax,WORK_maxdir			;calc. # remap blocks for dir.
+	mov cl,6 ! shr ax,cl			;64. dir entries per remap blk
+	dec ax ! mov WORK_enddir,ax
+;
+	ret
+
+	dseg $
+maxreserved	rw	1
+	cseg $
+
+;------------------------------------------------------------------------------
+;	This is called from create as very first thing to build part of
+;	CPM label and set WORK_cpmvalid true
+;------------------------------------------------------------------------------
+cpm_label_setup:		;set up initial values for CP/M label
+	cld ! push ds ! pop es	;copy default label into working label
+	mov si,offset default_cpm + 600h
+	mov di,offset WORK_hdlb
+	mov cx,hd_label_size ! rep movsb	
+	mov WORK_cpmvalid,0ffh			;label is now valid
+;
+	ret
+
+eject
+;------------------------------------------------------------------------------
+; 	SUBROUTINE TO TEST NON-SYSTEM CP/M CYLINDERS
+;	This routine checks the user abort status,
+;	and tests each block in the cylinder (incl blocks which
+;	end in this cylinder, but not those which begin here and end in
+;	the next cylinder)
+;	The routine calls TEST BLOCK, which will not return if too many
+;	bad blocks are found.
+;------------------------------------------------------------------------------
+test_cyl:
+	call cr_abort_check86			;quit?
+	mov ax,test_cyl_no			;get start remap block & count
+	call get_block_info			;cx=# blocks, ax==blk number
+	mov test_block_no,ax
+	cmp cpm_fast_test,0 ! jne cpm_fastcheck	;check for fast mode
+test_cyl_block_loop:				;else use full rw test
+	  push cx ! call test_block ! pop cx
+	  inc test_block_no ! loop test_cyl_block_loop
+	  ret
+;
+cpm_fastcheck:					;use read-only quick test
+	push cx ! call cpm_rd_testblock ! pop cx
+	inc test_block_no ! loop cpm_fastcheck
+	ret
+
+eject
+;------------------------------------------------------------------------------
+;	SUBROUTINE TO TEST A CP/M REMAP BLOCK
+;	This routine adds bad blocks to remap table.
+;	If too many bad blocks are found, the fatal exit is taken
+;------------------------------------------------------------------------------
+test_block:
+	mov es,esbase ! mov di,0	;fill buffer with pattern 6DB6h
+	cld ! mov cx,2048/2		;number of words in remap block
+	mov ax,0B66Dh ! rep stosw	;pattern 1 (MFM worst case)
+;
+	mov bx,0			;set parameters up
+	mov dl,WORK_disk ! xor dh,dh	;then write block and verify it
+	mov cx,offset WORK_hdlb
+	mov ax,test_block_no
+	call write_cpm_block ! or al,al ! jnz test_block_is_bad
+;
+	  mov es,esbase ! mov di,0	;same thing with E5E5 pattern
+	  cld ! mov cx,2048/2		;number of words in remap block
+	  mov ax,0E5E5h ! rep stosw	;pattern 2
+;
+	  mov bx,0			;as above
+	  mov dl,WORK_disk ! xor dh,dh
+	  mov cx,offset WORK_hdlb
+	  mov ax,test_block_no
+	  call write_cpm_block ! or al,al ! jz test_block_ok
+;
+test_block_is_bad:				   ;block failed tests
+	inc num_bad_blocks			   ;increment bad block count
+	call MENU_BOL
+	XPOSITION 17,10 ! XPNUM3 num_bad_blocks	   ;display new count
+	XSTOP
+	mov si,WORK_mapcnt
+	cmp si,maxbadlimit ! jz very_bad_disk	   ;too many bad, fatal exit?
+	  add si,si				   ;else enter it in table
+	  mov bx,offset WORK_map_table
+	  mov ax,test_block_no ! mov [bx+si],ax
+	  inc WORK_mapcnt ! dec WORK_mapspareend
+	  cmp ax,WORK_mapspareend ! jl exit_from_bad_one ;was it a remap block?
+	    mov bx,offset WORK_map_table 		;yes,need to move table
+	    mov si,orig_spare_end	 		;up & insert an 0FFFFh
+	    sub si,test_block_no ! dec si ! add si,si
+	    mov di,WORK_mapcnt ! dec di ! add di,di
+	    mov ax,[bx+si] ! mov [bx+di],ax
+	    mov word ptr [bx+si],-1
+exit_from_bad_one:
+	  mov al,0FFh					;set error flag
+test_block_ok:
+	ret						;return to caller
+;
+very_bad_disk:
+	mov hd_error,HD_ERR_BAD ! jmp main_menu86 	;FATAL err,too many bad
+
+
+;	alternate entry point used during debug or if your PHYSICAL FORMAT
+;	program is VERY RELIABLE AT FLAGGING BAD TRACKS. Speeds testing by
+;	doing a read only check of  user data area on disk.
+;	(NOTE: this MUST NOT BE USED to test system area and directory since
+;	they are initialized by the normal test procedure.)
+cpm_rd_testblock:
+	mov es,esbase ! mov bx,0
+	mov dl,WORK_disk ! xor dh,dh
+	mov cx,offset WORK_hdlb
+	mov ax,test_block_no
+	call read_cpm_block ! or al,al ! jz cpm_rd_testblock_ok
+	  jmp test_block_is_bad				;go map it out
+cpm_rd_testblock_ok:
+	ret
+eject
+;------------------------------------------------------------------------------
+;	SUBROUTINE TO SETUP REMAP TABLE VARIABLES
+;------------------------------------------------------------------------------
+init_remap_table:
+	mov ax,WORK_mapspareend		;save pointer to very end of part.
+	mov orig_spare_end,ax		; (actually end+1)
+;
+	mov ax,1				;assume small remap area
+	cmp WORK_cpmbsh,4 ! je small_remap	;set max remap blocks allowed
+	  mov ax,8				;8 cyl. for large partitions
+small_remap:
+	mov bl,WORK_nheads ! xor bh,bh ! mul bx
+	mov bl,WORK_pspt ! mul bx		 ;dx,ax=IBM sectors/remap area
+	mov bx,WORK_mapspb ! shr bx,1 ! shr bx,1 ;bx=IBM sectors/remap block
+	div bx ! mov maxbadlimit,ax		 ;dx,ax=remap blocks/remap area
+	ret
+
+;------------------------------------------------------------------------------
+; SUBROUTINE TO COMPLETE REMAP TABLE
+;------------------------------------------------------------------------------
+finish_remap_table:
+	mov al,WORK_ibmspt ! cbw		;set max remap entries for
+	mul WORK_nheads				; 1 cyl more than we found
+	shr ax,1 ! shr ax,1			;ax=# of remap blocks per cyl
+	add ax,WORK_mapcnt ! mov WORK_mapmax,ax	;allow 1 cyl. extra for remap
+;
+	mov ax,origspareend			;spareend= last remap block no.
+	dec ax ! mov WORK_mapspareend,ax	; (in remap area)
+;
+	mov ax,WORK_mapcnt		;adjust DSM to account for bad blocks
+	cmp WORK_cpmbsh,4 ! je num_allocs_remapped_ok
+	  inc ax ! shr ax,1
+num_allocs_remapped_ok:
+	sub ax,WORK_cpmdsm ! neg ax ! mov WORK_cpmdsm,ax
+	ret
+
+
+	dseg	$
+maxbadlimit	rw	1		;max number of remap entries
+origspareend	rw	1		;number of remap blocks in partition
+
+test_cyl_no	rw	1
+test_block_no	rw	1
+num_bad_blocks	rw	1
+	cseg $
+
+eject
+;------------------------------------------------------------------------------
+;
+;	low level functions needed to read/modify/create CP/M directory labels
+;	WARNING: all these functions assume a good CP/M partition exists and
+;	has been properly logged in and that DISK_INFO tables are current.
+;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+;	searches directory of current cpm volume looking for a directory label.
+;	returns AL=0 if operation works, AL=NZ if physical error.
+;	returns BX--> of dir entry for label in esbase:cpm_block_buffer
+;	returns DX=dir entry number of block containing label.
+;	if not found, BX=DX=-1.
+;------------------------------------------------------------------------------
+cpm_findlbl:
+	mov al,32			;fcb(0) for a directory label
+	jmp cpm_search
+
+
+;------------------------------------------------------------------------------
+;	as above, but returns first free directory entry info (-1 if no free)
+;------------------------------------------------------------------------------
+cpm_findfree:
+	mov al,0e5h			;fcb(0) for an empty entry
+;	jmp cpm_search
+
+;------------------------------------------------------------------------------
+;	routine to search directory for user number field matching passed AL.
+;	(return conditions as required by above.)
+;	CAUTION: Hard coded for 2K remap blocks!
+;------------------------------------------------------------------------------
+cpm_search:
+	sub dx,dx					;dir entry counter
+cpm_srch1:
+	push ax ! push dx				;read next dir block
+	mov cl,6 ! shr dx,cl				;calculate which 2k blk
+	mov es,esbase ! mov bx,offset cpm_dir_buffer
+	mov ax,dx ! mov dl,WORK_disk ! mov dh,0
+	mov cx,offset WORK_hdlb
+	call read_cpm_block				;go read one remap blk
+	or al,al ! pop dx ! pop ax ! jnz cpm_srch_ret	;exit if phys. error
+;
+	mov es,esbase ! mov di,offset cpm_dir_buffer
+	mov cx,WORK_cpmdrm ! inc cx
+	sub cx,dx ! cmp cx,2048/32 ! jb cpm_srch2
+	  mov cx,2048/32
+cpm_srch2:
+	cmp es:byte ptr[di],al ! je cpm_srch_fnd
+	inc dx ! add di,32 ! loop cpm_srch2
+	  cmp dx,WORK_cpmdrm ! jbe cpm_srch1
+	    mov dx,-1 ! mov di,dx
+cpm_srch_fnd:
+	xor ax,ax ! mov bx,di
+cpm_srch_ret:
+	ret
+
+;------------------------------------------------------------------------------
+;	update timestamps label fcb es:bx--> (and sfcb if appropriate)
+;	note that caller must also supply dir entry # in dx
+;
+;	NOTE that the current "Programmer's Guide" incorrectly lists
+;	the timestamp field offsets as 25d and 29d.  They are 24 and 28!
+;------------------------------------------------------------------------------
+cpm_stamp_u:
+	mov di,bx ! push dx			;save fcb base pointer
+	call c_gettod				;get current time to cx,dx
+	mov es:28[di],dx ! mov es:30[di],cx	;stamp update fields
+	pop bx ! call c_getsfcb			;get saved dir # to bx
+	cmp bx,-1 ! je cpm_stamp_u1		;no sfcb, exit
+	  add bx,4 ! jmps c_do_sfcb		;point to update and go do it
+cpm_stamp_u1:
+	ret
+
+
+;------------------------------------------------------------------------------
+;	create timestamps label fcb es:bx--> (and sfcb if appropriate)
+;	See note above re decimalization of documentation:
+;	  Correct offset of create time field is 24 decimal, not 25!
+;------------------------------------------------------------------------------
+cpm_stamp_c:
+	mov di,bx ! push dx			;as above, but other field
+	call c_gettod
+	mov es:24[di],dx ! mov es:26[di],cx
+	pop bx ! call c_getsfcb
+	cmp bx,-1 ! je cpm_stamp_c_ret
+	  push cx ! mov cx,10/2			;zero sfcb
+	  cld ! mov di,bx
+	  sub ax,ax ! rep stosw ! pop cx
+	  call c_do_sfcb
+cpm_stamp_c_ret:
+	  ret
+;
+c_do_sfcb:
+	mov es:[bx],dx ! mov es:2[bx],cx ! ret
+
+
+;------------------------------------------------------------------------------
+;	returns dx=system date, ch=tod minutes, cl=tod secs.  Preserves si
+;------------------------------------------------------------------------------
+c_gettod:
+	push si
+	mov cl,105 ! mov dx,offset ctod_day ! int 224	;get sys tod
+	mov cl,ctod_hour ! mov ch,ctod_min
+	mov dx,ctod_day ! pop si ! ret
+
+;------------------------------------------------------------------------------
+;	assuming es:di--> EA of curr dir entry, bx=dir entry #, returns
+;	bx--> base of sfcb timestamp field if sfcb exists, else bx=-1
+;------------------------------------------------------------------------------
+c_getsfcb:
+	and bx,3 ! mov ax,3 ! sub ax,bx
+	mov ah,32 ! mul ah
+	xchg bx,ax ! lea bx,[bx+di]
+	cmp es:byte ptr[bx],33 ! je c_getsfcb1
+	  mov bx,-1 ! ret				;not an sfcb, exit
+c_getsfcb1:
+	mov ah,10 ! mul ah ! inc ax
+	add bx,ax ! ret
+
+;------------------------------------------------------------------------------
+;	writes current contents of esbase:cpm_dir_buffer to current disk at
+;	remap block whose dir entry # is passed in CX.
+;	Returns al=0 if succeeds else NZ.
+;	CAUTION: Hard coded for 2K remap blocks!
+;------------------------------------------------------------------------------
+cpm_flush_lbl:
+	mov es,esbase ! mov bx,offset cpm_dir_buffer
+	mov dl,WORK_disk ! mov dh,0
+	mov ax,cx ! mov cl,6 ! shr ax,cl		;calculate block #
+	mov cx,offset WORK_hdlb
+	call write_cpm_block
+	ret
+
+
+	dseg $
+ctod_day	dw	0
+ctod_hour	db	0
+ctod_min	db	0
+ctod_sec	db	0
+	cseg $
+
+eject
+;******************************************************************************
+;	LOGICAL CP/M DISK IO ROUTINES (read and write CP/M objects)
+;******************************************************************************
+
+;------------------------------------------------------------------------------
+;	READ PARTITION TABLE
+;	Entry: ES:BX->destination buffer
+;		  DX =disk
+;	Exit:     AL =0 if no errors else <>0
+;------------------------------------------------------------------------------
+get_partition_table:
+	push es ! push bx			;save destination address
+	mov es,esbase		   		;use temp. buffer that is known
+	mov bx,offset partition_buffer		;to be safe from 64k boundaries
+	call read_part_table
+	pop bx ! pop es
+;
+	push si ! push di ! push ds ! pushf
+	mov ds,esbase
+	mov di,bx ! mov si,offset partition_buffer
+	mov cx,512/2
+	cld ! rep movsw
+	popf ! pop ds ! pop di ! pop si
+	ret
+
+
+;------------------------------------------------------------------------------
+;	WRITE PARTITION TABLE
+;	This routine moves 'our' master boot into the working copy of the
+;	master boot/partition table record.  It then moves the record into
+;	the I/O buffer and writes it to disk.
+;------------------------------------------------------------------------------
+put_partition_table:
+	cld				;move master boot into disk label
+	mov si,offset default_xtlbl
+	mov ax,ds ! mov es,ax
+	mov di,offset WORK_xtlbl
+	mov cx,length XTLBL_code ! rep movsb
+;
+	mov si,offset WORK_xtlbl	;move disk label to I/O buffer
+	mov es,esbase
+	mov di,offset partition_buffer
+	mov cx,512 ! rep movsb
+;
+	mov bx,offset partition_buffer	;write out the partition table
+	mov dl,WORK_disk ! xor dh,dh
+	jmp write_part_table
+eject
+;------------------------------------------------------------------------------
+;	READ CP/M LABEL FROM DISK
+;	Entry: ES:BX->destination buffer
+;		  DX =disk
+;		  CX =cylinder
+;	Exit:     AL =0 if no errors else <>0
+;------------------------------------------------------------------------------
+get_cpm_label:
+	push es ! push bx			;save destination address
+	mov es,esbase		   		;use temp. buffer that is known
+	mov bx,offset label_buffer		; to be in a safe place
+	call read_cpm_label
+	pop bx ! pop es
+;
+	push si ! push di ! push ds ! pushf   	;then move the data
+	cld ! mov ds,esbase
+	mov di,bx
+	mov si,offset label_buffer
+	mov cx,512/2 ! rep movsw
+	popf ! pop ds ! pop di ! pop si
+	ret
+
+
+;------------------------------------------------------------------------------
+;	WRITE THE CP/M LABEL TO DISK
+;------------------------------------------------------------------------------
+put_cpm_label:
+	cld ! mov es,esbase		;set up ES for I/O routines
+	mov si,offset WORK_hdlb		;move CP/M label to I/O buffer
+	mov di,offset label_buffer
+	mov cx,HD_LABEL_SIZE ! rep movsb
+;
+	mov bx,offset label_buffer	;set up parms for I/O
+	mov dl,WORK_disk ! xor dh,dh
+	mov cx,WORK_pstart
+	jmp write_cpm_label		;write label to disk
+eject
+;------------------------------------------------------------------------------
+;	WRITE CP/M SYSTEM TRACK TO DISK
+;------------------------------------------------------------------------------
+put_cpm_system:
+	cld ! mov es,esbase
+	mov si,offset default_cpm	;move default CP/M with its partition
+	mov di,offset cpm_buffer	;boot, setup sector, etc to I/O buffer
+	push di
+	mov cx,16*512 ! rep movsb
+;
+	mov si,offset WORK_hdlb		;move current CP/M label to I/O buffer
+	mov di,offset label_buffer
+	mov cx,hd_label_size ! rep movsb
+;
+	pop bx				;set up I/O parms
+	mov cx,WORK_pstart
+	mov dl,WORK_disk ! xor dh,dh
+	jmp write_cpm_system		;write the system track out
+                                                                                                                                                                                                                                                                                                                                                                                                                                                         

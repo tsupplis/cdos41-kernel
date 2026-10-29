@@ -1,0 +1,296 @@
+eject
+;	HDTEXT.LIB include file for HDMAINT 2.0 as of 6-Aug-84
+;	revised 06-Aug-84 to add "Remote console" error msg by M.P. Vano
+;	revised 06-Aug-84 to change program banner
+;	revised 31-Aug-84 to add DOS 3.0 partition type message
+	DSEG $
+	org	180h
+;******************************************************************************
+;
+;	This file contains all of the ENGLISH SPECIFIC Message texts
+;	For HDMAINT 2.0.  Note that some CRT control sequences, Blanking
+;	messages, Graphic arrays and other Non-Language specific messages
+;	remain imbedded in the Code files.  Note also that the Cursor
+;	positioning sequences associated with these messages are part of
+;	the instructions that print them.
+;
+;	NOTE TO TRANSLATORS:  Although these messages may be translated into
+;	other languages easily, it is still your responsibility to make sure
+;	that the cursor positioning, centering, field compatibility and erasure
+;	of these messages will work in all menu sequences.  These parameters
+;	will probably still require modification of code files unless any
+;	new messages can be coerced into fields similar in size to the
+;	English messages.  To assist this process, HDMAINT uses redundant
+;	messages even where a message can be shared between several menus.
+;
+;******************************************************************************
+
+;	program name line in main box
+progname_msg db	' Concurrent Hard Disk Maintenance Program Version 4.1  ',0
+;progname_msg db'Hard Disk Maintenance Version 2.0 for Concurrent PC-DOS',0
+
+;	general initialization error messages
+msg_err_bados	db 'Cannot execute under this operating system version',0
+msg_err_nodisks	db 'Cannot execute without a hard disk',0
+msg_err_files	db 'Cannot execute while any files are open',0
+msg_err_state	db 'Virtual Console must be in Dynamic mode',0
+msg_err_remote	db 'Cannot execute from a remote console',0
+
+eject
+;------------------------------------------------------------------------------
+;	from MAIN MENU LEVEL
+;------------------------------------------------------------------------------
+mm1_msg	db	'Main Menu',0
+mm2_msg	db	'SELECT FUNCTION',0
+mm3_msg	db	'Display or change disk partitioning',0
+  mm4_msg db	  'Verify a hard disk partition',0
+    mm4A_msg db     'Display or change bootstrap behavior',0
+  mm5_msg db	  'Display or change a partition''s options',0
+mm6_msg	db	'Exit from this program',0
+
+;	status line message displayed on fatal errors (MUST BE 80 COLUMNS!)
+;			'*********** This is 40 columns *********'
+msg_fatal_status db     'Unable to continue:  Type D for details '
+		db	'                                        ',0
+
+;	exit sequence / exit error messages
+exit0_msg db 'Unable to continue: ',0
+exit1_msg db 'Cannot write to Partition Table',0
+exit2_msg db 'Cannot read the Partition Table',0
+exit3_msg db 'Cannot write to reserved system area',0
+exit4_msg db 'Cannot read the reserved system area',0
+exit5_msg db 'Too many bad blocks were found',0
+exit6_msg db 'It is necessary to reload the operating system from diskette',0
+exit7_msg db 'at this time.',0
+exit8_msg db 'Please insert a boot diskette in drive A:',0
+exit9_msg db 'Reload operating system from diskette',0
+
+eject
+;------------------------------------------------------------------------------
+;	from PARTITION MAINTENANCE MENUS
+;------------------------------------------------------------------------------
+pm1_msg	db	'Display or Change Disk Partitioning',0
+pm2_msg	db	'SELECT FUNCTION',0
+  pm3_msg db	  'Delete CP/M partition',0
+  pm3A_msg db	  'Delete DOS partition',0
+  pm4_msg db	  'Change bootable partition',0
+  pm5_msg db	  'Change CP/M partition',0
+  pm5A_msg db	  'Change DOS partition',0
+  pm5B_msg db	  'Create CP/M partition',0
+  pm5C_msg db	  'Create DOS partition',0
+pm6_msg	db	'Return to main menu',0
+
+pm_nada0_msg db	'There is no room on this disk for HDMAINT to create a CP/M or',0
+pm_nada1_msg db 'DOS partition.  HDMAINT cannot change or delete partitions',0
+pm_nada2_msg db 'used by other operating systems.  Refer to the documentation',0
+pm_nada3_msg db 'for the operating system in question if you need to modify',0
+pm_nada4_msg db	'such a partition.',0
+
+eject
+;------------------------------------------------------------------------------
+;	from CREATE CP/M and DOS partition menus
+;------------------------------------------------------------------------------
+cyl1_msg db 'If the partition start cylinder shown is acceptable, press F10',0
+cyl2_msg db 'to proceed.  Otherwise, enter the desired start cylinder number.',0
+cyl3_msg db 'If a partition can be started there, this screen will be updated.',0
+cyl4_msg db 'Remember that a partition requires at least 10 cylinders.',0
+cyl5_msg db 	'Continue with start cylinder ',0
+cyl6_msg db 	'Enter F10 or a start cylinder (3 digits): ',0
+
+psize1_msg db 'If the size shown is acceptable, press F10 to proceed.  If not,',0
+psize2_msg db 'enter a new partition size. If that size is possible, this screen',0
+psize3_msg db 'will be updated.  A partition requires at least 10 cylinders.',0
+;
+psize4_msg db 'Concurrent CP/M-86 or DOS can access volumes larger than 8192K',0
+psize5_msg db 'bytes, but if you intend to use this partition with CP/M-86, make',0
+psize6_msg db 'sure that it has no more than ',0
+psize7_msg db ' cylinders.',0
+psize8_msg db 'Enter F10 or a partition size (3 digits): ',0
+psize9_msg db 'Continue with partition size of ',0
+
+create0_msg db 'Creating CP/M partition on ',0
+create0A_msg db 'first',0
+create0B_msg db 'second',0
+create1_msg db	' hard disk, cylinders ',0
+create2_msg db	'Stop creation of partition',0
+create3_msg db	'Deleting old partition',0
+create4_msg db	'Creating new partition',0
+create5_msg db	'Testing cylinder ',0
+create6_msg db	' bad blocks found (will be ignored by system)',0
+create7_msg db	'Enabling partition',0
+create8_msg db	'Creation of partition completed',0
+create9_msg db	'Return to main menu          ',0
+;
+cr_dos0_msg db	'Creating DOS partition on ',0
+
+;	optional abort frame
+abort0_msg db	'Do you really want to stop?',0
+abort1_msg db	'Continue creating partition',0
+abort2_msg db	'Stop creation of partition',0
+
+;	from create failure message frames
+create10_msg db 'HDMAINT cannot create a partition beginning at cylinder ',0
+create11_msg db 'because of a bad block in the reserved operating system area.',0
+create12_msg db 'You can either stop the creation process or try again with a',0
+create13_msg db 'new starting cylinder number.  If you stop now, no partition',0
+create14_msg db 'will have been created.',0
+create15_msg db 'Set a new starting cylinder',0
+create16_msg db 'Stop creation of this partition',0
+
+;------------------------------------------------------------------------------
+;	from delete cpm partition menu
+;------------------------------------------------------------------------------
+;  CP/M warning message
+del0_msg db 'The operation you have chosen will delete all the files and',0
+del1_msg db 'system information in the CP/M partition of this hard disk.',0
+
+;  DOS warning message
+del0A_msg db 'The operation you have chosen will delete all the files and',0
+del1A_msg db 'system information in the DOS partition of this hard disk.',0
+
+del2_msg db 'Do you really want to proceed?',0
+del3_msg db 'Delete existing partition',0
+del4_msg db 'Do not delete existing partition',0
+del5_msg db 'DELETING PARTITION',0
+
+eject
+;------------------------------------------------------------------------------
+;	from boot options menus
+;------------------------------------------------------------------------------
+bootopt0_msg db 'SELECT FUNCTION',0
+bootopt1_msg db 'Change bootable partition',0
+bootopt2_msg db 'Enable booting CCP/M from CP/M partition',0
+bootopt3_msg db 'Enable booting CCP/M from DOS partition',0
+bootopt4_msg db 'Return to main menu',0
+
+;	from change bootable partition menu
+chboot0_msg db	'CCP/M requires that the file CCPM.SYS exist in a hard disk',0
+chboot1_msg db	'partition before you can boot from that partition. If you',0
+chboot2_msg db	'haven''t yet done so, use PIP or COPY to put CCPM.SYS there.',0
+chboot3_msg db	'SELECT FUNCTION',0
+chboot4_msg db	'Change bootable partition',0
+chboot5_msg db	'Return to main menu',0
+chboot6_msg db	'Writing CP/M Loader to CP/M partition.',0
+chboot7_msg db	'Writing CP/M Loader to DOS partition.',0
+chboot8_msg db	'Loader successfully written.',0
+chboot9_msg db	07,'HDMAINT cannot write a loader because:',0
+chboot10_msg db 'No space is reserved for a system in this partition.',0
+chboot11_msg db 'A user file named "DRIBIO.COM" or "DRIDOS.COM" already exists.',0
+
+eject
+;------------------------------------------------------------------------------
+;	from VERIFY MENUS
+;------------------------------------------------------------------------------
+vfy_which_msg0 db 'SELECT FUNCTION',0
+vfy_which_msg1 db 'Verify CP/M partition',0
+vfy_which_msg2 db 'Verify DOS partition',0
+vfy_which_msg3 db 'Return to main menu',0
+
+vfy0_msg db	'Do you really want to stop?',0
+vfy1_msg db	'Continue verifying partition',0
+vfy2_msg db	'Verify a DOS or CP/M partition',0
+vfy3_msg db	'Scanning CP/M partition on ',0
+  vfy3A_msg db	'first',0
+  vfy3B_msg db  'second',0
+vfy4_msg db	' hard disk for bad blocks',0
+vfy5_msg db	' known bad blocks (ignored by system)',0
+vfy6_msg db	' additional bad blocks have been found',0
+vfy7_msg db	'Scanning cylinder ',0
+vfy8_msg db	'Stop verification of partition',0
+vfy9_msg db	'reserved system area is defective',0
+vfy9A_msg db	'file allocation table is defective',0
+vfy10_msg db	'Verification complete      ',0
+vfy11_msg db	'Verify disk again',0
+vfy12_msg db	'Return to main menu         ',0
+
+vfy3_dos_msg db	'Scanning DOS partition on ',0
+
+eject
+;------------------------------------------------------------------------------
+;	from change partition options menu
+;------------------------------------------------------------------------------
+p_opt0_msg db	'Display or Change a Partition''s Options',0
+p_opt0A_msg db	'SELECT FUNCTION',0
+p_opt1_msg db	'Display or Change Directory labels',0
+p_opt2_msg db	'Display or Change CP/M options',0
+p_opt3_msg db	'Return to main menu',0
+
+;	from volume names menu
+vnm0_msg db	'SELECT FUNCTION',0
+vnm1_msg db	'Change CP/M Directory label',0
+vnm2_msg db	'Change DOS Directory label',0
+vnm3_msg db	'Return to main menu',0
+vnm5_msg db	'CP/M Directory label is ',0
+vnm6_msg db	'DOS  Directory label is ',0
+vnm7_msg db	'First',0
+vnm8_msg db	'Second',0
+vnm9_msg db	' hard disk:',0
+
+vnm10_msg db	'ENTER A NEW CP/M DIRECTORY LABEL',0
+vnm11_msg db	'ENTER A NEW DOS DIRECTORY LABEL',0
+vnm12_msg db 	'A CP/M directory label may have up to 8 characters followed',0
+vnm13_msg db	'by a period (".") and then up to 3 more characters.',0
+vnm14_msg db	'A DOS directory label may have up to 11 characters.  Note',0
+vnm15_msg db	'that if you enter a period (".") it will count as a character.',0
+
+vnm16_msg db	'You may use the backspace key to erase mistakes. Press the',0
+vnm17_msg db	'carriage return key when you are through entering the name.',0
+
+vnm20_msg db	'No DOS Label currently exists, and there is',0
+vnm21_msg db	'no room in the directory to make a new one.',0 
+
+vnm22_msg db	'No CP/M label currently exists, and there is',0
+vnm23_msg db	'no room in the directory to make a new one.',0
+
+pwd_msg1 db	'The CP/M label has been PASSWORD protected.',0
+pwd_msg2 db	'(Use "SET [NAME = xxxxxxx.xxx]" to rename it.)',0
+
+eject
+;	from select cpm options menu
+cpmopt0_msg db	'Display or Change CP/M Options',0
+cpmopt1_msg db	'Directory is at maximum size (',0
+cpmopt2_msg db	' entries)',0
+cpmopt4_msg db	'If you intend to use passwords or time stamps'
+	    db	  ' on your files, we',0
+cpmopt5_msg db	'recommend that you increase the directory'
+	    db	  ' size to the maximum.',0
+cpmopt6_msg db	'Once the directory size has been increased, '
+	    db	  'it cannot be made',0
+cpmopt7_msg db	'smaller again.',0
+cpmopt8_msg db	' directory entries',0
+cpmopt9_msg db 'CP/M optionally will verify that every write to the hard disk',0
+cpmopt10_msg db	'is successful by reading the data back.',0
+cpmopt11_msg db	' will',0
+cpmopt12_msg db	'will not',0
+cpmopt13_msg db	' verify after writes',0
+cpmopt14_msg db	'Changes will take effect at the next POWER-ON or RESET',0
+cpmopt15_msg db	'Accept CP/M options shown',0
+
+
+eject
+;------------------------------------------------------------------------------
+;	UTILITY MENU SUBROUTINE MESSAGES
+;------------------------------------------------------------------------------
+;	"which disk" subroutine messages
+choose0_msg db	'SELECT DISK',0
+choose1_msg db	'First hard disk',0
+choose2_msg db	'Second hard disk',0
+choose4_msg db	'Return to main menu',0
+
+;	from partition info display subroutine
+pdisp_1st_msg db 'first',0
+pdisp_2nd_msg db 'second',0
+pdisp0_msg db	'Partition summary for ',0
+pdisp1_msg db	' hard disk:',0
+pdisp1A_msg db	' cylinders in use of ',0
+pdisp2_msg db	' total',0
+;
+  pdisp3_msg db	  'CP/M system area is defective',0
+  pdisp4_msg db	  'unknown use ',0
+  pdisp5_msg db   'CP/M        ',0			;total 12 chars
+  pdisp6_msg db	  'CCP/M only  ',0			;total 12 chars
+  pdisp7_msg db	  '  (bootable)',0
+  pdisp8_msg db	  '            ',0			;12 chars
+  pdisp9_msg db	  'DOS         ',0
+  pdisp10_msg db  'DOS 3 only  ',0
+                                                                                                                                                                                                                                                                                                                                                                   
