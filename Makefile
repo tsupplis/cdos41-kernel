@@ -7,7 +7,8 @@ kernel:
 xios-alt:
 	$(MAKE) -C kernel xios-alt
 check: all
-	@set -e; for f in kernel/con/*.con kernel/rsp?/*.rsp commands/genccpm/genccpm.cmd commands/pip/pip4.cmd commands/rmdir/rmdir.cmd commands/sysdisk/sysdisk.cmd; do cmdinfo $$f; done
+	@set -e; for f in kernel/con/*.con kernel/rsp?/*.rsp; do cmdinfo $$f; done
+	$(MAKE) -C commands check
 clean:
 	$(MAKE) -C commands clean
 	$(MAKE) -C kernel clean

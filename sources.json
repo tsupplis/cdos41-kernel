@@ -1,0 +1,4547 @@
+{
+  "archive": "concurrent-dos86-oem-src-cpm86",
+  "inventory": [
+    {
+      "source": "41SRC_01.IMG.DIR/ACB.DEF",
+      "sha256": "5776a26dc5d30b465040734b3717591296b3e70b532514398234a969ce9590d3",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/APB.DEF",
+      "sha256": "45f520af0b153ce138369455742dc20938bb5ea601bb1b69e7fe5837f73fcd2b",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/AUX.CIO",
+      "sha256": "705a0cd3d17bda10eb53d0594b57b596a04a2741a03597e5d57263ec081cba78",
+      "bytes": 3072
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/BASEP.FMT",
+      "sha256": "63b2648a465dc0aef3bec7f061adf124877c9769c38d1676ebbab98cc774fe7d",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/CB.DEF",
+      "sha256": "4f2f967dd71df203db347899e6ccc732d16a4a1357fafbbc293e7ca56a1b5984",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/CHAR.DEF",
+      "sha256": "5a951a9654488ad897bd20795d850f6da2a0d8616b00dc38c992c5cc14ad21c6",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/CHARIO.CIO",
+      "sha256": "d05facfb74eacba51cd5266ab62301107690371f6f4262750cc954952a0d8eec",
+      "bytes": 20480
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/CIO.A86",
+      "sha256": "dda90a928a0a94750ff1f76e3ac0e24403325c71ca006d615d59a6897b4c3e19",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/CIO.SUB",
+      "sha256": "52855f6836ed1f9b8c8ab3d51ae1ff904c17851e8bca953f9e2de0702f9dc1c0",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/CIOIF.CIO",
+      "sha256": "075bb44ecb7666cca84ebdb278c9f631b76d3785805f17df7aa2a307531c21b0",
+      "bytes": 3072
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/CLICB.DEF",
+      "sha256": "0acd45a5935fdaaa3279564c03d57435805d8a2efc9cd528e747125e6e704d4a",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/CLOCK.A86",
+      "sha256": "8d50104681994b1d7906bb4dcf498695ddbb4b8a9e4ed87ff9a8e163b730eff2",
+      "bytes": 5632
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/CLOCK.SUB",
+      "sha256": "81515e8db4eec0fe9fd7143cd04884c9d4c93ce5d256cc008c76f1aeeb9270c6",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/CMDH.DEF",
+      "sha256": "9b03dce2ed7ae13c3bd44b7e59d969b2f75212486cd3e462a405184c663435a0",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/COMLIT.LIT",
+      "sha256": "105eac9955d513507b16985830c1d8125e70ada82e759663be1db19721fc85e5",
+      "bytes": 640
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/COMMAND.SUP",
+      "sha256": "65cb651bb3d7f2f097ad599742d81fbda13937798dfdf85d05afb1b7794f6524",
+      "bytes": 17408
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/CONSOLE.CIO",
+      "sha256": "d4c9daa6f490d23321dd1d0c533a4bb0e7f6fb417c200c7d618fad5d18ff8245",
+      "bytes": 12288
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/CPMMEM.MEM",
+      "sha256": "e69cfe6000212e4cf53ff3694cdbf2a2e94cdfa95d0c92a93703f37b46a989a6",
+      "bytes": 7168
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/CPYRIGHT.DEF",
+      "sha256": "1ca6a0b0ed9cbb09c4b91f293218d55c05b4973f8feefb62b69d9a5e74e270fa",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/DATA.BDO",
+      "sha256": "fdcbd0a3622fd759bbabd5c5396107ee126536eb1a69892c828e168aa4c0064b",
+      "bytes": 11264
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/DSPTCH.RTM",
+      "sha256": "f1b01df5e9aa66bf9312800b180248482bb4a4eb74152182b19bf82a960fb855",
+      "bytes": 21504
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/ENTTAB.DEF",
+      "sha256": "50a7cbe03283182dc883528d5c58af0b5b77e9f0f36d8b39e2f80e9ef391f0b6",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/ERR.DEF",
+      "sha256": "bd411c5f3ddec3bd0c4ae6cb3ce6ba9eca7aad0348f1c2c8401b4da5cfc8fc83",
+      "bytes": 2560
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/FCB.DEF",
+      "sha256": "07d95b083ed3d97d01f2a82ecf4e8fea961b2b880a4e14ace649f156ec0cf206",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/FINDPD.RTM",
+      "sha256": "a72d27aa6c07ba7d9aa15423ed95cbad7532806f7fa13c6cc3be07fd03cb3dcb",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/FLAG.RTM",
+      "sha256": "20870eebf1c2322e597a1f07bc72664abd4234634dc311249f2f3cee64547095",
+      "bytes": 5632
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/FLG.DEF",
+      "sha256": "b7662752f11c9e25db1fb0eea17458635cea56a0762fdd364fa58910bdd2d5be",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/INIT.SUP",
+      "sha256": "471ecba00477226ede7cf73a45536899f11e89d4f8a225ab8c3a3fb1ab61a364",
+      "bytes": 3072
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/LOAD.SUP",
+      "sha256": "b927838a97e629033c110b5e6b220f1102660fb45b055c447a1ec06238e24dc9",
+      "bytes": 27136
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/LSTK.FMT",
+      "sha256": "f38dbd47d80c518977dc53031623cb04755a3d4494ee923b11b0e93e72f1b1f9",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/MAU.MEM",
+      "sha256": "6302255840b319c6bb8fddd638085f91093186dc0709eae558d0fdce8dc97f42",
+      "bytes": 8704
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/MEM.A86",
+      "sha256": "49149f2b7809b2381ce4036796dbb8cab58b1ad64f8792889fb92aeb01a5406f",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/MEM.DEF",
+      "sha256": "3e2f5cc3459f6220ef1ff55e437591544e1f41102de4d543d13c0a5fe8067e84",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/MEM.SUB",
+      "sha256": "74c4a2a3bfcecff501347fc4f68d3560555e0cfe07a905723fe508e24ee0bd75",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/MEMIF.MEM",
+      "sha256": "a42a3a6149f27c2d185b52ff52a117bebd0b325afb4c2b92e05e403adeab2b48",
+      "bytes": 3584
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/MEMORY.MEM",
+      "sha256": "b581473881d8526a0439872bacb24aaa4cc6d924bef9207dffba5a4696925308",
+      "bytes": 11776
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/MFUNC.LIT",
+      "sha256": "a9ef4666559f0be94de1bcc8e458ffcb39e88ffae1787f873eb06dbf41c7a564",
+      "bytes": 2176
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/ML.MEM",
+      "sha256": "98495eda08ca4b0cc902eb902bc49c386b7db7b0367b3838c057a3b16e3cc5bc",
+      "bytes": 6144
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/MODFUNC.DEF",
+      "sha256": "be16d6d04d5a8b60e68e0950730c79c19884e875936bd617769c1ed3f7bc8574",
+      "bytes": 5632
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/MODTAB.DEF",
+      "sha256": "c2290d886dd619750fb31ae0349feb4cf1016ead778ae4f9c9aa8eedb3f759c2",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/MPB.DEF",
+      "sha256": "b8f4d8af242c8bbcb1f27fea09075ece99d885303a40cf29d1d57368468b4d34",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/MXFUNC.LIT",
+      "sha256": "876f010b657f5af6762e7a71be291c6e6fd41ff9f1420aca90b72e70196f4e24",
+      "bytes": 384
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/NETPIN.LIT",
+      "sha256": "de8389b7a613b07ecb645da32be999518e5bcd01cb66cb161cb9f661f2240c98",
+      "bytes": 768
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/PARSE.SUP",
+      "sha256": "ba69df74b0a00b7ec7b59bdd0a924bd075182a2fa0fcf1fb2586214b8168ea1c",
+      "bytes": 5120
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/PATCH.COD",
+      "sha256": "aa0c0eec02995b2480f02558c7e6b2f11496206b14fa874e919982b11b5de2a8",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/PCB.DEF",
+      "sha256": "4403571501e1ee6a4f4db782580ea9d128db009a57608d8e3f75decf334236da",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/PD.DEF",
+      "sha256": "05d88aad3224488334a3b200c1ea4776b920a629fc0425b1374211ef4a2493dc",
+      "bytes": 5632
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/PIN.COM",
+      "sha256": "4318454923e25478a3a6de0092af288166caaee8ea42f3438a437b119f995052",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/POPF286.MAC",
+      "sha256": "71f062a677e88e303741bf2be9fbbbf6656874ecb9b43301d49690cc4f2a8282",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/PROC.RTM",
+      "sha256": "6d142aa3652e63ad849e1f98bbc05d647530c40856a8b04c7b1a4fc80e1de7a3",
+      "bytes": 7168
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/PROCES.LIT",
+      "sha256": "9519d901d3c3903e0bc226898b61e4ff1ff0c8bcaf444c8c0a24dae932b4796c",
+      "bytes": 2304
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/PXIOS.A86",
+      "sha256": "ddf7b1a86114bcd2f6c66125d552fa6a7ed33e1431666fac68d33eceb17b8841",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/QD.DEF",
+      "sha256": "5c3aee4b2b8c64e6940d0af8353a42d4014718daf11a9476648b2afeed494bdf",
+      "bytes": 3072
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/QD.LIT",
+      "sha256": "552451bb0f212492692e7324f18476d233b1554fdd59b68d3cf2f0aebb37d987",
+      "bytes": 896
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/QUE1.RTM",
+      "sha256": "57e4b4c0af81e65821db4d673dda216039bf5cec11b06a7ee474811767f9d755",
+      "bytes": 13824
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/QUE2.RTM",
+      "sha256": "fae3f3a8d9046949b27835d50bac539be202b9ff5466e146af9e4f670678284a",
+      "bytes": 6656
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/RHPIN.A86",
+      "sha256": "e5c730ae504e0b204afc56f1862a4a2626ba219df72b220f5eeb7f5c0d72df59",
+      "bytes": 2304
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/RPL.SUP",
+      "sha256": "f63777d61b3dcda9a5a1ce8c679392ea1ff6db232444062081b253c206f546e8",
+      "bytes": 2560
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/RSP.DEF",
+      "sha256": "e34e7992e01e80576ba260348656dddeb6880f406a006ce5fda21147a7057654",
+      "bytes": 2048
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/RTM.A86",
+      "sha256": "1598c4b8cfe93bf824b41c0da0f6fb17c6b4ea3a79c42900f3c225bbda1ff0e3",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/RTM.SUB",
+      "sha256": "108bdc4897c53dcd3f86c157f425735e515d04f686ff83b8ba9923012cb9f93c",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/RTMIF.RTM",
+      "sha256": "767e3709d54904f55d70e00c9176560e169106dc37a18c5447cd061a8d8b6215",
+      "bytes": 2560
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/S8087.LIB",
+      "sha256": "cfab5922776bdcc2aad641e1e0a13cf7aee55762a810003eb32efc245ad43905",
+      "bytes": 2048
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/SDPIN.LIT",
+      "sha256": "13c054bb034d58919ce4e6f4c75a2ec2ad5a534844a819d7d8e34ee5cf50d98e",
+      "bytes": 1664
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/SHARE.MEM",
+      "sha256": "2a475146fcf6bc9dc90d6e30dcf1c6028a12b5af5c0885680610f809935ce4f3",
+      "bytes": 2048
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/START.COD",
+      "sha256": "4625fd83f32fa1dec76ea5b1877292ac9af7b0dbe46a223fddda9f2045b50167",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/SUP.A86",
+      "sha256": "b5b251c7ae9e769e90967468fd553631eeb94c974b56f4c596f8507ce92cad6c",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/SUP.SUB",
+      "sha256": "a9ad1bcd1119e41ded36268c3cf4619080ab5adb43c84ef3be42990e151a87c4",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/SUPIF.SUP",
+      "sha256": "508e04d6c9b48cfdeeb14055f4c81a7ef2f8e900f073a4e3916d71e607f04db9",
+      "bytes": 11264
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/SYNC.DEF",
+      "sha256": "c684e37a7fd2cf0d1c3b6cd0e6dde316de71a91baa4213766caa75f99fcb39a2",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/SYSDAT.A86",
+      "sha256": "9e43442a714e28c06a8cae5eb394d5e728552f68b0ee30c14347c4f32aa8c6ed",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/SYSDAT.DAT",
+      "sha256": "2faa3c420c8a44628c7a0c07f82aa89cb3811e0dd451cfd971859f345faf33c5",
+      "bytes": 17408
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/SYSDAT.SUB",
+      "sha256": "9ee27fce8926ba33d84dbae5a1b55dc3531f18ca87ae6aca2df1c05a43b92e1c",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/SYSENT.RTM",
+      "sha256": "eeb27cf391078c049e9244b074d6a7e578c2ae885a9e731ae0f4ce76ccea88a2",
+      "bytes": 9216
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/SYSFUNC.SUP",
+      "sha256": "154d238bdcfd127e347f759cde70aaca4e3ccb918a7b8afe2ee86d7bf44a3b2a",
+      "bytes": 4608
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/SYSTEM.DEF",
+      "sha256": "b6a2625fdcc6da256de3d27f9453bca31d5264bb1fc8b83fd7d5db047de29353",
+      "bytes": 2048
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/UDA.DEF",
+      "sha256": "40ee66581fdbd53d376f324e95df343403da48a7b1ec6d90d3f7ac1e6a41eff8",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/UDA.FMT",
+      "sha256": "f0b74c5e42d9a4ae6ae91ad8fbec5f0f21d6e3f678409b25092ba9a539090723",
+      "bytes": 2560
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/UDA.LIT",
+      "sha256": "ac0e13573e6be9e43a96ead5613a9967cd65bbc08e3320661aeb1a6d3f5b25b7",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/UTIL.MEM",
+      "sha256": "6e1ff3ed9db267a6af7424c658199baefc5b6cd04d2876d081cc5e8daaba0195",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/VCCB.DEF",
+      "sha256": "7640d2520cc05230120b970975c0b3a9ff492b1efdf1a6ccf3fa9d4f240012e1",
+      "bytes": 5120
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/VCCB.LIT",
+      "sha256": "2aa7f0523288c4a71fd1a8d9b4f4b86b617acbe599e272e0816823a3bed2ca6e",
+      "bytes": 3712
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/VEC.FMT",
+      "sha256": "01801d694a6495472b3094172cb02c35d7b12ea22818322d2014728708b5f877",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/XIOSCB.DEF",
+      "sha256": "aac5dd3bc4271731dc4aa1c3bb07bd4f52dd494140d73f4fc56abbb3e601e25c",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_01.IMG.DIR/XIOSDAT.FMT",
+      "sha256": "afe90b4d877a0ccd98454778e6ab004ca9337f8af013ee961f53da6fcb7814a1",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/BDOS.SUB",
+      "sha256": "38f1e2c66ef25a4380af3c208067cf07265f9420cbef23e85b7a5ad02113aee7",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/BDOSIF.BDO",
+      "sha256": "d6d5d345e0ebcf38c70be9ac113beea13abb7bda5aeef403286053b2354edd3e",
+      "bytes": 17408
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/BLACK.A86",
+      "sha256": "dfe07ef63cf0a06b582193fc1238d7c8a7ccf30f02621729597a4127d4e10edf",
+      "bytes": 67584
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/CONST.BDO",
+      "sha256": "b04dceb0fdc504731267835c5a6f6f444de805b3a8e690aebcb7f5b761fa604c",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/DISPMENU.A86",
+      "sha256": "108c508f841e0167d6ad20bcf39fa846e4bf2c86734dd0e899555c2cde7e6e31",
+      "bytes": 11776
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/DMSUBS.C",
+      "sha256": "0d3b061ab8abb59e379605f0cc6055d7104f798ca397fac87c8d06c07145c281",
+      "bytes": 4096
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/EQU.BDO",
+      "sha256": "d0072ed721a52aed4f338eef542f1972d086c7e8e9ce2860fbdf01cbe2db29ed",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/FILE1.BDO",
+      "sha256": "fcd6fd33ebca5e0f3fb616e3aa80feeddc7119f66bad25f0e6d5d3fe70b3ce18",
+      "bytes": 39424
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/FILE2.BDO",
+      "sha256": "5aedc2d46d7936db0c62397a91886cf70ba7935be6678e9d94b9f4b4925af77e",
+      "bytes": 35840
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/FILE3.BDO",
+      "sha256": "a5ce8bb32cae4e69dd946eb9a999e728e5b2dd328d32fafc6f7e4f369199f809",
+      "bytes": 63488
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/FILE4.BDO",
+      "sha256": "16c71a4767c01f5c032d7d3d970657add1a3872f8d58477f5dfbfbc094c0fe1b",
+      "bytes": 44032
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/FILE5.BDO",
+      "sha256": "fda8cd338dee12c67073fed9eb67a694c312099fd530bd296ef39f35d078adc5",
+      "bytes": 3584
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/PCBDOS.A86",
+      "sha256": "cd4e92d0d8e7855cbadea25f870069ad37ed68da33ffa928777a1625942d72ab",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/PCTMP.INP",
+      "sha256": "4d1c39f9a15cad4f1150c400ea90f1b56efcee02dd0fbdce2bef104fd788fc8e",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/PCTMP.SUB",
+      "sha256": "7bc519d9e879c0c3d576a2040694afe7def5a4f8907e502755c1a671bfcb28b3",
+      "bytes": 384
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/PIN.PLM",
+      "sha256": "3baceb6258f53006efecf4f2a08ce56b434517e43e4944095560243cbbdc74a7",
+      "bytes": 23808
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/RMENUIO.A86",
+      "sha256": "d70d8ec390ba6bf5a3828168cb792b4bf88b3d145405cadc742f67e578cf6d4c",
+      "bytes": 15360
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/SYSDAT.BDO",
+      "sha256": "3a85f3a19e0cb891992f45e16ac40dd3231b1e48a882c892ad4ec6cd2255e1bf",
+      "bytes": 2048
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/SYSTEM.DAT",
+      "sha256": "0de05aa77b3126bca3d3b1a066c9421b7deb30968599c554a8fb8cbb7d692a83",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/TMPMENUE.LIB",
+      "sha256": "560221cd92ee6d46eeb53d282165ecef2c7336b2178fd6146651ca16b7e2ed10",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/TMPPC.A86",
+      "sha256": "2ca71d05c14fcd465e66267522ad3ef443a3cf3d6230f780e20380f7ff85b99f",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_02.IMG.DIR/WWCALL.A86",
+      "sha256": "39870cb690627aa80c26a42898b237932091afdceeda7942ccd570af9417968a",
+      "bytes": 5120
+    },
+    {
+      "source": "41SRC_03.IMG.DIR/ABORT.RTM",
+      "sha256": "c6f94da887eb95ab49a44727034bccd6babe9f4b965fe4edd6dd60b2592cd644",
+      "bytes": 14848
+    },
+    {
+      "source": "41SRC_03.IMG.DIR/MS1.A86",
+      "sha256": "bf11132e92ace9c210d0e959828187ef4bfe5a597c37a58724a406416856f8fc",
+      "bytes": 155648
+    },
+    {
+      "source": "41SRC_03.IMG.DIR/MS2.A86",
+      "sha256": "f4c93c5c36bbbefbf3fcd10dc5a5d283811012236acd07a2fffd3f05bd95bf56",
+      "bytes": 93184
+    },
+    {
+      "source": "41SRC_03.IMG.DIR/RUNMENU.A86",
+      "sha256": "64d5cac2580bf7b901da5731600aee4cfb5245efba61607785f0a1f8aab5f5c1",
+      "bytes": 39936
+    },
+    {
+      "source": "41SRC_03.IMG.DIR/TMPDIR.LIB",
+      "sha256": "74374f01d1fd312cdc6d05520bb2326c1afde142492c0ba6c200c2e3f1db92d1",
+      "bytes": 41472
+    },
+    {
+      "source": "41SRC_04.IMG.DIR/CONFID.INP",
+      "sha256": "9aafd69da7c64dfdd7172f0d1f59e5a753a8d773cc568edb964f793b889cf275",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_04.IMG.DIR/CONFID.SUB",
+      "sha256": "1b800ab65825ed5013e2ef8066e22c16192555f220cb9689bf2b1c299546b39f",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_04.IMG.DIR/CONFIDD.EQU",
+      "sha256": "23579b024abaa28faa653991e7926b3b0ac7fb6f156e5f9001fa3991342ef618",
+      "bytes": 9728
+    },
+    {
+      "source": "41SRC_04.IMG.DIR/CPM.H",
+      "sha256": "68d798dbaca4dbc12c7c1ac109d113efa7a159e4e3cc501c38d79a01e8c4630b",
+      "bytes": 8192
+    },
+    {
+      "source": "41SRC_04.IMG.DIR/GENC1.C",
+      "sha256": "40535e0bacb86f1dace31399ce38343ea9814bfc64326dfbcafd652c45301abb",
+      "bytes": 23040
+    },
+    {
+      "source": "41SRC_04.IMG.DIR/GENC2.C",
+      "sha256": "8e0d3640941e4102c953a38aee85b8c3588c97d824d38cddea22a68a713ac0fc",
+      "bytes": 25600
+    },
+    {
+      "source": "41SRC_04.IMG.DIR/GENC3.C",
+      "sha256": "2c2b16ac0115ac3aa682771487155465e59d5ceebd861f9b62920411737ce29f",
+      "bytes": 19968
+    },
+    {
+      "source": "41SRC_04.IMG.DIR/GENC4.C",
+      "sha256": "1dfaf5dcf6a88dbfeccd8a476a42ef814cdb6cec587cccdd761669246ba0b29f",
+      "bytes": 26112
+    },
+    {
+      "source": "41SRC_04.IMG.DIR/GENC5.C",
+      "sha256": "0d49336812ae6a7235c3940ec0ad0f5d3356246abf7b87e3b4349ec4d7feab71",
+      "bytes": 13312
+    },
+    {
+      "source": "41SRC_04.IMG.DIR/GENC6.C",
+      "sha256": "80500e4e2ef6cf17d2767a87205579c84e7c3a2e6cf687addc7d47d2f0edb4d5",
+      "bytes": 6656
+    },
+    {
+      "source": "41SRC_04.IMG.DIR/GENCCPM.BAT",
+      "sha256": "a0bd2b16a71143ee5537f1ca590451d035ca6f989910a2e087f88ac4cf63a4eb",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_04.IMG.DIR/GENCCPM.H",
+      "sha256": "84496e901ca3d638ae3e1379243630e2a993522674bfb673aed225bac58d0c49",
+      "bytes": 18944
+    },
+    {
+      "source": "41SRC_04.IMG.DIR/INITRSP.A86",
+      "sha256": "6ba6d42c66820e08e01ac73e57ff28ec3a012170c5225c537046f5dd38aa5def",
+      "bytes": 43520
+    },
+    {
+      "source": "41SRC_04.IMG.DIR/MACHINE.H",
+      "sha256": "0626dae0b4469980ac57d2764221db1304122bde78562e3bc93e1dcfc16ea3e1",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_04.IMG.DIR/NTERFACE.A86",
+      "sha256": "79de31b2986767152d4b61e7e79c9cc301edf28d34f05ba7e7a34c160c6932ce",
+      "bytes": 13824
+    },
+    {
+      "source": "41SRC_04.IMG.DIR/RSPDAT.A86",
+      "sha256": "e38ebc5695335c7e7c17db7d12a3abe3d32fc72e2b7dcc810d0c80c338f4ce31",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_04.IMG.DIR/TMPMENU.LIB",
+      "sha256": "aed3e7be5396817e0c9ac86d3934779584e4f4a11bb41c6c1d4c8a91e5cdb8ed",
+      "bytes": 59904
+    },
+    {
+      "source": "41SRC_05.IMG.DIR/PCXIOS.SUB",
+      "sha256": "c741f3dadf1a7792463143172525feb2a5379a335979a4c3a8c6660fd7fff803",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_05.IMG.DIR/SQUID.A86",
+      "sha256": "8b960f49ac26b3f54f37faebea3e7d29ec990f2404fe9598f7f79ca40edec6a4",
+      "bytes": 2560
+    },
+    {
+      "source": "41SRC_05.IMG.DIR/XAUX.LIB",
+      "sha256": "1152ac45d99549e151a9d56d6e17647789c6f4a20f25c12e0daeb088ac9e9309",
+      "bytes": 25600
+    },
+    {
+      "source": "41SRC_05.IMG.DIR/XBEGIN.LIB",
+      "sha256": "52e2eab2f8f9dc3bfc8fbf37c7f99cdfefbe8af3f2796a3013d3a12d69df9e69",
+      "bytes": 54784
+    },
+    {
+      "source": "41SRC_05.IMG.DIR/XCHAR.LIB",
+      "sha256": "c94d23e632e3275104ab2831877f32c173c0e41fb4a04c6f48a2beb08ac02d89",
+      "bytes": 40960
+    },
+    {
+      "source": "41SRC_05.IMG.DIR/XCON1.LIB",
+      "sha256": "20ba702ef48845cbec4a0b45697549df671dea739ed2ed8af37c1613b62dbdc6",
+      "bytes": 47104
+    },
+    {
+      "source": "41SRC_05.IMG.DIR/XCON2.LIB",
+      "sha256": "d0259a22962a8a9454281ded07b2348630776c910b7ba7f2d558f3a9cdae41c5",
+      "bytes": 46080
+    },
+    {
+      "source": "41SRC_05.IMG.DIR/XFLOPPY.LIB",
+      "sha256": "12328722ced6c177e6ebf6f2e7078965f37618e227e6c1694f49ef5223aca1da",
+      "bytes": 58368
+    },
+    {
+      "source": "41SRC_05.IMG.DIR/XHARD.LIB",
+      "sha256": "468025f22895a369b4bd379e003dea04a6f334833c101b3d9cb1c188740bf543",
+      "bytes": 45056
+    },
+    {
+      "source": "41SRC_05.IMG.DIR/XINIT.LIB",
+      "sha256": "cf04ecaf440ada29fcdda1e4a3c208816f299330079dbd6dd3ce03ddb2a74603",
+      "bytes": 35328
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/AUXIO.A86",
+      "sha256": "fef9079e09d9d410e450527a5cfd39d3e6f349115eba0cfa1d9fb5e98bc90637",
+      "bytes": 2560
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/CCB.EQU",
+      "sha256": "7e6841bebf1c2e409f788b5eb103435e7bce4755311e25e56cdc1a7b3d04cdbc",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/CHRCOMM.EQU",
+      "sha256": "c7cf16980d6e446f0d041499ef9f7f9e31787eaa8e94ee02779399f60e45a317",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/CONIN.A86",
+      "sha256": "7fba98944418ff8b3aa54cbdab8c108725a6307d7458237c8baa952ce856b426",
+      "bytes": 4096
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/CONOUT.A86",
+      "sha256": "185af68f034799b526ef21e09419854bb5aebb91b8682fc9e79f176b791e8c93",
+      "bytes": 2560
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/CPXIOS.BAT",
+      "sha256": "83b1b3c9b3e7b9afcae18556f089c260b7cbf9700cf74333fa8b42fa8ca55a32",
+      "bytes": 896
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/CPXIOS.INP",
+      "sha256": "5ba629084d61e1b9e908036aed1bb5d57e12b83e36f1fd19bc8ddef37abd71cb",
+      "bytes": 256
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/CTC.A86",
+      "sha256": "dc249c744ffe8b0cf1be42d314a5006e191e518c849cd30b0976c333efa60241",
+      "bytes": 3072
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/DENTRY.A86",
+      "sha256": "352b81e646f79765731f934cd63e8080054eca28b0020c2471e5a8677dd9152e",
+      "bytes": 6656
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/DISKHDR.EQU",
+      "sha256": "ec771e334e01d8f5cf2ecdadeafce3a96706954384118e911f0af2070da5edf7",
+      "bytes": 3072
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/DPBS.A86",
+      "sha256": "2ef1992d8236e3977d31e87a7f201c52ade598226737d306f2932cc4a90b429d",
+      "bytes": 10240
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/DPBS.EQU",
+      "sha256": "5587313c7bc8bc12e28fb67c247a2b9c0b8a153a736b561dbb0e96cade5e6672",
+      "bytes": 2048
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/DSKCOMN.EQU",
+      "sha256": "da83320f544c310ce945d7c6baaca646cda8a7ac40b0835d2b7e21cb33de3c66",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/EXERROR.EQU",
+      "sha256": "7b7e11c48794d8e63039fad2528d213df7c8bf7d9363af5fa941d6c414aa282c",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/FD.EQU",
+      "sha256": "b22674cd519b4a7b3c34ddef9ab36f3ca6a9a7a2e12447cb14a3da9191dc0040",
+      "bytes": 5120
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/FDFMT.A86",
+      "sha256": "c227f2a47c71cce32db461f0c46f04967c82b1e382f1d66ee309d234e5094b70",
+      "bytes": 5632
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/FDRW.A86",
+      "sha256": "2082ad3ec71c59f4b6c3a56eb7ff2e28b93add6be3c9998df2597ec72b4f6c09",
+      "bytes": 35328
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/FDSEL.A86",
+      "sha256": "bc3c2fba567becc163c63e6e1512a258f77e6f66d1d1ccd587d02c07a85d1da6",
+      "bytes": 22016
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/FLAGS.EQU",
+      "sha256": "bc7d94888498ea092f8dc04b5d25d4e3bd24af4f4d64f54cafd7dde530fdca35",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/HDISK.A86",
+      "sha256": "4704159ee6105f912490a0797f0f685f747568f73242e8ee1000f69140b36290",
+      "bytes": 18432
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/HEADENTR.A86",
+      "sha256": "40319f930f6b2a603c913db5281a45d8bb76ccd7968a3722291d9edcd07cff45",
+      "bytes": 13312
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/I3BOARD.EQU",
+      "sha256": "0d5e706c6bd48402d3386597d916d2c27b43c2297f5b85001645f397ed7fe16d",
+      "bytes": 2560
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/I3INT.A86",
+      "sha256": "1c725f10b302f6e0e22aaf2d2f6ada8bcdd04f0b36100846ccd898ae11f2212c",
+      "bytes": 6144
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/INTVEC.A86",
+      "sha256": "bbee5520ac4c2e532ef08ddd19809385b7ba1d6ece22260d5b28621a044de487",
+      "bytes": 7680
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/LIST.A86",
+      "sha256": "b03e6d640f217ead4d3265e2137b20640aced111c3bbeb2cb490cc71caf8a4f9",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/MDISK.A86",
+      "sha256": "e0b175aa4b4b0859db7c9be290e1abaff9b5303df2fc8561525b906a5581311e",
+      "bytes": 2560
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/NP8087.A86",
+      "sha256": "6890a99d278ba0c69fc55fe33a7a23bfcb8c2177a1dea1d4392acce6f599deb0",
+      "bytes": 3584
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/PCMODE.A86",
+      "sha256": "d10f64a3515f0f48979a3ebd5e3e54b663c74e12afb1ff8b86fc9f5ae4a7875d",
+      "bytes": 4096
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/PIC.A86",
+      "sha256": "b7ac3d68be2a15502d064baf151375e1854ec066d8037eb9df1a13742d1386e1",
+      "bytes": 8192
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/POPF.A86",
+      "sha256": "719327143a4a611f85a2274d3cec3dc349d6cbe57e162fbc85366ba0416bf205",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/RESKEW.A86",
+      "sha256": "a2da104fe543f598f5f9ef755b05bfb1c33bd4738da49baa929339b810be4521",
+      "bytes": 5120
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/SERDATA.A86",
+      "sha256": "0cf916501460aac440a477c93a395d1112681f20f2227ab660c43f29b823c231",
+      "bytes": 13312
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/SERDATA.EQU",
+      "sha256": "cef4cccd48b5525633106967d1f7df858035194a1e9524f8ffe5924e42a1276d",
+      "bytes": 6144
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/SERIN.A86",
+      "sha256": "f1793bd4395a228ee75a15284ec4ec711d203a392904fb0d2b091d3f78df8ae0",
+      "bytes": 9728
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/SEROUT.A86",
+      "sha256": "ca8b64e4610b54c5f8ded1c81004b97ea16c2bc2063c2fc1dbc53dd715ba1c66",
+      "bytes": 11776
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/SERVAR.A86",
+      "sha256": "bfa88a91811bf33904132a943a9b8aca4677649f7a34a1882eb72c0fabb19d24",
+      "bytes": 8192
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/SSBOARD.EQU",
+      "sha256": "f0c98d8166cf5026bf6402e1c9e949c5669aad883bb00027536e1ee9d049a2c9",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/SSINT.A86",
+      "sha256": "49e68479b727d3769101a53c93277d12498e08392c46dec0de2bf9269e3d4700",
+      "bytes": 3072
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/STATLINE.A86",
+      "sha256": "8a4cf75c83145cfd8f2b36e5ec30d301353dec0515a81ffd7f14c157104a2952",
+      "bytes": 15360
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/SWITCH.A86",
+      "sha256": "719460190b2bc3d12647d369767dbf6850ef58b87c60e0add4711a9bc7831a12",
+      "bytes": 2560
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/SYSDAT.LIB",
+      "sha256": "8970e7d7c36656ec29de7f3160569d5cdae8771583d53403e65837a84c92dc8a",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/SYSTEM.LIB",
+      "sha256": "af8988277873e063636cb91a2215b5713d29cc406152a577aa1cc7b348433694",
+      "bytes": 2048
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/TICK.A86",
+      "sha256": "a984f3289e162370be85a361740b8427aadf42199f9c21a8b0d4ff24d5667464",
+      "bytes": 3072
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/U2651.EQU",
+      "sha256": "37851eae4d22c0bf591b57e5184dffcf540c7fddd0541a66824745f100b8c366",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/VCCB.A86",
+      "sha256": "efe171ae58d4bc65cd46744b9a6a038b9d73e9f510ecf68399a57197e0d66e10",
+      "bytes": 4096
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/VSCREEN.A86",
+      "sha256": "4b1e35498e4a8cfc5bebb59908527826b660e87aeff1172a8e7f5ac92cfecf9a",
+      "bytes": 30720
+    },
+    {
+      "source": "41SRC_06.IMG.DIR/VSCREEN.EQU",
+      "sha256": "253d3ee8a7089a0e29e2738ee41110c66daaa4a853833665b09969b2cf57e52e",
+      "bytes": 2048
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/AM86EXTR.BAS",
+      "sha256": "739c11474f5fa5fa0498a785f341759bc10335ad7ea5dcf28af77e73e3d7b732",
+      "bytes": 5120
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/ATTR.H",
+      "sha256": "c7afb7c81a59ffbb58e7a47bc4ad472892720ede6a872f509b4fe92e5a751d1e",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/ATTRCLAS.H",
+      "sha256": "eaab70841d625ddb810207eedc6481f5decefaeb374f9ebfae8023cfd9aac246",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/ATTRDEF.H",
+      "sha256": "4680b16e4904c2caf60ff2d70515b7294e0376170bbee05fb826212b42afcceb",
+      "bytes": 45568
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/BATCH.A86",
+      "sha256": "b7f3f2955eda08f06cbbb34cc3798bc89beaf5505567794e43e615d79b62c8ee",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/BATCH.SUB",
+      "sha256": "4983fb5158930050ea956335a3119cb82ee524e52dda90e77465c4d13376e10c",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/CARD905.BAS",
+      "sha256": "9050825ae9462b0501c0ca65b04cb002f29a2d2cf976bc06e4afb12a1a4fdb94",
+      "bytes": 36352
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/CARDFILE.SUB",
+      "sha256": "779e35a91860815ba33ca84c253f05797080ef9f0fbcc34fc8c4d7c07b7d8a04",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/CDUPMSGS.H",
+      "sha256": "53e56c3a17d623d0a337aae4975013d54ebd9e7d32373690f0aef725ae14adfe",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/CHDIR.A86",
+      "sha256": "ba89d0c7ae52a709db9f00150d9e4309ef5fececa19f9ac59b50a49a0d6711aa",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/CHDIR.SUB",
+      "sha256": "a9bdaefa55d8fc881ab570dfbc58142c832c128ed6f8a47228080e4157207987",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/CHSET.C",
+      "sha256": "06d85afae9e1f2904495f70d82cffc4c44fed836f9afb99d6bc077b003310ee2",
+      "bytes": 23040
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/CHSET.SUB",
+      "sha256": "6d4bd007d54f2f1950d7886b6db3b6ac7637af9b3aeacc99ff76524adf35ff10",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/CMEDFLD.C",
+      "sha256": "836ae76d8dd2e10bef873421b57098b3b18a0106a3b63e1186954ce4beb52e73",
+      "bytes": 2048
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/CMEDMAIN.C",
+      "sha256": "94ab94ee19b58d5033de0d3d79b9d02bc8287a0d6cf15ef611e377f57786b9e3",
+      "bytes": 13312
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/CMEDSCR.C",
+      "sha256": "4276268e90fdf2e664bd534384c4353bea007790c7abc3392608f98e8a14a8ef",
+      "bytes": 5632
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/COMPAQ.A86",
+      "sha256": "fdec90cb1135ab7b05d9d55238551c29f636ae315a3ab5d00cf433ddf39e5d14",
+      "bytes": 4096
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/COMPAQ.SUB",
+      "sha256": "2e5348c6cb3c5ef57f20f682f65f65177177ea84fbee933b8638b6dbf8d82e5e",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/COPY.BAT",
+      "sha256": "07d481e812e59ac04e5a7b781715e78337f5470ce6b6173bbe7007822e2283b3",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/COPYMENU.INP",
+      "sha256": "852a854380551acb2eacfa95812b7e639f32e08ad14c1dc622c49ee711119f2d",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/COPYMENU.SUB",
+      "sha256": "22889415394f8cf72c1919bf7dfadd190036745e634d12fadb681adcb463cb39",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/CPMFUNC.H",
+      "sha256": "36391ad38e54b546c0b4c1780b147b29a1fec76f589d683942887b4e0e1a186d",
+      "bytes": 8192
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/CPMIF.A86",
+      "sha256": "64aee3aaa7072d66ded2f097adc6534c9c4dc36524c441c9b6503f2cb0640c8c",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/D.A86",
+      "sha256": "534dae07ef0088f3018b202c44ff211de9a82684cb0f377b9f9cec624b76b992",
+      "bytes": 24576
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/DERROR.A86",
+      "sha256": "deb4cb7739af116e30b9eccd0177d443d78731d368285c0f746fe9183d3b32db",
+      "bytes": 4096
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/DMEXTR.BAS",
+      "sha256": "53a7f3a9a10f5d455a89b0a3a1f08b967168e1804b365705e172cc908921787b",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/FDRAW.A86",
+      "sha256": "f2fa6ac54ed40f0fb83584094e7e24cb81396e1275cfc65218d955d2e9984ec1",
+      "bytes": 3584
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/FKEYS.H",
+      "sha256": "a5f27b527d2c395c614cb657123e76eb29858ed1e4d00b8ab6b2bbaf244aa225",
+      "bytes": 2048
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/FUNCTION.C",
+      "sha256": "cd13003572a601b9abeb8c815d30f62180388178bc5140623fb950483b2a45fb",
+      "bytes": 10240
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/MAIN.C",
+      "sha256": "1dffcc1d5e9716eedffb9cba383f864ccd631b62bc36f2b8b970f9015fb57fa5",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/PATH.A86",
+      "sha256": "4b9aae4424e5b12d402529bcf426e2bad270857ccfc87fc2228eefa72cc71a9d",
+      "bytes": 10752
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/PCCOPY.A86",
+      "sha256": "41db7e8dcf64b867cba166c0e3abc3b270df9c1edc002b9dbd1251232c91325e",
+      "bytes": 31744
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/PRATTACH.A86",
+      "sha256": "c71aeff9039e11feb651b09ce41c54725e1aebd3cdc56ce6e7421c2388e91fbb",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/ROLOE.A86",
+      "sha256": "c5a62df7e09a00076e811e94fa96fcaad13eeddc5df8fb3b58686615ea6caeab",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/SETDM.A86",
+      "sha256": "2fc261756a7b51b77177cdd5e38b4dfaa9e02ea46824c5ff86f39f148d2c90a3",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/TMPDIR.LIB",
+      "sha256": "74374f01d1fd312cdc6d05520bb2326c1afde142492c0ba6c200c2e3f1db92d1",
+      "bytes": 41472
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/TMPMENU.LIB",
+      "sha256": "aed3e7be5396817e0c9ac86d3934779584e4f4a11bb41c6c1d4c8a91e5cdb8ed",
+      "bytes": 59904
+    },
+    {
+      "source": "41SRC_07.IMG.DIR/TMPMENUE.LIB",
+      "sha256": "560221cd92ee6d46eeb53d282165ecef2c7336b2178fd6146651ca16b7e2ed10",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/BOXFRAME.DAT",
+      "sha256": "9d2290bf18930c2200b9f072b2926a06c3e56acafe8c08ffe5d3adcec90434d5",
+      "bytes": 2560
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/CAPARM.H",
+      "sha256": "0d860137917cd217fa9c77361d42bc7ee9af1ffa7c526d4bcd08cee72a45d160",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/CHECKVER.A86",
+      "sha256": "465e263df7fcf4b45d1a67bb3c4bb052e3efa87129e825279a906ddb2cb96a5f",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/CMEDSCR1.C",
+      "sha256": "671f7cbe95a12834d4099fc4a5e51ff336a1b261e606f3af14c77042b77f3462",
+      "bytes": 13824
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/COMMON.C",
+      "sha256": "2893f680fe06ebea1ebdc6317c5e7a33c1295fc537beb4b19153840e8c2263fe",
+      "bytes": 8192
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/COMMON.EQU",
+      "sha256": "4ab70eec1a68ad2cb263160092f1716dcc618660cd8a9793315e603a2a7a814f",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/COMMON.H",
+      "sha256": "bb2081bae59f972062904a8f7a79cf4f86dcad702a07279a70883b9960d0205c",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/COPYRITE.DAT",
+      "sha256": "93a251a7146b477b50841124442b96f395745514bc9bd68e6f91aebf1885f3b6",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/DATE.BAT",
+      "sha256": "5f6644def6aba850e1189ac27dbffb19ae7e61949d4ea91e264877ab144d2584",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/DATE.DAT",
+      "sha256": "39a88815865572a53e6a2cbac6a3a43b72fb8529a06436513cb8f7b9ca9cf3bc",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/DOSBOOT.A86",
+      "sha256": "3936fda77a6ff4e940bd2873e38892a9d0857e67ab1534e108b661986d48b4b0",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/DREDIX.INP",
+      "sha256": "fa26e7ef45f1cd8604b05811b0ea2bbcf0e4b1a364a18a8bd94a99bca5d7b9a3",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/DREDIX.SUB",
+      "sha256": "1e080f3531529790c9bda963828be94e76b143672d07b5f4fb077187989bfdfa",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/DSKBOOT.A86",
+      "sha256": "dbf2be3411bf6c614a3d802b98c225951fb37d43f826325a81b0e1aba9623ea4",
+      "bytes": 10752
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/DSKMAINT.IN",
+      "sha256": "d10755c1da9060caaf77c99178a41c4b552fa57c039148d0683b53cf9d1d66ef",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/EBUF.C",
+      "sha256": "2dc61386156caeadd887d154fdcc1f6ef772332ab99d36c95794bfade483bf0d",
+      "bytes": 15360
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/EBUF.H",
+      "sha256": "d02269d1f66766b3f2cfd258039007b85b0720d19a8eb4198605b6e9605ead69",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/ECMDBLK.C",
+      "sha256": "0e01b378af237ab63b6cffbd69c0eb0096f1749e3e1ce03359095427620c5954",
+      "bytes": 5632
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/ECMDBLK.H",
+      "sha256": "becbc1f11a886d009cf80dfb5c33f6326a30e5ea25447d8d2e48415d5df008fb",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/ECMDGLB.C",
+      "sha256": "c3cd33394eae5e2279e858838b0ed794909fc5b2c4319979c8044836230e6dee",
+      "bytes": 7168
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/ECMDGLB.H",
+      "sha256": "8fb13f0628aefe1946a38b461a1aa9298b7a4f8dc371fb54715af5151d429c85",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/ECMDIO.C",
+      "sha256": "3224d9c53e3a1c7d79c1a593531c855698711d8dcb8e2def6bd7760c04964b47",
+      "bytes": 9728
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/ECMDIO.H",
+      "sha256": "ad8af219ed54b018d58bc376df6760de61e4b710ec6f69ff32ac4c700bce2177",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/ECMDSTA.C",
+      "sha256": "37718cb094e1437c4104519cab3be0db9a3a2bcd2ba103aa55c967575b532baf",
+      "bytes": 2560
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/ECMDSTA.H",
+      "sha256": "89f5c69b3cd689e04a405209d838bf5046c9167a866d485368b9142a9b9f1091",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/ECOMMON.H",
+      "sha256": "6decfcba7d368d1cc9aee90f44e6632dc58f76a896c4991bd13e85746d03ed1c",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/ED.C",
+      "sha256": "f162b120db6caba5ea654dbe78fe0e3965dae993d544ec04d0bac1c702918c09",
+      "bytes": 7168
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/EHELP.C",
+      "sha256": "9fc4fc53fa85420f416386b5ff7b22d27548db02af262ecba605af9ec3a140a5",
+      "bytes": 2048
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/EHELP.H",
+      "sha256": "567dead775bb8e4efba48caefe11b7d4f3abba67f1edadde75808c49de4684b0",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/EKEY.C",
+      "sha256": "345b699c7d8d347cb22b8d8ff86baec9d4d1b620f412f6dda307d0000cfb86fc",
+      "bytes": 3072
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/EKEY.H",
+      "sha256": "ab69fa413aef7afcc381bde8569612938e5cbb1910b0e485ba9001d7941d79f7",
+      "bytes": 2560
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/ELESSON.C",
+      "sha256": "04df69ecbdf380d8350fd9ed3a346abdc3ba91c29d40104f2d4830e94971d31f",
+      "bytes": 2560
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/ELESSON.H",
+      "sha256": "dd716b00d594d707195bd6c576e5188d91e9d8a3d64b664e2a299e52d6edfd9d",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/EMEM.C",
+      "sha256": "fa46bbf0c8320d6a7ce8e16cf346f0c132251cc6807b009444a660f09f4f5d27",
+      "bytes": 6656
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/EMEM.H",
+      "sha256": "7d729089087d7b5582856d240f491c4c253ff96c26949325ee6be3ccc5af7290",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/EPAT.C",
+      "sha256": "f3c3a806c2753daa5efc76a39fc7e10a17b6920341773e93fde9dcc7772a4a13",
+      "bytes": 5632
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/EPAT.H",
+      "sha256": "8fa2ca118d1c5611bb89b38b404f7465e4b792c88327d34f248134c71a1b5089",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/EWDV.C",
+      "sha256": "463e75b833eb4ee7e1cf676e35bcd70a404c620a98f55074f86d3017516fb223",
+      "bytes": 3584
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/EWIN.H",
+      "sha256": "d15b21d407824b32c512d1a27b734c5784d0c8869dcb91aff106c51efdd1bd36",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/EWINDEF.H",
+      "sha256": "29bc1c791f76f5219c83237227880b466113a517cb5a7cae329ccf5ae8f6fa29",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/EWV.C",
+      "sha256": "4aae875e2ed50b953076fa8657ec96f97cd34e49b4214da3e084c2825549a3e9",
+      "bytes": 16384
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/IOSUBS.C",
+      "sha256": "d1801e002d4eaee563aa37c8b62de1b7d552b2282d252a3faaa4eee5d5734514",
+      "bytes": 20992
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/IOSUBS.H",
+      "sha256": "c021ac1a98ce5fd17e78470fb63297acbaf5cb3ee238668d3bed7d39f4e86c1b",
+      "bytes": 2048
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/LBDOS3.A86",
+      "sha256": "e6179c0e283eefa10fb2b53e514cf4a41bae70113fd47dd420bdef5895878ffa",
+      "bytes": 40448
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/LBIOS.A86",
+      "sha256": "dc3317b0d053f61c77bc9867e5cdf8a129937deff49f06cf0a0e5f7d7f283ac0",
+      "bytes": 41472
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/LPROG.A86",
+      "sha256": "5aa3866e2d67dd59685625ce44c17d79de21f50e1d29a56e368ca864b6e76c46",
+      "bytes": 7168
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/MEDATTR.C",
+      "sha256": "ff702cdfd3c3ef896723043081298ae9019a0111b9b73be8569abf2280d21b7d",
+      "bytes": 2048
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/MEDATTR.H",
+      "sha256": "1c9727029fda404167d8e8bf8232893ac777ba588d2759c1e5bf4946f866b41c",
+      "bytes": 6656
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/MENU.H",
+      "sha256": "ebd35eafa13020269748bd4a2986c3fb644edd0776ab82a25ef411b45c821559",
+      "bytes": 2048
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/MENUSUB.C",
+      "sha256": "b4241857867358b3bf3740d2e78fe3425c7d839ea2fcfe28a5934c2bc4f81cca",
+      "bytes": 19968
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/PCDATE.A86",
+      "sha256": "b8f07e62515c0f6d67170404a4d48c6f6c33282ebc35b0ca8e220671bd9eb5b7",
+      "bytes": 9728
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/SCRSUBS.C",
+      "sha256": "b7d151faba8f2981439a804a0b5a23be1526092092f22d1112123f07a1915e9b",
+      "bytes": 3072
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/SCRSUBS.H",
+      "sha256": "91b7e60fefced5900fd9488d06552464581934071ca15bba06d22a0ed05b6eeb",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/TCOPY.A86",
+      "sha256": "7020cec277590461cbab561f242130a5e277bed654f7d3dc3c4c149428ada1cf",
+      "bytes": 7168
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/UTIL.A86",
+      "sha256": "33105f346b52cc05dc41c583388ee8494aa8881d791cec68852241d9d549394a",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/VD.C",
+      "sha256": "e0c409aa33fcdcfe6354320e4db65fe7fb380b51b4e972fa6a645ea7849999b8",
+      "bytes": 13824
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/VD.H",
+      "sha256": "4ed9dcd20a0c131dadbbca6bcc2c65e9ebf093c6bf66d00ed3f94ad1957666e6",
+      "bytes": 3072
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/VK.C",
+      "sha256": "11e8a723afa99e3087f69ddde51c340f9b4a6d9f8786c0588803ce8b37df0133",
+      "bytes": 2048
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/WMCA.A86",
+      "sha256": "3d2a624c4cc2539e56a0542407ca23ff8618c63fe05620f8b42e282165d4fbc2",
+      "bytes": 5632
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/WMSUBS.C",
+      "sha256": "9271d01a99fe15a6aefe3f951abedd6536d51862e0ea57512c1976937f21f094",
+      "bytes": 5120
+    },
+    {
+      "source": "41SRC_08.IMG.DIR/WWCALL.A86",
+      "sha256": "39870cb690627aa80c26a42898b237932091afdceeda7942ccd570af9417968a",
+      "bytes": 5120
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/COPYRT.LIT",
+      "sha256": "eca873c32518da7505476d0db64e413cd339601c0ec8c4c3dbc169e3856c2f86",
+      "bytes": 128
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/CPMCALL.H",
+      "sha256": "3678cb6fc70cacf50466cec12aa2b05e3013cc42fc537f935955b9d6f2ea2eea",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/DISPLAY.A86",
+      "sha256": "20b37b7117c96a4f7db67a899e2b7fbe4bb7b90dcda35cf6d144330a43f71b57",
+      "bytes": 19968
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/DSKMAINT.SUB",
+      "sha256": "31c6d7ecdca011e85d8801aa97332c52d209eeada3b24121aeba6f5e5033fb3e",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/DSP.C",
+      "sha256": "1c52874038b8af8a02f485d9ac18ece1dbad8f020cd28e818b137290e11f868d",
+      "bytes": 12800
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/DSP.SUB",
+      "sha256": "9acd7ad2117fd6159f5d3dc5d3123519a012435898821ef7592af26b11abb493",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/DSPM.C",
+      "sha256": "176e6df92ace03780fd94de8923bb1adf000b01cdd6b79dac28922dded6be282",
+      "bytes": 2560
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/EDITMENU.INP",
+      "sha256": "df0d4aa8beb680cf8e7370edf9794a4140b260ea105b5af962a77659e2588f41",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/EDITMENU.SUB",
+      "sha256": "314e464f8505d750639dcc4d2e1961c13508d18e292eaf38f8b4c18a39f28129",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/EDUPMSGS.H",
+      "sha256": "b781191d0f657b90ac56667f40db4128dae61c91799fb79b2f877da81e3cfb81",
+      "bytes": 6144
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/ERAQ.PLM",
+      "sha256": "c0632a3b7c99b1d07aa693ad4aec4d51da1a049cbf4532c3e114ca5acb3fbcf2",
+      "bytes": 11008
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/ERAQ.SUB",
+      "sha256": "463d25f7a77ef5b8a478f76b0cb9080d7d47c093841927929271f69935d16d18",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/ERASE.BAT",
+      "sha256": "2cea8fc02fdaf69b88d716cab6b1d2e2eaf60c4cc88e3c1c2bcd7d5a08d7f11d",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/FUNC1.A86",
+      "sha256": "4b91d0a4cc3af0a60db8a6af131a53018137aa7b41d0d1a864ff62949d0dea6d",
+      "bytes": 5120
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/FUNC10.A86",
+      "sha256": "6b4b3fb7468f6c58766c465ec44ebd8f769c0816724ef15f8a1724c96af1bfb1",
+      "bytes": 8704
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/FUNC3.A86",
+      "sha256": "380f25e92943ba5e8f19030b6562919aee247a9f39a768f258534738eed6e92a",
+      "bytes": 17920
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/FUNCMEN1.DAT",
+      "sha256": "7d2fa1846fd88ff088799dd74ee080a877f1ba78a7137d204b0067593e01c272",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/HELP1.A86",
+      "sha256": "049854a65d3987a37ccf7ee2a89838afdfc2affddb6d38f0842bbe8b9619eaf1",
+      "bytes": 2560
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/HELP2.PLM",
+      "sha256": "880887d03d3e3f9be0f431ce65ff5c8d91be54fe8f844331811b4be70989088e",
+      "bytes": 27776
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/MAINMENU.DAT",
+      "sha256": "a90ff21460f7bcbdee52ce76a2cda0cc48e288ff51b96e5c28ae7944241390ba",
+      "bytes": 1536
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/MEDFLD.C",
+      "sha256": "924cebbec8d713c2638a75e2aea5b2c5e5affb3e26ffa2350ae3bc47356e8f5e",
+      "bytes": 5632
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/MEDIA.A86",
+      "sha256": "2138c7639fbb2b5dd2b6d50e59717c992890e1544ebbad7db0153bdfc97159c4",
+      "bytes": 2048
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/MEDMAIN.C",
+      "sha256": "994b406083f9b9aca80f806f3eeefed609eb5e6a415f1d8e0dcb023c576c69a1",
+      "bytes": 11776
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/MEDSCR.C",
+      "sha256": "d559b6199ba88b404e877f61cc9ded13fd81995676105b86c5658133d1eed1ef",
+      "bytes": 16896
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/MEDSCR1.C",
+      "sha256": "6c539f177d54032155fabb1c2fa5733082e9e7df1fd570625155038494a6e5be",
+      "bytes": 19456
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/MEDSCR2.C",
+      "sha256": "7506b3e916ad30282ce7e28e387c2510aac81e430972466e098ab9afc8f0f431",
+      "bytes": 24064
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/MEDSCR3.C",
+      "sha256": "0ba3ba8c4b55f92d1648d00450c406ca6b2d113914990b3256adf039043dc099",
+      "bytes": 10240
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/MEDSCR4.C",
+      "sha256": "3ed3855c2babd7ef1cf2a698cb1e722c0d8b807eb157cc5ced5b4d77469cd00b",
+      "bytes": 7168
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/MENUIO.A86",
+      "sha256": "24a62cc6a340d7f7a03b31543a1d7bec8d1a0eb14dcf4ac2ed64ba894760159b",
+      "bytes": 19968
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/PCCRT.A86",
+      "sha256": "40bca54ecff6029a8d08767281be1ee788f92213524ce89eb6198ef7bb0c4b2e",
+      "bytes": 3072
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/PCERASE.A86",
+      "sha256": "7684867606fa3e4aaeab8f5f4d966bde2c078b169e9ea34f2a46733911a74318",
+      "bytes": 6144
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/SCD3.A86",
+      "sha256": "1682f21013f560c3d472c86e3ff92db7ca9ac522aff16189a25844031c6bd5b8",
+      "bytes": 2048
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/SCREEN.A86",
+      "sha256": "0f693ba3987c72402c1093b21cd3407790f1792115e62f6af87044949c8a6c6b",
+      "bytes": 8192
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/SERCHCK.A86",
+      "sha256": "ccd9857337cdc60fd8810117bc13997118a08ec4fb55feef2789a134c62edba3",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/SPLDEF.H",
+      "sha256": "38497681d4e4657e63e0192c7b0ef125e1937d4db40ed18f900224191173456b",
+      "bytes": 5120
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/SQUIDDM1.A86",
+      "sha256": "cc79f530f2dad02255661ef1964535a41069cf2fd3dd3b12b661a86169a714db",
+      "bytes": 6144
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/SQUIDDM2.A86",
+      "sha256": "a5194482d263203ea8f1644f79682d85859894de9cea0285cc18d39b343e3003",
+      "bytes": 32256
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/SQUIDDM3.A86",
+      "sha256": "d7107957ef24358b5cb83cc312dfdacfcb1b49c153b5bbd8227067c03a256d6e",
+      "bytes": 26112
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/SYSTEM.A86",
+      "sha256": "ac44c66f9f7c3eeee5a2836785b1a191fded926e3b9a4a72d67fdb8672e2810d",
+      "bytes": 6144
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/UTLASM.A86",
+      "sha256": "a7239878b80353e879b68029aad8017f63f0fa5b682dd53b3457b38b6166a2a3",
+      "bytes": 3584
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/VAXCMD.LIT",
+      "sha256": "ef6013ae6c5826ff78f996d595654cdb30c178a6e26cf4c11700251777c1b633",
+      "bytes": 768
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/VERMPM.LIT",
+      "sha256": "292f2e3af580df8454969aafed0fd02652ed208ee17b53696b36ef8005de7320",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_09.IMG.DIR/WWCALLM.A86",
+      "sha256": "5d07f71da6e9deb7ed2d2667ea10f4d9050b7f7a19fa5dcd586ad7cf58e48fc7",
+      "bytes": 5632
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/COMLIT.LIT",
+      "sha256": "105eac9955d513507b16985830c1d8125e70ada82e759663be1db19721fc85e5",
+      "bytes": 640
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/CPMBOOT2.A86",
+      "sha256": "e197870728712b16966ce0e221424c702913e98b026b6d4f751f6d616a76f290",
+      "bytes": 5632
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/CPMBOOT3.A86",
+      "sha256": "b366e08404859862e11a759a5251516302474776f1f0146c4fe136f321de04c6",
+      "bytes": 27136
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/DPB.LIT",
+      "sha256": "ec1affc531820a7fd9c500a29dd8f2ed62c8400012f3adba95075f298669c85c",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/FCB.LIT",
+      "sha256": "001c06530cc5e11f500682d3f3078662044973620a59f2c8f9009ff9191b662c",
+      "bytes": 1408
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/FINFO.LIT",
+      "sha256": "cce302594fbaf1ddc894c4c3d1780ac1d521f1ce7c6d03addb37405a2389412a",
+      "bytes": 640
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/FORMAT.LIT",
+      "sha256": "2adfa7c8408c401c2e37b31322d54128328c625ad3c6707ab98f5da340a5194e",
+      "bytes": 128
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/FUNC2.A86",
+      "sha256": "5d03fd6fee0ccee2ff4cf90d15c213b8c20eb0f898f6b29e0b90550552301f76",
+      "bytes": 36864
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/FUNCMEN2.DAT",
+      "sha256": "0bed2649d17892b745279f5933d768b2d14fb9ddc54a25328bf10a9eb7f92330",
+      "bytes": 2048
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/FUNCMEN3.DAT",
+      "sha256": "7312f19bd968a61abfbb69ba83759816b2876cdbd3b32486a17ad4bcb9062df5",
+      "bytes": 2560
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/FUNCTION.SUB",
+      "sha256": "0fcc8db590e6ff925195ae3a146d28c8466f211a0f9ad1c6e2f876b325363787",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/GENLDR.PLM",
+      "sha256": "2041d23a50fdc53ad51eaa388520482030ed17b2df7a91ce6eace2b0845c3354",
+      "bytes": 22016
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/GENLDR.SUB",
+      "sha256": "052a377f367fbcbf9d1f3267fb404f5b2f4fc45759b701e9a96edbd8a613a828",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/GENMSG.A86",
+      "sha256": "e0d43c46b780bc31bcb256c3423dd561b2edffdea8072983c3602a8e0c82ca2f",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/H70.A86",
+      "sha256": "c65ec801db84ddd3e58da4021c0756fa5e945fe01c15f89cb9930627d4eab9e7",
+      "bytes": 10240
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/HDBOOT.LIB",
+      "sha256": "97e22d59fce46e2eaf6813b28fefe34d67c8d7f221bc5155287c6930123cbba2",
+      "bytes": 8704
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/HDBUFF.LIB",
+      "sha256": "37e7f2ddb45932c1e5c918e87d5e08624c8579b8aa906ac79fc4a790d8c51ea6",
+      "bytes": 5632
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/HDCPMLIB.LIB",
+      "sha256": "b7093ad80568d9ec4f78fb8e9e81497323b7fafc8c827a0c1c5e48291f038921",
+      "bytes": 19456
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/HDDEF1.LIB",
+      "sha256": "3b7a9d9749a020257b881a2b7b48591b2896233e027a99e29632594224f6e452",
+      "bytes": 3584
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/HDDEF2.LIB",
+      "sha256": "9cc9dcc146b7c2ad8b4e96862b30ffcf6b50ac0e2dbcc76e1e05f1debe1d67eb",
+      "bytes": 4096
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/HDDOSLIB.LIB",
+      "sha256": "92b52f3c2a870dbf35e3f1b305b0718dd2634c0f0007084eb7df669a26166073",
+      "bytes": 32768
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/HDDSEG1.LIB",
+      "sha256": "64689cdb4dfdddb8dfee58cc9faadf88593a019ca45830fe99679214208d6bf6",
+      "bytes": 3072
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/HDDSEG2.LIB",
+      "sha256": "c3c38d4588074f59b8bfc7b1f7b4116bcb1c7cf1db6ac1f2179814c03c3f876b",
+      "bytes": 4096
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/HDESEG.LIB",
+      "sha256": "994dd1b790f7568c0de07a27ef8f7242498d24f523b5d0644ef67d90a7f946a6",
+      "bytes": 2048
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/HDISKIO.LIB",
+      "sha256": "bc3d086a3259f689e629225d4fcc04a1abc441295c6d6038c5cbec1a651ebe94",
+      "bytes": 15360
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/HDLOGIN.LIB",
+      "sha256": "b7de50ba9563d898953b721f2fd24cda2e1d5a73322d4ae19fdb4df7ea1fa921",
+      "bytes": 15360
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/HDMAIN.LIB",
+      "sha256": "1cf535b606a3709cbf550a69a398a1746bdfa80a1d96bbbd5c311fb823335851",
+      "bytes": 16896
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/HDMAINT.SUB",
+      "sha256": "fb1513ea7f539367f3c4ab86f730353712f962f6cbddeb21cd1e990d2b2e1a24",
+      "bytes": 2048
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/HDOPTION.LIB",
+      "sha256": "4df567d2d4cc217fa626fbb77d0b6310c007022fb8d662038e825c7260620117",
+      "bytes": 18432
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/HDPMAINT.LIB",
+      "sha256": "e09c4bdc7cecb3518bc69bf56476dbed73c56d444fb65ee3a062b23e3b9b7734",
+      "bytes": 28672
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/HDPTUTIL.LIB",
+      "sha256": "7b5721fa0c5924bca161a9a4bc1ffc063729f7e4a5ad0ea5f0bf8f0df95657e8",
+      "bytes": 7168
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/HDTEXT.LIB",
+      "sha256": "8ced541de8329253519890a7748185ee073d7a9b9b017cccf1399aec71eb1a14",
+      "bytes": 13824
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/HDUTIL1.LIB",
+      "sha256": "84e4440651cf43dd37cdfe578b978ec072d0df456987bf77ce4c31fce049a3e0",
+      "bytes": 8192
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/HDVERIFY.LIB",
+      "sha256": "8db1997991772910e0947511713dbd7a67cbd19deb9e1e421562ba15891254b7",
+      "bytes": 11776
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/HDXTDEFS.LIB",
+      "sha256": "fe1bf32c4cad578b99dae5c73bbea4470603eb8af1b3dd31603001befd4dfb41",
+      "bytes": 4096
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/HSETUP.A86",
+      "sha256": "34c7afd4747470328540573bfc7c05ce6143954161037bca13f60f8cdec4e535",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/LABEL.A86",
+      "sha256": "a39ea8b123cc33309a79cac75212490c188d04343886bd29f5ee27244e48a4fe",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/LDRBUF.PLM",
+      "sha256": "c721c62d0bfaac881b72ff9d3b00cfd09734903c8c49c3e43ea61e8e6628ccae",
+      "bytes": 5504
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/SCAN.LIT",
+      "sha256": "603924bd49d32797522a6f7dbb62e19a4e385e0ff3eb8fdb9631e056e6764e72",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/SEARCH.LIT",
+      "sha256": "f17c86d9add04ca3e0ab8c4fd393dedbfc1eecf112559226cb94b49f778f8f7b",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/VERS.LIT",
+      "sha256": "66cbe752332d2b5749fde407cb3d15f42d11c5ea0e31770eeb73f08acf9693e0",
+      "bytes": 256
+    },
+    {
+      "source": "41SRC_10.IMG.DIR/XFCB.LIT",
+      "sha256": "89be737b2831c414330a2c631b1838f2f3f9a428846724f1b0b3bb8dfbda5d15",
+      "bytes": 1152
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/DIOMOD.A86",
+      "sha256": "79571a24577c3fcfba8674b698819d96235015aa023baa54130f445670c0ea27",
+      "bytes": 24576
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/DIOMOD.DCL",
+      "sha256": "82a96e5b03147c900e299c1ac46d0d902eaf705ca250cb872b232457dab73350",
+      "bytes": 2560
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/HELP.SUB",
+      "sha256": "e98585618c6b8fa26603775bd8f010ab5b10bba3f8cf15f77872c848ba8ebf6d",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/HELP3.PLM",
+      "sha256": "48538b6868a4be24481dd93795b63e12bae32c3a284e67f25010e2b661b054c1",
+      "bytes": 35328
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/INITDIR.PLI",
+      "sha256": "ef814927357cabd8e5dc5425fedb728d096144cb8d9275a1ffb4178806fb5bfa",
+      "bytes": 44544
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/INITDIR.SUB",
+      "sha256": "2f79cb4d393e4d0a6eebc78f66476543568ae5110a84528e3e1b659ff5b233e6",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/INITDIRA.A86",
+      "sha256": "bcd9d721da3ff3bc4ee6d7370ba262ca6e82f98a86444f47e5fd1924d81d8eb7",
+      "bytes": 12288
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/INITDIRA.DCL",
+      "sha256": "2f9239a5b9bb095325d665ba6a81972c33afa3dbb341d645f427b8ff65363868",
+      "bytes": 1024
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/INPOUT.A86",
+      "sha256": "254128b63b36cd1116bff40e4f886a1498c52b146cc973db8a0ec0321384232f",
+      "bytes": 768
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/LOAD6300.A86",
+      "sha256": "19d216c1244ee58ee0d973828f044e6aceb6654f692afc124d075614ba14ce18",
+      "bytes": 21504
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/LOAD6300.SUB",
+      "sha256": "66753e3462fbae080b59c816a53c878c73c8301d77c1b47923dd3f1d41b25590",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/LOADCCPM.A86",
+      "sha256": "34c69e496c0eb73ef74f95fc3a714324ff66a14a43ded63bcdd5927aa4c61524",
+      "bytes": 21504
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/LOADCCPM.SUB",
+      "sha256": "e2db2f18efed2fe920ccf5c440dab65e0890bc7341f47dcb6172b557e6776341",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/MENUBOL.DEF",
+      "sha256": "ab4835ea2addfef9afae5b635e6a6a65a526944f5b7d6992a58e8d6592da880c",
+      "bytes": 10752
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/MENUBOL.LIB",
+      "sha256": "99f20739ee0e139e9fc99241f6757eacf780093670d379c247db808431219236",
+      "bytes": 25088
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/MKDIR.A86",
+      "sha256": "5185c50a9a8dd59aa2318916815cf470a7da70849bef377aef3808064a65f7cf",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/MKDIR.SUB",
+      "sha256": "b8d0722346209f0e329706ca65735082e3b2b86a07ef9e33902580be6d25ac7e",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/PATH.BAT",
+      "sha256": "5f89272e6e8f5d81a40db565d91c27e9afe97907babf047a6c9564311b776bcd",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/PATHX.A86",
+      "sha256": "c574c2042065477e30a5f8ede9ec3ab0babb480c25f9e50348d40d1b05a56795",
+      "bytes": 7680
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/PCBOOT1.A86",
+      "sha256": "7fa60461e3741d8119c9caa2322e946ec32af7d77567a727904a5cddc1879ab4",
+      "bytes": 5120
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/PCBOOT2.A86",
+      "sha256": "272c8971037a31c6d83137d4e0ecef60120e3109bb9b37ca78d46cdcbf3a889a",
+      "bytes": 8704
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/PCBOOT3.A86",
+      "sha256": "e8aa9bb25184e064bcbbe0846bb628dc66330fde5f509e3562b94ea5015c3187",
+      "bytes": 26624
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/PIP.PLM",
+      "sha256": "f4ff6c65c589f93993db0cf341c5a9e9e1e158b10cfb8c191b7aaf13d2ab740c",
+      "bytes": 61696
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/PIP.SUB",
+      "sha256": "d6a2044d068ee64b2ab4dd1ee3d6cba9591df740887f0c907c539058ab0c8787",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/PRINTMGR.SUB",
+      "sha256": "2ab8880faa0150e7138ad6b0f1761ad9283e45ddc21d48a3a74d62ba87cd2728",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/REDOS.SUB",
+      "sha256": "5200406acaee0af1bcf809f7c2200340bf680fe093dd54225d0ddc2cb0c2ec66",
+      "bytes": 512
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/SNCHECK.C",
+      "sha256": "2e42c502c182a5c0684659395f0a943db9fb3b43e114334dd0ae9416d8e175e3",
+      "bytes": 3584
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/SPOOL.C",
+      "sha256": "f7eb505d380382442e1213a0b5bf1d1e297f93e64673e9af8f93c595c8ca3b25",
+      "bytes": 25600
+    },
+    {
+      "source": "41SRC_11.IMG.DIR/SPOOLM.C",
+      "sha256": "4956ccf84a2d672537ca205f3f0bc101ae0841e7ae271b758e2867686fa850a8",
+      "bytes": 7168
+    }
+  ],
+  "copies": [
+    {
+      "path": "kernel/con/pcxios.sub",
+      "origin": "41SRC_05.IMG.DIR/PCXIOS.SUB",
+      "sha256": "c741f3dadf1a7792463143172525feb2a5379a335979a4c3a8c6660fd7fff803"
+    },
+    {
+      "path": "kernel/con/sysdat.sub",
+      "origin": "41SRC_01.IMG.DIR/SYSDAT.SUB",
+      "sha256": "9ee27fce8926ba33d84dbae5a1b55dc3531f18ca87ae6aca2df1c05a43b92e1c"
+    },
+    {
+      "path": "kernel/con/mem.sub",
+      "origin": "41SRC_01.IMG.DIR/MEM.SUB",
+      "sha256": "74c4a2a3bfcecff501347fc4f68d3560555e0cfe07a905723fe508e24ee0bd75"
+    },
+    {
+      "path": "kernel/con/cio.sub",
+      "origin": "41SRC_01.IMG.DIR/CIO.SUB",
+      "sha256": "52855f6836ed1f9b8c8ab3d51ae1ff904c17851e8bca953f9e2de0702f9dc1c0"
+    },
+    {
+      "path": "kernel/con/rtm.sub",
+      "origin": "41SRC_01.IMG.DIR/RTM.SUB",
+      "sha256": "108bdc4897c53dcd3f86c157f425735e515d04f686ff83b8ba9923012cb9f93c"
+    },
+    {
+      "path": "kernel/con/sup.sub",
+      "origin": "41SRC_01.IMG.DIR/SUP.SUB",
+      "sha256": "a9ad1bcd1119e41ded36268c3cf4619080ab5adb43c84ef3be42990e151a87c4"
+    },
+    {
+      "path": "kernel/con/bdos.sub",
+      "origin": "41SRC_02.IMG.DIR/BDOS.SUB",
+      "sha256": "38f1e2c66ef25a4380af3c208067cf07265f9420cbef23e85b7a5ad02113aee7"
+    },
+    {
+      "path": "kernel/con/squid.a86",
+      "origin": "41SRC_05.IMG.DIR/SQUID.A86",
+      "sha256": "8b960f49ac26b3f54f37faebea3e7d29ec990f2404fe9598f7f79ca40edec6a4"
+    },
+    {
+      "path": "kernel/con/xinit.lib",
+      "origin": "41SRC_05.IMG.DIR/XINIT.LIB",
+      "sha256": "cf04ecaf440ada29fcdda1e4a3c208816f299330079dbd6dd3ce03ddb2a74603"
+    },
+    {
+      "path": "kernel/con/xhard.lib",
+      "origin": "41SRC_05.IMG.DIR/XHARD.LIB",
+      "sha256": "468025f22895a369b4bd379e003dea04a6f334833c101b3d9cb1c188740bf543"
+    },
+    {
+      "path": "kernel/con/xfloppy.lib",
+      "origin": "41SRC_05.IMG.DIR/XFLOPPY.LIB",
+      "sha256": "12328722ced6c177e6ebf6f2e7078965f37618e227e6c1694f49ef5223aca1da"
+    },
+    {
+      "path": "kernel/con/xcon2.lib",
+      "origin": "41SRC_05.IMG.DIR/XCON2.LIB",
+      "sha256": "d0259a22962a8a9454281ded07b2348630776c910b7ba7f2d558f3a9cdae41c5"
+    },
+    {
+      "path": "kernel/con/xcon1.lib",
+      "origin": "41SRC_05.IMG.DIR/XCON1.LIB",
+      "sha256": "20ba702ef48845cbec4a0b45697549df671dea739ed2ed8af37c1613b62dbdc6"
+    },
+    {
+      "path": "kernel/con/xaux.lib",
+      "origin": "41SRC_05.IMG.DIR/XAUX.LIB",
+      "sha256": "1152ac45d99549e151a9d56d6e17647789c6f4a20f25c12e0daeb088ac9e9309"
+    },
+    {
+      "path": "kernel/con/xchar.lib",
+      "origin": "41SRC_05.IMG.DIR/XCHAR.LIB",
+      "sha256": "c94d23e632e3275104ab2831877f32c173c0e41fb4a04c6f48a2beb08ac02d89"
+    },
+    {
+      "path": "kernel/con/xbegin.lib",
+      "origin": "41SRC_05.IMG.DIR/XBEGIN.LIB",
+      "sha256": "52e2eab2f8f9dc3bfc8fbf37c7f99cdfefbe8af3f2796a3013d3a12d69df9e69"
+    },
+    {
+      "path": "kernel/con/black.a86",
+      "origin": "41SRC_02.IMG.DIR/BLACK.A86",
+      "sha256": "dfe07ef63cf0a06b582193fc1238d7c8a7ccf30f02621729597a4127d4e10edf"
+    },
+    {
+      "path": "kernel/con/modfunc.def",
+      "origin": "41SRC_01.IMG.DIR/MODFUNC.DEF",
+      "sha256": "be16d6d04d5a8b60e68e0950730c79c19884e875936bd617769c1ed3f7bc8574"
+    },
+    {
+      "path": "kernel/con/popf286.mac",
+      "origin": "41SRC_01.IMG.DIR/POPF286.MAC",
+      "sha256": "71f062a677e88e303741bf2be9fbbbf6656874ecb9b43301d49690cc4f2a8282"
+    },
+    {
+      "path": "kernel/con/pd.def",
+      "origin": "41SRC_01.IMG.DIR/PD.DEF",
+      "sha256": "05d88aad3224488334a3b200c1ea4776b920a629fc0425b1374211ef4a2493dc"
+    },
+    {
+      "path": "kernel/con/pcbdos.a86",
+      "origin": "41SRC_02.IMG.DIR/PCBDOS.A86",
+      "sha256": "cd4e92d0d8e7855cbadea25f870069ad37ed68da33ffa928777a1625942d72ab"
+    },
+    {
+      "path": "kernel/con/data.bdo",
+      "origin": "41SRC_01.IMG.DIR/DATA.BDO",
+      "sha256": "fdcbd0a3622fd759bbabd5c5396107ee126536eb1a69892c828e168aa4c0064b"
+    },
+    {
+      "path": "kernel/con/sysdat.bdo",
+      "origin": "41SRC_02.IMG.DIR/SYSDAT.BDO",
+      "sha256": "3a85f3a19e0cb891992f45e16ac40dd3231b1e48a882c892ad4ec6cd2255e1bf"
+    },
+    {
+      "path": "kernel/con/uda.fmt",
+      "origin": "41SRC_01.IMG.DIR/UDA.FMT",
+      "sha256": "f0b74c5e42d9a4ae6ae91ad8fbec5f0f21d6e3f678409b25092ba9a539090723"
+    },
+    {
+      "path": "kernel/con/patch.cod",
+      "origin": "41SRC_01.IMG.DIR/PATCH.COD",
+      "sha256": "aa0c0eec02995b2480f02558c7e6b2f11496206b14fa874e919982b11b5de2a8"
+    },
+    {
+      "path": "kernel/con/const.bdo",
+      "origin": "41SRC_02.IMG.DIR/CONST.BDO",
+      "sha256": "b04dceb0fdc504731267835c5a6f6f444de805b3a8e690aebcb7f5b761fa604c"
+    },
+    {
+      "path": "kernel/con/file5.bdo",
+      "origin": "41SRC_02.IMG.DIR/FILE5.BDO",
+      "sha256": "fda8cd338dee12c67073fed9eb67a694c312099fd530bd296ef39f35d078adc5"
+    },
+    {
+      "path": "kernel/con/file4.bdo",
+      "origin": "41SRC_02.IMG.DIR/FILE4.BDO",
+      "sha256": "16c71a4767c01f5c032d7d3d970657add1a3872f8d58477f5dfbfbc094c0fe1b"
+    },
+    {
+      "path": "kernel/con/file3.bdo",
+      "origin": "41SRC_02.IMG.DIR/FILE3.BDO",
+      "sha256": "a5ce8bb32cae4e69dd946eb9a999e728e5b2dd328d32fafc6f7e4f369199f809"
+    },
+    {
+      "path": "kernel/con/file2.bdo",
+      "origin": "41SRC_02.IMG.DIR/FILE2.BDO",
+      "sha256": "5aedc2d46d7936db0c62397a91886cf70ba7935be6678e9d94b9f4b4925af77e"
+    },
+    {
+      "path": "kernel/con/file1.bdo",
+      "origin": "41SRC_02.IMG.DIR/FILE1.BDO",
+      "sha256": "fcd6fd33ebca5e0f3fb616e3aa80feeddc7119f66bad25f0e6d5d3fe70b3ce18"
+    },
+    {
+      "path": "kernel/con/bdosif.bdo",
+      "origin": "41SRC_02.IMG.DIR/BDOSIF.BDO",
+      "sha256": "d6d5d345e0ebcf38c70be9ac113beea13abb7bda5aeef403286053b2354edd3e"
+    },
+    {
+      "path": "kernel/con/start.cod",
+      "origin": "41SRC_01.IMG.DIR/START.COD",
+      "sha256": "4625fd83f32fa1dec76ea5b1877292ac9af7b0dbe46a223fddda9f2045b50167"
+    },
+    {
+      "path": "kernel/con/xioscb.def",
+      "origin": "41SRC_01.IMG.DIR/XIOSCB.DEF",
+      "sha256": "aac5dd3bc4271731dc4aa1c3bb07bd4f52dd494140d73f4fc56abbb3e601e25c"
+    },
+    {
+      "path": "kernel/con/qd.def",
+      "origin": "41SRC_01.IMG.DIR/QD.DEF",
+      "sha256": "5c3aee4b2b8c64e6940d0af8353a42d4014718daf11a9476648b2afeed494bdf"
+    },
+    {
+      "path": "kernel/con/system.dat",
+      "origin": "41SRC_02.IMG.DIR/SYSTEM.DAT",
+      "sha256": "0de05aa77b3126bca3d3b1a066c9421b7deb30968599c554a8fb8cbb7d692a83"
+    },
+    {
+      "path": "kernel/con/equ.bdo",
+      "origin": "41SRC_02.IMG.DIR/EQU.BDO",
+      "sha256": "d0072ed721a52aed4f338eef542f1972d086c7e8e9ce2860fbdf01cbe2db29ed"
+    },
+    {
+      "path": "kernel/con/cpyright.def",
+      "origin": "41SRC_01.IMG.DIR/CPYRIGHT.DEF",
+      "sha256": "1ca6a0b0ed9cbb09c4b91f293218d55c05b4973f8feefb62b69d9a5e74e270fa"
+    },
+    {
+      "path": "kernel/con/sysdat.a86",
+      "origin": "41SRC_01.IMG.DIR/SYSDAT.A86",
+      "sha256": "9e43442a714e28c06a8cae5eb394d5e728552f68b0ee30c14347c4f32aa8c6ed"
+    },
+    {
+      "path": "kernel/con/sysdat.dat",
+      "origin": "41SRC_01.IMG.DIR/SYSDAT.DAT",
+      "sha256": "2faa3c420c8a44628c7a0c07f82aa89cb3811e0dd451cfd971859f345faf33c5"
+    },
+    {
+      "path": "kernel/con/uda.def",
+      "origin": "41SRC_01.IMG.DIR/UDA.DEF",
+      "sha256": "40ee66581fdbd53d376f324e95df343403da48a7b1ec6d90d3f7ac1e6a41eff8"
+    },
+    {
+      "path": "kernel/con/system.def",
+      "origin": "41SRC_01.IMG.DIR/SYSTEM.DEF",
+      "sha256": "b6a2625fdcc6da256de3d27f9453bca31d5264bb1fc8b83fd7d5db047de29353"
+    },
+    {
+      "path": "kernel/con/mem.a86",
+      "origin": "41SRC_01.IMG.DIR/MEM.A86",
+      "sha256": "49149f2b7809b2381ce4036796dbb8cab58b1ad64f8792889fb92aeb01a5406f"
+    },
+    {
+      "path": "kernel/con/lstk.fmt",
+      "origin": "41SRC_01.IMG.DIR/LSTK.FMT",
+      "sha256": "f38dbd47d80c518977dc53031623cb04755a3d4494ee923b11b0e93e72f1b1f9"
+    },
+    {
+      "path": "kernel/con/util.mem",
+      "origin": "41SRC_01.IMG.DIR/UTIL.MEM",
+      "sha256": "6e1ff3ed9db267a6af7424c658199baefc5b6cd04d2876d081cc5e8daaba0195"
+    },
+    {
+      "path": "kernel/con/ml.mem",
+      "origin": "41SRC_01.IMG.DIR/ML.MEM",
+      "sha256": "98495eda08ca4b0cc902eb902bc49c386b7db7b0367b3838c057a3b16e3cc5bc"
+    },
+    {
+      "path": "kernel/con/mau.mem",
+      "origin": "41SRC_01.IMG.DIR/MAU.MEM",
+      "sha256": "6302255840b319c6bb8fddd638085f91093186dc0709eae558d0fdce8dc97f42"
+    },
+    {
+      "path": "kernel/con/share.mem",
+      "origin": "41SRC_01.IMG.DIR/SHARE.MEM",
+      "sha256": "2a475146fcf6bc9dc90d6e30dcf1c6028a12b5af5c0885680610f809935ce4f3"
+    },
+    {
+      "path": "kernel/con/memory.mem",
+      "origin": "41SRC_01.IMG.DIR/MEMORY.MEM",
+      "sha256": "b581473881d8526a0439872bacb24aaa4cc6d924bef9207dffba5a4696925308"
+    },
+    {
+      "path": "kernel/con/cpmmem.mem",
+      "origin": "41SRC_01.IMG.DIR/CPMMEM.MEM",
+      "sha256": "e69cfe6000212e4cf53ff3694cdbf2a2e94cdfa95d0c92a93703f37b46a989a6"
+    },
+    {
+      "path": "kernel/con/memif.mem",
+      "origin": "41SRC_01.IMG.DIR/MEMIF.MEM",
+      "sha256": "a42a3a6149f27c2d185b52ff52a117bebd0b325afb4c2b92e05e403adeab2b48"
+    },
+    {
+      "path": "kernel/con/mpb.def",
+      "origin": "41SRC_01.IMG.DIR/MPB.DEF",
+      "sha256": "b8f4d8af242c8bbcb1f27fea09075ece99d885303a40cf29d1d57368468b4d34"
+    },
+    {
+      "path": "kernel/con/mem.def",
+      "origin": "41SRC_01.IMG.DIR/MEM.DEF",
+      "sha256": "3e2f5cc3459f6220ef1ff55e437591544e1f41102de4d543d13c0a5fe8067e84"
+    },
+    {
+      "path": "kernel/con/err.def",
+      "origin": "41SRC_01.IMG.DIR/ERR.DEF",
+      "sha256": "bd411c5f3ddec3bd0c4ae6cb3ce6ba9eca7aad0348f1c2c8401b4da5cfc8fc83"
+    },
+    {
+      "path": "kernel/con/cio.a86",
+      "origin": "41SRC_01.IMG.DIR/CIO.A86",
+      "sha256": "dda90a928a0a94750ff1f76e3ac0e24403325c71ca006d615d59a6897b4c3e19"
+    },
+    {
+      "path": "kernel/con/xiosdat.fmt",
+      "origin": "41SRC_01.IMG.DIR/XIOSDAT.FMT",
+      "sha256": "afe90b4d877a0ccd98454778e6ab004ca9337f8af013ee961f53da6fcb7814a1"
+    },
+    {
+      "path": "kernel/con/chario.cio",
+      "origin": "41SRC_01.IMG.DIR/CHARIO.CIO",
+      "sha256": "d05facfb74eacba51cd5266ab62301107690371f6f4262750cc954952a0d8eec"
+    },
+    {
+      "path": "kernel/con/console.cio",
+      "origin": "41SRC_01.IMG.DIR/CONSOLE.CIO",
+      "sha256": "d4c9daa6f490d23321dd1d0c533a4bb0e7f6fb417c200c7d618fad5d18ff8245"
+    },
+    {
+      "path": "kernel/con/aux.cio",
+      "origin": "41SRC_01.IMG.DIR/AUX.CIO",
+      "sha256": "705a0cd3d17bda10eb53d0594b57b596a04a2741a03597e5d57263ec081cba78"
+    },
+    {
+      "path": "kernel/con/cioif.cio",
+      "origin": "41SRC_01.IMG.DIR/CIOIF.CIO",
+      "sha256": "075bb44ecb7666cca84ebdb278c9f631b76d3785805f17df7aa2a307531c21b0"
+    },
+    {
+      "path": "kernel/con/cb.def",
+      "origin": "41SRC_01.IMG.DIR/CB.DEF",
+      "sha256": "4f2f967dd71df203db347899e6ccc732d16a4a1357fafbbc293e7ca56a1b5984"
+    },
+    {
+      "path": "kernel/con/char.def",
+      "origin": "41SRC_01.IMG.DIR/CHAR.DEF",
+      "sha256": "5a951a9654488ad897bd20795d850f6da2a0d8616b00dc38c992c5cc14ad21c6"
+    },
+    {
+      "path": "kernel/con/vccb.def",
+      "origin": "41SRC_01.IMG.DIR/VCCB.DEF",
+      "sha256": "7640d2520cc05230120b970975c0b3a9ff492b1efdf1a6ccf3fa9d4f240012e1"
+    },
+    {
+      "path": "kernel/con/acb.def",
+      "origin": "41SRC_01.IMG.DIR/ACB.DEF",
+      "sha256": "5776a26dc5d30b465040734b3717591296b3e70b532514398234a969ce9590d3"
+    },
+    {
+      "path": "kernel/con/rtm.a86",
+      "origin": "41SRC_01.IMG.DIR/RTM.A86",
+      "sha256": "1598c4b8cfe93bf824b41c0da0f6fb17c6b4ea3a79c42900f3c225bbda1ff0e3"
+    },
+    {
+      "path": "kernel/con/vec.fmt",
+      "origin": "41SRC_01.IMG.DIR/VEC.FMT",
+      "sha256": "01801d694a6495472b3094172cb02c35d7b12ea22818322d2014728708b5f877"
+    },
+    {
+      "path": "kernel/con/abort.rtm",
+      "origin": "41SRC_03.IMG.DIR/ABORT.RTM",
+      "sha256": "c6f94da887eb95ab49a44727034bccd6babe9f4b965fe4edd6dd60b2592cd644"
+    },
+    {
+      "path": "kernel/con/findpd.rtm",
+      "origin": "41SRC_01.IMG.DIR/FINDPD.RTM",
+      "sha256": "a72d27aa6c07ba7d9aa15423ed95cbad7532806f7fa13c6cc3be07fd03cb3dcb"
+    },
+    {
+      "path": "kernel/con/que2.rtm",
+      "origin": "41SRC_01.IMG.DIR/QUE2.RTM",
+      "sha256": "fae3f3a8d9046949b27835d50bac539be202b9ff5466e146af9e4f670678284a"
+    },
+    {
+      "path": "kernel/con/que1.rtm",
+      "origin": "41SRC_01.IMG.DIR/QUE1.RTM",
+      "sha256": "57e4b4c0af81e65821db4d673dda216039bf5cec11b06a7ee474811767f9d755"
+    },
+    {
+      "path": "kernel/con/flag.rtm",
+      "origin": "41SRC_01.IMG.DIR/FLAG.RTM",
+      "sha256": "20870eebf1c2322e597a1f07bc72664abd4234634dc311249f2f3cee64547095"
+    },
+    {
+      "path": "kernel/con/dsptch.rtm",
+      "origin": "41SRC_01.IMG.DIR/DSPTCH.RTM",
+      "sha256": "f1b01df5e9aa66bf9312800b180248482bb4a4eb74152182b19bf82a960fb855"
+    },
+    {
+      "path": "kernel/con/proc.rtm",
+      "origin": "41SRC_01.IMG.DIR/PROC.RTM",
+      "sha256": "6d142aa3652e63ad849e1f98bbc05d647530c40856a8b04c7b1a4fc80e1de7a3"
+    },
+    {
+      "path": "kernel/con/sysent.rtm",
+      "origin": "41SRC_01.IMG.DIR/SYSENT.RTM",
+      "sha256": "eeb27cf391078c049e9244b074d6a7e578c2ae885a9e731ae0f4ce76ccea88a2"
+    },
+    {
+      "path": "kernel/con/rtmif.rtm",
+      "origin": "41SRC_01.IMG.DIR/RTMIF.RTM",
+      "sha256": "767e3709d54904f55d70e00c9176560e169106dc37a18c5447cd061a8d8b6215"
+    },
+    {
+      "path": "kernel/con/s8087.lib",
+      "origin": "41SRC_01.IMG.DIR/S8087.LIB",
+      "sha256": "cfab5922776bdcc2aad641e1e0a13cf7aee55762a810003eb32efc245ad43905"
+    },
+    {
+      "path": "kernel/con/apb.def",
+      "origin": "41SRC_01.IMG.DIR/APB.DEF",
+      "sha256": "45f520af0b153ce138369455742dc20938bb5ea601bb1b69e7fe5837f73fcd2b"
+    },
+    {
+      "path": "kernel/con/cmdh.def",
+      "origin": "41SRC_01.IMG.DIR/CMDH.DEF",
+      "sha256": "9b03dce2ed7ae13c3bd44b7e59d969b2f75212486cd3e462a405184c663435a0"
+    },
+    {
+      "path": "kernel/con/sync.def",
+      "origin": "41SRC_01.IMG.DIR/SYNC.DEF",
+      "sha256": "c684e37a7fd2cf0d1c3b6cd0e6dde316de71a91baa4213766caa75f99fcb39a2"
+    },
+    {
+      "path": "kernel/con/flg.def",
+      "origin": "41SRC_01.IMG.DIR/FLG.DEF",
+      "sha256": "b7662752f11c9e25db1fb0eea17458635cea56a0762fdd364fa58910bdd2d5be"
+    },
+    {
+      "path": "kernel/con/modtab.def",
+      "origin": "41SRC_01.IMG.DIR/MODTAB.DEF",
+      "sha256": "c2290d886dd619750fb31ae0349feb4cf1016ead778ae4f9c9aa8eedb3f759c2"
+    },
+    {
+      "path": "kernel/con/sup.a86",
+      "origin": "41SRC_01.IMG.DIR/SUP.A86",
+      "sha256": "b5b251c7ae9e769e90967468fd553631eeb94c974b56f4c596f8507ce92cad6c"
+    },
+    {
+      "path": "kernel/con/basep.fmt",
+      "origin": "41SRC_01.IMG.DIR/BASEP.FMT",
+      "sha256": "63b2648a465dc0aef3bec7f061adf124877c9769c38d1676ebbab98cc774fe7d"
+    },
+    {
+      "path": "kernel/con/rpl.sup",
+      "origin": "41SRC_01.IMG.DIR/RPL.SUP",
+      "sha256": "f63777d61b3dcda9a5a1ce8c679392ea1ff6db232444062081b253c206f546e8"
+    },
+    {
+      "path": "kernel/con/parse.sup",
+      "origin": "41SRC_01.IMG.DIR/PARSE.SUP",
+      "sha256": "ba69df74b0a00b7ec7b59bdd0a924bd075182a2fa0fcf1fb2586214b8168ea1c"
+    },
+    {
+      "path": "kernel/con/load.sup",
+      "origin": "41SRC_01.IMG.DIR/LOAD.SUP",
+      "sha256": "b927838a97e629033c110b5e6b220f1102660fb45b055c447a1ec06238e24dc9"
+    },
+    {
+      "path": "kernel/con/command.sup",
+      "origin": "41SRC_01.IMG.DIR/COMMAND.SUP",
+      "sha256": "65cb651bb3d7f2f097ad599742d81fbda13937798dfdf85d05afb1b7794f6524"
+    },
+    {
+      "path": "kernel/con/sysfunc.sup",
+      "origin": "41SRC_01.IMG.DIR/SYSFUNC.SUP",
+      "sha256": "154d238bdcfd127e347f759cde70aaca4e3ccb918a7b8afe2ee86d7bf44a3b2a"
+    },
+    {
+      "path": "kernel/con/supif.sup",
+      "origin": "41SRC_01.IMG.DIR/SUPIF.SUP",
+      "sha256": "508e04d6c9b48cfdeeb14055f4c81a7ef2f8e900f073a4e3916d71e607f04db9"
+    },
+    {
+      "path": "kernel/con/init.sup",
+      "origin": "41SRC_01.IMG.DIR/INIT.SUP",
+      "sha256": "471ecba00477226ede7cf73a45536899f11e89d4f8a225ab8c3a3fb1ab61a364"
+    },
+    {
+      "path": "kernel/con/pcb.def",
+      "origin": "41SRC_01.IMG.DIR/PCB.DEF",
+      "sha256": "4403571501e1ee6a4f4db782580ea9d128db009a57608d8e3f75decf334236da"
+    },
+    {
+      "path": "kernel/con/rsp.def",
+      "origin": "41SRC_01.IMG.DIR/RSP.DEF",
+      "sha256": "e34e7992e01e80576ba260348656dddeb6880f406a006ce5fda21147a7057654"
+    },
+    {
+      "path": "kernel/con/clicb.def",
+      "origin": "41SRC_01.IMG.DIR/CLICB.DEF",
+      "sha256": "0acd45a5935fdaaa3279564c03d57435805d8a2efc9cd528e747125e6e704d4a"
+    },
+    {
+      "path": "kernel/con/enttab.def",
+      "origin": "41SRC_01.IMG.DIR/ENTTAB.DEF",
+      "sha256": "50a7cbe03283182dc883528d5c58af0b5b77e9f0f36d8b39e2f80e9ef391f0b6"
+    },
+    {
+      "path": "kernel/con/fcb.def",
+      "origin": "41SRC_01.IMG.DIR/FCB.DEF",
+      "sha256": "07d95b083ed3d97d01f2a82ecf4e8fea961b2b880a4e14ace649f156ec0cf206"
+    },
+    {
+      "path": "kernel/rsp1/pin.plm",
+      "origin": "41SRC_02.IMG.DIR/PIN.PLM",
+      "sha256": "3baceb6258f53006efecf4f2a08ce56b434517e43e4944095560243cbbdc74a7"
+    },
+    {
+      "path": "kernel/rsp1/qd.lit",
+      "origin": "41SRC_01.IMG.DIR/QD.LIT",
+      "sha256": "552451bb0f212492692e7324f18476d233b1554fdd59b68d3cf2f0aebb37d987"
+    },
+    {
+      "path": "kernel/rsp1/vccb.lit",
+      "origin": "41SRC_01.IMG.DIR/VCCB.LIT",
+      "sha256": "2aa7f0523288c4a71fd1a8d9b4f4b86b617acbe599e272e0816823a3bed2ca6e"
+    },
+    {
+      "path": "kernel/rsp1/netpin.lit",
+      "origin": "41SRC_01.IMG.DIR/NETPIN.LIT",
+      "sha256": "de8389b7a613b07ecb645da32be999518e5bcd01cb66cb161cb9f661f2240c98"
+    },
+    {
+      "path": "kernel/rsp1/uda.lit",
+      "origin": "41SRC_01.IMG.DIR/UDA.LIT",
+      "sha256": "ac0e13573e6be9e43a96ead5613a9967cd65bbc08e3320661aeb1a6d3f5b25b7"
+    },
+    {
+      "path": "kernel/rsp1/proces.lit",
+      "origin": "41SRC_01.IMG.DIR/PROCES.LIT",
+      "sha256": "9519d901d3c3903e0bc226898b61e4ff1ff0c8bcaf444c8c0a24dae932b4796c"
+    },
+    {
+      "path": "kernel/rsp1/sdpin.lit",
+      "origin": "41SRC_01.IMG.DIR/SDPIN.LIT",
+      "sha256": "13c054bb034d58919ce4e6f4c75a2ec2ad5a534844a819d7d8e34ee5cf50d98e"
+    },
+    {
+      "path": "kernel/rsp1/mxfunc.lit",
+      "origin": "41SRC_01.IMG.DIR/MXFUNC.LIT",
+      "sha256": "876f010b657f5af6762e7a71be291c6e6fd41ff9f1420aca90b72e70196f4e24"
+    },
+    {
+      "path": "kernel/rsp1/mfunc.lit",
+      "origin": "41SRC_01.IMG.DIR/MFUNC.LIT",
+      "sha256": "a9ef4666559f0be94de1bcc8e458ffcb39e88ffae1787f873eb06dbf41c7a564"
+    },
+    {
+      "path": "kernel/rsp1/comlit.lit",
+      "origin": "41SRC_01.IMG.DIR/COMLIT.LIT",
+      "sha256": "105eac9955d513507b16985830c1d8125e70ada82e759663be1db19721fc85e5"
+    },
+    {
+      "path": "kernel/rsp1/pxios.a86",
+      "origin": "41SRC_01.IMG.DIR/PXIOS.A86",
+      "sha256": "ddf7b1a86114bcd2f6c66125d552fa6a7ed33e1431666fac68d33eceb17b8841"
+    },
+    {
+      "path": "kernel/rsp1/rhpin.a86",
+      "origin": "41SRC_01.IMG.DIR/RHPIN.A86",
+      "sha256": "e5c730ae504e0b204afc56f1862a4a2626ba219df72b220f5eeb7f5c0d72df59"
+    },
+    {
+      "path": "kernel/rsp2/clock.sub",
+      "origin": "41SRC_01.IMG.DIR/CLOCK.SUB",
+      "sha256": "81515e8db4eec0fe9fd7143cd04884c9d4c93ce5d256cc008c76f1aeeb9270c6"
+    },
+    {
+      "path": "kernel/rsp2/clock.a86",
+      "origin": "41SRC_01.IMG.DIR/CLOCK.A86",
+      "sha256": "8d50104681994b1d7906bb4dcf498695ddbb4b8a9e4ed87ff9a8e163b730eff2"
+    },
+    {
+      "path": "kernel/rsp3/confid.sub",
+      "origin": "41SRC_04.IMG.DIR/CONFID.SUB",
+      "sha256": "1b800ab65825ed5013e2ef8066e22c16192555f220cb9689bf2b1c299546b39f"
+    },
+    {
+      "path": "kernel/rsp3/confid.inp",
+      "origin": "41SRC_04.IMG.DIR/CONFID.INP",
+      "sha256": "9aafd69da7c64dfdd7172f0d1f59e5a753a8d773cc568edb964f793b889cf275"
+    },
+    {
+      "path": "kernel/rsp3/nterface.a86",
+      "origin": "41SRC_04.IMG.DIR/NTERFACE.A86",
+      "sha256": "79de31b2986767152d4b61e7e79c9cc301edf28d34f05ba7e7a34c160c6932ce"
+    },
+    {
+      "path": "kernel/rsp3/confidd.equ",
+      "origin": "41SRC_04.IMG.DIR/CONFIDD.EQU",
+      "sha256": "23579b024abaa28faa653991e7926b3b0ac7fb6f156e5f9001fa3991342ef618"
+    },
+    {
+      "path": "kernel/rsp3/initrsp.a86",
+      "origin": "41SRC_04.IMG.DIR/INITRSP.A86",
+      "sha256": "6ba6d42c66820e08e01ac73e57ff28ec3a012170c5225c537046f5dd38aa5def"
+    },
+    {
+      "path": "kernel/rsp3/rspdat.a86",
+      "origin": "41SRC_04.IMG.DIR/RSPDAT.A86",
+      "sha256": "e38ebc5695335c7e7c17db7d12a3abe3d32fc72e2b7dcc810d0c80c338f4ce31"
+    },
+    {
+      "path": "kernel/rsp3/pctmp.sub",
+      "origin": "41SRC_02.IMG.DIR/PCTMP.SUB",
+      "sha256": "7bc519d9e879c0c3d576a2040694afe7def5a4f8907e502755c1a671bfcb28b3"
+    },
+    {
+      "path": "kernel/rsp3/pctmp.inp",
+      "origin": "41SRC_02.IMG.DIR/PCTMP.INP",
+      "sha256": "4d1c39f9a15cad4f1150c400ea90f1b56efcee02dd0fbdce2bef104fd788fc8e"
+    },
+    {
+      "path": "kernel/rsp3/ms2.a86",
+      "origin": "41SRC_03.IMG.DIR/MS2.A86",
+      "sha256": "f4c93c5c36bbbefbf3fcd10dc5a5d283811012236acd07a2fffd3f05bd95bf56"
+    },
+    {
+      "path": "kernel/rsp3/ms1.a86",
+      "origin": "41SRC_03.IMG.DIR/MS1.A86",
+      "sha256": "bf11132e92ace9c210d0e959828187ef4bfe5a597c37a58724a406416856f8fc"
+    },
+    {
+      "path": "kernel/rsp3/wwcall.a86",
+      "origin": "41SRC_02.IMG.DIR/WWCALL.A86",
+      "sha256": "39870cb690627aa80c26a42898b237932091afdceeda7942ccd570af9417968a"
+    },
+    {
+      "path": "kernel/rsp3/dmsubs.c",
+      "origin": "41SRC_02.IMG.DIR/DMSUBS.C",
+      "sha256": "0d3b061ab8abb59e379605f0cc6055d7104f798ca397fac87c8d06c07145c281"
+    },
+    {
+      "path": "kernel/rsp3/rmenuio.a86",
+      "origin": "41SRC_02.IMG.DIR/RMENUIO.A86",
+      "sha256": "d70d8ec390ba6bf5a3828168cb792b4bf88b3d145405cadc742f67e578cf6d4c"
+    },
+    {
+      "path": "kernel/rsp3/runmenu.a86",
+      "origin": "41SRC_03.IMG.DIR/RUNMENU.A86",
+      "sha256": "64d5cac2580bf7b901da5731600aee4cfb5245efba61607785f0a1f8aab5f5c1"
+    },
+    {
+      "path": "kernel/rsp3/dispmenu.a86",
+      "origin": "41SRC_02.IMG.DIR/DISPMENU.A86",
+      "sha256": "108c508f841e0167d6ad20bcf39fa846e4bf2c86734dd0e899555c2cde7e6e31"
+    },
+    {
+      "path": "kernel/rsp3/tmppc.a86",
+      "origin": "41SRC_02.IMG.DIR/TMPPC.A86",
+      "sha256": "2ca71d05c14fcd465e66267522ad3ef443a3cf3d6230f780e20380f7ff85b99f"
+    },
+    {
+      "path": "kernel/rsp3/tmpmenue.lib",
+      "origin": "41SRC_02.IMG.DIR/TMPMENUE.LIB",
+      "sha256": "560221cd92ee6d46eeb53d282165ecef2c7336b2178fd6146651ca16b7e2ed10"
+    },
+    {
+      "path": "kernel/rsp3/tmpdir.lib",
+      "origin": "41SRC_03.IMG.DIR/TMPDIR.LIB",
+      "sha256": "74374f01d1fd312cdc6d05520bb2326c1afde142492c0ba6c200c2e3f1db92d1"
+    },
+    {
+      "path": "kernel/rsp3/tmpmenu.lib",
+      "origin": "41SRC_04.IMG.DIR/TMPMENU.LIB",
+      "sha256": "aed3e7be5396817e0c9ac86d3934779584e4f4a11bb41c6c1d4c8a91e5cdb8ed"
+    },
+    {
+      "path": "kernel/xios/auxio.a86",
+      "origin": "41SRC_06.IMG.DIR/AUXIO.A86",
+      "sha256": "fef9079e09d9d410e450527a5cfd39d3e6f349115eba0cfa1d9fb5e98bc90637"
+    },
+    {
+      "path": "kernel/xios/serdata.equ",
+      "origin": "41SRC_06.IMG.DIR/SERDATA.EQU",
+      "sha256": "cef4cccd48b5525633106967d1f7df858035194a1e9524f8ffe5924e42a1276d"
+    },
+    {
+      "path": "kernel/xios/np8087.a86",
+      "origin": "41SRC_06.IMG.DIR/NP8087.A86",
+      "sha256": "6890a99d278ba0c69fc55fe33a7a23bfcb8c2177a1dea1d4392acce6f599deb0"
+    },
+    {
+      "path": "kernel/xios/flags.equ",
+      "origin": "41SRC_06.IMG.DIR/FLAGS.EQU",
+      "sha256": "bc7d94888498ea092f8dc04b5d25d4e3bd24af4f4d64f54cafd7dde530fdca35"
+    },
+    {
+      "path": "kernel/xios/intvec.a86",
+      "origin": "41SRC_06.IMG.DIR/INTVEC.A86",
+      "sha256": "bbee5520ac4c2e532ef08ddd19809385b7ba1d6ece22260d5b28621a044de487"
+    },
+    {
+      "path": "kernel/xios/sysdat.lib",
+      "origin": "41SRC_06.IMG.DIR/SYSDAT.LIB",
+      "sha256": "8970e7d7c36656ec29de7f3160569d5cdae8771583d53403e65837a84c92dc8a"
+    },
+    {
+      "path": "kernel/xios/system.lib",
+      "origin": "41SRC_06.IMG.DIR/SYSTEM.LIB",
+      "sha256": "af8988277873e063636cb91a2215b5713d29cc406152a577aa1cc7b348433694"
+    },
+    {
+      "path": "kernel/xios/dentry.a86",
+      "origin": "41SRC_06.IMG.DIR/DENTRY.A86",
+      "sha256": "352b81e646f79765731f934cd63e8080054eca28b0020c2471e5a8677dd9152e"
+    },
+    {
+      "path": "kernel/xios/dskcomn.equ",
+      "origin": "41SRC_06.IMG.DIR/DSKCOMN.EQU",
+      "sha256": "da83320f544c310ce945d7c6baaca646cda8a7ac40b0835d2b7e21cb33de3c66"
+    },
+    {
+      "path": "kernel/xios/diskhdr.equ",
+      "origin": "41SRC_06.IMG.DIR/DISKHDR.EQU",
+      "sha256": "ec771e334e01d8f5cf2ecdadeafce3a96706954384118e911f0af2070da5edf7"
+    },
+    {
+      "path": "kernel/xios/exerror.equ",
+      "origin": "41SRC_06.IMG.DIR/EXERROR.EQU",
+      "sha256": "7b7e11c48794d8e63039fad2528d213df7c8bf7d9363af5fa941d6c414aa282c"
+    },
+    {
+      "path": "kernel/xios/pic.a86",
+      "origin": "41SRC_06.IMG.DIR/PIC.A86",
+      "sha256": "b7ac3d68be2a15502d064baf151375e1854ec066d8037eb9df1a13742d1386e1"
+    },
+    {
+      "path": "kernel/xios/mdisk.a86",
+      "origin": "41SRC_06.IMG.DIR/MDISK.A86",
+      "sha256": "e0b175aa4b4b0859db7c9be290e1abaff9b5303df2fc8561525b906a5581311e"
+    },
+    {
+      "path": "kernel/xios/pcmode.a86",
+      "origin": "41SRC_06.IMG.DIR/PCMODE.A86",
+      "sha256": "d10f64a3515f0f48979a3ebd5e3e54b663c74e12afb1ff8b86fc9f5ae4a7875d"
+    },
+    {
+      "path": "kernel/xios/popf.a86",
+      "origin": "41SRC_06.IMG.DIR/POPF.A86",
+      "sha256": "719327143a4a611f85a2274d3cec3dc349d6cbe57e162fbc85366ba0416bf205"
+    },
+    {
+      "path": "kernel/xios/vscreen.a86",
+      "origin": "41SRC_06.IMG.DIR/VSCREEN.A86",
+      "sha256": "4b1e35498e4a8cfc5bebb59908527826b660e87aeff1172a8e7f5ac92cfecf9a"
+    },
+    {
+      "path": "kernel/xios/chrcomm.equ",
+      "origin": "41SRC_06.IMG.DIR/CHRCOMM.EQU",
+      "sha256": "c7cf16980d6e446f0d041499ef9f7f9e31787eaa8e94ee02779399f60e45a317"
+    },
+    {
+      "path": "kernel/xios/vscreen.equ",
+      "origin": "41SRC_06.IMG.DIR/VSCREEN.EQU",
+      "sha256": "253d3ee8a7089a0e29e2738ee41110c66daaa4a853833665b09969b2cf57e52e"
+    },
+    {
+      "path": "kernel/xios/serin.a86",
+      "origin": "41SRC_06.IMG.DIR/SERIN.A86",
+      "sha256": "f1793bd4395a228ee75a15284ec4ec711d203a392904fb0d2b091d3f78df8ae0"
+    },
+    {
+      "path": "kernel/xios/ssboard.equ",
+      "origin": "41SRC_06.IMG.DIR/SSBOARD.EQU",
+      "sha256": "f0c98d8166cf5026bf6402e1c9e949c5669aad883bb00027536e1ee9d049a2c9"
+    },
+    {
+      "path": "kernel/xios/ctc.a86",
+      "origin": "41SRC_06.IMG.DIR/CTC.A86",
+      "sha256": "dc249c744ffe8b0cf1be42d314a5006e191e518c849cd30b0976c333efa60241"
+    },
+    {
+      "path": "kernel/xios/statline.a86",
+      "origin": "41SRC_06.IMG.DIR/STATLINE.A86",
+      "sha256": "8a4cf75c83145cfd8f2b36e5ec30d301353dec0515a81ffd7f14c157104a2952"
+    },
+    {
+      "path": "kernel/xios/ccb.equ",
+      "origin": "41SRC_06.IMG.DIR/CCB.EQU",
+      "sha256": "7e6841bebf1c2e409f788b5eb103435e7bce4755311e25e56cdc1a7b3d04cdbc"
+    },
+    {
+      "path": "kernel/xios/headentr.a86",
+      "origin": "41SRC_06.IMG.DIR/HEADENTR.A86",
+      "sha256": "40319f930f6b2a603c913db5281a45d8bb76ccd7968a3722291d9edcd07cff45"
+    },
+    {
+      "path": "kernel/xios/fdfmt.a86",
+      "origin": "41SRC_06.IMG.DIR/FDFMT.A86",
+      "sha256": "c227f2a47c71cce32db461f0c46f04967c82b1e382f1d66ee309d234e5094b70"
+    },
+    {
+      "path": "kernel/xios/reskew.a86",
+      "origin": "41SRC_06.IMG.DIR/RESKEW.A86",
+      "sha256": "a2da104fe543f598f5f9ef755b05bfb1c33bd4738da49baa929339b810be4521"
+    },
+    {
+      "path": "kernel/xios/switch.a86",
+      "origin": "41SRC_06.IMG.DIR/SWITCH.A86",
+      "sha256": "719460190b2bc3d12647d369767dbf6850ef58b87c60e0add4711a9bc7831a12"
+    },
+    {
+      "path": "kernel/xios/dpbs.equ",
+      "origin": "41SRC_06.IMG.DIR/DPBS.EQU",
+      "sha256": "5587313c7bc8bc12e28fb67c247a2b9c0b8a153a736b561dbb0e96cade5e6672"
+    },
+    {
+      "path": "kernel/xios/fdrw.a86",
+      "origin": "41SRC_06.IMG.DIR/FDRW.A86",
+      "sha256": "2082ad3ec71c59f4b6c3a56eb7ff2e28b93add6be3c9998df2597ec72b4f6c09"
+    },
+    {
+      "path": "kernel/xios/fd.equ",
+      "origin": "41SRC_06.IMG.DIR/FD.EQU",
+      "sha256": "b22674cd519b4a7b3c34ddef9ab36f3ca6a9a7a2e12447cb14a3da9191dc0040"
+    },
+    {
+      "path": "kernel/xios/i3int.a86",
+      "origin": "41SRC_06.IMG.DIR/I3INT.A86",
+      "sha256": "1c725f10b302f6e0e22aaf2d2f6ada8bcdd04f0b36100846ccd898ae11f2212c"
+    },
+    {
+      "path": "kernel/xios/i3board.equ",
+      "origin": "41SRC_06.IMG.DIR/I3BOARD.EQU",
+      "sha256": "0d5e706c6bd48402d3386597d916d2c27b43c2297f5b85001645f397ed7fe16d"
+    },
+    {
+      "path": "kernel/xios/servar.a86",
+      "origin": "41SRC_06.IMG.DIR/SERVAR.A86",
+      "sha256": "bfa88a91811bf33904132a943a9b8aca4677649f7a34a1882eb72c0fabb19d24"
+    },
+    {
+      "path": "kernel/xios/u2651.equ",
+      "origin": "41SRC_06.IMG.DIR/U2651.EQU",
+      "sha256": "37851eae4d22c0bf591b57e5184dffcf540c7fddd0541a66824745f100b8c366"
+    },
+    {
+      "path": "kernel/xios/cpxios.inp",
+      "origin": "41SRC_06.IMG.DIR/CPXIOS.INP",
+      "sha256": "5ba629084d61e1b9e908036aed1bb5d57e12b83e36f1fd19bc8ddef37abd71cb"
+    },
+    {
+      "path": "kernel/xios/dpbs.a86",
+      "origin": "41SRC_06.IMG.DIR/DPBS.A86",
+      "sha256": "2ef1992d8236e3977d31e87a7f201c52ade598226737d306f2932cc4a90b429d"
+    },
+    {
+      "path": "kernel/xios/serout.a86",
+      "origin": "41SRC_06.IMG.DIR/SEROUT.A86",
+      "sha256": "ca8b64e4610b54c5f8ded1c81004b97ea16c2bc2063c2fc1dbc53dd715ba1c66"
+    },
+    {
+      "path": "kernel/xios/ssint.a86",
+      "origin": "41SRC_06.IMG.DIR/SSINT.A86",
+      "sha256": "49e68479b727d3769101a53c93277d12498e08392c46dec0de2bf9269e3d4700"
+    },
+    {
+      "path": "kernel/xios/conout.a86",
+      "origin": "41SRC_06.IMG.DIR/CONOUT.A86",
+      "sha256": "185af68f034799b526ef21e09419854bb5aebb91b8682fc9e79f176b791e8c93"
+    },
+    {
+      "path": "kernel/xios/cpxios.bat",
+      "origin": "41SRC_06.IMG.DIR/CPXIOS.BAT",
+      "sha256": "83b1b3c9b3e7b9afcae18556f089c260b7cbf9700cf74333fa8b42fa8ca55a32"
+    },
+    {
+      "path": "kernel/xios/list.a86",
+      "origin": "41SRC_06.IMG.DIR/LIST.A86",
+      "sha256": "b03e6d640f217ead4d3265e2137b20640aced111c3bbeb2cb490cc71caf8a4f9"
+    },
+    {
+      "path": "kernel/xios/tick.a86",
+      "origin": "41SRC_06.IMG.DIR/TICK.A86",
+      "sha256": "a984f3289e162370be85a361740b8427aadf42199f9c21a8b0d4ff24d5667464"
+    },
+    {
+      "path": "kernel/xios/hdisk.a86",
+      "origin": "41SRC_06.IMG.DIR/HDISK.A86",
+      "sha256": "4704159ee6105f912490a0797f0f685f747568f73242e8ee1000f69140b36290"
+    },
+    {
+      "path": "kernel/xios/serdata.a86",
+      "origin": "41SRC_06.IMG.DIR/SERDATA.A86",
+      "sha256": "0cf916501460aac440a477c93a395d1112681f20f2227ab660c43f29b823c231"
+    },
+    {
+      "path": "kernel/xios/fdsel.a86",
+      "origin": "41SRC_06.IMG.DIR/FDSEL.A86",
+      "sha256": "bc3c2fba567becc163c63e6e1512a258f77e6f66d1d1ccd587d02c07a85d1da6"
+    },
+    {
+      "path": "kernel/xios/vccb.a86",
+      "origin": "41SRC_06.IMG.DIR/VCCB.A86",
+      "sha256": "efe171ae58d4bc65cd46744b9a6a038b9d73e9f510ecf68399a57197e0d66e10"
+    },
+    {
+      "path": "kernel/xios/conin.a86",
+      "origin": "41SRC_06.IMG.DIR/CONIN.A86",
+      "sha256": "7fba98944418ff8b3aa54cbdab8c108725a6307d7458237c8baa952ce856b426"
+    },
+    {
+      "path": "commands/genccpm/genccpm.bat",
+      "origin": "41SRC_04.IMG.DIR/GENCCPM.BAT",
+      "sha256": "a0bd2b16a71143ee5537f1ca590451d035ca6f989910a2e087f88ac4cf63a4eb"
+    },
+    {
+      "path": "commands/genccpm/machine.h",
+      "origin": "41SRC_04.IMG.DIR/MACHINE.H",
+      "sha256": "0626dae0b4469980ac57d2764221db1304122bde78562e3bc93e1dcfc16ea3e1"
+    },
+    {
+      "path": "commands/genccpm/cpm.h",
+      "origin": "41SRC_04.IMG.DIR/CPM.H",
+      "sha256": "68d798dbaca4dbc12c7c1ac109d113efa7a159e4e3cc501c38d79a01e8c4630b"
+    },
+    {
+      "path": "commands/genccpm/genccpm.h",
+      "origin": "41SRC_04.IMG.DIR/GENCCPM.H",
+      "sha256": "84496e901ca3d638ae3e1379243630e2a993522674bfb673aed225bac58d0c49"
+    },
+    {
+      "path": "commands/genccpm/genc6.c",
+      "origin": "41SRC_04.IMG.DIR/GENC6.C",
+      "sha256": "80500e4e2ef6cf17d2767a87205579c84e7c3a2e6cf687addc7d47d2f0edb4d5"
+    },
+    {
+      "path": "commands/genccpm/genc5.c",
+      "origin": "41SRC_04.IMG.DIR/GENC5.C",
+      "sha256": "0d49336812ae6a7235c3940ec0ad0f5d3356246abf7b87e3b4349ec4d7feab71"
+    },
+    {
+      "path": "commands/genccpm/genc4.c",
+      "origin": "41SRC_04.IMG.DIR/GENC4.C",
+      "sha256": "1dfaf5dcf6a88dbfeccd8a476a42ef814cdb6cec587cccdd761669246ba0b29f"
+    },
+    {
+      "path": "commands/genccpm/genc3.c",
+      "origin": "41SRC_04.IMG.DIR/GENC3.C",
+      "sha256": "2c2b16ac0115ac3aa682771487155465e59d5ceebd861f9b62920411737ce29f"
+    },
+    {
+      "path": "commands/genccpm/genc2.c",
+      "origin": "41SRC_04.IMG.DIR/GENC2.C",
+      "sha256": "8e0d3640941e4102c953a38aee85b8c3588c97d824d38cddea22a68a713ac0fc"
+    },
+    {
+      "path": "commands/genccpm/genc1.c",
+      "origin": "41SRC_04.IMG.DIR/GENC1.C",
+      "sha256": "40535e0bacb86f1dace31399ce38343ea9814bfc64326dfbcafd652c45301abb"
+    },
+    {
+      "path": "commands/pip/Makefile",
+      "origin": "ccpm86-kernel/commands/pip/Makefile",
+      "sha256": "d27eac6b5003d42069d601cc8c63fbb7d815a349b24cf23de9cb7f84e4e0678f"
+    },
+    {
+      "path": "commands/pip/pip3.plm",
+      "origin": "ccpm86-kernel/commands/pip/pip3.plm",
+      "sha256": "fd98429adc4dfdeb09eb7efafbd02fa91f87295af8015cba6dc15e7e8f9d0dad"
+    },
+    {
+      "path": "commands/pip/pip4.plm",
+      "origin": "ccpm86-kernel/commands/pip/pip4.plm",
+      "sha256": "3e9eb5a3b3d955699a3582a459ae6e2202bb9f4842765a9c3c9c8f43763e7fc5"
+    },
+    {
+      "path": "commands/pip/inpout.a86",
+      "origin": "ccpm86-kernel/commands/pip/inpout.a86",
+      "sha256": "1ea3b4ae510f0cbc0d032c219d17f6fee5b2d3b3452cd6f358b71b65a4de8a97"
+    },
+    {
+      "path": "commands/pip/scd1.a86",
+      "origin": "ccpm86-kernel/commands/pip/scd1.a86",
+      "sha256": "9ec4a89f2bb1b4475c39c87a27b14a660b7950ace3af40f95272d172c7095c6a"
+    },
+    {
+      "path": "LICENSE.md",
+      "origin": "ccpm86-kernel/LICENSE.md",
+      "sha256": "5240dcaabbb173ded110bcbb03681ef87825e0926d6738405c9c98d6d2d1277f"
+    },
+    {
+      "path": "LICENSE-bis.md",
+      "origin": "ccpm86-kernel/LICENSE-bis.md",
+      "sha256": "c340d4d71bf19d6b548249c013fac097d8e482d12f8bf04c7dc42dcf6e02a3a5"
+    },
+    {
+      "path": "commands/batch/batch.sub",
+      "origin": "41SRC_07.IMG.DIR/BATCH.SUB",
+      "sha256": "4983fb5158930050ea956335a3119cb82ee524e52dda90e77465c4d13376e10c"
+    },
+    {
+      "path": "commands/batch/batch.a86",
+      "origin": "41SRC_07.IMG.DIR/BATCH.A86",
+      "sha256": "b7f3f2955eda08f06cbbb34cc3798bc89beaf5505567794e43e615d79b62c8ee"
+    },
+    {
+      "path": "commands/batch/tmpmenue.lib",
+      "origin": "41SRC_02.IMG.DIR/TMPMENUE.LIB",
+      "sha256": "560221cd92ee6d46eeb53d282165ecef2c7336b2178fd6146651ca16b7e2ed10"
+    },
+    {
+      "path": "commands/batch/tmpdir.lib",
+      "origin": "41SRC_03.IMG.DIR/TMPDIR.LIB",
+      "sha256": "74374f01d1fd312cdc6d05520bb2326c1afde142492c0ba6c200c2e3f1db92d1"
+    },
+    {
+      "path": "commands/batch/tmpmenu.lib",
+      "origin": "41SRC_04.IMG.DIR/TMPMENU.LIB",
+      "sha256": "aed3e7be5396817e0c9ac86d3934779584e4f4a11bb41c6c1d4c8a91e5cdb8ed"
+    },
+    {
+      "path": "commands/chset/chset.sub",
+      "origin": "41SRC_07.IMG.DIR/CHSET.SUB",
+      "sha256": "6d4bd007d54f2f1950d7886b6db3b6ac7637af9b3aeacc99ff76524adf35ff10"
+    },
+    {
+      "path": "commands/chset/cpmif.a86",
+      "origin": "41SRC_07.IMG.DIR/CPMIF.A86",
+      "sha256": "64aee3aaa7072d66ded2f097adc6534c9c4dc36524c441c9b6503f2cb0640c8c"
+    },
+    {
+      "path": "commands/chset/function.c",
+      "origin": "41SRC_07.IMG.DIR/FUNCTION.C",
+      "sha256": "cd13003572a601b9abeb8c815d30f62180388178bc5140623fb950483b2a45fb"
+    },
+    {
+      "path": "commands/chset/cpmfunc.h",
+      "origin": "41SRC_07.IMG.DIR/CPMFUNC.H",
+      "sha256": "36391ad38e54b546c0b4c1780b147b29a1fec76f589d683942887b4e0e1a186d"
+    },
+    {
+      "path": "commands/chset/chset.c",
+      "origin": "41SRC_07.IMG.DIR/CHSET.C",
+      "sha256": "06d85afae9e1f2904495f70d82cffc4c44fed836f9afb99d6bc077b003310ee2"
+    },
+    {
+      "path": "commands/chset/main.c",
+      "origin": "41SRC_07.IMG.DIR/MAIN.C",
+      "sha256": "1dffcc1d5e9716eedffb9cba383f864ccd631b62bc36f2b8b970f9015fb57fa5"
+    },
+    {
+      "path": "commands/chdir/chdir.sub",
+      "origin": "41SRC_07.IMG.DIR/CHDIR.SUB",
+      "sha256": "a9bdaefa55d8fc881ab570dfbc58142c832c128ed6f8a47228080e4157207987"
+    },
+    {
+      "path": "commands/chdir/derror.a86",
+      "origin": "41SRC_07.IMG.DIR/DERROR.A86",
+      "sha256": "deb4cb7739af116e30b9eccd0177d443d78731d368285c0f746fe9183d3b32db"
+    },
+    {
+      "path": "commands/chdir/path.a86",
+      "origin": "41SRC_07.IMG.DIR/PATH.A86",
+      "sha256": "4b9aae4424e5b12d402529bcf426e2bad270857ccfc87fc2228eefa72cc71a9d"
+    },
+    {
+      "path": "commands/chdir/chdir.a86",
+      "origin": "41SRC_07.IMG.DIR/CHDIR.A86",
+      "sha256": "ba89d0c7ae52a709db9f00150d9e4309ef5fececa19f9ac59b50a49a0d6711aa"
+    },
+    {
+      "path": "commands/chdir/d.a86",
+      "origin": "41SRC_07.IMG.DIR/D.A86",
+      "sha256": "534dae07ef0088f3018b202c44ff211de9a82684cb0f377b9f9cec624b76b992"
+    },
+    {
+      "path": "commands/mkdir/mkdir.sub",
+      "origin": "41SRC_11.IMG.DIR/MKDIR.SUB",
+      "sha256": "b8d0722346209f0e329706ca65735082e3b2b86a07ef9e33902580be6d25ac7e"
+    },
+    {
+      "path": "commands/mkdir/derror.a86",
+      "origin": "41SRC_07.IMG.DIR/DERROR.A86",
+      "sha256": "deb4cb7739af116e30b9eccd0177d443d78731d368285c0f746fe9183d3b32db"
+    },
+    {
+      "path": "commands/mkdir/path.a86",
+      "origin": "41SRC_07.IMG.DIR/PATH.A86",
+      "sha256": "4b9aae4424e5b12d402529bcf426e2bad270857ccfc87fc2228eefa72cc71a9d"
+    },
+    {
+      "path": "commands/mkdir/mkdir.a86",
+      "origin": "41SRC_11.IMG.DIR/MKDIR.A86",
+      "sha256": "5185c50a9a8dd59aa2318916815cf470a7da70849bef377aef3808064a65f7cf"
+    },
+    {
+      "path": "commands/mkdir/d.a86",
+      "origin": "41SRC_07.IMG.DIR/D.A86",
+      "sha256": "534dae07ef0088f3018b202c44ff211de9a82684cb0f377b9f9cec624b76b992"
+    },
+    {
+      "path": "commands/dredix/dredix.sub",
+      "origin": "41SRC_08.IMG.DIR/DREDIX.SUB",
+      "sha256": "1e080f3531529790c9bda963828be94e76b143672d07b5f4fb077187989bfdfa"
+    },
+    {
+      "path": "commands/dredix/dredix.inp",
+      "origin": "41SRC_08.IMG.DIR/DREDIX.INP",
+      "sha256": "fa26e7ef45f1cd8604b05811b0ea2bbcf0e4b1a364a18a8bd94a99bca5d7b9a3"
+    },
+    {
+      "path": "commands/dredix/vk.c",
+      "origin": "41SRC_08.IMG.DIR/VK.C",
+      "sha256": "11e8a723afa99e3087f69ddde51c340f9b4a6d9f8786c0588803ce8b37df0133"
+    },
+    {
+      "path": "commands/dredix/common.h",
+      "origin": "41SRC_08.IMG.DIR/COMMON.H",
+      "sha256": "bb2081bae59f972062904a8f7a79cf4f86dcad702a07279a70883b9960d0205c"
+    },
+    {
+      "path": "commands/dredix/wwcall.a86",
+      "origin": "41SRC_02.IMG.DIR/WWCALL.A86",
+      "sha256": "39870cb690627aa80c26a42898b237932091afdceeda7942ccd570af9417968a"
+    },
+    {
+      "path": "commands/dredix/wmca.a86",
+      "origin": "41SRC_08.IMG.DIR/WMCA.A86",
+      "sha256": "3d2a624c4cc2539e56a0542407ca23ff8618c63fe05620f8b42e282165d4fbc2"
+    },
+    {
+      "path": "commands/dredix/util.a86",
+      "origin": "41SRC_08.IMG.DIR/UTIL.A86",
+      "sha256": "33105f346b52cc05dc41c583388ee8494aa8881d791cec68852241d9d549394a"
+    },
+    {
+      "path": "commands/dredix/vd.c",
+      "origin": "41SRC_08.IMG.DIR/VD.C",
+      "sha256": "e0c409aa33fcdcfe6354320e4db65fe7fb380b51b4e972fa6a645ea7849999b8"
+    },
+    {
+      "path": "commands/dredix/vd.h",
+      "origin": "41SRC_08.IMG.DIR/VD.H",
+      "sha256": "4ed9dcd20a0c131dadbbca6bcc2c65e9ebf093c6bf66d00ed3f94ad1957666e6"
+    },
+    {
+      "path": "commands/dredix/caparm.h",
+      "origin": "41SRC_08.IMG.DIR/CAPARM.H",
+      "sha256": "0d860137917cd217fa9c77361d42bc7ee9af1ffa7c526d4bcd08cee72a45d160"
+    },
+    {
+      "path": "commands/dredix/ecmdsta.c",
+      "origin": "41SRC_08.IMG.DIR/ECMDSTA.C",
+      "sha256": "37718cb094e1437c4104519cab3be0db9a3a2bcd2ba103aa55c967575b532baf"
+    },
+    {
+      "path": "commands/dredix/ecmdsta.h",
+      "origin": "41SRC_08.IMG.DIR/ECMDSTA.H",
+      "sha256": "89f5c69b3cd689e04a405209d838bf5046c9167a866d485368b9142a9b9f1091"
+    },
+    {
+      "path": "commands/dredix/ecmdblk.h",
+      "origin": "41SRC_08.IMG.DIR/ECMDBLK.H",
+      "sha256": "becbc1f11a886d009cf80dfb5c33f6326a30e5ea25447d8d2e48415d5df008fb"
+    },
+    {
+      "path": "commands/dredix/ecommon.h",
+      "origin": "41SRC_08.IMG.DIR/ECOMMON.H",
+      "sha256": "6decfcba7d368d1cc9aee90f44e6632dc58f76a896c4991bd13e85746d03ed1c"
+    },
+    {
+      "path": "commands/dredix/ewindef.h",
+      "origin": "41SRC_08.IMG.DIR/EWINDEF.H",
+      "sha256": "29bc1c791f76f5219c83237227880b466113a517cb5a7cae329ccf5ae8f6fa29"
+    },
+    {
+      "path": "commands/dredix/ewin.h",
+      "origin": "41SRC_08.IMG.DIR/EWIN.H",
+      "sha256": "d15b21d407824b32c512d1a27b734c5784d0c8869dcb91aff106c51efdd1bd36"
+    },
+    {
+      "path": "commands/dredix/ebuf.h",
+      "origin": "41SRC_08.IMG.DIR/EBUF.H",
+      "sha256": "d02269d1f66766b3f2cfd258039007b85b0720d19a8eb4198605b6e9605ead69"
+    },
+    {
+      "path": "commands/dredix/ewdv.c",
+      "origin": "41SRC_08.IMG.DIR/EWDV.C",
+      "sha256": "463e75b833eb4ee7e1cf676e35bcd70a404c620a98f55074f86d3017516fb223"
+    },
+    {
+      "path": "commands/dredix/elesson.c",
+      "origin": "41SRC_08.IMG.DIR/ELESSON.C",
+      "sha256": "04df69ecbdf380d8350fd9ed3a346abdc3ba91c29d40104f2d4830e94971d31f"
+    },
+    {
+      "path": "commands/dredix/elesson.h",
+      "origin": "41SRC_08.IMG.DIR/ELESSON.H",
+      "sha256": "dd716b00d594d707195bd6c576e5188d91e9d8a3d64b664e2a299e52d6edfd9d"
+    },
+    {
+      "path": "commands/dredix/ecmdio.h",
+      "origin": "41SRC_08.IMG.DIR/ECMDIO.H",
+      "sha256": "ad8af219ed54b018d58bc376df6760de61e4b710ec6f69ff32ac4c700bce2177"
+    },
+    {
+      "path": "commands/dredix/ekey.h",
+      "origin": "41SRC_08.IMG.DIR/EKEY.H",
+      "sha256": "ab69fa413aef7afcc381bde8569612938e5cbb1910b0e485ba9001d7941d79f7"
+    },
+    {
+      "path": "commands/dredix/ehelp.c",
+      "origin": "41SRC_08.IMG.DIR/EHELP.C",
+      "sha256": "9fc4fc53fa85420f416386b5ff7b22d27548db02af262ecba605af9ec3a140a5"
+    },
+    {
+      "path": "commands/dredix/ehelp.h",
+      "origin": "41SRC_08.IMG.DIR/EHELP.H",
+      "sha256": "567dead775bb8e4efba48caefe11b7d4f3abba67f1edadde75808c49de4684b0"
+    },
+    {
+      "path": "commands/dredix/ewv.c",
+      "origin": "41SRC_08.IMG.DIR/EWV.C",
+      "sha256": "4aae875e2ed50b953076fa8657ec96f97cd34e49b4214da3e084c2825549a3e9"
+    },
+    {
+      "path": "commands/dredix/ecmdblk.c",
+      "origin": "41SRC_08.IMG.DIR/ECMDBLK.C",
+      "sha256": "0e01b378af237ab63b6cffbd69c0eb0096f1749e3e1ce03359095427620c5954"
+    },
+    {
+      "path": "commands/dredix/emem.c",
+      "origin": "41SRC_08.IMG.DIR/EMEM.C",
+      "sha256": "fa46bbf0c8320d6a7ce8e16cf346f0c132251cc6807b009444a660f09f4f5d27"
+    },
+    {
+      "path": "commands/dredix/emem.h",
+      "origin": "41SRC_08.IMG.DIR/EMEM.H",
+      "sha256": "7d729089087d7b5582856d240f491c4c253ff96c26949325ee6be3ccc5af7290"
+    },
+    {
+      "path": "commands/dredix/epat.c",
+      "origin": "41SRC_08.IMG.DIR/EPAT.C",
+      "sha256": "f3c3a806c2753daa5efc76a39fc7e10a17b6920341773e93fde9dcc7772a4a13"
+    },
+    {
+      "path": "commands/dredix/ecmdio.c",
+      "origin": "41SRC_08.IMG.DIR/ECMDIO.C",
+      "sha256": "3224d9c53e3a1c7d79c1a593531c855698711d8dcb8e2def6bd7760c04964b47"
+    },
+    {
+      "path": "commands/dredix/ecmdglb.c",
+      "origin": "41SRC_08.IMG.DIR/ECMDGLB.C",
+      "sha256": "c3cd33394eae5e2279e858838b0ed794909fc5b2c4319979c8044836230e6dee"
+    },
+    {
+      "path": "commands/dredix/epat.h",
+      "origin": "41SRC_08.IMG.DIR/EPAT.H",
+      "sha256": "8fa2ca118d1c5611bb89b38b404f7465e4b792c88327d34f248134c71a1b5089"
+    },
+    {
+      "path": "commands/dredix/ecmdglb.h",
+      "origin": "41SRC_08.IMG.DIR/ECMDGLB.H",
+      "sha256": "8fb13f0628aefe1946a38b461a1aa9298b7a4f8dc371fb54715af5151d429c85"
+    },
+    {
+      "path": "commands/dredix/ebuf.c",
+      "origin": "41SRC_08.IMG.DIR/EBUF.C",
+      "sha256": "2dc61386156caeadd887d154fdcc1f6ef772332ab99d36c95794bfade483bf0d"
+    },
+    {
+      "path": "commands/dredix/ekey.c",
+      "origin": "41SRC_08.IMG.DIR/EKEY.C",
+      "sha256": "345b699c7d8d347cb22b8d8ff86baec9d4d1b620f412f6dda307d0000cfb86fc"
+    },
+    {
+      "path": "commands/dredix/common.c",
+      "origin": "41SRC_08.IMG.DIR/COMMON.C",
+      "sha256": "2893f680fe06ebea1ebdc6317c5e7a33c1295fc537beb4b19153840e8c2263fe"
+    },
+    {
+      "path": "commands/dredix/ed.c",
+      "origin": "41SRC_08.IMG.DIR/ED.C",
+      "sha256": "f162b120db6caba5ea654dbe78fe0e3965dae993d544ec04d0bac1c702918c09"
+    },
+    {
+      "path": "commands/dsp/dsp.sub",
+      "origin": "41SRC_09.IMG.DIR/DSP.SUB",
+      "sha256": "9acd7ad2117fd6159f5d3dc5d3123519a012435898821ef7592af26b11abb493"
+    },
+    {
+      "path": "commands/dsp/utlasm.a86",
+      "origin": "41SRC_09.IMG.DIR/UTLASM.A86",
+      "sha256": "a7239878b80353e879b68029aad8017f63f0fa5b682dd53b3457b38b6166a2a3"
+    },
+    {
+      "path": "commands/dsp/dspm.c",
+      "origin": "41SRC_09.IMG.DIR/DSPM.C",
+      "sha256": "176e6df92ace03780fd94de8923bb1adf000b01cdd6b79dac28922dded6be282"
+    },
+    {
+      "path": "commands/dsp/spldef.h",
+      "origin": "41SRC_09.IMG.DIR/SPLDEF.H",
+      "sha256": "38497681d4e4657e63e0192c7b0ef125e1937d4db40ed18f900224191173456b"
+    },
+    {
+      "path": "commands/dsp/dsp.c",
+      "origin": "41SRC_09.IMG.DIR/DSP.C",
+      "sha256": "1c52874038b8af8a02f485d9ac18ece1dbad8f020cd28e818b137290e11f868d"
+    },
+    {
+      "path": "commands/dsp/cpmcall.h",
+      "origin": "41SRC_09.IMG.DIR/CPMCALL.H",
+      "sha256": "3678cb6fc70cacf50466cec12aa2b05e3013cc42fc537f935955b9d6f2ea2eea"
+    },
+    {
+      "path": "commands/eraq/eraq.sub",
+      "origin": "41SRC_09.IMG.DIR/ERAQ.SUB",
+      "sha256": "463d25f7a77ef5b8a478f76b0cb9080d7d47c093841927929271f69935d16d18"
+    },
+    {
+      "path": "commands/eraq/eraq.plm",
+      "origin": "41SRC_09.IMG.DIR/ERAQ.PLM",
+      "sha256": "c0632a3b7c99b1d07aa693ad4aec4d51da1a049cbf4532c3e114ca5acb3fbcf2"
+    },
+    {
+      "path": "commands/eraq/vermpm.lit",
+      "origin": "41SRC_09.IMG.DIR/VERMPM.LIT",
+      "sha256": "292f2e3af580df8454969aafed0fd02652ed208ee17b53696b36ef8005de7320"
+    },
+    {
+      "path": "commands/eraq/vaxcmd.lit",
+      "origin": "41SRC_09.IMG.DIR/VAXCMD.LIT",
+      "sha256": "ef6013ae6c5826ff78f996d595654cdb30c178a6e26cf4c11700251777c1b633"
+    },
+    {
+      "path": "commands/eraq/copyrt.lit",
+      "origin": "41SRC_09.IMG.DIR/COPYRT.LIT",
+      "sha256": "eca873c32518da7505476d0db64e413cd339601c0ec8c4c3dbc169e3856c2f86"
+    },
+    {
+      "path": "commands/eraq/scd3.a86",
+      "origin": "41SRC_09.IMG.DIR/SCD3.A86",
+      "sha256": "1682f21013f560c3d472c86e3ff92db7ca9ac522aff16189a25844031c6bd5b8"
+    },
+    {
+      "path": "commands/help/help.sub",
+      "origin": "41SRC_11.IMG.DIR/HELP.SUB",
+      "sha256": "e98585618c6b8fa26603775bd8f010ab5b10bba3f8cf15f77872c848ba8ebf6d"
+    },
+    {
+      "path": "commands/help/help3.plm",
+      "origin": "41SRC_11.IMG.DIR/HELP3.PLM",
+      "sha256": "48538b6868a4be24481dd93795b63e12bae32c3a284e67f25010e2b661b054c1"
+    },
+    {
+      "path": "commands/help/scd3.a86",
+      "origin": "41SRC_09.IMG.DIR/SCD3.A86",
+      "sha256": "1682f21013f560c3d472c86e3ff92db7ca9ac522aff16189a25844031c6bd5b8"
+    },
+    {
+      "path": "commands/function/funcmen3.dat",
+      "origin": "41SRC_10.IMG.DIR/FUNCMEN3.DAT",
+      "sha256": "7312f19bd968a61abfbb69ba83759816b2876cdbd3b32486a17ad4bcb9062df5"
+    },
+    {
+      "path": "commands/function/funcmen2.dat",
+      "origin": "41SRC_10.IMG.DIR/FUNCMEN2.DAT",
+      "sha256": "0bed2649d17892b745279f5933d768b2d14fb9ddc54a25328bf10a9eb7f92330"
+    },
+    {
+      "path": "commands/function/funcmen1.dat",
+      "origin": "41SRC_09.IMG.DIR/FUNCMEN1.DAT",
+      "sha256": "7d2fa1846fd88ff088799dd74ee080a877f1ba78a7137d204b0067593e01c272"
+    },
+    {
+      "path": "commands/function/function.sub",
+      "origin": "41SRC_10.IMG.DIR/FUNCTION.SUB",
+      "sha256": "0fcc8db590e6ff925195ae3a146d28c8466f211a0f9ad1c6e2f876b325363787"
+    },
+    {
+      "path": "commands/function/func10.a86",
+      "origin": "41SRC_09.IMG.DIR/FUNC10.A86",
+      "sha256": "6b4b3fb7468f6c58766c465ec44ebd8f769c0816724ef15f8a1724c96af1bfb1"
+    },
+    {
+      "path": "commands/function/help2.plm",
+      "origin": "41SRC_09.IMG.DIR/HELP2.PLM",
+      "sha256": "880887d03d3e3f9be0f431ce65ff5c8d91be54fe8f844331811b4be70989088e"
+    },
+    {
+      "path": "commands/function/help1.a86",
+      "origin": "41SRC_09.IMG.DIR/HELP1.A86",
+      "sha256": "049854a65d3987a37ccf7ee2a89838afdfc2affddb6d38f0842bbe8b9619eaf1"
+    },
+    {
+      "path": "commands/function/screen.a86",
+      "origin": "41SRC_09.IMG.DIR/SCREEN.A86",
+      "sha256": "0f693ba3987c72402c1093b21cd3407790f1792115e62f6af87044949c8a6c6b"
+    },
+    {
+      "path": "commands/function/system.a86",
+      "origin": "41SRC_09.IMG.DIR/SYSTEM.A86",
+      "sha256": "ac44c66f9f7c3eeee5a2836785b1a191fded926e3b9a4a72d67fdb8672e2810d"
+    },
+    {
+      "path": "commands/function/common.equ",
+      "origin": "41SRC_08.IMG.DIR/COMMON.EQU",
+      "sha256": "4ab70eec1a68ad2cb263160092f1716dcc618660cd8a9793315e603a2a7a814f"
+    },
+    {
+      "path": "commands/function/date.dat",
+      "origin": "41SRC_08.IMG.DIR/DATE.DAT",
+      "sha256": "39a88815865572a53e6a2cbac6a3a43b72fb8529a06436513cb8f7b9ca9cf3bc"
+    },
+    {
+      "path": "commands/function/pccrt.a86",
+      "origin": "41SRC_09.IMG.DIR/PCCRT.A86",
+      "sha256": "40bca54ecff6029a8d08767281be1ee788f92213524ce89eb6198ef7bb0c4b2e"
+    },
+    {
+      "path": "commands/function/display.a86",
+      "origin": "41SRC_09.IMG.DIR/DISPLAY.A86",
+      "sha256": "20b37b7117c96a4f7db67a899e2b7fbe4bb7b90dcda35cf6d144330a43f71b57"
+    },
+    {
+      "path": "commands/function/boxframe.dat",
+      "origin": "41SRC_08.IMG.DIR/BOXFRAME.DAT",
+      "sha256": "9d2290bf18930c2200b9f072b2926a06c3e56acafe8c08ffe5d3adcec90434d5"
+    },
+    {
+      "path": "commands/function/func3.a86",
+      "origin": "41SRC_09.IMG.DIR/FUNC3.A86",
+      "sha256": "380f25e92943ba5e8f19030b6562919aee247a9f39a768f258534738eed6e92a"
+    },
+    {
+      "path": "commands/function/func2.a86",
+      "origin": "41SRC_10.IMG.DIR/FUNC2.A86",
+      "sha256": "5d03fd6fee0ccee2ff4cf90d15c213b8c20eb0f898f6b29e0b90550552301f76"
+    },
+    {
+      "path": "commands/function/func1.a86",
+      "origin": "41SRC_09.IMG.DIR/FUNC1.A86",
+      "sha256": "4b91d0a4cc3af0a60db8a6af131a53018137aa7b41d0d1a864ff62949d0dea6d"
+    },
+    {
+      "path": "commands/function/serchck.a86",
+      "origin": "41SRC_09.IMG.DIR/SERCHCK.A86",
+      "sha256": "ccd9857337cdc60fd8810117bc13997118a08ec4fb55feef2789a134c62edba3"
+    },
+    {
+      "path": "commands/function/checkver.a86",
+      "origin": "41SRC_08.IMG.DIR/CHECKVER.A86",
+      "sha256": "465e263df7fcf4b45d1a67bb3c4bb052e3efa87129e825279a906ddb2cb96a5f"
+    },
+    {
+      "path": "commands/function/copyrite.dat",
+      "origin": "41SRC_08.IMG.DIR/COPYRITE.DAT",
+      "sha256": "93a251a7146b477b50841124442b96f395745514bc9bd68e6f91aebf1885f3b6"
+    },
+    {
+      "path": "commands/dskmaint/date.dat",
+      "origin": "41SRC_08.IMG.DIR/DATE.DAT",
+      "sha256": "39a88815865572a53e6a2cbac6a3a43b72fb8529a06436513cb8f7b9ca9cf3bc"
+    },
+    {
+      "path": "commands/dskmaint/copyrite.dat",
+      "origin": "41SRC_08.IMG.DIR/COPYRITE.DAT",
+      "sha256": "93a251a7146b477b50841124442b96f395745514bc9bd68e6f91aebf1885f3b6"
+    },
+    {
+      "path": "commands/dskmaint/boxframe.dat",
+      "origin": "41SRC_08.IMG.DIR/BOXFRAME.DAT",
+      "sha256": "9d2290bf18930c2200b9f072b2926a06c3e56acafe8c08ffe5d3adcec90434d5"
+    },
+    {
+      "path": "commands/dskmaint/dskmaint.sub",
+      "origin": "41SRC_09.IMG.DIR/DSKMAINT.SUB",
+      "sha256": "31c6d7ecdca011e85d8801aa97332c52d209eeada3b24121aeba6f5e5033fb3e"
+    },
+    {
+      "path": "commands/dskmaint/dskmaint.in",
+      "origin": "41SRC_08.IMG.DIR/DSKMAINT.IN",
+      "sha256": "d10755c1da9060caaf77c99178a41c4b552fa57c039148d0683b53cf9d1d66ef"
+    },
+    {
+      "path": "commands/dskmaint/dosboot.a86",
+      "origin": "41SRC_08.IMG.DIR/DOSBOOT.A86",
+      "sha256": "3936fda77a6ff4e940bd2873e38892a9d0857e67ab1534e108b661986d48b4b0"
+    },
+    {
+      "path": "commands/dskmaint/func10.a86",
+      "origin": "41SRC_09.IMG.DIR/FUNC10.A86",
+      "sha256": "6b4b3fb7468f6c58766c465ec44ebd8f769c0816724ef15f8a1724c96af1bfb1"
+    },
+    {
+      "path": "commands/dskmaint/help2.plm",
+      "origin": "41SRC_09.IMG.DIR/HELP2.PLM",
+      "sha256": "880887d03d3e3f9be0f431ce65ff5c8d91be54fe8f844331811b4be70989088e"
+    },
+    {
+      "path": "commands/dskmaint/help1.a86",
+      "origin": "41SRC_09.IMG.DIR/HELP1.A86",
+      "sha256": "049854a65d3987a37ccf7ee2a89838afdfc2affddb6d38f0842bbe8b9619eaf1"
+    },
+    {
+      "path": "commands/dskmaint/screen.a86",
+      "origin": "41SRC_09.IMG.DIR/SCREEN.A86",
+      "sha256": "0f693ba3987c72402c1093b21cd3407790f1792115e62f6af87044949c8a6c6b"
+    },
+    {
+      "path": "commands/dskmaint/system.a86",
+      "origin": "41SRC_09.IMG.DIR/SYSTEM.A86",
+      "sha256": "ac44c66f9f7c3eeee5a2836785b1a191fded926e3b9a4a72d67fdb8672e2810d"
+    },
+    {
+      "path": "commands/dskmaint/common.equ",
+      "origin": "41SRC_08.IMG.DIR/COMMON.EQU",
+      "sha256": "4ab70eec1a68ad2cb263160092f1716dcc618660cd8a9793315e603a2a7a814f"
+    },
+    {
+      "path": "commands/dskmaint/pccrt.a86",
+      "origin": "41SRC_09.IMG.DIR/PCCRT.A86",
+      "sha256": "40bca54ecff6029a8d08767281be1ee788f92213524ce89eb6198ef7bb0c4b2e"
+    },
+    {
+      "path": "commands/dskmaint/display.a86",
+      "origin": "41SRC_09.IMG.DIR/DISPLAY.A86",
+      "sha256": "20b37b7117c96a4f7db67a899e2b7fbe4bb7b90dcda35cf6d144330a43f71b57"
+    },
+    {
+      "path": "commands/dskmaint/squiddm3.a86",
+      "origin": "41SRC_09.IMG.DIR/SQUIDDM3.A86",
+      "sha256": "d7107957ef24358b5cb83cc312dfdacfcb1b49c153b5bbd8227067c03a256d6e"
+    },
+    {
+      "path": "commands/dskmaint/squiddm2.a86",
+      "origin": "41SRC_09.IMG.DIR/SQUIDDM2.A86",
+      "sha256": "a5194482d263203ea8f1644f79682d85859894de9cea0285cc18d39b343e3003"
+    },
+    {
+      "path": "commands/dskmaint/squiddm1.a86",
+      "origin": "41SRC_09.IMG.DIR/SQUIDDM1.A86",
+      "sha256": "cc79f530f2dad02255661ef1964535a41069cf2fd3dd3b12b661a86169a714db"
+    },
+    {
+      "path": "commands/dskmaint/mainmenu.dat",
+      "origin": "41SRC_09.IMG.DIR/MAINMENU.DAT",
+      "sha256": "a90ff21460f7bcbdee52ce76a2cda0cc48e288ff51b96e5c28ae7944241390ba"
+    },
+    {
+      "path": "commands/dskmaint/serchck.a86",
+      "origin": "41SRC_09.IMG.DIR/SERCHCK.A86",
+      "sha256": "ccd9857337cdc60fd8810117bc13997118a08ec4fb55feef2789a134c62edba3"
+    },
+    {
+      "path": "commands/dskmaint/checkver.a86",
+      "origin": "41SRC_08.IMG.DIR/CHECKVER.A86",
+      "sha256": "465e263df7fcf4b45d1a67bb3c4bb052e3efa87129e825279a906ddb2cb96a5f"
+    },
+    {
+      "path": "commands/hdmaint/hdmaint.sub",
+      "origin": "41SRC_10.IMG.DIR/HDMAINT.SUB",
+      "sha256": "fb1513ea7f539367f3c4ab86f730353712f962f6cbddeb21cd1e990d2b2e1a24"
+    },
+    {
+      "path": "commands/hdmaint/lbdos3.a86",
+      "origin": "41SRC_08.IMG.DIR/LBDOS3.A86",
+      "sha256": "e6179c0e283eefa10fb2b53e514cf4a41bae70113fd47dd420bdef5895878ffa"
+    },
+    {
+      "path": "commands/hdmaint/pcboot3.a86",
+      "origin": "41SRC_11.IMG.DIR/PCBOOT3.A86",
+      "sha256": "e8aa9bb25184e064bcbbe0846bb628dc66330fde5f509e3562b94ea5015c3187"
+    },
+    {
+      "path": "commands/hdmaint/pcboot2.a86",
+      "origin": "41SRC_11.IMG.DIR/PCBOOT2.A86",
+      "sha256": "272c8971037a31c6d83137d4e0ecef60120e3109bb9b37ca78d46cdcbf3a889a"
+    },
+    {
+      "path": "commands/hdmaint/cpmboot3.a86",
+      "origin": "41SRC_10.IMG.DIR/CPMBOOT3.A86",
+      "sha256": "b366e08404859862e11a759a5251516302474776f1f0146c4fe136f321de04c6"
+    },
+    {
+      "path": "commands/hdmaint/cpmboot2.a86",
+      "origin": "41SRC_10.IMG.DIR/CPMBOOT2.A86",
+      "sha256": "e197870728712b16966ce0e221424c702913e98b026b6d4f751f6d616a76f290"
+    },
+    {
+      "path": "commands/hdmaint/pcboot1.a86",
+      "origin": "41SRC_11.IMG.DIR/PCBOOT1.A86",
+      "sha256": "7fa60461e3741d8119c9caa2322e946ec32af7d77567a727904a5cddc1879ab4"
+    },
+    {
+      "path": "commands/hdmaint/hsetup.a86",
+      "origin": "41SRC_10.IMG.DIR/HSETUP.A86",
+      "sha256": "34c7afd4747470328540573bfc7c05ce6143954161037bca13f60f8cdec4e535"
+    },
+    {
+      "path": "commands/hdmaint/label.a86",
+      "origin": "41SRC_10.IMG.DIR/LABEL.A86",
+      "sha256": "a39ea8b123cc33309a79cac75212490c188d04343886bd29f5ee27244e48a4fe"
+    },
+    {
+      "path": "commands/hdmaint/h70.a86",
+      "origin": "41SRC_10.IMG.DIR/H70.A86",
+      "sha256": "c65ec801db84ddd3e58da4021c0756fa5e945fe01c15f89cb9930627d4eab9e7"
+    },
+    {
+      "path": "commands/hdmaint/hdbuff.lib",
+      "origin": "41SRC_10.IMG.DIR/HDBUFF.LIB",
+      "sha256": "37e7f2ddb45932c1e5c918e87d5e08624c8579b8aa906ac79fc4a790d8c51ea6"
+    },
+    {
+      "path": "commands/hdmaint/menubol.lib",
+      "origin": "41SRC_11.IMG.DIR/MENUBOL.LIB",
+      "sha256": "99f20739ee0e139e9fc99241f6757eacf780093670d379c247db808431219236"
+    },
+    {
+      "path": "commands/hdmaint/hdiskio.lib",
+      "origin": "41SRC_10.IMG.DIR/HDISKIO.LIB",
+      "sha256": "bc3d086a3259f689e629225d4fcc04a1abc441295c6d6038c5cbec1a651ebe94"
+    },
+    {
+      "path": "commands/hdmaint/hdlogin.lib",
+      "origin": "41SRC_10.IMG.DIR/HDLOGIN.LIB",
+      "sha256": "b7de50ba9563d898953b721f2fd24cda2e1d5a73322d4ae19fdb4df7ea1fa921"
+    },
+    {
+      "path": "commands/hdmaint/hdptutil.lib",
+      "origin": "41SRC_10.IMG.DIR/HDPTUTIL.LIB",
+      "sha256": "7b5721fa0c5924bca161a9a4bc1ffc063729f7e4a5ad0ea5f0bf8f0df95657e8"
+    },
+    {
+      "path": "commands/hdmaint/hddoslib.lib",
+      "origin": "41SRC_10.IMG.DIR/HDDOSLIB.LIB",
+      "sha256": "92b52f3c2a870dbf35e3f1b305b0718dd2634c0f0007084eb7df669a26166073"
+    },
+    {
+      "path": "commands/hdmaint/hdcpmlib.lib",
+      "origin": "41SRC_10.IMG.DIR/HDCPMLIB.LIB",
+      "sha256": "b7093ad80568d9ec4f78fb8e9e81497323b7fafc8c827a0c1c5e48291f038921"
+    },
+    {
+      "path": "commands/hdmaint/hdutil1.lib",
+      "origin": "41SRC_10.IMG.DIR/HDUTIL1.LIB",
+      "sha256": "84e4440651cf43dd37cdfe578b978ec072d0df456987bf77ce4c31fce049a3e0"
+    },
+    {
+      "path": "commands/hdmaint/hdverify.lib",
+      "origin": "41SRC_10.IMG.DIR/HDVERIFY.LIB",
+      "sha256": "8db1997991772910e0947511713dbd7a67cbd19deb9e1e421562ba15891254b7"
+    },
+    {
+      "path": "commands/hdmaint/hdoption.lib",
+      "origin": "41SRC_10.IMG.DIR/HDOPTION.LIB",
+      "sha256": "4df567d2d4cc217fa626fbb77d0b6310c007022fb8d662038e825c7260620117"
+    },
+    {
+      "path": "commands/hdmaint/hdboot.lib",
+      "origin": "41SRC_10.IMG.DIR/HDBOOT.LIB",
+      "sha256": "97e22d59fce46e2eaf6813b28fefe34d67c8d7f221bc5155287c6930123cbba2"
+    },
+    {
+      "path": "commands/hdmaint/hdpmaint.lib",
+      "origin": "41SRC_10.IMG.DIR/HDPMAINT.LIB",
+      "sha256": "e09c4bdc7cecb3518bc69bf56476dbed73c56d444fb65ee3a062b23e3b9b7734"
+    },
+    {
+      "path": "commands/hdmaint/hdmain.lib",
+      "origin": "41SRC_10.IMG.DIR/HDMAIN.LIB",
+      "sha256": "1cf535b606a3709cbf550a69a398a1746bdfa80a1d96bbbd5c311fb823335851"
+    },
+    {
+      "path": "commands/hdmaint/hddseg2.lib",
+      "origin": "41SRC_10.IMG.DIR/HDDSEG2.LIB",
+      "sha256": "c3c38d4588074f59b8bfc7b1f7b4116bcb1c7cf1db6ac1f2179814c03c3f876b"
+    },
+    {
+      "path": "commands/hdmaint/hdtext.lib",
+      "origin": "41SRC_10.IMG.DIR/HDTEXT.LIB",
+      "sha256": "8ced541de8329253519890a7748185ee073d7a9b9b017cccf1399aec71eb1a14"
+    },
+    {
+      "path": "commands/hdmaint/hddseg1.lib",
+      "origin": "41SRC_10.IMG.DIR/HDDSEG1.LIB",
+      "sha256": "64689cdb4dfdddb8dfee58cc9faadf88593a019ca45830fe99679214208d6bf6"
+    },
+    {
+      "path": "commands/hdmaint/hdeseg.lib",
+      "origin": "41SRC_10.IMG.DIR/HDESEG.LIB",
+      "sha256": "994dd1b790f7568c0de07a27ef8f7242498d24f523b5d0644ef67d90a7f946a6"
+    },
+    {
+      "path": "commands/hdmaint/menubol.def",
+      "origin": "41SRC_11.IMG.DIR/MENUBOL.DEF",
+      "sha256": "ab4835ea2addfef9afae5b635e6a6a65a526944f5b7d6992a58e8d6592da880c"
+    },
+    {
+      "path": "commands/hdmaint/hddef2.lib",
+      "origin": "41SRC_10.IMG.DIR/HDDEF2.LIB",
+      "sha256": "9cc9dcc146b7c2ad8b4e96862b30ffcf6b50ac0e2dbcc76e1e05f1debe1d67eb"
+    },
+    {
+      "path": "commands/hdmaint/hdxtdefs.lib",
+      "origin": "41SRC_10.IMG.DIR/HDXTDEFS.LIB",
+      "sha256": "fe1bf32c4cad578b99dae5c73bbea4470603eb8af1b3dd31603001befd4dfb41"
+    },
+    {
+      "path": "commands/hdmaint/hddef1.lib",
+      "origin": "41SRC_10.IMG.DIR/HDDEF1.LIB",
+      "sha256": "3b7a9d9749a020257b881a2b7b48591b2896233e027a99e29632594224f6e452"
+    },
+    {
+      "path": "commands/initdir/initdir.sub",
+      "origin": "41SRC_11.IMG.DIR/INITDIR.SUB",
+      "sha256": "2f79cb4d393e4d0a6eebc78f66476543568ae5110a84528e3e1b659ff5b233e6"
+    },
+    {
+      "path": "commands/initdir/diomod.a86",
+      "origin": "41SRC_11.IMG.DIR/DIOMOD.A86",
+      "sha256": "79571a24577c3fcfba8674b698819d96235015aa023baa54130f445670c0ea27"
+    },
+    {
+      "path": "commands/initdir/initdira.a86",
+      "origin": "41SRC_11.IMG.DIR/INITDIRA.A86",
+      "sha256": "bcd9d721da3ff3bc4ee6d7370ba262ca6e82f98a86444f47e5fd1924d81d8eb7"
+    },
+    {
+      "path": "commands/initdir/initdir.pli",
+      "origin": "41SRC_11.IMG.DIR/INITDIR.PLI",
+      "sha256": "ef814927357cabd8e5dc5425fedb728d096144cb8d9275a1ffb4178806fb5bfa"
+    },
+    {
+      "path": "commands/genldr/genldr.sub",
+      "origin": "41SRC_10.IMG.DIR/GENLDR.SUB",
+      "sha256": "052a377f367fbcbf9d1f3267fb404f5b2f4fc45759b701e9a96edbd8a613a828"
+    },
+    {
+      "path": "commands/genldr/genmsg.a86",
+      "origin": "41SRC_10.IMG.DIR/GENMSG.A86",
+      "sha256": "e0d43c46b780bc31bcb256c3423dd561b2edffdea8072983c3602a8e0c82ca2f"
+    },
+    {
+      "path": "commands/genldr/ldrbuf.plm",
+      "origin": "41SRC_10.IMG.DIR/LDRBUF.PLM",
+      "sha256": "c721c62d0bfaac881b72ff9d3b00cfd09734903c8c49c3e43ea61e8e6628ccae"
+    },
+    {
+      "path": "commands/genldr/genldr.plm",
+      "origin": "41SRC_10.IMG.DIR/GENLDR.PLM",
+      "sha256": "2041d23a50fdc53ad51eaa388520482030ed17b2df7a91ce6eace2b0845c3354"
+    },
+    {
+      "path": "commands/loadccpm/loadccpm.sub",
+      "origin": "41SRC_11.IMG.DIR/LOADCCPM.SUB",
+      "sha256": "e2db2f18efed2fe920ccf5c440dab65e0890bc7341f47dcb6172b557e6776341"
+    },
+    {
+      "path": "commands/loadccpm/loadccpm.a86",
+      "origin": "41SRC_11.IMG.DIR/LOADCCPM.A86",
+      "sha256": "34c69e496c0eb73ef74f95fc3a714324ff66a14a43ded63bcdd5927aa4c61524"
+    },
+    {
+      "path": "commands/printmgr/printmgr.sub",
+      "origin": "41SRC_11.IMG.DIR/PRINTMGR.SUB",
+      "sha256": "2ab8880faa0150e7138ad6b0f1761ad9283e45ddc21d48a3a74d62ba87cd2728"
+    },
+    {
+      "path": "commands/printmgr/sncheck.c",
+      "origin": "41SRC_11.IMG.DIR/SNCHECK.C",
+      "sha256": "2e42c502c182a5c0684659395f0a943db9fb3b43e114334dd0ae9416d8e175e3"
+    },
+    {
+      "path": "commands/printmgr/utlasm.a86",
+      "origin": "41SRC_09.IMG.DIR/UTLASM.A86",
+      "sha256": "a7239878b80353e879b68029aad8017f63f0fa5b682dd53b3457b38b6166a2a3"
+    },
+    {
+      "path": "commands/printmgr/spoolm.c",
+      "origin": "41SRC_11.IMG.DIR/SPOOLM.C",
+      "sha256": "4956ccf84a2d672537ca205f3f0bc101ae0841e7ae271b758e2867686fa850a8"
+    },
+    {
+      "path": "commands/printmgr/spldef.h",
+      "origin": "41SRC_09.IMG.DIR/SPLDEF.H",
+      "sha256": "38497681d4e4657e63e0192c7b0ef125e1937d4db40ed18f900224191173456b"
+    },
+    {
+      "path": "commands/printmgr/spool.c",
+      "origin": "41SRC_11.IMG.DIR/SPOOL.C",
+      "sha256": "f7eb505d380382442e1213a0b5bf1d1e297f93e64673e9af8f93c595c8ca3b25"
+    },
+    {
+      "path": "commands/printmgr/cpmcall.h",
+      "origin": "41SRC_09.IMG.DIR/CPMCALL.H",
+      "sha256": "3678cb6fc70cacf50466cec12aa2b05e3013cc42fc537f935955b9d6f2ea2eea"
+    },
+    {
+      "path": "commands/copymenu/copymenu.sub",
+      "origin": "41SRC_07.IMG.DIR/COPYMENU.SUB",
+      "sha256": "22889415394f8cf72c1919bf7dfadd190036745e634d12fadb681adcb463cb39"
+    },
+    {
+      "path": "commands/copymenu/copymenu.inp",
+      "origin": "41SRC_07.IMG.DIR/COPYMENU.INP",
+      "sha256": "852a854380551acb2eacfa95812b7e639f32e08ad14c1dc622c49ee711119f2d"
+    },
+    {
+      "path": "commands/copymenu/menuio.a86",
+      "origin": "41SRC_09.IMG.DIR/MENUIO.A86",
+      "sha256": "24a62cc6a340d7f7a03b31543a1d7bec8d1a0eb14dcf4ac2ed64ba894760159b"
+    },
+    {
+      "path": "commands/copymenu/wwcallm.a86",
+      "origin": "41SRC_09.IMG.DIR/WWCALLM.A86",
+      "sha256": "5d07f71da6e9deb7ed2d2667ea10f4d9050b7f7a19fa5dcd586ad7cf58e48fc7"
+    },
+    {
+      "path": "commands/copymenu/fdraw.a86",
+      "origin": "41SRC_07.IMG.DIR/FDRAW.A86",
+      "sha256": "f2fa6ac54ed40f0fb83584094e7e24cb81396e1275cfc65218d955d2e9984ec1"
+    },
+    {
+      "path": "commands/copymenu/iosubs.c",
+      "origin": "41SRC_08.IMG.DIR/IOSUBS.C",
+      "sha256": "d1801e002d4eaee563aa37c8b62de1b7d552b2282d252a3faaa4eee5d5734514"
+    },
+    {
+      "path": "commands/copymenu/attr.h",
+      "origin": "41SRC_07.IMG.DIR/ATTR.H",
+      "sha256": "c7afb7c81a59ffbb58e7a47bc4ad472892720ede6a872f509b4fe92e5a751d1e"
+    },
+    {
+      "path": "commands/copymenu/iosubs.h",
+      "origin": "41SRC_08.IMG.DIR/IOSUBS.H",
+      "sha256": "c021ac1a98ce5fd17e78470fb63297acbaf5cb3ee238668d3bed7d39f4e86c1b"
+    },
+    {
+      "path": "commands/copymenu/fkeys.h",
+      "origin": "41SRC_07.IMG.DIR/FKEYS.H",
+      "sha256": "a5f27b527d2c395c614cb657123e76eb29858ed1e4d00b8ab6b2bbaf244aa225"
+    },
+    {
+      "path": "commands/copymenu/wmsubs.c",
+      "origin": "41SRC_08.IMG.DIR/WMSUBS.C",
+      "sha256": "9271d01a99fe15a6aefe3f951abedd6536d51862e0ea57512c1976937f21f094"
+    },
+    {
+      "path": "commands/copymenu/menusub.c",
+      "origin": "41SRC_08.IMG.DIR/MENUSUB.C",
+      "sha256": "b4241857867358b3bf3740d2e78fe3425c7d839ea2fcfe28a5934c2bc4f81cca"
+    },
+    {
+      "path": "commands/copymenu/menu.h",
+      "origin": "41SRC_08.IMG.DIR/MENU.H",
+      "sha256": "ebd35eafa13020269748bd4a2986c3fb644edd0776ab82a25ef411b45c821559"
+    },
+    {
+      "path": "commands/copymenu/scrsubs.c",
+      "origin": "41SRC_08.IMG.DIR/SCRSUBS.C",
+      "sha256": "b7d151faba8f2981439a804a0b5a23be1526092092f22d1112123f07a1915e9b"
+    },
+    {
+      "path": "commands/copymenu/scrsubs.h",
+      "origin": "41SRC_08.IMG.DIR/SCRSUBS.H",
+      "sha256": "91b7e60fefced5900fd9488d06552464581934071ca15bba06d22a0ed05b6eeb"
+    },
+    {
+      "path": "commands/copymenu/cmedscr1.c",
+      "origin": "41SRC_08.IMG.DIR/CMEDSCR1.C",
+      "sha256": "671f7cbe95a12834d4099fc4a5e51ff336a1b261e606f3af14c77042b77f3462"
+    },
+    {
+      "path": "commands/copymenu/medattr.c",
+      "origin": "41SRC_08.IMG.DIR/MEDATTR.C",
+      "sha256": "ff702cdfd3c3ef896723043081298ae9019a0111b9b73be8569abf2280d21b7d"
+    },
+    {
+      "path": "commands/copymenu/attrdef.h",
+      "origin": "41SRC_07.IMG.DIR/ATTRDEF.H",
+      "sha256": "4680b16e4904c2caf60ff2d70515b7294e0376170bbee05fb826212b42afcceb"
+    },
+    {
+      "path": "commands/copymenu/medattr.h",
+      "origin": "41SRC_08.IMG.DIR/MEDATTR.H",
+      "sha256": "1c9727029fda404167d8e8bf8232893ac777ba588d2759c1e5bf4946f866b41c"
+    },
+    {
+      "path": "commands/copymenu/attrclas.h",
+      "origin": "41SRC_07.IMG.DIR/ATTRCLAS.H",
+      "sha256": "eaab70841d625ddb810207eedc6481f5decefaeb374f9ebfae8023cfd9aac246"
+    },
+    {
+      "path": "commands/copymenu/cmedfld.c",
+      "origin": "41SRC_07.IMG.DIR/CMEDFLD.C",
+      "sha256": "836ae76d8dd2e10bef873421b57098b3b18a0106a3b63e1186954ce4beb52e73"
+    },
+    {
+      "path": "commands/copymenu/cmedscr.c",
+      "origin": "41SRC_07.IMG.DIR/CMEDSCR.C",
+      "sha256": "4276268e90fdf2e664bd534384c4353bea007790c7abc3392608f98e8a14a8ef"
+    },
+    {
+      "path": "commands/copymenu/cdupmsgs.h",
+      "origin": "41SRC_07.IMG.DIR/CDUPMSGS.H",
+      "sha256": "53e56c3a17d623d0a337aae4975013d54ebd9e7d32373690f0aef725ae14adfe"
+    },
+    {
+      "path": "commands/copymenu/cmedmain.c",
+      "origin": "41SRC_07.IMG.DIR/CMEDMAIN.C",
+      "sha256": "94ab94ee19b58d5033de0d3d79b9d02bc8287a0d6cf15ef611e377f57786b9e3"
+    },
+    {
+      "path": "commands/editmenu/mainmenu.dat",
+      "origin": "41SRC_09.IMG.DIR/MAINMENU.DAT",
+      "sha256": "a90ff21460f7bcbdee52ce76a2cda0cc48e288ff51b96e5c28ae7944241390ba"
+    },
+    {
+      "path": "commands/editmenu/editmenu.sub",
+      "origin": "41SRC_09.IMG.DIR/EDITMENU.SUB",
+      "sha256": "314e464f8505d750639dcc4d2e1961c13508d18e292eaf38f8b4c18a39f28129"
+    },
+    {
+      "path": "commands/editmenu/editmenu.inp",
+      "origin": "41SRC_09.IMG.DIR/EDITMENU.INP",
+      "sha256": "df0d4aa8beb680cf8e7370edf9794a4140b260ea105b5af962a77659e2588f41"
+    },
+    {
+      "path": "commands/editmenu/menuio.a86",
+      "origin": "41SRC_09.IMG.DIR/MENUIO.A86",
+      "sha256": "24a62cc6a340d7f7a03b31543a1d7bec8d1a0eb14dcf4ac2ed64ba894760159b"
+    },
+    {
+      "path": "commands/editmenu/wwcallm.a86",
+      "origin": "41SRC_09.IMG.DIR/WWCALLM.A86",
+      "sha256": "5d07f71da6e9deb7ed2d2667ea10f4d9050b7f7a19fa5dcd586ad7cf58e48fc7"
+    },
+    {
+      "path": "commands/editmenu/fdraw.a86",
+      "origin": "41SRC_07.IMG.DIR/FDRAW.A86",
+      "sha256": "f2fa6ac54ed40f0fb83584094e7e24cb81396e1275cfc65218d955d2e9984ec1"
+    },
+    {
+      "path": "commands/editmenu/iosubs.c",
+      "origin": "41SRC_08.IMG.DIR/IOSUBS.C",
+      "sha256": "d1801e002d4eaee563aa37c8b62de1b7d552b2282d252a3faaa4eee5d5734514"
+    },
+    {
+      "path": "commands/editmenu/attr.h",
+      "origin": "41SRC_07.IMG.DIR/ATTR.H",
+      "sha256": "c7afb7c81a59ffbb58e7a47bc4ad472892720ede6a872f509b4fe92e5a751d1e"
+    },
+    {
+      "path": "commands/editmenu/iosubs.h",
+      "origin": "41SRC_08.IMG.DIR/IOSUBS.H",
+      "sha256": "c021ac1a98ce5fd17e78470fb63297acbaf5cb3ee238668d3bed7d39f4e86c1b"
+    },
+    {
+      "path": "commands/editmenu/fkeys.h",
+      "origin": "41SRC_07.IMG.DIR/FKEYS.H",
+      "sha256": "a5f27b527d2c395c614cb657123e76eb29858ed1e4d00b8ab6b2bbaf244aa225"
+    },
+    {
+      "path": "commands/editmenu/wmsubs.c",
+      "origin": "41SRC_08.IMG.DIR/WMSUBS.C",
+      "sha256": "9271d01a99fe15a6aefe3f951abedd6536d51862e0ea57512c1976937f21f094"
+    },
+    {
+      "path": "commands/editmenu/menusub.c",
+      "origin": "41SRC_08.IMG.DIR/MENUSUB.C",
+      "sha256": "b4241857867358b3bf3740d2e78fe3425c7d839ea2fcfe28a5934c2bc4f81cca"
+    },
+    {
+      "path": "commands/editmenu/menu.h",
+      "origin": "41SRC_08.IMG.DIR/MENU.H",
+      "sha256": "ebd35eafa13020269748bd4a2986c3fb644edd0776ab82a25ef411b45c821559"
+    },
+    {
+      "path": "commands/editmenu/scrsubs.c",
+      "origin": "41SRC_08.IMG.DIR/SCRSUBS.C",
+      "sha256": "b7d151faba8f2981439a804a0b5a23be1526092092f22d1112123f07a1915e9b"
+    },
+    {
+      "path": "commands/editmenu/scrsubs.h",
+      "origin": "41SRC_08.IMG.DIR/SCRSUBS.H",
+      "sha256": "91b7e60fefced5900fd9488d06552464581934071ca15bba06d22a0ed05b6eeb"
+    },
+    {
+      "path": "commands/editmenu/medscr4.c",
+      "origin": "41SRC_09.IMG.DIR/MEDSCR4.C",
+      "sha256": "3ed3855c2babd7ef1cf2a698cb1e722c0d8b807eb157cc5ced5b4d77469cd00b"
+    },
+    {
+      "path": "commands/editmenu/medscr3.c",
+      "origin": "41SRC_09.IMG.DIR/MEDSCR3.C",
+      "sha256": "0ba3ba8c4b55f92d1648d00450c406ca6b2d113914990b3256adf039043dc099"
+    },
+    {
+      "path": "commands/editmenu/medscr2.c",
+      "origin": "41SRC_09.IMG.DIR/MEDSCR2.C",
+      "sha256": "7506b3e916ad30282ce7e28e387c2510aac81e430972466e098ab9afc8f0f431"
+    },
+    {
+      "path": "commands/editmenu/medscr1.c",
+      "origin": "41SRC_09.IMG.DIR/MEDSCR1.C",
+      "sha256": "6c539f177d54032155fabb1c2fa5733082e9e7df1fd570625155038494a6e5be"
+    },
+    {
+      "path": "commands/editmenu/medattr.c",
+      "origin": "41SRC_08.IMG.DIR/MEDATTR.C",
+      "sha256": "ff702cdfd3c3ef896723043081298ae9019a0111b9b73be8569abf2280d21b7d"
+    },
+    {
+      "path": "commands/editmenu/attrdef.h",
+      "origin": "41SRC_07.IMG.DIR/ATTRDEF.H",
+      "sha256": "4680b16e4904c2caf60ff2d70515b7294e0376170bbee05fb826212b42afcceb"
+    },
+    {
+      "path": "commands/editmenu/medattr.h",
+      "origin": "41SRC_08.IMG.DIR/MEDATTR.H",
+      "sha256": "1c9727029fda404167d8e8bf8232893ac777ba588d2759c1e5bf4946f866b41c"
+    },
+    {
+      "path": "commands/editmenu/attrclas.h",
+      "origin": "41SRC_07.IMG.DIR/ATTRCLAS.H",
+      "sha256": "eaab70841d625ddb810207eedc6481f5decefaeb374f9ebfae8023cfd9aac246"
+    },
+    {
+      "path": "commands/editmenu/medfld.c",
+      "origin": "41SRC_09.IMG.DIR/MEDFLD.C",
+      "sha256": "924cebbec8d713c2638a75e2aea5b2c5e5affb3e26ffa2350ae3bc47356e8f5e"
+    },
+    {
+      "path": "commands/editmenu/medscr.c",
+      "origin": "41SRC_09.IMG.DIR/MEDSCR.C",
+      "sha256": "d559b6199ba88b404e877f61cc9ded13fd81995676105b86c5658133d1eed1ef"
+    },
+    {
+      "path": "commands/editmenu/edupmsgs.h",
+      "origin": "41SRC_09.IMG.DIR/EDUPMSGS.H",
+      "sha256": "b781191d0f657b90ac56667f40db4128dae61c91799fb79b2f877da81e3cfb81"
+    },
+    {
+      "path": "commands/editmenu/medmain.c",
+      "origin": "41SRC_09.IMG.DIR/MEDMAIN.C",
+      "sha256": "994b406083f9b9aca80f806f3eeefed609eb5e6a415f1d8e0dcb023c576c69a1"
+    },
+    {
+      "path": "commands/copy/copy.bat",
+      "origin": "41SRC_07.IMG.DIR/COPY.BAT",
+      "sha256": "07d481e812e59ac04e5a7b781715e78337f5470ce6b6173bbe7007822e2283b3"
+    },
+    {
+      "path": "commands/copy/pccopy.a86",
+      "origin": "41SRC_07.IMG.DIR/PCCOPY.A86",
+      "sha256": "41db7e8dcf64b867cba166c0e3abc3b270df9c1edc002b9dbd1251232c91325e"
+    },
+    {
+      "path": "commands/date/date.bat",
+      "origin": "41SRC_08.IMG.DIR/DATE.BAT",
+      "sha256": "5f6644def6aba850e1189ac27dbffb19ae7e61949d4ea91e264877ab144d2584"
+    },
+    {
+      "path": "commands/date/pcdate.a86",
+      "origin": "41SRC_08.IMG.DIR/PCDATE.A86",
+      "sha256": "b8f07e62515c0f6d67170404a4d48c6f6c33282ebc35b0ca8e220671bd9eb5b7"
+    },
+    {
+      "path": "commands/erase/erase.bat",
+      "origin": "41SRC_09.IMG.DIR/ERASE.BAT",
+      "sha256": "2cea8fc02fdaf69b88d716cab6b1d2e2eaf60c4cc88e3c1c2bcd7d5a08d7f11d"
+    },
+    {
+      "path": "commands/erase/media.a86",
+      "origin": "41SRC_09.IMG.DIR/MEDIA.A86",
+      "sha256": "2138c7639fbb2b5dd2b6d50e59717c992890e1544ebbad7db0153bdfc97159c4"
+    },
+    {
+      "path": "commands/erase/pcerase.a86",
+      "origin": "41SRC_09.IMG.DIR/PCERASE.A86",
+      "sha256": "7684867606fa3e4aaeab8f5f4d966bde2c078b169e9ea34f2a46733911a74318"
+    },
+    {
+      "path": "commands/path/path.bat",
+      "origin": "41SRC_11.IMG.DIR/PATH.BAT",
+      "sha256": "5f89272e6e8f5d81a40db565d91c27e9afe97907babf047a6c9564311b776bcd"
+    },
+    {
+      "path": "commands/path/pathx.a86",
+      "origin": "41SRC_11.IMG.DIR/PATHX.A86",
+      "sha256": "c574c2042065477e30a5f8ede9ec3ab0babb480c25f9e50348d40d1b05a56795"
+    },
+    {
+      "path": "commands/d/derror.a86",
+      "origin": "41SRC_07.IMG.DIR/DERROR.A86",
+      "sha256": "deb4cb7739af116e30b9eccd0177d443d78731d368285c0f746fe9183d3b32db"
+    },
+    {
+      "path": "commands/d/path.a86",
+      "origin": "41SRC_07.IMG.DIR/PATH.A86",
+      "sha256": "4b9aae4424e5b12d402529bcf426e2bad270857ccfc87fc2228eefa72cc71a9d"
+    },
+    {
+      "path": "commands/d/d.a86",
+      "origin": "41SRC_07.IMG.DIR/D.A86",
+      "sha256": "534dae07ef0088f3018b202c44ff211de9a82684cb0f377b9f9cec624b76b992"
+    },
+    {
+      "path": "commands/redos/redos.sub",
+      "origin": "41SRC_11.IMG.DIR/REDOS.SUB",
+      "sha256": "5200406acaee0af1bcf809f7c2200340bf680fe093dd54225d0ddc2cb0c2ec66"
+    },
+    {
+      "path": "commands/rmdir/d.a86",
+      "origin": "41SRC_07.IMG.DIR/D.A86",
+      "sha256": "534dae07ef0088f3018b202c44ff211de9a82684cb0f377b9f9cec624b76b992"
+    },
+    {
+      "path": "commands/rmdir/path.a86",
+      "origin": "41SRC_07.IMG.DIR/PATH.A86",
+      "sha256": "4b9aae4424e5b12d402529bcf426e2bad270857ccfc87fc2228eefa72cc71a9d"
+    },
+    {
+      "path": "commands/rmdir/derror.a86",
+      "origin": "41SRC_07.IMG.DIR/DERROR.A86",
+      "sha256": "deb4cb7739af116e30b9eccd0177d443d78731d368285c0f746fe9183d3b32db"
+    },
+    {
+      "path": "commands/sysdisk/d.a86",
+      "origin": "41SRC_07.IMG.DIR/D.A86",
+      "sha256": "534dae07ef0088f3018b202c44ff211de9a82684cb0f377b9f9cec624b76b992"
+    },
+    {
+      "path": "commands/sysdisk/path.a86",
+      "origin": "41SRC_07.IMG.DIR/PATH.A86",
+      "sha256": "4b9aae4424e5b12d402529bcf426e2bad270857ccfc87fc2228eefa72cc71a9d"
+    },
+    {
+      "path": "commands/sysdisk/derror.a86",
+      "origin": "41SRC_07.IMG.DIR/DERROR.A86",
+      "sha256": "deb4cb7739af116e30b9eccd0177d443d78731d368285c0f746fe9183d3b32db"
+    },
+    {
+      "path": "commands/initdir/initdira.dcl",
+      "origin": "ccpm86-kernel/commands/initdir/initdira.dcl",
+      "sha256": "a2d59f463e8a5065ae5ada5b74d46d8f20f18f3661cc9c614d1643859104bf97"
+    },
+    {
+      "path": "commands/initdir/diomod.dcl",
+      "origin": "ccpm86-kernel/commands/initdir/diomod.dcl",
+      "sha256": "a9dbc49074581d355c824d4cf4773742b48df6096e1ffb794edab013d0fc3299"
+    },
+    {
+      "path": "commands/asm86/struc.lit",
+      "origin": "ccpm86-kernel/commands/asm86/struc.lit",
+      "sha256": "f7be059afe1309d250ebfb2b46890f67677857a10efdea815eaac63603592748"
+    },
+    {
+      "path": "commands/asm86/dline.x86",
+      "origin": "ccpm86-kernel/commands/asm86/dline.x86",
+      "sha256": "39554822d221e84789f484af062685ac3d37f715c235ccdd631c9f30fb30b701"
+    },
+    {
+      "path": "commands/asm86/exglob.ext",
+      "origin": "ccpm86-kernel/commands/asm86/exglob.ext",
+      "sha256": "883d3b04463d1f176f25ca56542f9d4045faf119aa8123dd6a014d37cf2725eb"
+    },
+    {
+      "path": "commands/asm86/global.ext",
+      "origin": "ccpm86-kernel/commands/asm86/global.ext",
+      "sha256": "24c06d43c2addf4a8e09dcda2bc48b200f0a148840766d650deef2cdc721fa03"
+    },
+    {
+      "path": "commands/asm86/io.plm",
+      "origin": "ccpm86-kernel/commands/asm86/io.plm",
+      "sha256": "629aaba2ed7b79dfc429e4f25d37bed97630554633d120a1527c0cb3fec4ade9"
+    },
+    {
+      "path": "commands/asm86/files.plm",
+      "origin": "ccpm86-kernel/commands/asm86/files.plm",
+      "sha256": "b70a844f5eb44f455cc3a24d13c9ecc21abc14ccf4fa77781507b1a142d12c40"
+    },
+    {
+      "path": "commands/asm86/subr2.ext",
+      "origin": "ccpm86-kernel/commands/asm86/subr2.ext",
+      "sha256": "6e82dcd1daa5ee5ea2c52a48454fc946c8fade41d9a208c35fc2604d155021ee"
+    },
+    {
+      "path": "commands/asm86/pseud1.ext",
+      "origin": "ccpm86-kernel/commands/asm86/pseud1.ext",
+      "sha256": "640d79db789250df9f6b6ba7481c463f772e7fd8bd36b359f3eda3f17bea831b"
+    },
+    {
+      "path": "commands/asm86/cmsubr.plm",
+      "origin": "ccpm86-kernel/commands/asm86/cmsubr.plm",
+      "sha256": "4052df09f3cd59187320bf705845e516d5a3460f9faf94dce459efee6023b38e"
+    },
+    {
+      "path": "commands/asm86/symb.plm",
+      "origin": "ccpm86-kernel/commands/asm86/symb.plm",
+      "sha256": "287dea536cee9f1a3890342ce5b55e97c2f6d7e3c03ff07e9c5e3a948cc2918b"
+    },
+    {
+      "path": "commands/asm86/cmlink.ext",
+      "origin": "ccpm86-kernel/commands/asm86/cmlink.ext",
+      "sha256": "13fc46dfcb78a1c4b1967a53a29fc97dbb4f4087f6bf51880c5d770ad3bf4b48"
+    },
+    {
+      "path": "commands/asm86/dev.lit",
+      "origin": "ccpm86-kernel/commands/asm86/dev.lit",
+      "sha256": "12913c085b820643d610f8dd6fdd557d5d8b43bf2c4eccb2a67bf68a8bbdd88b"
+    },
+    {
+      "path": "commands/asm86/brexpr.x86",
+      "origin": "ccpm86-kernel/commands/asm86/brexpr.x86",
+      "sha256": "a7c97907580731253de263b1976302dde0f183e10908913552a71293da93c38f"
+    },
+    {
+      "path": "commands/asm86/subr1.ext",
+      "origin": "ccpm86-kernel/commands/asm86/subr1.ext",
+      "sha256": "05e6b8e90ce41511d1c119991b962d9b129c7a5aeeb69c70154853a7ef0e296b"
+    },
+    {
+      "path": "commands/asm86/pseud2.ext",
+      "origin": "ccpm86-kernel/commands/asm86/pseud2.ext",
+      "sha256": "d742d408926ba8141a1b4d0b10cfd0b52e7970f63fdc6653a43828878472cfd8"
+    },
+    {
+      "path": "commands/asm86/cm.ext",
+      "origin": "ccpm86-kernel/commands/asm86/cm.ext",
+      "sha256": "2373d70144319641ee1335bc936fe5e9a413deb4a84a7dee641475085d5a8c88"
+    },
+    {
+      "path": "commands/asm86/mainp.plm",
+      "origin": "ccpm86-kernel/commands/asm86/mainp.plm",
+      "sha256": "5f42e2f0e8b38bf5696fe50341767da1d2f35e0f93323a7b094c3be4a809f083"
+    },
+    {
+      "path": "commands/asm86/mglob.ext",
+      "origin": "ccpm86-kernel/commands/asm86/mglob.ext",
+      "sha256": "a3358136732e87e14335c984d4eedd6094408c0404dadd61d4a1b951793a7ee9"
+    },
+    {
+      "path": "commands/asm86/equals.lit",
+      "origin": "ccpm86-kernel/commands/asm86/equals.lit",
+      "sha256": "ee76f3e9eb8b660992dcc049bc106297110c78dbdb51844b3ed46ca942d77def"
+    },
+    {
+      "path": "commands/asm86/cmac3.plm",
+      "origin": "ccpm86-kernel/commands/asm86/cmac3.plm",
+      "sha256": "6f6ae59d62636e0489b1a181c53af110dcdc4a56bcbdc9d6d3274bffb7e4b0ee"
+    },
+    {
+      "path": "commands/asm86/Makefile",
+      "origin": "ccpm86-kernel/commands/asm86/Makefile",
+      "sha256": "10ab0375f320237b23cbb0f4e25f0a23a62d59924b64ac94c33163abc7135bd2"
+    },
+    {
+      "path": "commands/asm86/cmac2.plm",
+      "origin": "ccpm86-kernel/commands/asm86/cmac2.plm",
+      "sha256": "0f3b5edd5a2336689aab61fbb8eb76f1b2f27b525b5a95eb7a902f6a4d44bc0b"
+    },
+    {
+      "path": "commands/asm86/instr.x86",
+      "origin": "ccpm86-kernel/commands/asm86/instr.x86",
+      "sha256": "0ec826def642489d88f46abe66dd19b5a36eb0a9a260e51b505f6cf135380783"
+    },
+    {
+      "path": "commands/asm86/cmac1.plm",
+      "origin": "ccpm86-kernel/commands/asm86/cmac1.plm",
+      "sha256": "f56eb07fe95359017a8f135401cb044bb280a725e317b5ad6b1fd8190779cf94"
+    },
+    {
+      "path": "commands/asm86/expr.x86",
+      "origin": "ccpm86-kernel/commands/asm86/expr.x86",
+      "sha256": "6d913a171349590eedb8b2ad8ff630a56da953bff34b03eeb701fbe6445cecbd"
+    },
+    {
+      "path": "commands/asm86/cm.lit",
+      "origin": "ccpm86-kernel/commands/asm86/cm.lit",
+      "sha256": "c7390fba8cd0ec75c482d53943d622b3fed2e4b213da70ae7a52e04688f915d8"
+    },
+    {
+      "path": "commands/asm86/pseud1.plm",
+      "origin": "ccpm86-kernel/commands/asm86/pseud1.plm",
+      "sha256": "983ef1eb738ea240fc9eb4bd317e3c7876be624d885eb940f1dd86fad67854cd"
+    },
+    {
+      "path": "commands/asm86/files.ext",
+      "origin": "ccpm86-kernel/commands/asm86/files.ext",
+      "sha256": "89187b14d81924eda4c69d58ee89ec756d2fb0a8f8df89d0bcddb17ede9cea49"
+    },
+    {
+      "path": "commands/asm86/subr2.plm",
+      "origin": "ccpm86-kernel/commands/asm86/subr2.plm",
+      "sha256": "19b84f66402ab0d3a35303bbf942badd769cd5d04f10f7aaecb654016c40dc4b"
+    },
+    {
+      "path": "commands/asm86/global.plm",
+      "origin": "ccpm86-kernel/commands/asm86/global.plm",
+      "sha256": "6d4d0beb5d424285419f087796a5013c3bb496d0555855a4f25e218198f7faf1"
+    },
+    {
+      "path": "commands/asm86/cmac5.plm",
+      "origin": "ccpm86-kernel/commands/asm86/cmac5.plm",
+      "sha256": "601f03bc0d6c9a632dfdacd74029e815bf93238fbc34422e84784d4928b1436b"
+    },
+    {
+      "path": "commands/asm86/io.ext",
+      "origin": "ccpm86-kernel/commands/asm86/io.ext",
+      "sha256": "45cd0109d771403c3f7dcc7c6cbed1631b7b244f6a824871a8c7f977de0a8002"
+    },
+    {
+      "path": "commands/asm86/cmacd.lit",
+      "origin": "ccpm86-kernel/commands/asm86/cmacd.lit",
+      "sha256": "10f6e060832bfbe583fc7a3b05f5c3520593ff4368f46db2934205323dfce3ea"
+    },
+    {
+      "path": "commands/asm86/cmac4.plm",
+      "origin": "ccpm86-kernel/commands/asm86/cmac4.plm",
+      "sha256": "c5bd797739019462f8c9a56d1bfdc8b60da2075af7b4bb87f92a3c61ea18dcdf"
+    },
+    {
+      "path": "commands/asm86/cmsubr.ext",
+      "origin": "ccpm86-kernel/commands/asm86/cmsubr.ext",
+      "sha256": "7be2d7e2d00487dbb328140249608bf8f40aea1eca811834b25e604c6a3efd2d"
+    },
+    {
+      "path": "commands/asm86/symb.ext",
+      "origin": "ccpm86-kernel/commands/asm86/symb.ext",
+      "sha256": "ab95b7624b12daf13793dddba397233e670b77d33023b0f634387f567361fa36"
+    },
+    {
+      "path": "commands/asm86/pseud2.plm",
+      "origin": "ccpm86-kernel/commands/asm86/pseud2.plm",
+      "sha256": "f3703f3e5f8740c4aa21bf1d6157994374177174c3ad903b73cf71563fd885e7"
+    },
+    {
+      "path": "commands/asm86/subr1.plm",
+      "origin": "ccpm86-kernel/commands/asm86/subr1.plm",
+      "sha256": "3789dca235c05a11d95aa7add13e2c69a2c4dea63f364f82cf9297c096f30a61"
+    },
+    {
+      "path": "commands/asm86/bnf.tex",
+      "origin": "ccpm86-kernel/commands/asm86/bnf.tex",
+      "sha256": "8332d2737ee9de5a16a9039044e9e57c8fb63825cc1e1902974d0436d24ca513"
+    },
+    {
+      "path": "commands/asm86/cm.plm",
+      "origin": "ccpm86-kernel/commands/asm86/cm.plm",
+      "sha256": "93186d7717a436c206fa89768eabf595944501be83fd1d5ebfb573f171f05d70"
+    },
+    {
+      "path": "commands/asm86/ermod.ext",
+      "origin": "ccpm86-kernel/commands/asm86/ermod.ext",
+      "sha256": "b498dd53ac50fb3de887d93769708022e5bd91d18a44848a2da9f64a93958164"
+    },
+    {
+      "path": "commands/asm86/mnem3.plm",
+      "origin": "ccpm86-kernel/commands/asm86/mnem3.plm",
+      "sha256": "10b7ceaf4836326daa88db858150cf655b7ca48524a4083aa92a4be72a879706"
+    },
+    {
+      "path": "commands/asm86/cm2.ext",
+      "origin": "ccpm86-kernel/commands/asm86/cm2.ext",
+      "sha256": "60f05768ecb1932ce44ca9a4599c82d48db9c61b0ee0ad75afcb10070bdeff55"
+    },
+    {
+      "path": "commands/asm86/mnem2.plm",
+      "origin": "ccpm86-kernel/commands/asm86/mnem2.plm",
+      "sha256": "85103b71a7935a5de2ebb267b6c244f33edb7083727a0255e04a5f7dfa76df78"
+    },
+    {
+      "path": "commands/asm86/brexpr.plm",
+      "origin": "ccpm86-kernel/commands/asm86/brexpr.plm",
+      "sha256": "b8e2aa18b78734fb03b1433e1c6be9499fa96c69137ef4157af6ed7005f4bef5"
+    },
+    {
+      "path": "commands/asm86/text.plm",
+      "origin": "ccpm86-kernel/commands/asm86/text.plm",
+      "sha256": "e2587a244a563633ddc9e678ecba1ecc4d0bd7fc7d6bf3aa38e25c5a730ce020"
+    },
+    {
+      "path": "commands/asm86/mnem1.plm",
+      "origin": "ccpm86-kernel/commands/asm86/mnem1.plm",
+      "sha256": "64f41f3971b9c5e0fb63ff1af476ad0b56857ba8a35ad7cba908a050c9747e7b"
+    },
+    {
+      "path": "commands/asm86/outp.plm",
+      "origin": "ccpm86-kernel/commands/asm86/outp.plm",
+      "sha256": "192f11ac6435b4779c78a1add4a441998f56663869921004bf0ae77978b91588"
+    },
+    {
+      "path": "commands/asm86/symb.x86",
+      "origin": "ccpm86-kernel/commands/asm86/symb.x86",
+      "sha256": "451672504200d3641af5bec66f81400de8fa94f33fc3d5d3414db78eed994de4"
+    },
+    {
+      "path": "commands/asm86/cmsubr.x86",
+      "origin": "ccpm86-kernel/commands/asm86/cmsubr.x86",
+      "sha256": "18147df451f59b70e0afecbd585c8cc931cbd30ac37feac0fecbb4f25bf2cbfc"
+    },
+    {
+      "path": "commands/asm86/scan.plm",
+      "origin": "ccpm86-kernel/commands/asm86/scan.plm",
+      "sha256": "3da640ad411a05bb6ab3ecd8f91611ada495d0308881a9c9786d31c9cc423c92"
+    },
+    {
+      "path": "commands/asm86/expr.ext",
+      "origin": "ccpm86-kernel/commands/asm86/expr.ext",
+      "sha256": "b61a8ec681731ba8b20f5fbbdabb1277e195becf9428ae210e40596787e1ae8d"
+    },
+    {
+      "path": "commands/asm86/mnem4.plm",
+      "origin": "ccpm86-kernel/commands/asm86/mnem4.plm",
+      "sha256": "298ab1c3f2769cead6561490c291743dc67c48d86e0958bff28107bd437154af"
+    },
+    {
+      "path": "commands/asm86/dline.plm",
+      "origin": "ccpm86-kernel/commands/asm86/dline.plm",
+      "sha256": "f8b753e8d559353b962e250aacc67a32423a169666b80e559c05f1370fde5e26"
+    },
+    {
+      "path": "commands/asm86/mnem.ext",
+      "origin": "ccpm86-kernel/commands/asm86/mnem.ext",
+      "sha256": "c00bf7162d084cb3027a713156135fb65b7f3022a5b934d3e143a04ac7c268e9"
+    },
+    {
+      "path": "commands/asm86/print.ext",
+      "origin": "ccpm86-kernel/commands/asm86/print.ext",
+      "sha256": "ea5167dcfff29b2f10583d57e689709f848c53f2963c94b90083f2959e11b0d2"
+    },
+    {
+      "path": "commands/asm86/c86lnk.asm",
+      "origin": "ccpm86-kernel/commands/asm86/c86lnk.asm",
+      "sha256": "b6c785ccd9854359bfb83fffbc289c6c9089758e42f3ed8358902a117eebe87d"
+    },
+    {
+      "path": "commands/asm86/macro.lit",
+      "origin": "ccpm86-kernel/commands/asm86/macro.lit",
+      "sha256": "3356bbaf67ff59ac1e49c966308e70cab57d71611c78b5b659a4e600cdf79779"
+    },
+    {
+      "path": "commands/asm86/outp.lit",
+      "origin": "ccpm86-kernel/commands/asm86/outp.lit",
+      "sha256": "e40be064030540a1492e86b63b74e9eb0c4455ccdf8f99333faba5a334a9fa6d"
+    },
+    {
+      "path": "commands/asm86/predef.plm",
+      "origin": "ccpm86-kernel/commands/asm86/predef.plm",
+      "sha256": "02de02be00a76a4b3fc1e1d091f3016c71b61593412b70b964f730471c7a9078"
+    },
+    {
+      "path": "commands/asm86/instr.ext",
+      "origin": "ccpm86-kernel/commands/asm86/instr.ext",
+      "sha256": "99581bf6c5910d3e2104f3266359e229bdc22ee29aa2ac00cd14c0b3efabb2ab"
+    },
+    {
+      "path": "commands/asm86/cm2.plm",
+      "origin": "ccpm86-kernel/commands/asm86/cm2.plm",
+      "sha256": "cbdfc7fa2d1256de65c50cc75754ea9ec015697473570ced2da92233118a9c1d"
+    },
+    {
+      "path": "commands/asm86/ermod.plm",
+      "origin": "ccpm86-kernel/commands/asm86/ermod.plm",
+      "sha256": "a0384d9d5f99f6e344fd6190f757434c666e2f56b414bb6bdbd96b582d71d59c"
+    },
+    {
+      "path": "commands/asm86/cmac.lit",
+      "origin": "ccpm86-kernel/commands/asm86/cmac.lit",
+      "sha256": "e6f0ed7358c999caf7eaa1f1a595b6badcdddf6ec750812faa975a4177e8d3af"
+    },
+    {
+      "path": "commands/asm86/pseud2.x86",
+      "origin": "ccpm86-kernel/commands/asm86/pseud2.x86",
+      "sha256": "8d0c79af75f536128c2f4ecaac12d79228cd189d0704458334f075d4d44b7235"
+    },
+    {
+      "path": "commands/asm86/mnem.lit",
+      "origin": "ccpm86-kernel/commands/asm86/mnem.lit",
+      "sha256": "15fbfb6934031de2cf7df7aef4ad092d1917ff50941aee022d08ce4c70c93960"
+    },
+    {
+      "path": "commands/asm86/pseud1.x86",
+      "origin": "ccpm86-kernel/commands/asm86/pseud1.x86",
+      "sha256": "8dd7a81d40a921925803cd7161a237b1b18e5ac37862eacebfa7dc00a0382cc0"
+    },
+    {
+      "path": "commands/asm86/scan.ext",
+      "origin": "ccpm86-kernel/commands/asm86/scan.ext",
+      "sha256": "b6e5646ec9dae4faedd496e83fce82c7488d03271af4f22d9f76bf149879aa2a"
+    },
+    {
+      "path": "commands/asm86/text.ext",
+      "origin": "ccpm86-kernel/commands/asm86/text.ext",
+      "sha256": "006507e596ff4f187ac1e6bfbf5184ee9ff6db12b9fce05920f109c7861eacfd"
+    },
+    {
+      "path": "commands/asm86/c86lnk.a86",
+      "origin": "ccpm86-kernel/commands/asm86/c86lnk.a86",
+      "sha256": "b6c785ccd9854359bfb83fffbc289c6c9089758e42f3ed8358902a117eebe87d"
+    },
+    {
+      "path": "commands/asm86/outp.ext",
+      "origin": "ccpm86-kernel/commands/asm86/outp.ext",
+      "sha256": "ca91a66e0de9786d585a38c2d9b51ddbdad6437b11af0044f05b3bb9cf8a0ef0"
+    },
+    {
+      "path": "commands/asm86/ermod.lit",
+      "origin": "ccpm86-kernel/commands/asm86/ermod.lit",
+      "sha256": "81e01ed6d0890fe9118709055d387ea393471ef6f81ed1cdb4ac53492f0063b3"
+    },
+    {
+      "path": "commands/asm86/print.plm",
+      "origin": "ccpm86-kernel/commands/asm86/print.plm",
+      "sha256": "a1e1fd5f9041f8953a42305ab4e8c2c436232ad78e8ccc3099d242a6c36c0875"
+    },
+    {
+      "path": "commands/asm86/expr.plm",
+      "origin": "ccpm86-kernel/commands/asm86/expr.plm",
+      "sha256": "803c674304eec0662f58af9a64e64d8371c94fa57d08ff5ea8d77f458bc48114"
+    },
+    {
+      "path": "commands/asm86/dline.ext",
+      "origin": "ccpm86-kernel/commands/asm86/dline.ext",
+      "sha256": "45d4452f72c12a6ffa762e867be74bab00d8185c0c820a512ebfb8fbaf58b809"
+    },
+    {
+      "path": "commands/asm86/instr.plm",
+      "origin": "ccpm86-kernel/commands/asm86/instr.plm",
+      "sha256": "42976e22473ee8e01a7597cb7567320ae88763486335696d71be40e02abed460"
+    },
+    {
+      "path": "commands/asm86/predef.ext",
+      "origin": "ccpm86-kernel/commands/asm86/predef.ext",
+      "sha256": "71088ce38ba51843d1fc07729ed9f73ec9bad1f9c5b4423f5ce11ac3a689ad67"
+    },
+    {
+      "path": "commands/gencmd/Makefile",
+      "origin": "ccpm86-kernel/commands/gencmd/Makefile",
+      "sha256": "0df0386fc42bdab4d9a7a25c5d09146a4aa698e676e0bb309550ff7df35b247a"
+    },
+    {
+      "path": "commands/gencmd/gencmd.plm",
+      "origin": "ccpm86-kernel/commands/gencmd/gencmd.plm",
+      "sha256": "6cdcb72392d369637212b1df7b7708a967cfb51ac7f96aa593718b5748149fe4"
+    },
+    {
+      "path": "commands/gencmd/hellob.a86",
+      "origin": "ccpm86-kernel/commands/gencmd/hellob.a86",
+      "sha256": "88dfb9759e3d8b84c9c2c3358e5b1c48896008a8f4af0e35abcbeadd260d8b64"
+    },
+    {
+      "path": "commands/gencmd/hellob.ref",
+      "origin": "ccpm86-kernel/commands/gencmd/hellob.ref",
+      "sha256": "3d81729878fb6db4e74066918ad7d157d84e3420c16c1de639c33b7931f6d473"
+    },
+    {
+      "path": "commands/gencmd/scd.a86",
+      "origin": "ccpm86-kernel/commands/gencmd/scd.a86",
+      "sha256": "657f644ed64ab895fe4aca6733230b6b4a9c588d381f2e55dab998c86c434638"
+    },
+    {
+      "path": "commands/submit/Makefile",
+      "origin": "ccpm86-kernel/commands/submit/Makefile",
+      "sha256": "10fa8ed8c078a7f2be054dfcd93f9169dc3ccd008535d316e7d37daaf57655e8"
+    },
+    {
+      "path": "commands/submit/submit.a86",
+      "origin": "ccpm86-kernel/commands/submit/submit.a86",
+      "sha256": "f523076479823d2a3e7a6113e04aed2b55b9bd5b9d5df96af31a32dd68712df4"
+    },
+    {
+      "path": "commands/genldr/scd2.a86",
+      "origin": "ossrc/ccpmv31/D10/SCD2.A86",
+      "sha256": "647251c93beca60ff91d87999b10f55cfa8a2aeba145481363bf2f9647cdfae0"
+    }
+  ]
+}
