@@ -1,0 +1,404 @@
+;
+;	CONSOLE HANDLERS
+;
+cr	equ	0dh
+lf	equ	0ah
+tab	equ	9
+cntrlc	equ	3
+ctlh	equ	8
+ctlu	equ	15h
+ctlr	equ	12h
+ctls	equ	13h
+ctlq	equ	11h
+ctlp	equ	10h
+ctle	equ	5
+ctlx	equ	18h
+escape  equ	1bh
+rubout	equ	7FH
+
+
+public read
+
+
+
+read:   mov read_es,es
+	mov read_dx,dx
+	mov read_sp,sp
+read2:	push dx
+	push es
+	mov cl,154
+	call bdos
+	mov ax,es
+;	mov sysdat,ax		; we never use this
+	mov si,es:RLR  			;ready list root
+	mov bl,es:20h[si]
+	mov console_no,bl
+	pop es
+	pop dx
+
+	mov al,column
+	mov strcol,al			;save start for clt-x, ctl-h
+	mov bx,dx
+	mov cl,es:[bx]			;CL = maximum buffer length
+	inc bx				;BX = next to fill - 1
+	push bx
+	mov ch,0			;CH = current buffer length
+
+readnx:
+					;read next character, CX, BX active
+	push cx! push bx		;blen, cmax, BX saved
+readn0:
+	call conin			;next char in AL
+	pop bx! pop cx			;reactivate counters
+	cmp al,cr! jnz l_19
+eofre:
+	  jmp readen
+l_19:
+					;end of line
+	cmp al,lf! je eofre		;jump to end of read if lf
+	cmp al,ctlh! jnz noth		;backspace?
+					;do we have any chars to backspace
+	  or ch,ch! jz readnx
+					;characters remain in buffer, backup one
+	  dec ch			;remove one char
+	  mov al,column
+	  mov compcol,al		;col > 0; compcol > 0 marks repeat as
+					;length comput
+	  jmp linelen			;uses same code as repeat
+noth:
+
+	cmp al,escape ! jnz notescape
+	  jmp c_term
+					;not a backspace
+notescape:
+	cmp al,rubout! jnz notrub	;rubout char?
+	  or ch,ch! jz readnx		;skip if len = 0
+					;buffer has char, resend last char
+	  mov al,es:[bx]		;AL = last char
+	  dec ch! dec bx		;blen=blen-1
+					;next to fill -1 decremented
+	  jmp rdech1			;act like this is an echo
+
+notrub:
+					;not a rubout char, check eol
+	cmp al,ctle! jnz note		;physical end of line?
+					;yes, save active counters
+					;and force eol
+	  push cx! push bx
+	  call crlf
+	  mov strcol,0			;start position = 0
+to_readn0:
+	  jmps readn0			;for another character
+
+note:
+	cmp al,ctlx! jnz notx		;not a ctle, line delete?
+	  pop bx			;discard start position
+					;loop while column > strcol
+backx:
+	mov al,strcol
+	cmp al,column! jnb read_jmp
+	  dec column
+	  call backup
+	  jmps backx
+notx:
+					;not a ctlx, ctlu?
+	cmp al,ctlu! jnz notu		;skip if not
+	  call crlfp
+	  pop bx
+read_jmp:
+	  mov sp,read_sp
+	  mov dx,read_dx
+	  jmp read2
+
+notu:
+					;not line delete, repeat line?
+	cmp al,ctlr! jnz notr
+linelen:				;repeat line, or compute line len (ctlh)
+					;if compcol > 0
+	push cx
+	call crlfp			;save line length
+	pop cx! pop bx			;bcur, cmax active
+	push bx! push cx		;beginning at BX
+rep0:
+	or ch,ch! jz rep1		;count len to zero
+	  inc bx
+	  mov cl,es:[bx]		;next to print
+	  dec ch
+	  push cx! push bx		;count length down
+	  call ctlout
+	  pop bx! pop cx		;recall remaining count
+	  jmp rep0			;for the next char
+rep1:
+					;end of repeat, recall lengths
+					;original BX remains pushed
+	push bx				;save next to fill
+	mov al,compcol
+	or al,al! jz backsp1		;>0 if computing length
+	  sub al,column
+	  mov compcol,al
+backsp:
+	call backup
+	dec compcol! jnz backsp
+backsp1:
+	jmp to_readn0
+
+notr:
+	cmp al,cntrlc! jnz notc
+	  mov ax,ds! mov es,ax
+	  jmp c_term
+notc:
+
+					;not a ctrl, place into buffer
+rdecho:
+	cmp ch,cl! jae dont_echo
+	inc bx
+	mov es:[bx],al			;character placed into memory
+	inc ch
+rdech1:
+					;look for random contrl char
+	push cx! push bx		;active values saved
+	mov cl,al			;ready to print
+	call ctlout			;may be up-arrow C
+	pop bx! pop cx
+dont_echo:
+	jmp readnx			;go for another if no
+
+readen:
+					;end of read, store blen
+	inc bx
+	mov es:byte ptr [bx],cr
+	pop bx
+	mov es:[bx],ch
+	mov es,read_es			;restore es
+	mov cl,cr
+	jmp conout
+
+c_term: mov es,read_es
+	mov bx,read_dx
+	mov byte ptr 1[bx],0
+	mov sp,read_sp
+	ret
+
+getstat:
+	mov ax,ros_char
+	or ax,ax! jnz getstat_exit
+	  push cx
+	  mov dl,0FEH
+	  mov cl,6
+	  call bdos
+	  pop cx
+	  or al,al
+getstat_exit:
+	ret
+
+putchar:
+	push cx
+	mov dl,cl
+	mov cl,6
+	call bdos
+	pop cx
+	ret
+
+
+conin:
+					;read console character to AL
+	mov ax,ros_char
+	or ax,ax! jz conin2
+	  cmp ext_char,0ffh! je get_ext_char
+	    or al,al! jnz clear_ros_char
+	      mov ext_char,0ffh
+	      ret
+get_ext_char:
+	    mov al,ah
+clear_ros_char:
+	  mov ext_char,0
+	  mov ros_char,0
+	  ret
+conin2:
+	call get_char
+	or al,al! jnz not_ext_char
+	  mov ext_char,0ffh
+	  mov ros_char,ax
+not_ext_char:
+	ret
+
+echoc:
+				;echo character if graphic
+				;cr, lf, tab, or backspace
+	cmp al,cr! je ret0
+	  cmp al,lf! je ret0
+	    cmp al,tab! je ret0
+	     cmp al,ctlh! je ret0
+	       cmp al,' '
+ret0:
+	ret				;carry set if not graphic
+
+conbrk:
+					;check for character
+	call getstat! jz conbrk_exit	;return if no character
+	    				;character ready, read it
+	 call conin
+	 cmp al,cntrlc! jne not_cntrlc
+	   mov ros_char,0
+	   jmp c_term
+not_cntrlc:				;not a terminate
+	 cmp al,ctls! jne conb0		;check stop screen function
+					;found ctls, read next char
+conbrk_loop:
+	   call conin
+	   cmp al,cntrlc! jne not_ctrlc
+	     mov ros_char,0
+	     jmp c_term
+not_ctrlc:
+	   cmp al,ctlq! jne conbrk_loop
+	     xor ax,ax! mov ros_char,0
+conbrk_exit:
+	ret
+
+conb0:
+	mov ros_char,ax
+conb1:
+					;return TRUE
+	mov al,0ffh
+	ret
+
+conout:
+					;compute character position/write console
+					;compcol = true if computing
+					;  column position
+
+	test compcol,0FFH! jnz compout
+					;write the character,
+					;then compute the column
+					;write console char from CL\
+	call conbrk			;check for stop screen function
+	call putchar			;put the character to the console
+compout:
+	mov al,cl			;recall the character
+					;and compute column position
+					;  AL = char
+	cmp al,rubout! jz ret1		;no column change if nulls
+	  inc column			;column = column + 1;
+	  cmp al,' '! jae ret1		;return if not a control char
+	    dec column			;not graphic reset column
+	    jz ret1			;return if at zero
+					;  not a zero, may be backspace
+					;  or end of line
+	      cmp al,ctlh! jnz notbacksp
+		dec column		;backspace char, decrement column
+ret1:
+	ret
+notbacksp:
+					;not a backspace, eol?
+	cmp al,lf! jnz not_eol		;return if not end of line
+	  mov column,0			;end of line column = 0
+not_eol:
+	ret
+
+ctlout:
+					;print CL char with possible preceding
+					; up - arrow
+	mov al,cl
+	call echoc			;try if not graphic or spec.
+	jae tabout			;skip if graphic or tab, cr, lf, or ctlh
+	  push ax
+	  mov cl,'^'			;send preceding up - arrow
+	  call conout
+	  pop cx
+	  or cl,40H			;becomes graphic letter
+					;ready to print
+
+tabout:
+					;expand tabs to console
+	cmp cl,tab! jnz conout		;direct to console if not tab
+tab0:
+	  mov cl,' '
+	  call conout			;another blank
+	  mov al,column
+	  and al,7! jnz tab0		;column mod 8 = 0?
+ret2:
+	ret
+
+backup:
+					;back up one position
+	call pctlh
+	mov cl,' '
+	call putchar
+
+pctlh:
+					;send ctlh to console without affecting
+					;column count
+	mov cl,ctlh
+	jmp putchar
+
+crlfp:
+					;print #, cr, lf, for ctlx, ctlu, ctlr
+					;function then move to starting column
+	mov cl,'#'
+	call conout
+	call crlf
+					;column = 0, move to starting column
+crlfp0:
+	mov al,column
+	cmp al,strcol! jae ret2
+	  mov cl,' '
+	  call conout			;print blank
+	  jmps crlfp0
+
+crlf:
+					;carriage return line feed sequence
+	mov cl,cr
+	call conout
+	mov cl,lf
+	jmp conout
+
+
+
+
+get_char:
+	push cx
+	mov cl,6
+	mov dl,0FDH			;get console character
+	call bdos
+	pop cx
+	ret
+
+
+print:
+					;print message until '$'
+	mov si,cx
+	lods al
+	cmp al,'$'
+	je ret2				;return if '$'
+					; else more to print
+	  inc cx
+	  push cx
+	  mov cl,al			;char to CL
+	  push ds! push ss		;restore data segment
+	  pop ds
+	  call tabout			;another character printer
+	  pop ds! pop cx
+	  jmps print
+
+bdos:	int 0e0h
+	ret
+
+	dseg
+
+EXTRN			column:byte
+;EXTRN			sysdat:word	; we never use this
+
+console_no		db	0
+list_no			db	0
+pd_list			equ	byte ptr .24h
+printer_busy_msg	db	cr,lf,'Printer Busy',cr,lf,'$'
+ros_char		dw	0
+ext_char		db	0
+compcol			db	0
+listcp			db	0
+strcol			db	0
+read_sp			dw	0
+read_dx			dw	0
+read_es			dw	0
+RLR			equ	word ptr .68h
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        

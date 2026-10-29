@@ -1,0 +1,1263 @@
+title 'Disk Copy Routines for XT DKSMAINT'
+;
+; All code realted to AT is identified by  AT@
+;
+;	DISK MAINTENANCE PROGRAM for SQUID
+;
+;	Disk copy routines and associated messages
+;
+;
+;	PUBLIC and EXTRN declarations
+;
+;
+;DISPLAY
+	extrn	modes:near, perform_menu:near, perform_menu_1:near
+	extrn	do_n_routines:near
+	extrn	blank_box:near, blank_entry:near
+	extrn	hex_ascii_dec:near, err_beep:near
+	extrn	ctrl_c_stat:near, show_esc_key:near, show_help_key:near
+;
+;SQUIDDM3
+	extrn	format_disk:near, check_for_AT:near
+;
+;SYSTEM and SQUIDDM3
+		dseg
+	extrn	uda:word, sysdat:word, w5_msg:word,disk_type:word
+	extrn	cluster_list:word,num_clusters:word
+;
+;
+		cseg
+	public	verify_disk, generic_copy
+	public	oem_setup_1
+	public warn_disk, verify_it, do_function, common_menu, cd_err_1
+	public warn_user_1, do_message,xios_call,seldsk
+		dseg
+	public	flops, dma_off, func_prompt_@, sector, dma_seg, source_disk
+	public  writing, cur_op,func_title_@, cur_msg, mcnt, cur_disk
+	public	track,sel_drive, max_track
+		cseg
+eject
+;
+;	EQUATES for the code area
+;
+eight		equ	8
+sixteen		equ	16
+forty		equ	40
+eighty		equ	80
+logical_record	equ	128
+answer_offset	equ	6
+first_sector	equ	0
+ctrl_c		equ	3
+;
+track_size@	equ	512 * 8			;size of a track
+;
+get_xios_pointer equ	14
+;						 header
+;
+;these are for getting at  the IOPB
+;
+dpb_offset	equ	8
+dos_dpb_len	equ	29
+cpm_dpb_len	equ	17
+
+;
+spt		equ	word ptr 0
+bsh		equ	byte ptr 2
+blm		equ	byte ptr 3
+dsm		equ	word ptr 5
+off		equ	word ptr 13
+psh		equ	byte ptr 15
+;
+shift_mask	equ	word ptr 2
+clsize		equ	word ptr 8
+nclstrs		equ	word ptr 6
+; 
+clean_IOPB	equ	10
+;
+first_select	equ	0
+;
+return_error	equ	0ffh
+default_mode	equ	0
+f_errmode	equ	45
+write_protected	equ	3
+;	SYSTEM calls
+;
+xios_seldsk	equ	9
+xios_entry	equ	dword ptr .28h
+;
+include common.equ
+eject
+;
+;	GENERIC_COPY
+;
+;	copy a diskette, this can either a one or two drive copy
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+generic_copy:
+	mov	format_needed,false		;false at start of operation
+	mov	bx,previous_menu ! mov	cx,help_no ! call set_help_esc
+	mov	func_title_@,offset repro_msg	;function title
+	mov	func_prompt_@,offset sel_src_dsk ;function prompt
+	mov	si,offset sel_drive		;put up menu
+	call	common_menu			; and get an answer
+	jz	generic_done			;ESC-wanted back to main menu
+	call	set_up_source			;set up messages and DPB
+	jz	bad_disk			;if zero then error on source
+	mov	func_prompt_@,offset sel_dest_dsk ;function prompt
+	mov	si,offset sel_drive	;ask for destination disk
+	call	common_menu		; same as above
+	jz	generic_done		;see if they wanted out
+	call	extended_error_on	;turn off XIOS status line messages
+	call	set_up_destination	;set up message and DPB
+	call	extended_error_off	;turn on XIOS status line messages
+	jnz	dest_ok			;good target disk
+	mov	format_needed,true	;bad disk, format while copying
+	call	unformatted_disk	;see if they want to format disk
+	jz	generic_copy		; no they did not
+	jmps	next_step_2		;else ,don't ask about destination
+dest_ok:
+	call	same_type?		;make sure they are same type disks
+	jnz	next_step_1		;Z flag means disks are different and
+	mov	si,offset type_err_msg	;operator  did not want to re-format
+	jmps	bad_disk_1
+next_step_1:
+	call	warn_user		;warn about destination disk
+	jz	generic_copy		; they changed their mind
+next_step_2:
+	call	copy_disk		;finally do the copy
+	jmps	generic_copy		;stay in this menu
+generic_done:
+	ret
+;
+bad_disk:
+	mov	si,offset err_@		;BAD DISK message
+bad_disk_1:
+	mov	err_msg_@,si
+	mov 	si,offset bad_disk_msg	;error screen
+	call	perform_menu_1		;put it up and get any key
+	jmps	generic_copy		;start all over
+eject
+;
+;	COPY_DISK
+;
+;	this is the routine that will actually copy the disks
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+copy_disk:
+	mov loop_index,zero ! mov format_index,-1	;intialize counters
+	mov bx,stop_op ! call show_esc_key
+	call	size_disk		;set up the parameters for the copy
+;
+	mov	cur_op,io_read		;playing it safe
+	call ask_for_source ! jz cd_done
+	mov	cl,source_disk
+	call	seldsk			;make sure to log in source, in case
+					;the destination was different media
+buffer_loop:
+	call	start_params		;initialize parameters for buffer ops
+	mov	cl,source_disk		;disk to read from
+	call	read_buffer		;read enough to fill available buffer
+	jz	cd_err_1		;if error then zero flag set
+	cmp al,ctrl_c ! je cd_done	;bail out on a Ctrl-C
+	push	ax			;save return code from params routine
+	call ask_for_dest ! jz wo_1	;check for one drive copy
+write_restart:
+	call	check_for_format	;check for format while copying
+	jz	wo_1			;Z flag is format error or ESC key
+	call	restore_start_params	;set up the correct starting points
+	mov	cl,dest_disk		;disk to write to
+	call	write_buffer		;write to destination disk
+	jnz	write_ok
+	cmp xios_ret,write_protected ! jz cd_err
+	mov	format_needed,true	;signal a format
+	jmps	write_restart
+write_ok:
+	cmp al,ctrl_c ! jne bl_1		;check for ctrl-C
+wo_1:
+	pop ax ! jmp cd_done		;Ctrl-C bail out
+bl_1:
+	call	restore_start_params	;set up the correct starting points
+	mov	cl,dest_disk		;disk to verify
+	call	verify_buffer		;verify the write operation
+	jz	cd_err
+	inc	track			;start next buffer on next track
+	pop	ax			;get back the error code from params
+	cmp al,two ! je cd_done		;are we done with the disk ?
+	cmp al,ctrl_c ! je cd_done	;Ctrl-C bail out
+	call ask_for_source ! jz cd_done ;if one drive then propmt for switch
+	jmp	buffer_loop
+;
+cd_done:
+	ret
+;
+cd_err:
+	pop	 cx			;clean off the stack
+cd_err_1:
+	mov	si,offset err_@
+	mov	err_msg_@,si		;put pointer to message in menu
+	mov	si,offset bad_disk_msg
+	call	perform_menu_1		; structure and wait for any key
+	ret
+
+eject
+;
+;	CHECK_FOR_FORMAT
+;
+;	see whether or not to format the disk during copy operation
+;
+;	ENTRY	NONE
+;
+;	EXIT	zero flag if error during format operation
+;
+check_for_format:
+	cmp	format_needed,true	;see if a format operation is needed
+	jnz	cff_ret_0		;if not then bail out
+	cmp	loop_index,zero		;only format in first buffer ops
+	jnz	cff_ret_0
+	inc	format_index		;if this becomes zero
+	jz	cff_1			; then OK to format
+cff_ret_0:
+	jmp	cff_ret			;else bail out
+;
+;	now figure out what kind of disk the source disk is
+;
+cff_1:
+	mov	bx,offset source_dpb
+	cmp	word ptr [bx],0ffffh	;is it a DOS disk
+	jnz	cpm_source
+	push es ! mov ax,ds ! mov es,ax
+	mov	di,offset cluster_list	;list of # of clusters for different
+	mov	cx,num_clusters		;  disk types
+	mov	ax,nclstrs[bx]		;get NCLSTRS  from source disk
+	repnz	scasw			;get the offse in list
+	pop	es
+	jnz	bad_format		;something is wrong
+	xchg	dx,cx			;put it in DX
+	jmps	format_for_write
+cpm_source:
+	mov	dx,two			;that's CP/M 1-8
+	cmp	shift_mask[bx],7*256+3	;looking for a 7 and a 3
+	jz	format_for_write
+	inc	dx
+	cmp	shift_mask[bx],15*256 + 4 ; looking for a 15 and 4
+	jz	format_for_write
+	jmp	bad_format
+format_for_write:
+	xchg bx,dx ! shl bx,one		;make a word pointer
+	mov	bx,disk_type[bx]	;get disk table entry
+	mov	al,source_disk
+	mov	ah,dest_disk
+	push	ax			;save the values for copy ops
+	xchg	ah,al
+	mov	source_disk,al		;make sure you format the right one
+	mov	dest_disk,ah
+	call	format_disk		;zero flag set if error condition
+	jz	cff_ret_1
+	call	restore_start_params	;set up to write track zero only
+	mov	cur_op,io_write		;write operation
+	mov	cl,source_disk		;this was swapped with dest_disk
+	mov	cur_disk,cl		;make sure it's the current disk
+	call	do_function		;write track 0
+	dec al ! or al,al ! jz cff_ret_1 ;look for error code of 1
+	mov	cl,cur_disk		;get it back
+	call	seldsk			;this is what we had to do all along
+;now the formatted diskette has been logged in as the correct media
+	or ax,ax ! jz cff_ret_1		;always check the error return
+	inc	al			;turn off the zero flag
+cff_ret_1:
+	pop	ax			;recover original values
+	mov	source_disk,al		;and restore them
+	mov	dest_disk,ah
+cff_ret:
+	ret
+bad_format:
+	xor	ax,ax
+	jmps	cff_ret
+eject
+;
+;	VERIFY_DISK
+;
+;	verify the disk by reading the entire disk
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+verify_disk:
+	mov bx,previous_menu ! 	mov cx,help_no ! call set_help_esc
+;
+	mov	func_title_@,offset ver_msg ;function title
+	mov	func_prompt_@,offset sel_ver_dsk ;function prompt
+	mov	si,offset sel_drive	;tell'm what's going on
+	call	common_menu		;menu and answer
+	jz	verify_done		;if zero then exit key
+	call	set_up_source		;get DPB and messages
+	jnz	vd			;
+	jmp	bad_verify		;error path - 5 JAN 84 changed
+vd:
+	call	size_disk		;figure out how many tracks
+	call	start_params		;intialize READ parameters
+	call	blank_box		;erase the verify menu
+	mov	al,warn_disk		;get ASCII drive letter
+	mov	ver_disk,al		;put it in message
+	mov	si,offset verify_title
+	mov	bx,msg_mode_@		;place the message
+	call	do_n_routines		;display the title
+	call	verify_it		;do the actual verify operation
+	jmps	verify_disk
+;
+verify_done:
+	ret
+eject
+;
+;	VERIFY_IT
+;
+;	verify the curent disk; do a read operation not a verify
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+verify_it:
+	mov bx,stop_op ! mov cx,help_no ! call set_help_esc
+;
+	xor	ax,ax			;make a zero, assume system tracks
+	mov	start_track,ax		;  same as data tracks
+	mov	track,ax		;start with track 0
+	mov	cur_op,io_read		;get operation code for XIOS call
+	mov	cl,source_disk		;get source disk
+	mov	cur_disk,cl		;make it the current disk
+	call	not_first_seldsk	;select the disk
+	jz	bad_verify		;bail out if error
+	mov	cur_msg,offset checking	;put message in data structure
+ver_loop:
+	call	ctrl_c_stat
+	jz	verify_it_done
+	call	do_message		;show the current track
+	call	do_function		;go do the read
+	or al,al ! jnz bad_verify	;if not zero then an error
+	mov	ax,track		;get current track
+	inc	ax			;bump it
+	cmp	ax,max_track		;are we done
+	ja	verify_it_done		; if higher, then yes
+	mov	track,ax		;else update the list
+	jmps	ver_loop		;do it again
+verify_it_done:
+	ret
+;
+bad_verify:
+	jmp	cd_err_1		;use the copy disk erorr path
+
+eject
+;
+;	READ_BUFFER	WRITE_BUFFER
+;
+;	go work on buffer in memory
+;
+;	ENTRY	CL = disk to work on
+;
+;	EXIT	AL = 0 if error
+;		AL = 1 if buffer ops done
+;		AL = 2 if finished with disk
+;		AL = 3 if CTRL-C pressed
+;
+verify_buffer:
+	mov	ax,io_read		;signal a read
+	mov	si,offset checking	;offset of verify message
+	jmps	do_operation
+read_buffer:
+	mov	ax,io_read		;signal a read operation
+	mov	si,offset reading	;offset of message structure
+	jmps	do_operation
+write_buffer:
+	mov	ax,io_write		;signal a write operation
+	mov	si,offset writing	;offset of message structure
+do_operation:
+	mov	buf_index,zero		;initialize counter for buffer ops
+	mov	cur_op,ax		;stash it
+	mov	cur_msg,si		;stash it
+	mov	cur_disk,cl		;stash it
+	call	not_first_seldsk	;select the disk
+	jz	bad_op			;bail out if error
+do_again:
+	call	do_message		;print the message with current track
+	call	do_function		;do the actual physical operation
+	or al,al ! jnz bad_op		;if AL = 0 then operation is OK
+	call	ctrl_c_stat		;did someone press A Ctl-C ?
+	jnz	do_again_1
+	inc al ! mov al,ctrl_c		;signal a Ctrl-C
+	jmps	do_again_2
+do_again_1:
+	call	adjust_params		;adjust the parameters for next time
+	jz	do_again		;keep going till buffer full or empty
+					; AL either 1 or 2 from ADJUST_PARAMS
+do_again_2:
+	ret
+;
+bad_op:
+	mov	si,offset bad_disk_msg
+	xor	al,al			;set zero flag for error
+	ret
+eject
+;
+;	DO_FUNCTION
+;
+;	set up the IOPB and perform the indicated function call
+;
+;	ENTRY	NONE
+;
+;	EXIT	AL = 0 if no error
+;		AL = 1 if physical error
+;		AL = FFh if change in media density
+;
+do_function:
+	push es ! push ds
+	mov	es,uda			;needed for context
+	mov	cl,cur_disk		;currently selected disk
+	mov	ch,mcnt			;multi sector count
+	push	cx			;for  the IOPB
+	mov cx,track ! push cx		;track
+	mov cx,sector ! push cx		;starting sector
+	mov cx,dma_seg ! push cx	;dma segment
+	mov cx,dma_off ! push cx	;dma offset
+    	mov	ax,cur_op		;current operation
+	mov	ds,sysdat		;needed for XIOS call
+	callf	xios_entry		;make the call
+	add	sp,clean_IOPB		;get rid of IOPB
+	pop ds ! pop es			;get back seg registers
+	mov	xios_ret,ah		;save return code
+	ret
+eject
+;
+;	ADJUST_PARAMS
+;
+;	bump the params for the function being perfomed
+;
+;	ENTRY	NONE
+;
+;	EXIT	AL = 0 if OK
+;		AL = 1 if buffer ops done
+;		AL = 2 if disk done
+;
+adjust_params:
+	mov	ax,track		;last track worked on
+	inc	ax			;next track
+	cmp	ax,max_track		;check to see if in bounds
+	ja	disk_done		;if above bail out
+	mov	bx,ax			;save it for now, will only update the
+					; parameters if all sanity checks work
+	mov	dma_off,zero		;always zero
+	mov	ax,dma_seg		;last value used
+	add	ax,track_size_para	;new segment
+	mov	cx,ax			;save it for now
+	mov	ax,buf_index		;loops done on this buffer
+	inc	ax
+	cmp	ax,tracks_per_buf	;is it the last one
+	ja	params_done
+	mov	buf_index,ax		;number of ops on this buffer
+	mov	dma_seg,cx		;new dma segment
+	mov	track,bx		;new track
+	xor al,al			;signal no problems
+	ret
+;
+params_done:
+	mov al,one			;signal buffer ops done
+	ret
+disk_done:
+	mov	al,two			;signal disk ops done
+	ret
+
+eject
+;
+;	START_PARAMS
+;
+;	initialize the parameters for the READ / WRITE BUFFER routine
+;
+start_params:
+	mov	ax,start_dma		;always restart the buffer
+	mov	dma_seg,ax		;start of dma area
+	mov	ax,track
+	mov	start_track,ax		;starting track for buffer operation
+	ret
+
+;
+;	RESTORE_START_PARAMS
+;
+;	restore the params that were saved in the START_PARAMS routine
+;
+restore_start_params:
+	mov	ax,start_track
+	mov	track,ax		;starting track for buffer
+	mov	ax,start_dma
+	mov	dma_seg,ax		;starting dma segment for buffer
+	mov	buf_index,zero		;again start with zero loop counter
+	ret
+eject
+;
+;	SIZE_DISK
+;
+;	find out how big the disk is, and how many buffer operations
+;	 will be required
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+size_disk:
+	mov	bx,offset source_dpb
+	cmp	word ptr[bx],0ffffh	;is it a DOS dpb?
+	jnz	cpm_dpb_found
+	add	bx,12			;if DOS then move over 12 bytes
+cpm_dpb_found:
+	mov	ax,logical_record	;that's 128 bytes
+	mov	cl,psh[bx]		;that' the shift factor for physical
+					; record size
+	shl	ax,cl			;now we have physical record size
+	mov	cx,spt[bx]		;get the physical sectors per track
+	mov	sectors_per_track,cx	;stash physical sector count
+	mov	mcnt,cl			;multi sector count
+	mul	cx			;finally we have bytes in a track
+	mov	track_size,ax		;stash it for later use
+	shr ax,1 ! shr ax,1 ! shr ax,1 ! shr ax,1
+	mov	track_size_para,ax	;track size in paragraphs
+;
+	mov	ax,cmd_eseg_base	;start of buffer
+	mov	start_dma,ax		;initialize dma segment
+	mov	ax,cmd_eseg_len		;get low 16 bits of eseg length
+	xor dx,dx ! mov dl,cmd_eseg_high ;get high 8 bits of eseg length
+	div	track_size		;divide buffer size by track size
+	dec	ax
+	mov	tracks_per_buf,ax	;that's how many track ops to do
+					;per pass
+;
+	xor dx,dx ! xor cx,cx
+	mov ax,dsm[bx] ! inc ax		;blocks per disk
+	mov cl,blm[bx] ! inc cl		;logical sectors per block
+	mul	cx			;multiply to get logical sectors
+	push	ax			;    per disk
+	mov	cl,psh[bx]		;get physical record shift
+	mov	ax,one 			;one shifted PSH times gives
+	shl	al,cl			; logical sectors per physical sector
+	mov	cx,spt[bx]		;get physical sectors per track
+	xor	dx,dx
+	mul	cx			;results in logical sectors per track
+	pop cx ! xchg ax,cx		; AX = logical sectors per disk
+					; CX = logical sectors per track
+	div	cx			;results in tracks per disk in AX
+	add	ax,off[bx]		;add the number of reserved tracks
+	dec	ax			;then make it zero relative
+	mov	max_track,ax		;stash it
+	mov	track,zero		;always starting with track 0
+	mov	sector,first_sector	;initialize to sector 0
+;
+	ret
+eject
+;
+;	SET UP the source and destination drives
+;	  get the dpb, put drive letter in message
+;
+;	ENTRY	BL = Nth floppy drive (Nth choice from menu)
+;
+set_up_source:
+	mov	si, offset copy_src	;location in source message
+	mov	di,offset source_dpb	;location of source dpb
+	mov	dx,offset source_disk	;location of source drive
+	jmps	set_up			;go do the actual work
+;
+set_up_destination:
+	mov	si,offset dest_src	;location in destination message
+	mov	di,offset dest_dpb	;location of destination dpb
+	mov	dx,offset dest_disk	;location of destination drive
+;
+set_up:
+	xor	bh,bh			;make sure that BH = 0
+	mov	al,flops[bx]		;get the actual drive number
+	xchg	bx,dx			;get the drive location in BX
+	mov	[bx],al			;stash the drive
+	mov	ah,al			;make a working copy
+	add	ah,'A'			;make it an ASCII letter
+	mov	[si],ah			;move it into copying message
+	mov	byte ptr  warn_disk,ah	;also into warning prompt
+;
+	mov	cl,al			;disk to select
+	call	choose_disk		;XIOS select and copy DPB
+	ret
+eject
+;
+;	CHOOSE_DISK
+;
+;	select the drive and get the DPB address
+;
+;	ENTRY	DI = offset for DPB copy
+;		CL = drive number ( 0=A, 1=B,...)
+;
+;	EXIT	Zero flag set if error
+;
+choose_disk:
+	push	di			;save it
+	call	seldsk			;select the drive
+					;returns with BX = offset of DPH
+	pop	di			;recover destination pointer
+	or ax,ax ! jz sud_ret		;error condition
+	push	es
+	mov ax,ds ! mov es,ax		;point ES to local data area
+	call	copy_in_dpb		;move the dpb 
+	pop	es
+	inc	si			;make sure zero flag not set
+sud_ret:
+	ret
+
+eject
+;
+;	SELDSK
+;
+;	XIOS call to select the disk
+;
+;	ENTRY	CL = disk to select (0 = A,...)
+;
+;	EXIT	BX = offset of DPH in SYSDAT
+;
+seldsk:
+	mov	dl,first_select
+seldsk_1:
+	mov	al,xios_seldsk
+	call	xios_call
+	or	bx,bx			;set the zero flag in case of error
+	ret
+;
+not_first_seldsk:
+	mov	dl,one			;signal not first select
+	jmps	seldsk_1
+
+;
+;	COPY_IN_DPB
+;
+;	move the DPB from SYSDAT to desired location
+;
+;	ENTRY	ES:DI = offset of DPB location
+;		BX = offset of DPH in SYSDAT
+;
+;	EXIT	NONE
+;
+copy_in_dpb:
+	push	ds
+	mov	ds,sysdat		;point to SYSDAT
+	mov	si,word ptr dpb_offset[bx] ;get DPB offset from DPH
+	mov	cx,cpm_dpb_len		;assume a CP/M disk
+	mov	dx,offset cpm_dpb
+	cmp	word ptr [si],0ffffh	;now check to see if DOS
+	jnz	cpm_media		;if not equal then guess was right
+	mov	cx,dos_dpb_len		; fix the guess
+	mov	dx,offset dos_dpb
+cpm_media:
+	push	cx
+	rep	movsb			;move the stuff
+	pop	cx
+	pop	ds
+	mov	dpb_start,dx		;point to spt field
+	mov	dpb_len,cx		;put in actual length of dpb
+	ret
+
+
+eject
+;
+;	WARN_USER
+;
+;	ask the user if they really want to do this
+;
+;	ENTRY	NONE
+;
+;	EXIT	zero flag set if user said 'N' or 'n' or ESC
+;
+warn_user:
+	mov	si,offset warning
+warn_u_1:
+	push	si
+	call	perform_menu		;put up  messages and get answer
+	cmp al,'N'! jz go_on
+	cmp al,'n'! jz go_on		;set the flag
+	cmp al,'Y'! jz yes
+	cmp al,'y'! jz yes
+	cmp al,esc ! jz go_on
+	call	err_beep
+	pop	si
+	jmps	warn_u_1
+yes:
+	inc al				;unset the zero flag
+go_on:
+	pop	si
+	pushf				;save flag from comparison
+	mov	ax,07*256+8		;row 8 column 7
+	mov	cx,three		;3 lines to blank
+	call	blank_entry		;blank the three line message
+	popf				;recover flags
+	ret
+;
+warn_user_1:
+	mov	si,offset warning_1
+	jmps	warn_u_1
+;
+unformatted_disk:
+	mov	si,offset unform_prompt	;the destination disk is not formatted
+	jmps	warn_u_1
+eject
+;
+;	DO_MESSAGE
+;
+;	display message for current operation and track
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+do_message:
+	mov	ax,'  '
+	mov	bx,offset track_@
+	mov	[bx],ax
+	inc bx ! inc bx
+	mov	[bx],ax		;clear out old stuff
+	mov	ax,track	;current track
+	mov	cx,four		;# of digits to display
+	mov	di,offset track_@ ;place for the ASCII digits
+	call	hex_ascii_dec	;make the number ASCII
+	mov	bx,msg_mode_@	;message with location
+	mov	si,offset current_operation
+	call	do_n_routines	;put up two messages
+	ret
+eject
+;
+;	SAME_TYPE?
+;
+;	compare dpb's to make sure they are the same type of disks
+;	if they are different, ask if the destination disk can be formatted
+;
+;	ENTRY	NONE
+;
+;	EXIT	zero flag if different and no formatting
+;
+same_type?:
+	push	es
+	mov ax,ds ! mov es,ax		;point to local data area
+	mov	si,offset source_dpb
+	mov	di,offset dest_dpb	;now have both dpb's
+	mov	cx,dpb_len
+	rep	cmpsb			;compare them both
+	pop	es
+	jz	same_1			;same disks if zero flag set
+	mov	si,offset type_warning	;ask to format destination
+	call	warn_u_1
+	jz	same_2			;do not format different disks
+	mov	format_needed,true	;else signal a format
+same_1:					;here disks are OK or will format
+	inc	al			;make sure zero flag not set
+same_2:					;here disks are different, Z flag set
+	ret
+eject
+;
+;	ASK_FOR_
+;
+;	prompt the operator for the appropriate diskette
+;
+;	ENTRY	NONE
+;
+;	EXIT	Z flag set if ESC was pressed
+;
+ask_for_source:
+	mov	si,offset in_src	;source prompt
+	jmps	ask_for
+ask_for_dest:
+	mov	si,offset in_dest	;destination prompt
+ask_for:
+	mov al,source_disk ! cmp al,dest_disk
+	jne	check_ret		;if different don't need message
+	mov	in_@@,si		;move message pointer into structure
+	mov	si,offset insert_msg
+	call	perform_menu_1		;put it up and get any key
+	push	ax
+	mov	ax,7*256+7		;col 7 row 7
+	mov	cx,one			;one line
+	call	blank_entry		;blank the line
+	pop ax ! cmp al,esc		;set Z flag if ESC was pressed
+check_ret:
+	ret
+eject
+;
+;	COMMON_MENU
+;
+;	display a menu and check the answer for the EXIT key
+;
+;	ENTRY	SI = offset menu structure 
+;
+;	EXIT	     zero flag if EXIT key pressed
+;		AL = character
+common_menu:
+	call	perform_menu		;blank the box first
+cm_@:
+	cmp	al,exit_key		; set the zero flag accordingly
+	ret
+common_menu_1:
+	call	perform_menu_1		;don't blank the box
+	jmps	cm_@
+
+eject
+;
+;	SET_HELP_ESC
+;
+;	set up the help and esc keys according to input params
+;
+;	ENTRY	BX = esc key state
+;		CX = help key state
+;		DX = offset of help string if CX = help_yes
+;
+;	EXIT	NONE
+;
+set_help_esc:
+	push cx ! push dx
+	call	show_esc_key
+	pop dx ! pop bx			;recover help key parameters
+	call	show_help_key
+	ret
+
+eject
+;
+;	OEM_SETUP_1
+;
+;	set up the messages to match the number of floppies on the system
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+oem_setup_1:
+	mov	al,get_xios_pointer	;get pointers for XIOS data	
+	mov	cx,zero
+	call	xios_call
+	push ds ! mov ds,sysdat		;point to XIOS area
+	mov	ax,[bx]			;get number of floppies
+	pop	ds			;recover local data segment
+	mov	d_key,ax		;put into drive letters to show
+	mov bx,ax ! inc bx		;take into account the esc key
+	mov	si,offset even_pfk	;counter for answers
+	mov	[si],bx			;count of messages
+	inc	si			;point to start of list
+	mov	cx,ax			;going to loop
+	push 	es
+	mov dx,ds ! mov es,dx
+	mov	di,offset even_ans	;only those that apply
+	xchg	si,di			;reverse the roles
+	rep	movsb			;move the drive answers
+	mov	byte ptr[di],exit_key	;put in the esc key
+	pop	es
+;AT@
+	call	check_for_AT		;set up choices for AT
+;for right now don't do anything for AT
+	ret
+
+eject
+;
+;	XIOS_CALL
+;
+;	make a direct XIOS call
+;
+;	ENTRY	AL = XIOS function number
+;
+;	EXIT	registers from XIOS
+;
+xios_call:
+	push	ds
+	push	es
+	mov	es,uda			;need UDA in ES for XIOS call
+	mov	ds,sysdat		;need SYSDAT in DS for XIOS call
+	callf	xios_entry		;callf through entry point in SYSDAT
+	pop	es
+	pop	ds
+	ret
+
+eject
+;
+;	EXTENDED_ERROR_ON
+;
+;	turn on extended error handling; this turns off the display of XIOS
+;	  errors on the status line
+;
+extended_error_on:
+	push	dx
+	mov	dl,return_error
+	jmps	extended_call
+extended_error_off:
+	push	dx
+	mov	dl,default_mode
+extended_call:
+	push bx ! push cx ! pushf
+	mov	cl,f_errmode
+	int	224
+	popf ! pop cx ! pop bx ! pop dx
+	ret
+eject
+
+	DSEG
+include date.dat
+;
+;	EQUATES for the data section
+;
+exit_key	equ	1bh		;that's the esc key
+;
+flops		db	0,1,2,3		;drive codes for floppies
+;
+dpb_len		dw	0
+dpb_start	dw	0
+source_dpb	rb	dos_dpb_len	;source DPB
+dest_dpb	rb	dos_dpb_len	;destination DPB
+cpm_dpb		equ	source_dpb
+dos_dpb		equ	source_dpb+12	;point to spt field
+;
+track_size	dw	0		;bytes per track
+track_size_para	dw	0		;paragraphs per track
+tracks_per_buf	dw	0		;tracks per buffer
+max_track	dw	0		;highest track
+sectors_per_track dw	0		;physical sectors per track
+;
+buf_index	dw	0		;current loop count
+;
+start_dma	dw	0		;start dma for buffer loop
+start_track	dw	0		;start track for buffer loop
+;
+source_disk	db	0
+dest_disk	db	0
+;
+cur_op		dw	0		;current operation
+cur_disk	db	0		;current disk
+;
+format_needed		db	false		;format while copying switch
+loop_index		db	-1		;index for buffer ops
+format_index		db	-1		;index for format/copy
+;	values for IOPB
+;
+mcnt		db	0		;multi sector count
+track		dw	0
+sector		dw	0
+dma_off		dw	0
+dma_seg		dw	0
+;
+;
+;	here are the menus
+;
+sel_drive	dw	0		;skip the plain message
+		dw	d_prompts	;function header and prompt
+		dw	d_key		;show the available drives
+		dw	d_answers	;legal answers
+;
+d_prompts	dw	2		;there are going to be 2 of them
+		dw	offset func_title ;title of function
+		dw	offset func_prompt ;prompt for function
+;
+;
+func_prompt	db	7		;row
+		db	(screen - length sd_@)/2+1 ; column
+		db	high_on,high_off
+func_prompt_@	dw	0		;this has to be filled in
+;
+sel_ver_dsk	dw	length sd_@
+sd_@		db	'  I N S E R T  A N D  S E L E C T  D I S K E T T E  T O  V E R I F Y   '
+;
+sel_src_dsk	dw	length ssd_@
+ssd_@		db	'     I N S E R T  A N D  S E L E C T  S O U R C E  D I S K E T T E     '
+;
+sel_dest_dsk	dw	length sdd_@
+sdd_@		db	'I N S E R T  A N D  S E L E C T  D E S T I N A T I O N  D I S K E T T E'
+;
+;
+func_title	db	5				;row
+		db	(screen - length r_msg_@)/2	;column
+		db	normal,normal
+func_title_@	dw	0				;this has to be filled
+;
+ver_msg		dw	length v_msg_@
+v_msg_@		db	'         Verify a Diskette         '
+;
+repro_msg	dw	length r_msg_@
+r_msg_@		db	' Copy from one Diskette to another '
+;
+;
+d_answers	dw	1
+		dw	offset even_pfk
+;
+even_pfk	db	0			;needs to be initialized
+even_@		db	0,0,0,0,0		;leave room for five answers
+good_keys	equ	even_@
+even_ans	db	'<' or 80h,'>' or 80h	;pfk expansion has been turned
+		db	'@' or 80h,'B' or 80h	; off, pfk's will be seen as
+		db	esc			;  key-id with high bit set
+
+;
+;	These are the messages for the keys.
+;	The table to display the keys and drive choices has to be
+;	 initialized in the oem_disk_setup routine.
+;	To initialize the table, just insert the number of drives i d_key
+;
+d_key		dw	5		;number of keys to display
+		dw	offset f2_key	; A:
+		dw	offset f4_key	; B:
+		dw	offset f6_key	; C:
+		dw	offset f8_key	; D:
+
+;
+f2_key		db	9		;row and colum for
+		db	26		;  F2 key box
+		db	'F2 '		;key id for box
+		dw	1		;number of lines in label
+		db	10		;row and column
+		db	36		;  for label
+		dw	offset dr_a	;label
+;
+dr_a		dw	length dr_a_@	;length of label
+dr_a_@		db	' A:'		;
+;
+f4_key		db	12,26,'F4 '
+		dw	1
+		db	13,36
+		dw	offset dr_b
+;
+dr_b		dw	length dr_b_@
+dr_b_@		db	' B:'
+;
+f6_key		db	15,26,'F6 '
+		dw	1
+		db	16,36
+		dw	offset dr_c
+;
+dr_c		dw	length dr_c_@
+dr_c_@		db	' C:'
+;
+f8_key		db	18,26,'F8 '
+		dw	1
+		db	19,36
+		dw	offset dr_d
+;
+dr_d		dw	length dr_d_@
+dr_d_@		db	' D:'
+;
+;
+type_err_msg	db	4
+		db	(screen - length tem)/2
+		db	reverse_on,reverse_off
+		dw	type_msg
+;
+type_msg	dw	length tem
+tem 	db	'Source and destination diskettes are not of the same type'
+;
+;
+bad_disk_msg	dw	0		;no plain messages
+		dw	offset err_msg	;error msg
+		dw	0		;no keys
+		dw	offset any_key	;dont care about the key
+;
+err_msg		dw	2
+err_msg_@	dw	offset err_@
+		dw	offset any_@	
+;
+err_@		db	4
+		db	(screen - length err)/2
+		db	reverse_on,reverse_off
+		dw	offset err_ptr
+;
+err_ptr		dw	length err
+err		db	' B A D    D I S K '
+;
+any_@		db	8
+		db	(screen - length any_ptr_@)/2
+		db	reverse_on,reverse_off
+		dw	offset any_ptr
+;
+any_ptr		dw	length any_ptr_@
+any_ptr_@	db	'Press any key to return to Menu'	
+;
+;
+;
+warning		dw	0			;no plain meessage
+		dw	warning_@		;message with attributes
+		dw	0			;no key id's
+		dw	offset any_key		;accept any key
+;
+warning_1	dw	0
+		dw	warning_@@
+		dw	0
+		dw	offset any_key
+;
+warning_@	dw	4			;4 messages
+		dw	offset warn_1		;copying from
+		dw	offset warn_2		;  to
+		dw	offset warn_3		;this will destroy
+		dw	offset warn_4		;are you sure?
+;
+warning_@@	dw	3
+		dw	offset warn_5
+		dw	offset warn_3
+		dw	offset warn_4
+;
+warn_1		db	5
+		db	(screen - w1_msg_len)/2
+		db	normal,normal
+warn_msg	dw	offset w1_msg
+;
+w1_msg		dw	w1_msg_len
+w1_msg_@	db	'Copying from the Diskette in Drive '
+copy_src	db	' :'
+w1_msg_len	equ	offset $ - offset w1_msg_@
+;
+warn_2		db	6
+		db	(screen - w2_msg_len)/2
+		db	normal,normal
+		dw	offset w2_msg
+;
+w2_msg		dw	w2_msg_len
+w2_msg_@	db	'          to the Diskette in Drive '
+dest_src	db	' :'
+w2_msg_len	equ	offset $ - offset w2_msg_@
+;
+warn_3		db	8
+		db	(screen - w3_msg_len)/2
+		db	normal,normal
+		dw	offset w3_msg
+;
+w3_msg		dw	w3_msg_len
+w3_msg_@	db	'This will erase data on the destination diskette'
+		db	' in drive '
+warn_disk	db	' :'
+w3_msg_len	equ	offset $ - offset w3_msg_@
+;
+warn_4		db	10
+		db	(screen - w4_msg_@_len)/2
+		db	normal,normal
+		dw	offset w4_msg
+;
+w4_msg		dw	w4_msg_@_len
+w4_msg_@	db	'Is this what you want to do (Y or N)'
+		db	esc,'s?',esc,'t'
+w4_msg_@_len	equ	offset $ -offset w4_msg_@
+;
+warn_5		db	6
+		db	(screen - w4_msg_@_len)/2
+		db	normal,normal
+		dw	offset w5_msg
+;
+insert_msg	dw	0			;skip plain message
+		dw	offset insert_msgs	;insert message
+		dw	0			;skip key boxes
+		dw	offset any_key		;accept any key
+;
+insert_msgs	dw	1
+		dw	offset insert_msg_0
+;
+insert_msg_0	db	7
+	 	db	(screen -length in_dest_@)/2
+	 	db	high_on,high_off
+in_@@		dw	0			;to be filled in
+;
+in_dest		dw	length in_dest_@
+in_dest_@	db	'INSERT DESTINATION DISKETTE AND TYPE ANY KEY'
+;
+in_src		dw	length in_src_@
+in_src_@	db	'  INSERT SOURCE DISKETTE AND TYPE ANY KEY   '
+;
+any_key		dw	1			;one key list
+		dw	offset zero_key
+;
+zero_key	db	0			;no list means any key
+;
+current_operation	dw	2		;two messages
+			dw	offset co_1
+			dw	offset co_2
+;
+co_1		db	10
+		db	(screen - length reading_@ - length co_3_@)/2
+		db	normal,normal
+cur_msg		dw	0		;to be filled in
+;
+co_2		db	10
+	db (screen - length reading_@ - length co_3_@)/2 + length reading_@
+		db	normal,normal
+		dw	offset co_3
+;
+co_3		dw	length co_3_@
+co_3_@		db	'    '
+track_@		equ	co_3_@
+;
+reading		dw	length reading_@
+reading_@	db	' Reading track   '
+;
+writing		dw	length writing_@
+writing_@	db	' Writing track   '
+;
+checking	dw	length checking_@
+checking_@	db	' Checking  track '
+;
+verify_title	dw	1		;one message
+		dw	offset v_title
+;
+v_title		db	5
+		db	(screen - ver_len)/2
+		db	normal,normal
+		dw	offset v_t
+;
+v_t		dw	ver_len
+v_t_@		db	'Verifying Diskette in Drive '
+ver_disk	db	' :'
+ver_len		equ	offset $ - offset v_t_@;
+;
+type_warning	dw	0
+		dw	offset type_warning_msg
+		dw	0
+		dw	offset any_key
+;
+type_warning_msg	dw	4
+			dw	offset warn_1
+			dw	offset warn_2
+			dw	offset tw_1
+			dw	offset tw_2
+;
+tw_1		db	8,(screen - tw_1_len)/2
+		db	normal,normal
+		dw	tw_1_@
+;
+tw_1_@		dw	tw_1_len
+tw1		db	'The source and destination diskettes are different.'
+tw_1_len	equ	offset $ - offset tw1
+;
+tw_2		db	10,(screen - tw_2_len)/2
+		db	normal,normal
+		dw	tw_2_@
+;
+tw_2_@		dw	tw_2_len
+tw2		db	'Do you want to format the destination diskette '
+		db	'(Y or N) ',esc,'s?',esc,'t'
+tw_2_len	equ	offset $ - offset tw2
+;
+xios_ret	db	0		;return code from last XIOS error
+;
+;
+unform_prompt	dw	0
+		dw	offset unform_disk
+		dw	0
+		dw	offset any_key
+;
+unform_disk	dw	4
+		dw	offset warn_1
+		dw	offset warn_2
+		dw	offset unf_1
+		dw	offset tw_2
+;
+unf_1		db	8,(screen - length unf_msg)/2
+		db	normal,normal
+		dw	unf_2_@
+;
+unf_2_@		dw	length unf_msg
+unf_msg		db	'The destination diskette is not formattted.'
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    

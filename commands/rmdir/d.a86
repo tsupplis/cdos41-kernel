@@ -1,0 +1,1348 @@
+
+;REVISION History
+;
+
+
+		CSEG
+		
+	EXTRN	find_path:near		; in PATH
+	EXTRN	derror:near		; in DERROR
+
+
+		DSEG
+
+	EXTRN	invalidpath:byte	; in DERROR
+	EXTRN	baddrive:byte		; in DERROR
+
+eject
+
+CAT		equ	02eh	; offset of CAT structure (PD)
+CATPCNT		equ	020h	; offset of process count (CAT)
+HDPCNT		equ	008h	; offset of process count (HD)
+NWM		equ	022h	; offset of network mask (CAT)
+MAPDRIVE	equ	00h	; drive that the floater is mapped into
+OURBLK		equ	06h	; our block number
+BLKNUM		equ	1ah	; block number file can be found in
+EXTENT		equ	12
+DRIVE		equ	0
+SYSDISK		equ	04bh	; system disk
+P_PARENT	equ	1Eh	; Our parents process descriptor(PD)
+P_SFLAG		equ	26h	; second process flag(PD)
+
+;	Some common equates
+
+cr		equ	13		; carraige return
+lf		equ	10		; linefeed
+tab		equ	9		; tab char
+
+DMA		equ	80h		; default dma
+dfcb0		equ	5ch		; default fcb0
+dfcb1		equ	6ch		; default fcb1
+map_dir		equ	.5dh		; mapped directory name
+map_drv		equ	.68h		; mapped drv (EXTENT)
+
+;	CCP/M-86 system functions 
+
+osint		equ	224		; interrupt for CCP/M system calls
+
+c_read		equ	1		; console functions
+c_write		equ	2
+c_rawio		equ	6
+c_writebuf	equ	9
+c_readstr	equ	10
+c_delimit	equ	110
+c_attachc	equ	146
+c_detachc	equ	147
+c_setnum	equ	148
+
+f_open		equ	15		; file functions
+f_close		equ	16
+f_sfirst	equ	17
+f_snext		equ	18
+f_delete	equ	19
+f_read		equ	20
+f_make		equ	22
+f_dmaoff	equ	26
+f_readrand	equ	33
+f_errmode	equ	45
+f_dmaseg	equ	51
+f_parse		equ	152
+
+drv_set		equ	14		; drive functions
+drv_loginvec	equ	24
+drv_get		equ	25
+drv_free	equ	39
+
+p_pdadr		equ	156		; process functions
+
+eject
+
+;*****************************************************
+;*
+;*	S T A R T  C O D E
+;*
+;*****************************************************
+
+	CSEG
+
+	jmp start
+
+	db 'COPYRIGHT(c) 1985, INTERGALACTIC DIGITAL RESEARCH  02/29/85'
+
+start:
+
+	mov	cl,12			;get version number
+	call	ccpm
+	and	bh,not 2		;strip network bit
+	cmp	bh,14h
+	jne badvers			;CCP/M?
+	cmp	bl,32h			; CCP/M 3.2 or better
+	jae	okvers
+
+badvers:
+	mov	dx,offset wrongvers
+
+fatal_err:
+	call	print_ds_string
+;	jmps	terminate
+
+terminate:
+	  mov	cl,0
+	  call	ccpm			;abort
+
+;------
+okvers:
+;------
+
+; set output delimiter to NULL
+
+	mov	cl,c_delimit
+	mov	dl,0
+	call	ccpm
+
+; set error mode to return error numbers to us
+
+	mov	cl,f_errmode
+	mov	dl,0ffh
+	call	ccpm
+
+	mov	cl,byte ptr .DMA	; see if we have a tail
+	cmp	cl,0
+	jne	fixinput		; YES
+
+		; We do not have a tail
+if CD
+	jmp	prcurpath	; print the current path of the default drive
+endif
+if SD
+	jmp	prcurppath		; print the path for the P: drive
+endif
+if MD or ZD
+	mov	dx,offset invalidpath+1
+	jmp	fatal_err
+endif
+
+fixinput:
+
+	mov	si,DMA			; input buffer
+	mov	di,offset tail		; di -> location to store tail
+	mov	al,byte ptr [si]	; al <== count
+	xor	ah,ah
+	inc	al			; ax <== number of characters + cnt
+	mov	cx,ax
+	rep	movsb			; use es:di ds:si
+
+		; skip ending blanks and tabs
+	mov	di,offset tail		; character count
+noendb:
+	dec	si
+	dec	byte ptr [di]
+	cmp	byte ptr [si],' '
+	je	noendb
+	cmp	byte ptr [si],TAB
+	je	noendb
+		; ending blanks and tabs are gone
+	inc	byte ptr [di]
+	mov	byte ptr 1[si],0	; NULL terminate tail
+
+	;
+	;
+;=====	
+parse:
+;=====
+
+	mov	di,dfcb0
+	mov	byte ptr EXTENT[di],0	; assume a non-floating drive
+	mov	byte ptr DRIVE[di],0	; assume default drive
+	mov	si,offset tail
+	mov	cl,byte ptr [si]
+	inc	si			; si pts to first character in line
+
+		; skip initial blanks and tabs
+loop1:
+	mov	al,byte ptr [si]
+	cmp	al,' '
+	je	skipit
+	cmp	al,TAB			; tab
+
+if SD
+	jne	onoff
+endif
+if CD
+	jne	checkall
+endif
+if ZD or MD
+	jne	enter			; initial tabs and spaces are gone
+endif
+
+skipit:
+	inc	si
+	dec	cl
+	jmps	loop1
+
+if SD
+
+onoff:
+		; See if we have either the on [on] or [off] option
+
+	cmp	word ptr [si],'O['
+	jne	noonoff
+	cmp	word ptr 2[si],']N'
+	je	almoston
+	cmp	cl,5
+	jne	noonoff
+	cmp	word ptr 2[si],'FF'
+	jne	noonoff
+	cmp	byte ptr 4[si],']'
+	jne	noonoff
+		; Use wishes to turn off the sysdisk option
+	mov	ax,0008h
+	mov	dl,1
+	call	setsflag		; turn off sysdisk bit
+	jmp	prcurppath
+;	jmp	terminate
+
+almoston:
+	cmp	cl,4
+	jne	noonoff
+	mov	ax,not 0008h
+	mov	dl,0
+	call	setsflag		; turn on sysdisk bit
+	jmp	prcurppath
+;	jmp	terminate
+
+noonoff:
+
+	push	si
+	push	cx
+	push	es
+	mov	cl,09ch
+	call	ccpm
+	test	es:word ptr P_SFLAG[bx],0008h
+	pop	es
+	jz	alrdyon
+	mov	ax,not 0008h
+	mov	dl,0
+	call	setsflag
+alrdyon:
+	pop	cx
+	pop	si
+	sub	si,3
+	add	cl,3
+	mov	word ptr [si],':P'
+	mov	byte ptr 2[si],'='
+endif
+
+if CD
+checkall:
+	cmp	cl,5
+	jne	enter
+	cmp	word ptr [si],'A['
+	jne	enter
+	cmp	word ptr 2[si],'LL'
+	jne	enter
+	cmp	byte ptr 4[si],']'
+	jne	enter
+
+;     We have the [ALL] option
+	push	es
+	mov	cl,P_PDADR
+	call	ccpm			; set es:bx to process descriptor
+
+	mov	bx,es:CAT[bx]
+	pop	dx			; get es's old value in dx
+
+	mov	cx,16			; check drives A thru P
+	mov	si,0C18h
+	or	bx,bx			; does the CAT exist?
+	jnz	all_drives_loop
+
+	mov	bx,si			; if not, check only the physical table
+
+all_drives_loop:
+;    si = physical drive table, bx = Current Assignment Table, es = sysdat seg
+		; check if we want to print it
+	lods	es:ax			; if this is a physical drive (ax != 0)
+	or	ax,es:[bx]		; or a currently mapped drive (ax != 0)
+	jz	next_drive		; print it, else next drive
+
+	mov	al,'P'+1
+	sub	al,cl
+	mov	ftail+DRPOS,al		; store visual drive letter
+
+	push	bx
+	push	cx
+	push	es
+	mov	es,dx			; get ds seg back in es
+	push	si
+	sub	al,'A'			; set al to 0 rel drive #
+	mov	dx,80h			; set addr of dma buff for 'find_path'
+	mov	bx,5ch			; set addr of fcb
+	mov	di,offset tail		; set addr of path buffer
+	call	find_path
+; set up format of line
+	mov	si,offset ftail
+	sub	dx,HDRLEN
+	mov	di,dx
+	push	ds
+	pop	es
+	mov	cx,HDRLEN
+	rep	movsb
+	call	print_ds_string
+	pop	si
+	mov	dx,es
+	pop	es
+	pop	cx
+	pop	bx
+
+next_drive:
+	inc	bx
+	inc	bx
+	loop	all_drives_loop
+
+	jmp	terminate
+endif
+
+enter:
+
+if CD
+	mov	ah,'O'-'A'	; P: is illegal for CHDIR
+else
+	mov	ah,'P'-'A'	; P: is legal for rest
+endif
+
+	call	getdrive
+	je	cpathorroot	; no drive so skip floating and newdrive code
+		; we have a drive number in al (1 rel)
+	cmp	cl,0
+	jne	ok1
+		; we have (d:)
+if CD
+		dec	al		; prpath needs drive (0 rel)
+		jmp	prpath		; CD will print path
+endif
+if MD or ZD
+		jmp	patherror	; RD and MD do not like (d:)
+endif
+
+ok1:
+	cmp	byte ptr [si],'='
+	jne	override	; override the default drive
+	; user wishes to map into a floater (n:=...)
+if MD or ZD
+	mov	dx,offset invalidpath+1	; MD, RD do not accept (n:=...)
+	jmp	fatal_err
+else
+	dec	cl			; one less because of '='
+;     we will accept (a>d n:=) to mean (a>d n:=a:)
+;	jnz	ok3
+;		mov	dx,offset invalidpath+1	; had (n:=)
+;		jmp	fatal_err
+;;ok3:
+	inc	si			; was pointing at '='
+		; al has drive number (1 rel)
+	mov	map_flag,al		; save mapping drive for later
+	mov	ah,'P'-'A'		; all drive letters O.K.
+	call	getdrive		; place drive number in al (1 rel)
+	mov	byte ptr DRIVE[di],al	; zero means default
+	call	map_sub_dir		; returns only on no errors
+	cmp	cl,0
+	jne	cpathorroot
+		jmp	alldone		; had (n:=d:)    SUCCESS!!!
+endif
+
+
+override:			; no mapping just user specified drive
+	mov	byte ptr DRIVE[di],al
+	jmp	cpathorroot
+
+lbaddr:
+	jmp	baddr
+
+l2patherror:
+	jmp	patherror
+
+	;
+	;  Decide if should go from current path or go down from root
+	;
+;----------
+cpathorroot:
+;----------
+	; Currently have (...)
+	; could have been (...), (d:...), (n:=...), or (n:=d:...)
+
+; di,si,cl are good
+
+if CD
+	cmp	byte ptr .5ch,0
+	jne	ok103
+	push	di
+	push	si
+	push	cx
+	mov	cl,DRV_GET
+	call	ccpm
+	pop	cx
+	pop	si
+	pop	di
+	cmp	al,0fh
+	je	lbaddr		; User trying to mess with P:
+ok103:
+endif
+
+	cmp	byte ptr 0[si],'\'
+	jne	cpath
+
+;	have (\...)
+;
+;----
+root:
+;----
+
+	inc	si
+	dec	cl
+
+if MD or ZD
+	jnz	ok6
+		jmp	patherror	; had (n:\)
+ok6:
+endif
+
+	push	cx
+	push	si
+	call	gotoroot		; forces us to the root
+	pop	si
+	pop	cx
+
+if CD or SD
+	cmp	cl,0
+	je	alldone			; i.e. (n:=a:\) or (\)
+endif
+
+;	have	(...)
+;
+;-----
+cpath:
+;-----
+
+; si,cl are active
+
+	cmp	cl,0
+	je	patherror
+
+;------
+cpath1:			; cl can be zero
+;------
+
+		; blank out fcb name and extension
+	push	cx
+	mov	di,dfcb0+1
+	mov	al,' '
+	mov	cx,11
+	rep	stosb
+	mov	di,dfcb0
+	pop	cx
+
+		; lets check for . and ..
+	cmp	cl,0		; catches . and .. at end of path
+	je	alldone	
+	cmp	byte ptr [si],'.'
+	jne	normal
+	inc	si
+	dec	cl
+	jz	alldone
+	mov	al,byte ptr [si]
+	cmp	al,'.'
+	jne	maybedot
+	inc	si
+	dec	cl
+	jnz	maybedotdot
+	call	upwego
+	jmps	cpath1
+
+;	have a dot and at least one more character
+;
+maybedot:
+	cmp	byte ptr [si],'\'
+	jne	patherror		; had (.whocares)  no file name
+	inc	si
+	dec	cl
+	jmps	cpath1			; had (.) so no need to do anything
+
+;	have a dotdot and at least one more character
+;
+maybedotdot:
+	cmp	byte ptr [si],'\'
+	jne	patherror		; had (..whocares)  no file name
+	inc	si
+	dec	cl
+	call	upwego			; go up to current parent directory
+	jmps	cpath1
+
+;=======
+alldone:
+;=======
+
+if MD
+	jmp	patherror		; had (.) or (..) at end - return error
+endif
+if ZD
+	mov	dx,offset cannotdel	; had (.) or (..) at end - return error
+	jmp	fatal_err
+endif
+if SD or CD
+	push	ds
+	push	es
+	call	set_parent
+	pop	es
+	pop	ds
+	jmp	terminate	; SUCCESS!!!
+endif
+
+patherror:
+	mov	dx,offset invalidpath+1
+	jmp	fatal_err
+
+;------
+normal:
+;------
+	mov	byte ptr havedot,false
+
+;-----
+loop3:
+;-----
+	dec	cl
+
+if CD or SD
+	jl	lastdir
+endif
+if MD
+	jl	make_dir	; the big moment is at hand for MD
+endif
+if ZD
+	jl	remove_dir	; the big moment is at hand for RD
+endif
+
+	mov	al,byte ptr [si]
+	inc	si
+	cmp	al,'\'
+	jne	ok72
+		call	gotdir
+		jmp	cpath1
+ok72:
+	cmp	al,'.'
+	je	dotmess
+	cmp	al,' '	; if you allow ' ' at end then watch for '\ ' at end
+	jle	patherror		; a space or control character
+	cmp	al,'?'
+	je	patherror
+	cmp	al,'/'
+	je	patherror
+	cmp	al,'*'
+	je	patherror
+	cmp	al,':'
+	je	patherror
+	inc	di
+	cmp	byte ptr havedot,true
+	je	inextension
+	cmp	di,dfcb0+10
+	jne	storeit
+	jmp	patherror		; file part of pathname to long
+inextension:
+	cmp	di,dfcb0+13
+	je	lpatherror		; extension part of pathname is to long
+storeit:
+	mov	byte ptr [di],al
+	jmps	loop3
+
+dotmess:
+	cmp	byte ptr havedot,true
+	je	lpatherror		; two dots in pathname
+	mov	byte ptr havedot,true
+	mov	di,dfcb0+8		; move di to where extension goes
+	jmps	loop3
+
+lpatherror:
+	jmp	patherror
+
+if MD
+;========
+make_dir:
+;========
+
+	; Lets check to see if our path will be to long
+
+	call	drivenumber	; set up cdrive
+	call	savehd		; save off current position
+
+	mov	al,cdrive
+	mov	bx,offset extrafcb
+	mov	dx,80h
+	mov	di,offset tail
+	push	es
+	call	find_path
+	pop	es
+	cmp	ax,0
+	jz	ok103		; find_path returns zero for no error and
+	jmp	fatal_err	; if a error the message is at ds:dx
+ok103:
+	; next 3 lines calculates the current path lenght using the fact
+	;that find_path puts a null at tail+67 and then fills in path backwards
+	mov	bx,offset tail
+	add	bx,67
+	sub	bx,dx
+
+	inc	bx		; for '\'
+	mov	si,5ch
+	mov	cx,11
+	mov	al,' '
+loop59:
+	inc	si
+	cmp	[si],al
+	je	skip104
+	inc	bx
+skip104:
+	dec	cx
+	jnz	loop59
+
+	sub	si,2
+	cmp	[si],al		; Is there an extension
+	je	done_cnt	; NO
+	inc	bx		; YES	add one for the dot
+done_cnt:
+	cmp	bx,67
+	jl	ok106
+	mov	dx,offset invalidpath+1
+	jmp	fatal_err
+ok106:
+	call	switchhd	; restore to correct subdirectory 
+
+	; Now we can do make dir
+
+	or	byte ptr .dfcb0,80h	;set high nibble to 80H
+	mov	dx,dfcb0
+	mov	cl,f_make
+	call	ccpm
+
+	or	al,al
+	je	ok90			; no error
+		; We have an error
+		or	ah,ah
+		jne	extend_make
+			mov	dx,offset nospace
+			;zzzz stuff on stack
+			jmp	fatal_err
+extend_make:
+	push	ax
+	call	drivenumber	; cl gets drive number (0 rel)
+	pop	ax
+	mov	al,cl
+	call	derror
+		; zzz stuff on stack
+	jmp	fatal_err
+
+ok90:
+
+	jmp	terminate	; SUCCESSFULLY MADE DIRECTORY!!!!!!
+
+
+switchhd:
+	push	es
+	mov	cl,09ch		; get sysdat segment
+	call	ccpm
+
+	mov	bx,es:word ptr .68h
+	mov	si,es:CAT[bx]		; SI offset of CAT
+	push	si
+
+;	cmp	hdmode,NOCAT
+;	je	switchcathds
+	call	gethds
+;	cmp	hdmode,NOHDS
+;	je	switchcathds
+
+			;     ES:SI pt to 10 byte HDS
+	mov	bx,8
+	mov	di,offset savedhds
+switchhd1:
+	mov	ax,es:[si+bx]		; will xchg saved hds with current
+	xchg	[di+bx],ax		; hds backwards
+	mov	es:[si+bx],ax
+	dec	bx
+	dec	bx
+	jnl	switchhd1
+
+
+;	jmps	switchhd_exit
+;
+;switchcathds:
+;			; SI contains the offset of the CAT or HDS
+;			; ES:BX pts CAT or HDS
+;
+;	xchg	cathds,si
+;	mov	es:[bx],si
+;
+;switchhd_exit:
+
+	pop	si
+	mov	es:word ptr NWM[si],0ffffh	; Tell NET we did some poking
+
+skip_3:
+	pop	es
+	ret
+
+
+savehd:
+
+
+;	To make life real easy will make the BDOS give us a new CAT and
+;    HDS for the drive we are working on.
+	call	createcat
+
+;	mov	cathds,0		; value if no CAT or HDS exists
+;	mov	hdmode,NOCAT		; default value
+	push	es
+	mov	cl,09ch			; get sysdat segment
+	call	ccpm
+	mov	bx,es:word ptr .68h
+	mov	si,es:CAT[bx]		; SI offset of batchs CAT
+;	cmp	si,0
+;	je	snocat			; save the fact we have no CAT
+
+	call	gethds			; enter -> SI offset of CAT
+;	cmp	si,0
+;	je	snohds			; save the fact we have no HDS
+
+		; ES:SI pts to 10 byte HDS
+
+;	mov	hdmode,HAVEHDS
+	mov	ax,ds
+	mov	cx,es
+	mov	ds,cx
+	mov	es,ax
+
+	mov	cx,5
+	mov	di,offset savedhds
+	rep	movsw
+	mov	ds,ax
+
+;snocat:
+			; 1) ES on stack  2) HDS saved
+	pop	es
+
+	ret
+
+;snohds:
+;	mov	hdmode,NOHDS
+;	jmps	snocat
+
+gethds:
+	mov	al,cdrive		; al gets drive number (0 rel)
+	xor	ah,ah
+	shl	ax,1
+	add	si,ax
+	mov	bx,si
+	mov	si,es:[si]
+	ret
+
+endif
+
+
+;=======	
+lastdir:
+;=======
+
+	call	gotdir		; will only return if no errors
+	jmp	alldone		; SUCCESS!!!
+
+
+if ZD
+;==========
+remove_dir:
+;==========
+
+	or	byte ptr .dfcb0,80h	;set high bit on
+	mov	dx,dfcb0
+	mov	cl,f_sfirst
+	call	ccpm
+		; The above assures us that we will delete only directories
+	or	al,al
+	je	okr89
+		; We have an error
+		or	ah,ah
+		jne	extend_remove
+nogood:
+			mov	dx,offset notfound
+			; stuff on stack
+			jmp	fatal_err
+
+okr89:
+	test	byte ptr .dma+10h,040h
+	jz	nogood			; We only delete directories
+	or	byte ptr .dfcb0,80h	; set high bit on
+	mov	dx,dfcb0
+	mov	cl,f_delete
+	call	ccpm
+
+	or	al,al
+	je	okr90			; no error
+		; We have an error
+		or	ah,ah
+		jne	extend_remove
+			mov	dx,offset cannotdel	; ie not found
+			;zzzz stuff on stack
+			jmp	fatal_err
+extend_remove:
+	push	ax
+	call	drivenumber	; cl gets drive number (0 rel)
+	pop	ax
+	mov	al,cl
+	call	derror
+		; zzz stuff on stack
+	jmp	fatal_err
+
+okr90:
+
+	jmp	terminate	; SUCCESSFULLY REMOVED DIRECTORY!!!!!!
+
+endif
+
+;------
+upwego:
+;------
+
+	mov	byte ptr .dfcb0+1,'.'
+	mov	byte ptr .dfcb0+2,'.'
+	mov	byte ptr .dfcb0+3,' '
+	call	gotdir
+	jmp	cpath1
+
+if MD
+
+;---------
+createcat:
+;---------
+;
+;	Note that the DRIVE field of the fcb was filled in by PARSE
+;
+
+	mov	byte ptr .dfcb1+1,'.'
+	mov	byte ptr .dfcb1+2,' '
+	mov	al,byte ptr .dfcb0+0		; get drive from default fcb
+	mov	byte ptr .dfcb1+0,al
+	call	change_dir1
+
+	ret
+
+endif
+
+eject
+
+	;
+	; get parent's PD & UDA 
+	;
+if CD or SD
+;==========
+set_parent:
+;==========
+;
+	call	drivenumber		; al get drive number (0 rel)
+	xor	ah,ah
+	push	ax			; save drive number
+;;	mov	bp,1			; set up network mask in bp
+;;	mov	cl,al
+;;	shl	bp,cl			; bp now has changed drive path bit on
+		mov	bp,0FFFFh	; Randy bug fix
+
+	push	bp
+	mov	cl,P_PDADR		; get PD address
+	call	ccpm
+	mov	bp,ax			; bp gets PD offset
+	pop	ax			; pop network bits
+	pop	cx			; pop drive # in cl
+
+; es:bp and es:bx ==> PD   ax -> network bit map   cx -> drive (0 rel)	
+
+	pushf
+	cli
+	mov 	bx,es:p_parent[bx]	; get our parent's PD address
+	or	bx,bx			; see if parent exists (it should)
+	jnz	get_cats
+to_sp_exit:
+	jmp 	sp_exit			; if not, terminate with no error msg
+
+get_cats:
+	mov	di,es:CAT[bp]		; get addr of our CAT
+	mov 	si,es:CAT[bx]		; get addr of our parent's CAT
+
+;;	or	di,di			; if we have no CAT, exit
+;;	jz	sp_exit			; (**Handled by next check**) 
+
+	cmp	di,si			; don't swap if they are the same
+	je	to_sp_exit		; can happen on cd d:\ after cd c:\qa12
+
+	shl	cx,1			; shift drive # into word pointer
+
+	cmp	map_flag,0		; check if this is a mapping chdir
+	je	change_parent
+
+	push	bx
+	push	bp
+
+	mov	bp,cx			; put it in bp
+
+	mov	bl,map_flag		; get 0 rel drive # in bx
+	dec	bl
+	xor	bh,bh
+;;	mov	ax,1			; set up actual network bit in ax
+;;	mov	cl,bl
+;;	shl	ax,cl
+	shl	bx,1			; shift mapped-drive # into word ptr
+
+if CD	;   CD doesn't allow physical drives to be assigned to another drive
+	cmp	es:word ptr 0C18h[bx],0	; is this a physical drive? (0 = no)
+	je	map_ok
+
+	push	si
+					; assume each hds does not exist
+	mov	dx,bp			; dl = new  drive # (times 2)
+	mov	dh,bl			; dh = phys drive # (times 2)
+	shr	dx,1			; normalize dh & dl (divide by 2)
+	mov	si,es:[bx+di]
+	or	si,si			; does phys drive's hds exist? (0 = no)
+	jz	phys_skip1
+	mov	dh,es:[si]		; get current drive # of phys drive
+phys_skip1:
+	mov	si,es:[bp+di]
+	or	si,si			; does new drive's hds exist?
+	jz	phys_skip2
+	mov	dl,es:[si]		; get current drive # of new drive
+phys_skip2:
+	pop	si
+	cmp	dh,dl			; are they the same?
+	je	map_ok
+
+map_error:
+	mov	dx,offset mapnop
+	jmp	fatal_err
+endif
+
+map_ok:
+	mov	dx,es:[bp+di]		; get new hds pointer
+	xchg	dx,es:[bx+di]		; exchange new pointer with mapped drive
+	mov	es:[bp+di],dx
+	mov	cx,bx			; set drive number (*2) to mapped drive
+	pop	bp
+	pop	bx
+
+change_parent:
+	or	es:NWM[di],ax		; turn on network bit
+
+	or	si,si			; see if dad has a CAT
+	jz	dadcatless
+
+	or	es:NWM[si],ax		; turn on network bit in dad's CAT
+	mov	dx,si			; save parents CAT offset
+	add	si,cx			; point to changed drive in dad's CAT
+	add	di,cx			; point to changed drive in our CAT
+	mov	bx,es:[si]		; get offset of dad's hds
+	mov	bp,es:[di]		; get offset of our hds
+
+		; SI,DI have hds offset values
+		; BX,BP have offsets of the hds
+
+	mov	es:[di],bx
+	mov	es:[si],bp		; switch hds pointed to by CATS
+
+	or	bx,bx			; did parent have HDS for drive?
+	jz	get_cnt			; NO
+
+		; lets switch the counts
+	mov	ax,es:HDPCNT[bx]
+	xchg	ax,es:HDPCNT[bp]
+	mov	es:HDPCNT[bx],ax
+
+	jmps	sp_exit
+
+get_cnt:
+			; DX  -> parents CAT offset
+			; BP  -> new HDS that needs PCNT updated
+
+	mov	si,dx
+	mov	ax,es:CATPCNT[si]
+	mov	es:HDPCNT[bp],ax
+	jmps	sp_exit
+
+;----------
+dadcatless:		; Swap with all old relatives
+;----------
+		; DI has new CAT offset to give to all relatives
+		; BX has our parents PD
+		; BP has our PD
+		; CX drive number (0 rel) times 2
+
+	mov	si,di
+	add	si,cx
+	mov	si,es:[si]		; hds offset
+	xor	cx,cx			; initialize count of PD who will share
+
+aliverelative:
+	inc	cx			; keep track of number of PDs who share
+	mov	es:CAT[bx],di
+	mov	bx,es:p_parent[bx]	; see if his dad is alive
+	or	bx,bx
+	jnz	aliverelative
+
+	mov	es:CATPCNT[di],cx
+	mov	es:HDPCNT[si],cx
+	mov	es:word ptr CAT[bp],0	; We will die with no CAT info
+;	jmps	sp_exit
+
+sp_exit:
+	popf
+	ret
+endif
+
+eject
+
+;======
+gotdir:
+;======
+
+	push	si
+	push	cx
+	call	change_dir		; will only return if no error
+	pop	cx
+	pop	si
+
+	ret
+
+;===========
+drivenumber:
+;===========
+
+	mov	al,byte ptr .dfcb0+DRIVE
+	and	al,1fh			; strip off bits
+	cmp	al,0
+	jnz	ok98
+		; using default so get it
+		mov	cl,drv_get
+		call	ccpm
+		jmps	ok99		; (0 rel) already
+
+ok98:
+	dec	al			; convert to (0 rel)
+
+ok99:
+	mov	cl,al
+	mov	cdrive,al
+	ret
+
+	;
+	;  Get drive number from tail
+	;
+;========
+getdrive:
+;========
+;
+;	ENTRY
+;		ah	->	legal drive number max (ex. if 1 then A:,B: ok)
+;		cl	->	buffer count
+;
+;	EXIT
+;		al	->	drive number (1 rel) else 0 if no drive letter
+;		ZF	->	set if no drive letter
+;
+;	NOTE
+;		Will not return if illegal drive letter
+;
+
+	mov	al,0ffh			; set up for no drive
+	cmp	cl,2
+	jb	nodrive			; hard to have d: if only one character
+	cmp	byte ptr 1[si],':'
+	jne	nodrive
+		mov	al,byte ptr [si]
+		sub	al,'A'
+		jl	baddr
+		cmp	al,ah
+		jg	baddr
+		sub	cl,2
+		add	si,2
+nodrive:
+	inc	al		; sets the zero flag or makes drives 1 relative
+
+	ret
+
+
+baddr:
+;	pop	ax			; clear stack
+	mov	dx,offset baddrive+1
+	jmp	fatal_err
+
+if MD
+
+;===========
+change_dir1:
+;===========
+
+	or	byte ptr .dfcb1,80h		;set high nibble to 80H
+	mov	dx, dfcb1
+	jmps	change_common
+
+endif
+
+	;
+	;  Map the subdirectory
+	;
+;==========
+change_dir:
+;==========
+
+	or	byte ptr .dfcb0,80h		;set high nibble to 80H
+	mov	dx, dfcb0
+
+change_common:
+
+	mov	cl,f_open
+	call	ccpm
+
+	or	al,al
+	je	ok91
+		; We have an error
+		or	ah,ah
+		jne	extend_open
+			mov	dx,offset notfound
+			;zzzz stuff on stack
+			jmp	fatal_err
+extend_open:
+	push	ax			; ah has error number
+	call	drivenumber		; puts drive number (0 rel) into cl
+	pop	ax
+	mov	al,cl
+	call	derror
+		; zzz stuff on stack
+	jmp	fatal_err
+
+ok91:
+
+	ret
+
+eject
+
+	;
+	;	print a directory path
+	;
+
+if SD
+;==========
+prcurppath:	; enter here for system disk
+;==========
+
+	push	es
+	mov	cl,09ch
+	call	ccpm
+
+	test	es:word ptr P_SFLAG[bx],0008h
+	pop	es
+	jz	ok38			; path is on so display path
+
+	mov	dx,offset sysdiskoff
+	jmp	fatal_err
+
+ok38:
+	mov	al,0fh		; Print path of P: as it is the system disk
+	jmps	prpath
+endif
+
+;=========	
+prcurpath:	; enter here for current drive
+;=========
+
+	mov	cl,drv_get
+	call	ccpm
+
+;======
+prpath:		; enter here for user specified drive in al (0 rel)
+;======
+
+	mov	dx,80h
+	mov	bx,5ch
+	mov	di,offset tail
+	call	find_path
+	jmp	fatal_err		; will print path or error and exit
+
+eject
+
+;
+;     This routine handles mapping of floating drives (n:=...)
+;
+;	ENTRY	-->	      FCB extent and drive have been set up
+;			ES -> DS
+;
+;	EXIT	-->	ax -> error code from BDOS
+;			      DRIVE in fcb is now the new drive after a map
+;			      EXTENT in fcb is now 0 for no mapping
+;			      all vital registers saved
+;
+
+if CD or SD
+;===========
+map_sub_dir:
+;===========
+;
+	push	cx
+	push	di
+	push	si
+
+	inc	di
+	mov	byte ptr [di],'.'		; get current mapping (non-zero)
+	inc	di
+	mov	al,' '
+	mov	cx,10
+	rep	stosb
+;;	mov	di,dfcb0
+
+	call	change_dir	; will return only if no errors
+
+	pop	si
+	pop	di
+	pop	cx
+
+	ret
+endif
+
+
+;========
+gotoroot:
+;========
+
+	or	byte ptr [di],80h	; turn on special bit
+	mov	dx,di
+	mov	cl,f_close
+	call	ccpm
+
+		; NOTE no possible error can occur
+	ret
+
+if SD
+;========
+setsflag:
+;========
+
+;     ENTRY
+;	ax	->	mask off bits to turn on or off in P_SFLAG
+;	dl	->	set or reset flag  ( 1=set )
+;
+;    This flag set is a global operation as it gets all of our older relatives
+;
+
+	push	es
+	push	ax
+	mov	cl,09ch
+	call	ccpm
+	pop	ax
+	cli
+
+nextgeneration:
+	cmp	dl,1
+	jnz	reset
+	or	es:word ptr P_SFLAG[bx],ax	; sets flag
+	jmps	ok122
+reset:
+	and	es:word ptr P_SFLAG[bx],ax
+ok122:
+	mov	bx,es:word ptr P_PARENT[bx]
+	cmp	bx,0
+	jne	nextgeneration
+
+	sti
+	pop	es
+	ret
+
+endif
+;------------------------------------------------------------------------------
+;                          SUPPORT ROUTINES
+;------------------------------------------------------------------------------
+
+print_ds_string:	mov cl,c_writebuf ! jmps ccpm
+
+;====
+ccpm:	; INTERFACE ROUTINE FOR SYSTEM ENTRY POINTS
+;====
+
+	int osint ! ret
+
+;*****************************************************
+
+	DSEG
+
+cdrive		rb	1		; current drive number (0 rel)
+havedot		rb	1
+
+if CD
+map_flag	db	0		; 0 = no mapping, otherwise = 1 - 16
+DRPOS		equ	2		; Drive position (0 rel)
+HDRLEN		equ	6
+ftail		db	13,10,'?:  '	; header for CD [ALL] 
+		rb	HDRLEN		; needed if tail fills up on [ALL]
+endif
+
+if SD
+ftail		db	'P:='		; creates extra room in tail
+endif
+
+tail		rb	128		; stores deblanked tail and path 
+
+wrongvers	db	'Requires Concurrent$'
+notfound	db	'Missing directory',0
+
+if CD
+mapnop		db	'CHDIR is unable to map physical drives.',0
+endif
+
+if MD
+NOCAT		equ	0
+NOHDS		equ	1
+HAVEHDS		equ	2
+
+hdmode		rb	1		; HD mode when process
+cathds		rw	1		; offset of CAT or HDS
+savedhds	rb	10		; HDS
+
+cataddr		rw	1
+
+extrafcb	rb	33
+nospace		db	'No space for directory',0
+endif
+
+if SD
+map_flag	db	0		; 0 = no mapping, otherwise = 1 - 16
+sysdiskoff	db	'The system drive is off',0
+endif
+
+if ZD
+cannotdel	db	'Can''t remove subdirectory',0
+endif
+
+		end
+                                                                                                                                                       

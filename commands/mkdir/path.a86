@@ -1,0 +1,482 @@
+title 'FIND PATH source code'
+
+;************
+;* 07/22/84 *
+;************
+
+;*BUG*1*	07/22/84	BUG	can call more than once now
+
+
+;*****************************************************************************
+;*
+;*
+;*			----  FIND_PATH  ----
+;*
+;*
+;*     FIND_PATH will return to the caller the present pathname for
+;*  the drive he specifies.  This includes CP/M media also, for which
+;*  the path will always be 'd:/'.  For drives a: thru m: the root will
+;*  always be the same, but for the three floating drives (n:, o:, p:)
+;*  the root drive can be any drive.  If a floating drive has not
+;*  been assigned by the user it will default to the default system drive.
+;*
+;*  
+;*	ENTRY:
+;*		al	==>	drive (0 to 15)
+;*		ds:bx	==>	offset of your fcb buffer (33 bytes long)
+;*		ds:dx	==>	offset of your dma buffer (128 bytes long)
+;*		ds:di	==>	offset of your path buffer(68 bytes long)
+;*		es	==>	ds
+;*	direction flag	==>	cleared
+;*
+;*	EXIT:
+;*		ax	==>	0 -> ok  else error number (see DERROR.A86)
+;*		dx	==>	offset of path if no error, else error message
+;*	ds,ss,cs,df	==>	preserved	(df is direction flag)
+;*	all others	==>	undefined
+;*
+;*
+;*	*** SIDE AFFECT the given drive will pointing at the ROOT ***
+;*
+;*
+;******************************************************************************
+
+
+		CSEG
+
+
+	EXTRN	derror:near
+
+
+		DSEG
+
+
+	EXTRN	physical:byte
+	EXTRN	invalidpath:byte
+
+eject
+
+;*****************************************************
+;*
+;*	S T A R T    E Q U A T E S
+;*
+;*****************************************************
+
+
+;*
+;* extended errors
+;*
+
+OK		equ	0	; SUCCESSFULLY COMPLETED!!!
+DISK_IO		equ	01h	; physical error
+RO_DISK		equ	02h	; read only disk
+INVALID_DRIVE	equ	04h	; invalid drive
+F_EXISTS	equ	08h	; file exists (ie directory exists)
+ILLEGAL_Q	equ	09h	; illegal ? in fcb
+MANY_OPEN	equ	0ah	; too many open files
+MANY_LOCKS	equ	0bh	; no room in lock list
+
+LONG_PATH	equ	21h	; pathname is too long
+LONG_FILENAME	equ	22h	; filename part of directory is to long
+LONG_EXTENSION	equ	23h	; extension part of directory is to long
+NO_TMPDISK	equ	24h	; temporary disk is not presently defined
+NOT_FOUND	equ	25h	; directory does not exist
+
+
+HD		equ	2eh	; offset of hd array pointer(PD)
+HDRV		equ	00h	; drive that the floater is mapped into(HDS)
+HBLK		equ	06h	; our block number(HDS)
+BLKNUM		equ	1ah	; block number file can be found in(FCB)
+DRIVE		equ	0	; drive byte(FCB)
+EXTENT		equ	0ch	; extene byte(FCB)
+DSYSDISK	equ	09dh	; default system disk(SYSDAT)
+
+CNT		equ	0
+PLEN		equ	66	; path length
+
+;	Some common equates
+
+TRUE		equ	0ffh
+false		equ	0
+cr		equ	13		; carraige return
+lf		equ	10		; linefeed
+tab		equ	9		; tab char
+
+;	CCP/M-86 system functions 
+
+osint		equ	224		; interrupt for CCP/M system calls
+
+c_read		equ	1
+c_write		equ	2		; console functions
+c_rawio		equ	6
+c_writebuf	equ	9
+c_readstr	equ	10
+c_delimit	equ	110
+c_attachc	equ	146
+c_detachc	equ	147
+c_setnum	equ	148
+
+l_setnum	equ	160		; list device functions
+l_getnum	equ	164
+
+f_open		equ	15		; file functions
+f_close		equ	16
+f_sfirst	equ	17
+f_snext		equ	18
+f_read		equ	20
+f_make		equ	22
+f_dmaoff	equ	26
+f_readrand	equ	33
+f_errmode	equ	45
+f_dmaseg	equ	51
+f_parse		equ	152
+
+drv_set		equ	14		; drive functions
+drv_get		equ	25
+drv_free	equ	39
+
+p_pdadr		equ	156
+
+dir_usernum	equ	32		; directory functions
+
+p_cli		equ	150		; process control functions
+
+eject
+
+;*****************************************************
+;*
+;*	S T A R T  C O D E
+;*
+;*****************************************************
+
+	cseg
+
+	PUBLIC	find_path
+
+
+	;
+	;	print a directory path
+	;
+;=========
+find_path:
+;=========
+
+; store CALLER input
+
+	mov	byte ptr realroot,al
+	mov	byte ptr cur_drive,al
+	mov	word ptr dma_offset,dx
+	mov	word ptr fcb_offset,bx
+	mov	word ptr path_offset,di
+
+; initialize flags
+
+	mov	needbslash,TRUE		; *BUG*1*
+
+; initialize pathname string
+
+	mov	byte ptr PLEN+1[di],0	; place delimiter at end of string
+	mov	byte ptr CNT[di],PLEN	; initialize cnt to be a offset ptr
+
+; lets put correct drive in the wildfcb
+
+	inc	al			; convert to 1-16
+	mov	byte ptr wildfcb,al	; force wild search to correct drive
+
+; initialize the fcb to 	drive,'..      ','    ',0
+
+	mov	byte ptr DRIVE[bx],al
+	mov	byte ptr EXTENT[bx],0
+	inc	bx
+	mov	byte ptr [bx],'.'
+	inc	bx
+	mov	byte ptr [bx],'.'
+	inc	bx
+	mov	di,bx
+	mov	al,' '
+	mov	cx,9
+	rep	stosb			; uses es:di
+
+;---------
+nextlevel:
+;---------
+;
+;	2eh[PD]		->  hd array
+;
+;	0[hd array]	->  hds for A:
+;	2[hd array]	->  hds for B:
+;		    .
+;		    .
+;		    .
+;       30[hd array]	->  hds for P:
+;	32[hd array]	->  number of processes pointing to hd array
+;	34[hd array]	->  Network mask
+;
+;	hds
+;		hdrv	equ	0		; drive (A: - M:) (0 relative)
+;		mseq	equ	1		; media sequence
+;		pblk	equ	2		; parent block number
+;		pdcnt	equ	4		; parent dcnt
+;		hblk	equ	6		; 1st block of directory
+;		prcnt	equ	8		; process cnt
+;
+
+	mov	cl,p_pdadr
+	call	ccpm		; es:bx -> Process Descriptor
+	mov	bx,es:HD[bx]	; now es:bx -> array of hd structures ptrs
+	cmp	bx,0		; no mapping yet for any drive
+	je	nohd
+	xor	ah,ah
+	mov	al,byte ptr cur_drive
+	add	ax,ax
+	add	bx,ax
+	mov	bx,es:[bx]	; bx ==> lock list item of current sub dir
+	cmp	bx,0		; no mapping yet for selected drive
+	je	nohd
+	mov	cl,es:HDRV[bx]	; cl is physical drive (0 relative)
+	mov	byte ptr realroot,cl
+	mov	cx,es:HBLK[bx]	; cx is parents block number
+	cmp	cx,0		; The root block number is zero
+	je	atroot
+	push	cx		
+	call	map_sub_dir	; lets do a '..      ' to go up a directory
+	pop	cx
+	cmp	ah,0
+	jne	exit		; we have an error
+	mov	byte ptr needbslash,false	; we have a sub-directory
+
+;-----
+insub:
+;-----
+;
+;     Now we have our parent block number and have done a '..' so
+;  now we search for the fcb with that block number and that will
+;  give us the sub directory we were in
+;
+
+	push	cx
+	mov	dx,offset wildfcb
+	or	byte ptr wildfcb,80h	; turn on special bit so we find dirs.
+	call	sfirst
+
+findit:
+	cmp	al,0ffh		; we should be able to find it
+	je	serror
+
+	cmp	ah,0
+	je	ok61
+
+		; can't get invalid drive so must be physical
+serror:
+	pop	cx		; clear stack
+	mov	ah,DISK_IO	; disk has garabage on it if we get an error
+	mov	bx,offset physical
+	jmp	ext_fatal_err
+
+ok61:
+	mov	bx,word ptr dma_offset
+	mov	ax,word ptr BLKNUM[bx]		; first block in file
+	pop	cx
+	cmp	cx,ax
+	jnz	skip15
+	jmp	addtopath
+
+skip15:
+	push	cx
+	or	byte ptr wildfcb,80h	; turn on special bit so we find dirs.
+	call	snext
+
+	jmps	findit
+
+	;
+	;	Load up return value and return to user
+	;
+ext_fatal_err:
+
+	mov	al,byte ptr [bx]	; ax has error number
+	inc	bx
+	mov	dx,bx		; dx pts to NULL terminated error string
+exit:
+
+	ret		; TO CALLER
+
+
+;----
+nohd:
+;----
+;
+	mov	al,byte ptr realroot
+	cmp	al,'N'-'A'
+	jl	atroot
+		; we have n,o, or p and we have no current map for it
+	mov	al,es:byte ptr .DSYSDISK  ; steal default sysdisk from SYSDAT
+;	cmp	al,0ffh
+;	jne	ok12
+;		; temporary disk is not defined so the same with our path
+;	mov	bx,offset notdefined
+;	mov	ah,NO_TMPDISK
+;	jmp	ext_fatal_err
+
+ok12:
+	mov	byte ptr realroot,al
+atroot:
+
+	mov	bx,word ptr path_offset
+	mov	al,byte ptr CNT[bx]
+	cmp	al,2			; Is there enough space for 'd:'
+	jae	skip20		; NOTE    if need room for 'd:\' we are
+	mov	bx,offset invalidpath	; sure to have enough space.
+	mov	ah,LONG_PATH
+	jmp	ext_fatal_err
+skip20:
+	xor	ah,ah
+	mov	di,ax
+	add	di,bx
+
+	cmp	byte ptr needbslash,true
+	jne	cont
+	mov	byte ptr [di],'\'
+	dec	di
+cont:
+	mov	byte ptr [di],':'
+	dec	di
+	mov	al,byte ptr realroot
+	add	al,'A'
+	mov	byte ptr [di],al
+	mov	dx,di
+	mov	ax,OK
+	jmp	exit
+
+addtopath:
+	mov	bx,word ptr path_offset
+	mov	bp,bx
+	inc	bp			; marker for pathname to long
+	mov	al,byte ptr CNT[bx]
+	xor	ah,ah
+	mov	di,ax
+	add	di,bx
+	mov	bx,word ptr dma_offset
+	mov	si,bx
+	mov	dx,bx			; marker for beginning of dma
+	add	bx,9
+	add	si,12
+
+loop2:
+	dec	si
+	cmp	dx,si
+	je	addbslash
+	mov	cl,byte ptr [si]
+	and	cl,07fh			; strip off any attributes
+	cmp	cl,' '
+	je	loop2
+nodotyet:		
+	cmp	di,bp
+	jae	ok13
+	mov	bx,offset invalidpath
+	mov	ah,LONG_FILENAME
+	jmp	ext_fatal_err
+ok13:
+	mov	byte ptr [di],cl
+	dec	di
+	cmp	si,bx			; 9th char (first in extension) is
+	jne	loop2			; not blank so need a dot
+	cmp	di,bp
+	jae	ok14
+	mov	bx,offset invalidpath
+	mov	ah,LONG_EXTENSION
+	jmp	ext_fatal_err
+ok14:
+	mov	byte ptr [di],'.'
+	dec	di
+	jmps	loop2
+
+addbslash:
+	cmp	di,bp
+	jae	ok15
+	mov	bx,offset invalidpath
+	mov	ah,LONG_PATH
+	jmp	ext_fatal_err
+ok15:
+	mov	byte ptr [di],'\'
+	mov	ax,di
+	dec	al
+	mov	bx,word ptr path_offset
+	sub	ax,bx
+	mov	byte ptr [bx],al
+	jmp	nextlevel
+
+eject
+
+	;
+	;  Map the subdirectory
+	;
+;===========
+map_sub_dir:
+;===========
+
+	mov	bx,word ptr fcb_offset
+	or	byte ptr [bx],80h	; turn on special bit
+	mov	dx,bx
+	call	open
+
+	cmp	al,0ffh			; was directory found?
+	jne	yes1
+		mov	bx,offset invalidpath
+		mov	ah,NOT_FOUND
+		jmp	ext_fatal_err
+
+yes1:
+	or	ah,ah
+	jz	ok32
+
+; we got an extended error
+
+	mov	al,byte ptr cur_drive
+	call	derror
+
+ok32:
+
+	ret
+
+
+;-----------------------------------------------------------------------------
+;                          SUPPORT ROUTINES
+;-----------------------------------------------------------------------------
+
+prchar:		mov cl,6 ! jmp ccpm 
+print_ds_string:
+	mov	cl,c_writebuf	! jmps ccpm
+getdisk:	mov cl,drv_get  ! jmps ccpm
+snext:		mov cl,f_snext	! jmps ccpm
+sfirst:		mov cl,f_sfirst	! jmps ccpm
+open:		mov cl,f_open	! jmps ccpm
+close:		mov cl,f_close	! ;jmps ccpm
+
+;====
+ccpm:	; INTERFACE ROUTINE FOR SYSTEM ENTRY POINTS
+;====
+
+	int osint ! ret
+eject
+
+;*****************************************************
+;*
+;*	CONSTANTS 
+;*
+;*****************************************************
+
+	DSEG
+sysdatseg	dw	0
+dma_offset	rw	1
+fcb_offset	rw	1
+path_offset	rw	1
+cur_drive	rb	1		
+realroot	rb	1
+needbslash	db	true
+havedot		rb	1
+wildfcb		db	0
+		db	'????????','???','?'
+		db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+
+		end
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      

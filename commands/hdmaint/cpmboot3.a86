@@ -1,0 +1,1100 @@
+
+pagewidth 132
+pagesize 72
+title  'CP/M-86 & CCP/M-86 System Loader 19-MAY-84'
+
+;	This is a modified version of the CP/M-86 & CCP/M-86 system
+;	loader of 12-MAY-83.
+;
+;	=========================================================
+;		   Revisions made as of 19-MAY-84
+;	=========================================================
+;	1) The loader makes sure that the operating system it
+;	   loads will not over-write itself. If this a occurs a
+;	   memory error message is printed.
+;	2) The loader has been combined with the loader bios and
+;	   has been updated to use the OEM CCP/M v2.0 loader BDOS.
+;	3) A '.' is printed every 16k of the operating system file
+;	   read by the loader.
+;	==========================================================
+;
+;	The Loader consists of the three modules:
+;	Loader BDOS (the file LBDOS.H86), the Loader Program and
+;	the Loader BIOS (the file XTCPMLDR).  This module contains
+;	both the Loader Program and the Loader BIOS.
+;
+;	XTCPMLDR resides on the first track of the CP/M-86
+;	or CCP/M-86 disk partition and is brought into memory
+;	by the partition bootstrap loader to load initiate CP/M-86
+;	or CCP/M-86.
+;
+;	It first trys opening the file 'CPM.SYS' using the LDRBDOS 
+;	and XTLDBIOS and then reads it into memory. If 'CPM.SYS' is
+;	not present on disk the same procedure is again tried using
+;	the file 'CCPM.SYS'. If one of the above files is successfully 
+;       read into memory a jump to the respective initialization entry
+;	point starts CP/M-86 or CCP/M-86. ON entry to either operating
+;	system DL must contain the physical IBM drive number from which
+;	it was loaded. In the case of the hard disk this value is 80h.
+;
+;	The CP/M loader may be read into any segment that does not
+;	overlap the desired system load segment as it makes
+;	all memory references using copies of the CS: register
+;	it is entered with.
+;
+;	Presently the loader only handles contiguous files.
+;		   (8080 and small models only)
+;	+----+----+----+----+----+----+----+----+----+
+;	|TYPE|   LEN   |   ABS   |   MIN   |   MAX   |
+;	+----+----+----+----+----+----+----+----+----+
+;	type	rb	1		;seg type 
+;	len	rw	1		;length 
+;	abs	dw	1		;absolute segment address for LOADER
+;	min	rw	1		;minimum mem
+;	max	rw	1		;max mem needed
+;
+;	GENERATION: GENCMD CPMBOOT2 8080 NHEAD
+eject
+;	LOADER CONSTANTS
+FALSE		equ	0
+TRUE		equ	not FALSE
+
+;	MISC. PROGRAM CONSTANTS
+DEBUG		equ	false
+CR		equ	0dh
+LF		equ	0ah
+
+;	BDOS FUNCTIONS
+SELDSKF		equ	14
+OPENF		equ	15
+READSF		equ	20	
+SETDMAF		equ	26		
+SETDMABF	equ	51		
+SETMULTCNTF	equ	44
+
+BDOS_INT	equ	224
+
+LDR_OFFSET	equ	0900h		;offset of loader bios
+BIOSOFF		equ	2500h		;offset of BIOS from start of CPM.SYS
+					;this is the entry point into CPM.SYS
+BOOTDRV		equ	0		;boot drive always zero
+
+eject
+;====================
+; LOADER BIOS DEBUG
+;====================
+if DEBUG
+	cseg
+	org	100h
+	mov	ax,cs
+	  mov	ds,ax
+	  mov	es,ax
+	push	cs
+	  call	init		;initialize BIOS
+	mov	al,1		;console input function
+	  push	cs
+	  call  entry		;get character AL
+	mov	cl,al
+	  mov	al,2		;console output function
+	  push	cs
+	  call	entry		;echo last character type
+	mov	al,9		;select disk function
+	  mov	cl,0		;drive 0
+	  mov	dl,0		;first select
+	  push	cs
+	  call	entry		;BX=0 if error else pointer to DPH 
+d0:     mov	sp_save,sp
+	mov	ax,1700h	;MCNT / DRIVE
+	  push	ax
+	mov	bx,4		;start track
+	  push	bx
+	mov	cx,43h		;start sector
+	  push	cx
+	push	cs		;DMA segment
+	mov	dx,offset dbuf
+	  push	dx		;DMA offset
+	mov	al,10		;read function
+	  push	cs
+	  call	entry		;AL=0 if no errors AL=1 if error occured
+d1:	mov	sp,sp_save
+	  jmps	d0
+
+sp_save	rw	1
+dbuf	rb	512*17		;IBM track buffer (68-128 byte sectors)
+endif
+
+eject
+;*******************************
+;*
+;*	LOADER starts here
+;*
+;*******************************
+if NOT DEBUG
+	cseg
+	org	LDR_OFFSET
+ endif
+	jmp	init				;loader bios initialization
+	jmp	entry				;loader bios normal entry
+	jmp	start				;loader program entry
+
+;ASSUMES loader BDOS has done the following at entry:
+; 1) Setup DS,ES,SS=CS
+; 2) Setup at least a 64 level stack
+;
+start:	cld
+	mov	dx,cs
+	call	setdmab
+	mov	dx,offset header_rec
+	call 	setdma				;set a safe dma address
+
+	call	seldsk				;select disk
+
+	call 	openfnc				;open CPM.SYS
+	mov	ccpm_flag,0
+	cmp	al,255
+	jne 	open_ok				; insure good file
+	
+	mov 	si,offset ccpm_file		;init FCB for CCPM.SYS
+	mov	di,offset fcb+1
+	mov	cx,8/2
+	rep	movsw
+
+	call 	openfnc				;open CCPM.SYS
+	mov	ccpm_flag,-1
+	cmp 	al,255
+	jne 	open_ok				; insure good file
+
+	mov 	dx,offset no_file_msg
+	call 	msg				; no CPM.SYS or CCPM.SYS file
+	jmp	stop				;  then halt the machine
+
+open_ok:
+	mov	dx,offset signon_msg
+	call	msg				;print signon
+	call	prtfcbfnm			;and load FCB file name
+
+	mov	dl,1
+	call	setmulscnt			;only one sector  needed
+	call 	read				;  to read .sys file header
+	or 	al,al
+	jnz 	header_err
+
+	cmp	GD1_form,1			;code segment?
+	jne	header_err			;error if no
+
+	mov 	ax,GD1_base			;get abs field from header
+	mov	sys_seg,ax			;long jump segment address
+	cmp	ax,0
+	je	header_err
+
+	add	ax,GD1_length			;end segment address
+	cmp	GD2_form,2			;small model?
+	jne	chk_memsize			;else 8080
+						;this simple loader can only
+	cmp	ax,GD2_base			;  a contiguous file
+	jne	header_err			;if not contiguous
+
+	add	ax,GD2_length			;ax=end seg address for data
+chk_memsize:
+	mov	dx,cs
+	cmp	ax,dx				;enough memory to read system?
+	jbe	readsys				; if yes
+
+	mov	dx,offset mem_err_msg
+	call	msg
+	jmp	stop_loop
+
+header_err:
+	mov 	dx,offset head_err_msg
+	call 	msg
+	jmp	stop
+
+eject
+;	LOAD OPERATING SYSTEM
+;
+readsys:
+	mov	dl,16				;read 2k at a time
+	call	setmulscnt
+
+	mov 	dx,GD1_base
+	call 	setdmab				; set DMA segment for disk IO
+
+	mov	active_cnt,1			;activity indication every 8k
+	mov 	dx,0-(128*16)			;offset of CPM in segment
+readit:	add 	dx,128*16			; address for next record
+	mov	ax,dx
+	add	ax,128*16	
+	jnc	setrdoff			;if no offset wrap
+
+	push	dx
+	mov	cl,4
+	shr	dx,cl				;create new segment
+	add	GD1_base,dx			;update new load segment
+	mov	dx,GD1_base
+	call	setdmab				;set new load segment
+	pop	dx
+	and	dx,000fh			;create new offset
+
+setrdoff:
+	push	dx
+	call 	setdma				;set new DMA offset
+
+	dec	active_cnt
+	jnz	readit1
+	mov	al,'.'
+	call	putchar
+	mov	active_cnt,16/2			;activity indicator every 16k
+
+readit1:
+	call 	read				;next sector read
+	pop	dx
+
+	cmp 	al,1
+	je 	done				; check for EOF 
+	cmp 	al,0
+	jz	readit				; check for good read
+
+	mov 	dx,offset read_err_msg
+	call 	msg				; print READ ERROR message
+	call	prtfcbfnm
+	jmp 	stop				; hard stop on any error
+
+done:	mov	dl,BOOTDRV+80h			;indicate hard disk load
+	cmp	ccpm_flag,0
+	jz	boot_sys			;if default (CPM.SYS)
+	mov	sys_off,0			;else CCPM.SYS
+
+boot_sys:
+	cmp	GD2_form,2			;small model data segment?
+	jnz	boot_sys1			;if 8080
+	mov	ds,GD2_base
+
+boot_sys1:
+	jmpf 	BIOS				;init system
+
+;	Vector for jmpf indirect to start CP/M
+;
+sys_off		dw	biosoff			;CPM.SYS value (0 IF CCPM.SYS)
+sys_seg		dw	0
+BIOS		equ	dword ptr sys_off
+
+eject
+;*****************************
+;*
+;*	subroutines
+;*
+;*****************************
+
+;*********
+prtfcbfnm:					;print FCB file name to console
+;*********
+	mov	si,offset fcb+1	
+	mov	cx,8
+	call	prtfcbfnm1
+	mov	al,'.'
+	call	putchar
+	mov	si,offset fcb+9
+	mov	cx,3
+prtfcbfnm1:
+	lodsb
+	cmp	al,' '
+	jz	prtfcbfnm_ret
+	push si! push cx
+	call	putchar
+	pop cx! pop si
+	loop	prtfcbfnm1
+prtfcbfnm_ret:
+	ret	
+
+;	Output Character string pointed to by DS:DX until $
+;***
+msg:	mov	si,dx
+;***
+msg1:	lodsb
+	cmp	al,'$'
+	je	msg_ret
+	push	si
+	call	putchar
+	pop	si
+	jmps	msg1
+msg_ret:ret
+
+;	Output Character In AL to Console
+;*******
+putchar:
+;*******
+	mov	cl,al			;console output not supported in BDOS
+	call	ioconout		;call BIOS direct
+	ret
+
+;******
+seldsk:
+;******
+	mov 	cl,SELDSKF
+	mov	dx,BOOTDRV		;select boot disk
+	jmps 	sys_vec
+
+;*******
+openfnc:
+;*******
+	mov 	cl,OPENF
+	mov 	dx,offset fcb 		;fcb already initialized
+	jmps 	sys_vec
+ 
+;******
+setdma:					;set new dma addr in dx
+;******
+	mov 	cl,SETDMAF
+	jmps 	sys_vec
+
+;*******
+setdmab:				;set new dma segment base from DX
+;*******
+	mov 	cl,SETDMABF
+	jmps 	sys_vec
+
+
+;**********
+setmulscnt:
+;**********
+	mov	cl,SETMULTCNTF		;set # of sectors from DL for next R/W
+	jmps	sys_vec
+
+;****
+read:
+;****
+	mov 	dx,offset fcb
+	mov 	cl,READSF
+;	jmps 	sys_vec
+
+;*******
+sys_vec:
+;*******
+	int 	bdos_int
+	ret
+
+;****
+stop:
+;****
+	mov 	dx,offset stop_msg
+	call	msg
+;	jmps	stop_loop
+
+;*********
+stop_loop:
+	jmps	stop_loop
+
+eject
+;title	'CCP/M-86 Loader Bios  19-MAY-84'
+
+;*********************************************
+;*                                           *
+;* Basic Input/Output System (BIOS) for      *
+;* CP/M-86 Configured for the IBM XT PC	     *
+;*                                           *
+;*********************************************
+;
+;
+;	Copyright (C) 1980,1981
+;	Digital Research, Inc.
+;	Box 579, Pacific Grove
+;	California, 93950
+;
+;
+;
+;  AT entry to the loader bios initialization routine (INIT:)
+;the CP/M hard disk label sector is expected to be loaded and
+;resident at absolute memory location CS-(512/16):0000.
+
+; Disk Label Data Structure
+;		DSEG
+;		org	0
+;CHECKSUM	rw	1	;sum of next 255 words == 0
+;ID_STRING	rb	31	;DR copyright
+;IBM_PSTART	rw	1	;partition start cylinder
+;IBM_PLENGTH	rw	1	;partition length in cylinders
+;IBM_NHEADS	rb	1	;number of heads
+;IBM_SPT	rb	1	;sectors per track
+;CPM_OPTIONS	rb	1	;bios options
+;CPM_NSECT	rb	1	;cpm sectors per physical
+;CPM_DPB	rb	15	;cpm DPB
+;RESERVED	rw	4	;reserved for DPB expansion
+;REMAP_SPB	rw	1	;# CP/M sectors per remap block
+;REMAP_MAX	rw	1	;# entries in remap table
+;REMAP_CNT	rw	1	;# occupied entries in table
+;SPARE_END	rw	1	;last spare cpm relative block #
+;REMAP_TBL	rw	220	;flawed sector block table
+
+eject
+;	PC ROM CONSOLE CONSTANTS
+VIDEO_INT	equ	10h		;console output entry
+VID_COUTF	equ	14		;teletype character out function
+VID_GSTATF	equ	15		;get video state
+VID_SMODEF	equ	0		;set video mode
+
+KEYBOARD_INT	equ	16h		;keyboard I/O entry
+KEY_STATUSF	equ	1		;         status function
+KEY_INPUTF	equ	0		;         input function
+
+
+;	XT PC FIXED DISK CONSTANTS
+FDSK_INT	equ	13h		;rom disk I/O entry
+
+DSK_RESETF	equ	0		;disk reset function
+DSK_READF	equ	2		;disk read function
+DSK_GETCHARF	equ	8		;get drive parameters
+
+ECC_ERROR	equ	11h		;data corrected error code
+MAX_RETRIES	equ 	5		;max retries on disk i/o error
+
+DSK_LBL_SIZE	equ	512		;size of disk label
+
+DEBLOCK_SIZE	equ	512*4		;deblocking buffer size
+					;must be >= remap block size
+eject
+;******************************
+;* LOADER BIOS INITIALIZATION *
+;******************************
+;
+; Arrive here from CALLF to offset 0
+;
+INIT:	sti
+	cld
+
+	mov	ax,ds
+	add	data_buf_seg,ax		;fix data buffer segment
+
+	mov	ah,VID_GSTATF
+	int	VIDEO_INT		;clear screen
+	mov	ah,VID_SMODEF
+	int	VIDEO_INT
+
+ if not DEBUG
+	push	ds
+	mov	ax,cs			;segment of disk label sector
+	sub	ax,DSK_LBL_SIZE/16
+	mov	ds,ax
+	mov	si,0
+	mov	di,offset disk_label	;move-it to internal storage
+	mov	cx,DSK_LBL_SIZE
+	rep	movsb
+	pop	ds
+ endif
+	mov	si,offset disk_label	;chk-sum disk label
+	lodsw
+	push	ax			;label chk-sum
+	xor	dx,dx
+	mov	cx,DSK_LBL_SIZE/2-1
+lbl_chksum:
+	lodsw
+	add	dx,ax
+	loop	lbl_chksum
+	pop	ax
+	add	dx,ax
+	jz	lbl_chkok		;label checked ok
+
+	mov	bx,offset inval_part_msg
+	call	pmsg
+lbl_chkbad:
+	jmps	lbl_chkbad		;loop until reset
+
+lbl_chkok:
+	xor	ax,ax
+	mov	cpm_cks,ax		;clear chk-sum (8000h) in case CP/M
+	mov	cpm_psh,al		;set to 128 byte sectors
+	mov	cpm_prm,al
+	mov	buff_block,-1		;mark read buffer invalid
+	retf
+
+eject
+;************************************************************************
+;*
+;* 	Register usage for BIOS interface routines:
+;*
+;*	Entry:	AL = function # (in entry)
+;*		CX = entry parameter
+;*		DX = entry parameter
+;*		DS = LDBDOS data segment
+;*
+;*	Exit:	AX = return
+;*		BX = AX (in exit)
+;*		ALL SEGMENT REGISTERS PRESERVED:
+;*		CS,DS,ES,SS must be preserved though call
+;*
+;************************************************************************
+entry:	cld
+	xor	ah,ah		;create index from entry function
+	shl	ax,1		;  word length fucntion
+	mov	bx,ax
+	call	func_tbl[bx]	;only called by loader BDOS
+	mov	bx,ax
+	retf			;return to loader BDOS
+
+;***********************
+;* BIOS Function Table *
+;***********************
+func_tbl dw 	IOCONST		; 0 = return console keyboard status
+	 dw 	IOCONIN		; 1 = return console keyboard char
+	 dw 	IOCONOUT  	; 2 = write char to console device
+	 dw	IORET		; 3 = list status
+	 dw	IORET		; 4 = write character to list device
+	 dw	IORET		; 5 = auxillary input
+	 dw	IORET		; 6 = auxillary output
+	 dw	IORET		; 7 = switch screen
+	 dw	IORET		; 8 = update or print new status
+	 dw 	IOSELDSK  	; 9 = select disk for next rd/write
+	 dw 	IOREAD		;10 = read logical sector
+	 dw	IORET		;11 = write logical sector
+	 dw	IORET		;12 = flush buffers
+	 dw	IORET		;13 = poll device
+eject
+;*****************************************
+;* CP/M Character I/O Interface Routines *
+;*       Using the IBM ROM BIOS		 *
+;*****************************************
+
+;*******
+IOCONST:			;console status AL=0FFH if character else 0
+;*******
+	mov	ah,KEY_STATUSF
+	int	KEYBOARD_INT
+	mov	al,0
+	jz	const_exit
+	mov	al,0ffh
+const_exit:
+	ret
+
+;*******
+IOCONIN:			;console input AL=character
+;*******
+	mov	ah,KEY_INPUTF
+	int	KEYBOARD_INT
+	mov	ah,0		;always returning character data
+	and	al,07fh
+	ret
+
+;********
+IOCONOUT:			;console output CL=character
+;********
+	mov	ah,VID_COUTF
+	mov	bx,7
+	mov	al,cl
+	and	al,07fh
+	int	VIDEO_INT
+
+;****************************************************
+;* I/O functions not implemented by the CP/M loader *
+;****************************************************
+IORET:  xor	ax,ax
+	ret
+
+; Utility subroutine to print messages pointed to by DS:BX ($=delimiter)
+;
+pmsg:	mov 	cl,[BX] 	;get next char from message
+	cmp	cl,'$'
+	je 	pmsg_exit
+	push	bx
+	call 	IOCONOUT  	;print it
+	pop	bx
+	inc 	bx
+	jmps 	pmsg		;next character and loop
+
+pmsg_exit:
+	ret
+eject
+;	Equates for paramter passing for read and write from the BDOS.
+;
+;	At the disk read and write function entries,
+;	all disk I/O parameters are on the stack.
+;	The stack at these entries appears as
+;	follows:
+;
+;           +-------+-------+
+;       +14 |  DRV  | MCNT  |   Drive and Multi sector count
+;           +-------+-------+
+;       +12 |     TRACK     |   Track number
+;           +-------+-------+
+;       +10 |    SECTOR     |   Physical sector number
+;           +-------+-------+
+;        +8 |    DMA_SEG    |   DMA segment 
+;           +-------+-------+
+;        +6 |    DMA_OFF    |   DMA offset
+;           +-------+-------+
+;        +4 |    RET_SEG    |   BDOS return segment
+;           +-------+-------+
+;        +2 |    RET_OFF    |   BDOS return offset
+;           +-------+-------+
+;      SP+0 |    RET_ADR    |   Return address to BIOS ENTRY routine
+;           +-------+-------+
+;
+;	These parameters may be indexed and modifided
+;	directly on the stack by the BIOS read and write rotines
+;	They will be removed by the BDOS when the BIOS completes
+;	the read/write function and returns to the BDOS.
+;
+;
+des_drv	equ	byte ptr 14[bp]
+sec_cnt	equ	byte ptr 15[bp]
+des_trk	equ	word ptr 12[bp]
+des_sec	equ	word ptr 10[bp]
+dma_seg	equ	word ptr  8[bp]
+dma_off	equ	word ptr  6[bp]
+
+eject
+;		************************
+;		* DISK DRIVER ROUTINES *
+;		************************
+;
+;========
+ioseldsk:	; Function 7:  Select Disk
+;========
+;	entry:	CL = disk to be selected
+;		DL = 00h if disk has not been previously selected
+;		   = 01h if disk has been previously selected
+;	exit:	AX = 0 if illegal disk
+;		   = offset of DPH relative from
+;			BIOS Data Segment
+;		ALL SEGMENT REGISTERS PRESERVED:
+;		CS,DS,ES,SS must be preserved though call
+;
+	xor 	ax,ax
+	cmp 	cl,BOOTDRV	;this BIOS only supports 1 disks
+	jne	seldsk_exit	;return w/ 0000 in AX if bad drive
+	or	cl,80h		;base fixed disk drive
+	test	dl,1		;log-in ?
+	jnz	seldsk_dpb	;no
+	
+	push	ax
+	mov	dl,cl		;on disk login verify the integrity
+	mov	ah,DSK_GETCHARF	;  of the disk label drive parameters
+	int	FDSK_INT	;BX=0 throughout interrupt
+	pop	ax		;AX=0
+	jc	seldsk_exit	;if error on last command
+	inc	dh
+	cmp	dh,IBM_nheads	;same number of heads?
+	jnz	seldsk_exit	;	if no
+	and	cl,3fh		;strip cylinder
+	cmp	cl,IBM_spt	;same number of sectors?
+	jnz	seldsk_exit	;	if no
+
+seldsk_dpb:
+	mov 	ax,offset cpm_dph
+
+seldsk_exit:
+	ret
+
+eject
+;======
+ioread:	    	; Function 11: Read sector
+;======
+; Reads the sector on the current disk, track and
+; sector into the current DMA buffer.
+
+;	entry:	parameters on stack
+;	exit:	AL = 00	if no error occured
+;		AL = 01 if an error occured
+;		AL = 0ffh if density change detected
+;		ALL SEGMENT REGISTERS PRESERVED:
+;		CS,DS,ES,SS must be preserved though call
+
+	mov 	bp,sp			;set BP for indexing into IOPB
+	push	es
+rd_all:	mov	al,sec_cnt
+	or	al,al
+	jz	rd_done			;if no sectors to transfer
+
+	call	xlat_request
+	mov	ax,remap_spb		;get # of cpm secs.in remap block
+	sub	al,req_sec		;after al=max. # of sectors we can xfer
+	mov	ah,sec_cnt		;get number of sectors left
+	cmp	ah,al			;can we xfer all remaining sectors?
+	jbe	rd_all1			;if yes
+	mov	ah,al			;else transfer as many as we can
+rd_all1:
+	mov	req_nsec,ah		;set # of logical sectors to transfer
+
+	call	disk_io
+	jnz	rd_done			;if error on last operation
+
+	xor	ch,ch
+	mov	cl,req_nsec		;get # of sectors transfered
+	sub	sec_cnt,cl		;# of sectors left
+	mov	ax,des_sec		;update parameters for next transfer
+	add	ax,cx			;next sector
+	cmp	ax,cpm_spt		;end of track?
+	jb	rd_all2			;if no
+	xor	dx,dx
+	div	cpm_spt
+	add	des_trk,ax		;# of tracks transfered
+	mov	ax,dx			;remainder is next sector
+rd_all2:
+	mov	des_sec,ax
+	mov	ch,cl
+	xor	cl,cl
+	shr	cx,1
+	add	dma_off,cx		;next DMA address
+	jmps	rd_all			;go do next operation
+
+rd_done:
+	pop	es
+	ret
+
+eject
+; Transfer up to the number of sectors in a remap block
+;
+; AT entry:	[req_block] = logical request block
+;		[req_sec]   = sub-sector within block to start
+;		[req_off]   = sub-sector starting offset address
+;		[req_nsec]  = # of logical sectors to transfer
+;
+; AT exit:      AL & ZF=0 (no errors)
+;		AL & ZF=1 (if fatal error)
+;
+disk_io:
+	mov	ax,req_block		;logical request block
+	cmp	buff_block,ax		;block already in buffer?
+	je	move_to_dma		;if yes
+
+	mov	buff_block,ax		; Physically read disk
+	mul	remap_spb		;block to number of cp/m sectors
+
+	mov	cl,cpm_nsect		;    /(cp/m sectors per ibm)
+	xor	ch,ch			; L o n g   D i v i d e !!
+	div	cx			;to number of IBM sectors
+	xor	dx,dx
+	mov	cl,ibm_spt
+	div	cx			;trk = ibm block / ibm spt
+	inc	dl			;AX = IBM physical block
+	mov	fdsk_sec,dl		;DL = IBM physical sector
+					;(remainder is ibm sector)
+	add	ax,cpm_off	 	;+ number of reserved tracks
+
+	xor	dx,dx
+	mov	cl,ibm_nheads		;cyl= ibm_track/nheads
+	div	cx			;CAUTION!! must be 16 bit
+	mov	fdsk_cyl,ax		;cylinder
+	mov	fdsk_hd,dl		;head=ibm_track % nheads
+
+	mov	fdsk_func,DSK_READF	;function
+
+	mov	fdsk_off,offset read_buffer  	;dma to buffer
+	mov	fdsk_seg,cs
+
+	mov	ax,remap_spb		;deblock to remap size (128)
+	shr ax,1! shr ax,1		;# ibm sectors (512)
+
+	mov	fdsk_nsec,al
+
+	mov	al,des_drv
+	or	al,80h			;base for all hard disks
+	mov	fdsk_drv,al		;drive
+	call	RW_common
+	jnc	move_to_dma		;read complete
+
+	mov	buff_block,-1		;mark deblocking buffer invalid
+	mov	al,1			;return with read error
+	jmps	disk_io_exit
+
+move_to_dma:
+	mov	si,offset read_buffer	;move data to DMA address
+	add	si,req_off
+	mov	di,dma_off
+	mov	es,dma_seg
+	mov	ch,req_nsec
+	xor	cl,cl
+	shr	cx,1			;number of bytes to move
+	shr	cx,1			;  to words
+	rep	movsw
+
+	mov	al,0			;no errors
+disk_io_exit:
+	or	al,al			;ZF=0 if no errors
+	ret
+
+eject
+;	translate entry parameters des_sec and des_trk into remapped units
+;	and finds alternate block if that block is in remap table
+;	(updates global variables req_block, req_sec, req_off)
+;
+xlat_request:
+	mov	ax,des_trk			;ax=CPM_TRACK-reserved tracks
+	sub	ax,cpm_off			;zero based track (directory)
+
+	mul	cpm_spt				;   * cpm sectors per track
+	mov	cx,des_sec			;   + desired cp/m sector
+	add	ax,cx				;   = logical cp/m block
+	adc	dx,0				;CAUTION: MUST BE 32 BITS!!
+
+	div	remap_spb			;   / remap block size
+	mov	req_sec,dl			;remainder is subsector in blk
+	mov	dh,dl				
+	xor	dl,dl				;256/2
+	shr	dx,1				; calculate buff ptr while here
+	mov	req_off,dx
+
+	mov	cx,remap_cnt			;see if that block is in table
+	jcxz	xlat_noremap			;if no entries
+	push cs! pop es
+	mov	di,offset remap_table		;by scanning table
+	repne	scasw
+	jne	xlat_noremap			;nope, leave block number alone
+	inc	cx				;adjust for pre-decrement
+	sub	cx,remap_cnt			;index for remapped block
+	mov	ax,spare_end
+	add	ax,cx
+
+xlat_noremap:
+	mov	req_block,ax			;update parameter and exit
+	ret
+
+eject
+;	COMMON READ/WRITE ROUTINE
+; ENTRY:
+; 	(fdsk_func) = byte - disk read or write function
+; 	(fdsk_drv)  = byte - drive
+; 	(fdsk_cyl)  = word - cylinder
+; 	(fdsk_hd)   = byte - head
+;	(fdsk_sec   = byte - start sector
+; 	(fdsk_nsec) = byte - number of sectors
+;	(fdsk_off)  = word - dma offset address
+;	(fdsk_seg)  = word - dma segment address
+; EXIT:
+;	CY=0 if operation complete
+;	CY=1 if error
+;	     and AH=rom bios error code
+RW_common:
+	mov	cx,MAX_RETRIES		;retries on a error
+
+RW_com_retry:
+	push es! push cx
+
+	mov	ah,fdsk_func
+	mov	al,fdsk_nsec
+
+	mov	dl,fdsk_drv
+	mov	dh,fdsk_hd
+
+	mov	cx,fdsk_cyl
+	xchg	ch,cl
+	ror	cl,1
+	ror	cl,1
+	and	cl,0c0h
+	or	cl,fdsk_sec
+
+	mov	bx,fdsk_off
+	mov	es,fdsk_seg		
+
+	int	FDSK_INT
+	pop cx! pop es
+	jnc	RW_com_exit		;return no errors
+
+	push	ax			;save return code
+	mov	ah,DSK_RESETF		;reset disk
+	int	FDSK_INT
+	pop	ax
+	loop	RW_com_retry		;retry operation again
+
+	cmp	ah,ECC_ERROR		;if no more retries make sure not
+	stc				;  correctable error
+	jnz	RW_com_exit
+	xor	ah,ah			;  then no error return
+
+RW_com_exit:
+	ret
+
+eject
+data_offset	equ 	offset $
+
+		dseg
+		org	data_offset	;contiguous with code segment
+
+;********************************
+;*				*
+;*	LOADER DATA AREA	*
+;*				*
+;********************************
+;
+;	Loader Program Messages
+;
+signon_msg	db	CR,LF,'Loading $'
+
+no_file_msg	db	CR,LF,'Can''t find file: CPM.SYS / CCPM.SYS$'
+
+read_err_msg	db	CR,LF,LF,'Disk error in reading $'
+
+head_err_msg	db	CR,LF,LF,'System file is defective: CCPM.SYS$'
+
+mem_err_msg	db	CR,LF,LF,'Not enough memory to load system.$'
+
+
+ccpm_flag	db	0
+
+fcb		db	0,'CPM     ','SYS',0,0,0,0,0,0,0,0,0,0,0
+		db	0,0,0,0,0,0,0,0,0,0
+ccpm_file	db	'CCPM    '
+
+active_cnt	db	0
+
+;	Header record for file being loaded
+;		(small model)
+header_rec:
+  GD1_form	rb	1
+  GD1_length	rw	1
+  GD1_base	rw	1
+  GD1_min	rw	1
+  GD1_max	rw	1
+
+  GD2_form	rb	1
+  GD2_length	rw	1
+  GD2_base	rw	1
+  GD2_min	rw	1
+  GD2_max	rw	1
+		rb	128-18
+
+eject
+;*********************************************
+;*                                           *
+;*       LOADER BIOS DATA AREA		     *
+;*                                           *
+;*********************************************
+
+;	Disk Parameter Header
+
+cpm_dph		dw	0		;translate table
+		dw	0,0,0		;scratch area
+		dw	cpm_dpb		;dsk parm block
+		dw	0		;check
+		dw	0		;alloc vectors
+		dw	dir_bcb_hdr	;dir buff cntrl	blk
+		dw	data_bcb_hdr	;data buff cntrl blk
+		dw	0		;hash table segment
+
+dir_bcb_hdr	dw	dir_bcb
+		db	1
+
+dir_bcb		db	0ffh		;drive
+		db	0,0,0		;record
+		db	0,0		;wflg,seg
+		dw	0,0		;track,sector
+dir_buf_off	dw	dir_buf		;buffer offset
+		dw	0,0		;link,pdadr
+
+data_bcb_hdr	dw	data_bcb
+		db	1
+
+data_bcb	db	0ffh		;drive
+		db	0,0,0		;record
+		db	0,0		;wflg,seg
+		dw	0,0		;track,sector
+data_buf_seg	dw	data_buf	;buffer segment, fixed at LBIOS init
+		dw	0,0		;link,pdadr
+
+; Loader BIOS Messages
+;
+inval_part_msg	db	CR,LF,'Defective hard disk CPM partition'
+
+; This message is used by the LOADER and LOADER BIOS
+stop_msg	db	CR,LF,'  Insert a boot diskette in A: '
+		db	CR,lF,'  then press Ctrl/Alt/Del...$'
+
+;	Low level I/O driver IOPB
+fdsk_func	rb	1		;disk read or write function
+fdsk_drv	rb	1		;drive
+fdsk_cyl	rw	1		;cylinder
+fdsk_hd		rb	1		;head
+fdsk_sec	rb	1		;start sector
+fdsk_nsec	rb	1		;number of sectors
+fdsk_off	rw	1		;dma offset address
+fdsk_seg	rw	1		;dma segment address
+
+;	Disk I/O routine work storage
+req_block	rw	1
+req_sec		rb	1
+req_off		rw	1
+req_nsec	rb	1
+
+ if not DEBUG
+;	Disk label (512 bytes)
+disk_label:
+checksum	rw	1	;sum of next 255 words == 0
+id_string	rb	31	;DR copyright
+ibm_pstart	rw	1	;partition start cylinder
+ibm_plength	rw	1	;partition length in cylinders
+ibm_nheads	rb	1	;number of heads
+ibm_spt		rb	1	;sectors per track
+cpm_options	rb	1	;bios options
+cpm_nsect	rb	1	;cpm sectors per physical
+cpm_dpb:
+  cpm_spt	rw	1
+  cpm_bsh	rb	1
+  cpm_blm	rb	1
+  cpm_exm	rb	1
+  cpm_dsm	rw	1
+  cpm_drm	rw	1
+  cpm_al0	rb	1
+  cpm_al1	rb	1
+  cpm_cks	rw	1
+  cpm_off	rw	1
+  cpm_psh	rb	1	;set by loader bios at INIT:
+  cpm_prm	rb	1	;"			   "
+reserved	rw	3	;DPB expansion
+remap_spb	rw	1	;# CP/M sectors per remap block
+remap_max	rw	1	;# entries in remap table
+remap_cnt	rw	1	;# occupied entries in table
+spare_end	rw	1	;last spare cpm relative block #
+remap_table	rw	220	;flawed sector block table
+ endif
+
+ if DEBUG
+disk_label:	;fully partitioned DMA 5/5
+checksum	dw	1763h	;sum of next 255 words == 0
+id_string	db '(C) 1983 DIGITAL RESEARCH, INC.';DR copyright
+ibm_pstart	dw	0	;partition start cylinder
+ibm_plength	dw	308	;partition length in cylinders
+ibm_nheads	db	2	;number of heads
+ibm_spt		db	17	;sectors per track
+cpm_options	db	0	;bios options
+cpm_nsect	db	4	;cpm sectors per physical
+cpm_dpb:
+  cpm_spt	dw	68
+  cpm_bsh	db	5
+  cpm_blm	db	31
+  cpm_exm	db	1
+  cpm_dsm	dw	0512h
+  cpm_drm	dw	02ffh
+  cpm_al0	db	0ffh
+  cpm_al1	db	0f0h
+  cpm_cks	dw	8000h
+  cpm_off	dw	2
+  cpm_psh	db	0
+  cpm_prm	db	0
+reserved	rw	3	  ;reserved for DPB expansion
+remap_spb	dw	2048/128  ;# CP/M sectors per remap block
+remap_max	dw	9	  ;# entries in remap table
+remap_cnt	dw	1	  ;# occupied entries in table
+spare_end	dw	0a30h	  ;last spare cpm relative block #
+remap_table	dw	067fh
+		rw	220-1	  ;flawed sector block table
+ endif
+
+iobuffers	equ	((offset $) + 0fh) and 0fff0h
+		org	iobuffers
+
+;	Directory Buffer
+dir_buf		rb	128
+
+;	Data Buffer
+data_buf	equ	offset $ / 16
+		rb	128
+
+;	Deblocking Buffer
+buff_block	rw	1		;logical mapping block
+read_buffer	rb	DEBLOCK_SIZE	;physical sectors
+					;must be >= remap block size
+
+	org 2180h-0A00h			;pad to end of track boundary
+					;to ease integration with other loaders
+		db	0
+
+		end
+                                                                                                                                         

@@ -1,0 +1,615 @@
+pagesize 72 ! pagewidth 128 ! title 'CCPM.SYS loader under DOS'
+;******************************************************************************
+;******************************************************************************
+;
+;	LOADCCPM: DOS 2.x/3.x application program that loads CCPM.SYS
+;
+;	 8-Sep-84	Written by Mario P. Vano, (VAI)
+;
+;	COPYRIGHT (c) 1984 Digital Research Inc.
+;
+;		LOADCCPM is a DOS application program (.COM file type) which
+;	may be used to load and execute CCPM.SYS from the PC-DOS command level.
+;
+;	The CCPM.SYS file used is taken from THE ROOT DIRECTORY OF THE CURRENT
+;	DEFAULT DRIVE.  If the drive is a diskette drive, CONCURRENT is advised
+;	that loading was from diskette drive A:.  If the drive is a hard disk,
+;	CONCURRENT is advised that it came from the first hard disk drive.
+;
+;	LOADCCPM is useful in many situations where it is not possible to
+;	directly boot Concurrent from a hard disk partition.  LOADCCPM has a
+;	command line option that causes it to ask the operator if he wants
+;	to load CONCURRENT or not.  If the operator answers "N", LOADCCPM
+;	merely returns to DOS.  This feature allows LOADCCPM to be placed in
+;	a DOS AUTOEXEC.BAT file as the first command to be executed after DOS
+;	is loaded.  In this way, the operator may interactively choose which OS
+;	to use for the session when he cold-starts the machine.
+;
+;	LOADCCPM without the "ASK" option is also useful as a console command
+;	that may be invoked at any time under DOS to switch to Concurrent.
+;
+;	NOTE: Obviously, you MUST NOT SET THE SYS ATTRIBUTE for LOADCCPM.COM
+;	      or DOS will not be able to find it!
+;
+;	If Concurrent is already loaded when LOADCCPM is invoked, it exits
+;	immediately with a quiet message to that effect.
+;
+;  COMMAND USE:
+;	form 1:		"LOADCCPMcr"	  	;immediately loads CCPM.SYS
+;	form 2:		"LOADCCPM ASKcr"  	;prompts first to confirm
+;
+;	DOS 3.0 and some functions under DOS 2.0 will destroy the contents
+;	of certain ROM BIOS interrupt vectors required for CONCURRENT DOS
+;	initialization.  LOADCCPM restores these vectors.  UNFORTUNATELY,
+;	THERE IS NO SYSTEM INDEPENDENT WAY OF DOING THIS on the IBM PC since
+;	the vectors must be restored to known fixed addresses pointing into
+;	the ROM.  LOADCCPM IS ROM BIOS DEPENDENT and may require modification
+;	for operation on any machine other than the IBM PC family (including
+;	the IBM AT).
+;
+;	LOADCCPM requires enough memory to load all of CCPM.SYS into free
+;	memory without disturbing DOS.  In practice, about 32k more than
+;	the size of CCPM.SYS is usually enough total installed memory.
+;
+; REVISIONS: none
+;******************************************************************************
+;******************************************************************************
+eject
+;******************************************************************************
+;
+;  TO GENERATE LOADCCPM.COM
+;
+;		ASM86 loadccpm $FI			;must make INTEL HEX!
+;		GENCMD loadccpm nhead 8080 code[b10]	; (or this won't work)
+;		REN loadccpm.cmd loadccpm.com		;assumes new REN syntax
+;
+;	NOTE:	Although this program is loaded as an 8080 model program,
+;		it actually is a LARGE MODEL program (managed at run-time.)
+;		as such, the content of the ES register is considered
+;		scratch and IS NOT SAVED OR RESTORED by subroutines.
+;
+;******************************************************************************
+
+;	DOS 2.0 operating system interface constants
+DOS		equ	33
+EXIT_F		equ	0		;exit to DOS
+GDISK_F		equ	19h		;return current default disk
+GETC_F		equ	0c01h		;flush and read console (AX VALUE)
+PRINT_F		equ	9		;print $ terminated message on console
+VERS_F		equ	30h		;return DOS version number
+OPEN_RD_F	equ	03d00h		;get a handle for read only (AX value)
+GALLOC_F	equ	1bh		;return FAT pointer for cur. disk
+READH_F		equ	03fh		;read using a handle
+
+;	Misc constants
+BEL	equ	07h			;ascii bell character
+CR	equ	0dh			;...etc.
+LF	equ	0ah
+
+;******************************************************************************
+;	External definitions
+;******************************************************************************
+ROMBIOSSEG	equ	0f000h			;rom bios vectors
+IV_SEG		equ	0			;interrupt vectors
+machine_id	equ	byte ptr .0fffeh	;offset in rom bios of type
+ID_AT		equ	0fch
+
+;******************************************************************************
+;	Program segment prefix data definitions
+;******************************************************************************
+	DSEG
+	org	2
+memtop	rw	1			;first paragraph NOT avail to program
+
+	org	5ch
+fcb1	rb	1			;preformed file control block #1
+fname1	rb	8
+
+eject
+;******************************************************************************
+;	CODE SEGMENT BEGINS HERE
+;******************************************************************************
+	CSEG
+
+	org	100h			;8080 model at startup (.COM)
+;	Program entry point
+begin:	jmp root_mainline		;must skip over mover module
+patch:	jmps patch_area			;in case of emergency
+;
+	     db	'COPYRIGHT 1984 (C) '
+match_string db	'DIGITAL RESEARCH'
+	     db	'LOADCCPM 2.0 for Concurrent DOS 3.2 04-Sep-84'
+
+patch_area:
+	org 180h		;leave some room for emergency use
+eject
+;******************************************************************************
+;	This is the "mover" module which is relocated by the root to the
+;	top of free memory above the buffer into which ccpm.sys was read.
+;	It moves ccpm.sys to its final address and transfers control to it.
+;	It must be at the beginning of the program to eliminate the need
+;	for a separate assembly.
+;******************************************************************************
+
+;	These CS relative variables are used to communicate parameters to
+;	the mover routine.
+source_seg dw	0			;segment where CCPM.SYS was loaded
+dest_seg   dw	0			;segment to move CCPM.SYS to
+move_l	   dw	0			;number of paragraphs to move
+;
+xfer_dseg  dw	0			;DS value needed at CCPM.SYS entry
+xfer_eseg  dw	0			;ES value needed at CCPM.SYS entry
+xfer_sseg  dw	0			;SS used during the move
+xfer_sp	   dw	3ffh			;SP used during the move (0:3ffh)
+;
+xfer_ofs   dw	0			;long pointer to CCPM.SYS entry
+xfer_seg   dw	0
+xfer_ptr equ dword ptr xfer_ofs
+;
+boot_disk db	0			;physical boot disk number (0 or 80h)
+
+
+;
+;	The mover code actually begins here
+;
+mover_entry:
+	pushf ! pop bx ! cli			;use top of iv page for stack
+	mov ss,xfer_sseg ! mov sp,xfer_sp	;during move and control xfer
+	push bx ! popf
+;
+	mov bx,source_seg ! mov dx,dest_seg	;set up to move ccpm.sys
+	cld ! mov cx,move_l
+mover_lp:
+	mov ds,bx ! xor si,si			;move that many paragraphs
+	mov es,dx ! xor di,di
+	xchg ax,cx ! mov cx,8 ! rep movsw
+	xchg ax,cx ! inc bx ! inc dx ! loop mover_lp
+;
+	mov ds,xfer_dseg ! mov es,xfer_eseg	;setup seg registers for ccpm
+	mov dl,boot_disk ! jmpf xfer_ptr	;go do it.
+
+MOVESIZE equ offset $				;how much "mover" to relocate
+
+eject
+;******************************************************************************
+;	This is the root program mainline code
+;******************************************************************************
+root_mainline:
+	pushf ! pop bx ! cli
+	mov dx,ds ! mov ss,dx				;setup local stack
+	mov sp,offset stack_top ! push bx ! popf
+;
+	call cpm_check ! or al,al ! jz init0		;see if already CCPM
+	  mov dx,offset not_again ! jmp abort		;yes, exit
+;
+init0:	call approval ! or al,al ! jz init1		;see if we will load
+	  jmp exit_to_dos				;else just exit
+;
+init1:	mov ah,VERS_F ! int DOS ! cmp al,2 ! jae init2	;see if ok dos version
+	  mov dx,offset not_again ! jmp abort		;no, exit
+;
+init2:	call get_machine_type ! mov hw_id,al		;save machine type
+;
+	call get_bootdisk ! mov boot_disk,al		;get phys id of disk
+;
+init4:	call segment_setup				;setup long pointers
+;
+init5:	mov ah,GDISK_F ! int DOS			;fill in disk name
+	add al,'A' ! mov cpm_name,al			;in handle
+	mov dx,offset cpm_name ! mov ax,OPEN_RD_F	;open for read
+	int DOS ! mov cpm_handle,ax ! jnc init6		;save handle
+	  mov dx,offset nofile_msg ! jmp abort		;no file error
+;
+init6:	mov bx,ax ! mov cx,128 ! mov dx,offset header	;read header into buff
+	mov ah,READH_F ! int DOS ! jc init6A		;physical error?
+	  cmp ax,cx ! je init7				;early EOF?
+init6A:	  mov dx,offset badfile_msg ! jmp abort		;yes, exit with msg
+;
+init7:	call check_header ! or al,al ! jz init8		;check consistency
+	  mov dx,offset badfile_msg ! jmp abort
+;
+init8:	call check_size ! or al,al ! jz init9		;check if enough ram
+	  mov dx,offset toobig_msg ! jmp abort
+;
+init9:	call read_sys ! or al,al ! jz init10		;read in the rest
+	  mov dx,offset badfile_msg ! jmp abort
+;
+init10:	call move_mover					;relocate the mover
+;
+	mov dx,offset crlf ! mov ah,PRINT_F ! int DOS	;need new line now
+;
+	call fix_vectors
+;
+	jmpf mover_ptr					;far jump to mover
+
+
+;	common abort exit prints message ds:dx--> and then exits
+abort:	mov ah,PRINT_F ! int DOS
+exit_to_dos:
+oops:	mov ah,EXIT_F ! int DOS ! jmps oops		;shouldn't return
+
+eject
+;******************************************************************************
+;	Major functions used by the ROOT mainline.
+;******************************************************************************
+
+;
+;  Try and find out if CCP/M already loaded (the hard way) by searching
+;  for the words "DIGITAL RESEARCH" in the 2K following 50:0
+;	Returns AX=0ffffh if CCPM already loaded, else 0
+;
+cpm_check:
+	mov ax,50h ! mov es,ax ! mov di,0
+	cld ! mov si,offset match_string
+cc_srch0:
+	push si ! push di
+	mov cx,8 ! repe cmpsw
+	pop di ! pop si ! jne cc_srch1				;found it
+	  mov ax,0ffffh ! ret
+cc_srch1:
+	inc di ! cmp di,7f0h ! jb cc_srch0
+	  xor ax,ax ! ret					;not found
+
+;
+;	Returns AX=0 if we are to load ccpm, else NZ
+;
+approval:
+	cmp word ptr fname1,'SA' ! jne go_load		;if no tail, go load it
+	  mov ah,PRINT_F ! mov dx,offset prompt_msg ! int DOS	;else prompt
+	  mov ax,GETC_F ! int DOS				;get reply
+	  cmp al,'y' ! je go_load				;ignore case
+	  cmp al,'Y' ! je go_load
+	    mov ax,-1 ! jmps approval_ret		;stay in DOS
+go_load: xor ax,ax					;load ccpm
+approval_ret:
+	ret
+
+;
+;	sets up global long pointers as needed
+;
+segment_setup:
+	mov ax,memtop ! sub ax,(1024/16)		;allow 1k for mover
+	mov mover_ptr_seg,ax
+	mov ax,cs ! add ax,FIRST_SECTOR_P
+	mov source_seg,ax
+	ret
+
+
+;
+;	returns normalized machine type information in al
+;	AL=0 is XT or other , AL=1 is AT (others not yet defined)
+;
+get_machine_type:
+	mov ax,ROMBIOSSEG ! mov es,ax
+	mov al,es:machine_id			;get machine ID from rom
+;	cmp ax,ID_AT				; *3.2*G*9*
+	cmp al,ID_AT				; *3.2*G*9* id is byte not word
+	mov al,1 ! je g_m_t_ret			;if AT, return 1
+	  mov al,0				;else 0
+g_m_t_ret:
+	ret
+
+;
+;	determines whether we are loading from floppy or hard disk
+;	by examining FATID byte and returns al=0 if floppy or 80h if
+;	hard disk.  This value is neede by XIOS init which sets sysdisk
+;	accordingly.
+;
+get_bootdisk:
+	push ds ! mov ah,GALLOC_F ! int DOS	;get DS:BX--> FAT first byte
+	mov ah,[bx] ! mov al,0			;assume floppy
+;	cmp ah,0fch				; *3.2*G*10*
+	cmp ah,0f9h				; *3.2*G*10* for the AT quad
+	jae g_bd_ret				;check fat id byte
+	  mov al,80h				;else must be hard disk
+g_bd_ret:
+	pop ds ! ret
+
+
+;
+;	analyzes .CMD file header consistency
+;	returns al=0 if ok, else NZ
+;
+check_header:
+	mov ax,-1
+	cmp ccpm_cseg_typ,1 ! jne chk_hd_ret		;any code group?
+	cmp ccpm_dseg_typ,0 ! je chk_hd_ok		;any dseg?
+	  cmp ccpm_dseg_typ,2 ! jne chk_hd_ret		;valid dseg type?
+chk_hd_ok:
+	mov ax,ccpm_base ! mov xfer_seg,ax		;setup pointers
+	mov dest_seg,ax					;for mover routine
+	mov ax,ccpm_dseg ! mov xfer_dseg,ax
+	mov xfer_eseg,ax
+	mov ax,ccpm_cseg_siz ! add ax,ccpm_dseg_siz
+	mov move_l,ax
+	xor ax,ax
+chk_hd_ret:
+	ret
+
+;
+;	checks if .SYS file can be loaded into available memory
+;	returns al=0 if ok, else NZ
+;
+check_size:
+	mov ax,cs ! add ax,FIRST_SECTOR_P
+	add ax,ccpm_cseg_siz
+	add ax,ccpm_dseg_siz
+	cmp ax,mover_ptr_seg ! mov ax,0 ! jb check_size_ok
+	  mov ax,-1
+check_size_ok:
+	or ax,ax ! ret
+
+
+;
+;	reads the rest of the .SYS file into buffer
+;	returns al=0 if succeeds, else non-zero
+;
+read_sys:
+	mov cx,ccpm_cseg_siz ! add cx,ccpm_dseg_siz	;cx==# of paragraphs
+	mov ax,cs ! add ax,FIRST_SECTOR_P ! mov bp,ax	;segment to read to
+read_sys_loop:
+	push cx ! push bp ! push ds
+	mov bx,cpm_handle
+	cmp cx,800h ! jb read_sys32			;try 32k chunks
+	  mov cx,800h					;ok, read 32k
+read_sys32:
+	mov ax,16 ! mul cx ! mov cx,ax			;convert to bytes
+	mov dx,0 ! mov ds,bp
+	mov ah,READH_F ! int DOS ! mov bx,cx		;save returned cx
+	pop ds ! pop bp ! pop cx ! jc read_sys_fail	;any DOS error?
+	  cmp ax,bx ! je read_sys_ok			;premature EOF?
+read_sys_fail:
+	    mov ax,-1 ! jmps read_sys_ret		;oops, return err
+read_sys_ok:
+	add bp,800h ! sub cx,800h ! ja read_sys_loop	;else read next chunk
+	sub ax,ax					;until done
+read_sys_ret:
+	ret
+
+;
+;	relocates the mover to top of ram
+;
+move_mover:
+	cld ! sub si,si
+	mov es,mover_ptr_seg ! sub di,di
+	mov cx,MOVESIZE ! rep movsb
+	ret
+
+;
+;	fixes up vectors to point back where they were at cold start of ROM
+;	WARNING!! MACHINE SPECIFIC CODE!!
+;
+fix_vectors:
+	cmp hw_id,1 ! jne iv_1				;skip if not AT
+	  mov ax,ROMBIOSSEG ! mov es,ax			;see if rom as expected
+	  cmp es:word ptr .02a71h,0fa80h ! jne ativ0	;check swi and parms
+	  cmp es:word ptr .0e411h,00267h ! je iv_1	;if wrong AT ROM must
+ativ0:	    mov dx,offset bad_at_msg ! jmp abort	;bail out here!!
+iv_1:	cld
+	mov ax,IV_SEG ! mov es,ax ! mov di,ax		;es:di--> 0:0
+	mov dx,mover_ptr_seg				;get fake rom segment
+	mov si,offset iv_table
+	PUSHF ! CLI					;CRITICAL REGION START
+	mov cx,64 ! rep movsw				;move in vectors
+;
+	cmp hw_id,1 ! jne iv_9				;fixup vectors if AT
+	  mov ax,ROMBIOSSEG				;rom bios segment
+	  mov dx,1805h					;at int trap
+	  mov es:word ptr .28h,dx			;28h-30h not used
+	    mov es:word ptr .2ah,ax
+	  mov es:word ptr .2ch,dx
+	    mov es:word ptr .2eh,ax
+	  mov es:word ptr .30h,dx
+	    mov es:word ptr .32h,ax
+	  mov es:word ptr .34h,01805h			;hard disk hw interrupt
+	    mov es:word ptr .36h,ax
+	  mov es:word ptr .4ch,02a71h			;disk swi
+	    mov es:word ptr .4eh,ax
+	  mov es:word ptr .100h,0ec59h			;diskette swi
+	    mov es:word ptr .102h,ax
+	  mov es:word ptr .104h,0e411h			;disk parms
+	    mov es:word ptr .106h,ax
+iv_9:	POPF						;CRITICAL REGION END
+	call i_attach					;now attach any io roms
+	ret
+eject
+;
+;	This function re-attaches any attached IO roms whose vectors
+;	have been clobbered by DOS.
+;
+;	Offset definitions for attached ROM header
+io_romflag	equ	es:word ptr .0
+io_romsize	equ	es:byte ptr .2
+io_romentry	equ	es:byte ptr .3
+io_romword	equ	es:word ptr .0
+
+ros_ioromseg	dw	0c000h		;start of possible io device roms
+ros_ioromend	dw	0f600h		;start of where not to look for them
+ros_dseg	dw	00040h		;rom bios DATA segment
+old_int		db	0		;save old int mask here
+
+reset_flag	equ	ds:word ptr .72h	;ROM BIOS warm start flag
+
+i_attach:
+	in al,21h ! mov old_int,al		;save current interrupt mask
+	cld ! pushf ! push es ! push ds		;flags and seg registers
+	mov ds,ros_dseg				;ds--> ROM BIOS DATA PAGE
+	mov reset_flag,1234h			;fake warm start conditions
+	mov es,ros_ioromseg			;es--> IO rom segment
+	mov dx,80h				;check every 2k for a rom
+i_attach_loop:
+	mov io_romflag,dx			;prevent parity error if RAM
+	cmp io_romflag,0aa55h ! jne no_rom	;look for signature there
+;
+	  mov ch,io_romsize ! sub cl,cl		;got one! checksum it
+	  mov di,cx				;save size in di
+	  sub bl,bl ! sub si,si
+i_attach_chksum:
+	lods io_romword ! add al,ah		;get and sum the word
+	add bl,al ! loop i_attach_chksum	;until all summed
+	jnz no_rom				;if bad check ignore rom
+	  push bx ! push es ! push ds ! push di
+	  push cs ! mov ax, offset i_attach1 ! push ax	;fake a far call
+	  push es ! mov ax,offset io_romentry
+	  push ax ! retf				;(by doing a far ret!)
+i_attach1:
+	  pop dx ! pop ds ! pop es ! pop bx
+	  add dx,400h ! and dx,not 3ffh		; skip to next 2k seg
+	  mov cl,3 ! shr dx,cl
+;
+no_rom:	mov ax,es ! add ax,dx ! mov es,ax	;add 2k to search segment
+	cmp ax,ros_ioromend ! jb i_attach_loop	;until end of rom area reached
+	PUSHF ! CLI				;CRITICAL REGION BEGINS
+	in al,21h ! and al,old_int ! out 21h,al	;make sure ints ok
+	POPF					;CRITICAL REGION END
+	pop ds ! pop es ! popf ! ret
+
+eject
+end_code:
+;******************************************************************************
+;	Root module variables/constant data  begin here
+;******************************************************************************
+	DSEG
+	org offset end_code		;8080 model
+
+prompt_msg	db	'Load Concurrent PC-DOS? (Y or N)? $'
+not_again	db	'Concurrent PC-DOS is already loaded.$'
+nofile_msg	db	BEL,CR,LF,'Can''t find DOS file: CCPM.SYS$'
+badfile_msg	db	BEL,CR,LF,'Defective DOS file: CCPM.SYS$'
+toobig_msg	db	BEL,CR,LF,'Not Enough Memory for DOS file: CCPM.SYS$'
+bad_at_msg	db	BEL,CR,LF,'Can''t load: Incompatible ROM BIOS$'
+crlf		db	CR,LF,'$'
+
+cpm_name	db	'A:\CCPM.SYS',0	;get ccpm.sys from ROOT directory
+cpm_handle	dw	0
+
+hw_id	  db	0			;hardware type, 1=AT, 0=any other
+
+;	long pointer to the mover routine  AFTER it is relocated
+mover_ptr_ofs	dw	offset mover_entry
+mover_ptr_seg	dw	0
+mover_ptr equ dword ptr mover_ptr_ofs
+
+eject
+;	This table is an EXACT IMAGE of what you want the interrupt vector
+;	segment starting at 0:0 to look like when you transfer control
+;	to the io ROM search routine.  It may modify some vectors to attach
+;	devices.  (Note that this version of LOADCCPM fixes up some
+;	vectors if the machine is an AT AFTER this table is moved in.)
+;
+;	CLEARLY, THIS TABLE IS HIGHLY MACHINE SPECIFIC.  The present table
+;	is adequate for PC-1, PC-2, AT (as of 8-Sep-84), XT, 3270/PC and
+;	most look-alikes whose ROM BIOS routines are considered IBM Compatible.
+;
+DUMMY_SWI	equ	0ff53h
+DUMMY_HWI	equ	DUMMY_SWI	;Not the best choice, but the only one
+ROMBIOS		equ	ROMBIOSSEG
+
+;	this is the table of vector offsets into the fake rom segment.
+;	there is one entry per vector.  The segment portion of each
+;	vector will usually be pointed to the fake rom segment.
+iv_table:
+	dw	DUMMY_SWI	;div by 0
+	  dw	ROMBIOS
+	dw	DUMMY_SWI	;single step
+	  dw	ROMBIOS
+	dw	0e2c3h		;nmi
+	  dw	ROMBIOS
+	dw	DUMMY_SWI	;debugger
+	  dw	ROMBIOS
+;
+	dw	DUMMY_SWI	;overflow
+	  dw	ROMBIOS
+	dw	0ff54h		;print screen
+	  dw	ROMBIOS
+	dw	DUMMY_SWI	;reserved
+	  dw	ROMBIOS
+	dw	DUMMY_SWI	;reserved
+	  dw	ROMBIOS
+;
+	dw	0fea5h		;real time clock hardware interrupt
+	  dw	ROMBIOS
+	dw	0e987h		;keyboard hwi
+	  dw	ROMBIOS
+	dw	DUMMY_HWI	;spare hwi
+	  dw	ROMBIOS
+	dw	DUMMY_HWI	;com2 hardware interrupt
+	  dw	ROMBIOS
+;
+	dw	DUMMY_HWI	;com1 hardware interrupt
+	  dw	ROMBIOS
+	dw	DUMMY_HWI	;hard disk hardware interrupt
+	  dw	ROMBIOS
+	dw	0ef57h		;floppy disk hardware
+	  dw	ROMBIOS
+	dw	DUMMY_HWI	;printer
+	  dw	ROMBIOS
+;
+	dw	0f065h			;crt swi
+	  dw	ROMBIOS
+	dw	0f84dh			;equipment check
+	  dw	ROMBIOS
+	dw	0f841h			;memory size
+	  dw	ROMBIOS
+	dw	0ec59h     		;diskette swi
+	  dw	ROMBIOS
+;
+	dw	0e739h			;serial swi
+	  dw	ROMBIOS
+	dw	0f859h			;cassette io
+	  dw	ROMBIOS
+	dw	0e82eh			;keyboard swi
+	  dw	ROMBIOS
+	dw	0efd2h			;printer swi
+	  dw	ROMBIOS
+;
+	dw	0			;basic
+	  dw	0f600h
+	dw	0e6f2h			;bootstrap
+	  dw	ROMBIOS
+	dw	0fe6eh			;tod
+	  dw	ROMBIOS
+	dw	DUMMY_SWI		;keyboard break
+	  dw	ROMBIOS
+;
+	dw	DUMMY_SWI		;user tick
+	  dw	ROMBIOS
+	dw	0f0a4h			;video parms
+	  dw	ROMBIOS
+	dw	0efc7h			;diskette parms
+	  dw	ROMBIOS
+	dw	0			;graphics characters
+	  dw	0
+
+	rw	128
+stack_top:
+
+eject
+	org (offset $ + 15) and 0fff0h 		;paragraph align buffers
+
+;******************************************************************************
+;	This is the beginning of the buffer area into which CCPM.SYS is read
+;******************************************************************************
+
+
+header	rb	0				;.sys header is read in here
+header_buffer	rb	128			;where to store .cmd header
+  ccpm_cseg_typ	equ	byte ptr header_buffer+0	;should be a 1
+  ccpm_cseg_siz	equ	word ptr header_buffer+1	;cseg size
+  ccpm_base	equ	word ptr header_buffer+3	;start paragraph
+  ccpm_dseg_typ	equ	byte ptr header_buffer+9	;should be a 2
+  ccpm_dseg_siz	equ	word ptr header_buffer+10	;dseg size
+  ccpm_dseg	equ	word ptr header_buffer+12	;dseg stat paragraph
+
+
+;	This is the head of the CCPM.SYS code/data segment buffer.
+;	NOTE THAT THIS BUFFER is treated as a SEPARATE SEGMENT at run time
+;	and so MUST BE PARAGRAPH ALIGNED !
+;
+first_sector	rb	0
+FIRST_SECTOR_P	equ	(offset $) shr 4	;paragraphs from cseg to buffer
+
+	end
+ end _SECTOR_P	equ	(offset $) shr 4	;paragraphs from cseg to buffer  **********                                                                                                  ¸'î¯¯|¯¯3ÿ Pê             ¸/¥¯¯ò¯¯Md            †ú        p’˛x◊˛
+ end _SECTOR_P	equ	(offset $) shr 4	;paragraphs from cseg to buffer  **********                                                  
+                                                                                                                                                                                                                                                                                                                                                                                      

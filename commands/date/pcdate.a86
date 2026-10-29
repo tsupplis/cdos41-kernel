@@ -1,0 +1,492 @@
+	TITLE 'PC-DOS DATE UTILITY' 
+
+;*******************************************************
+;*
+;*	Generation Procedure
+;*
+;*	RASM86 pcdate $lo
+;*
+;*	Under Concurrent with PC-MODE CompuPro or IBM PC
+;*
+;*	LINK86.EXE date = pcdate[nop]
+;*
+;*******************************************************
+
+	cseg
+
+true		equ	0ffh
+false		equ	000h
+cr		equ	0dh
+lf		equ	0ah
+tab		equ	9h
+blank		equ	20h
+eof             equ     1ah
+period		equ	2eh
+semicolon       equ     3bh
+colon           equ     3ah
+slash           equ     2fh             
+plus		equ	2bh		
+
+	db	'COPYRIGHT(C)1984,'
+	db	'DIGITAL RESEARCH(05/02/84)'
+	db	'XXXX-0000-654321'
+
+patch_code:
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop
+
+	
+start:	mov	ax,dataseg
+
+	mov	es,ax			;set es to data segment
+	mov	es:prefix,ds
+	mov	di,offset endtail
+	mov	si,80h
+	movsb
+	xor	ch,ch
+	mov	cl,es:endtail	
+	mov	di,offset buf
+	repnz	movsb
+
+	mov	ds,ax			;set ds to local data segment
+
+	mov	dl,0ffh
+	mov	cl,45			;set error return code
+	int	224
+
+;------------------------------------------------------------------------------
+
+date:	call	blnkfld
+	mov	bx,offset buf
+	cmp	endtail,0
+	jz	ntinln
+	jmp	inline
+	
+daterr: mov	di,offset inbuffer
+	mov	al,0
+	mov	cx,20
+	rep	stosb
+	call	crlf
+	mov	dx,offset daterror
+	call	pmsg	
+	call	crlf
+	jmp	around
+ntinln:	call	getdate
+	mov	dx,offset datemsg1
+	call	pmsg
+	mov	dx,offset datestruc
+	call	pmsg
+	call	crlf
+around:	mov	dx,offset datemsg2
+	call	pmsg
+	call	rcln
+	mov	bx,offset inbuffer
+	call	isend1
+	jnz	inline
+	jmp	ccpret
+	
+
+inline: call	eatblanks
+	mov	erroret,offset daterr
+	mov	di,offset month
+	call	process
+	call	getdsh
+	mov	di,offset day
+	call	process
+	call	getdsh
+	mov	year,0
+	mov	di,offset year
+	call	process
+	mov	full,2000
+	cmp	year,20
+	jz	fulyr
+	mov	full,1900
+	cmp	year,19
+	jz	fulyr
+	mov	ax,full
+	add	year,ax
+	call	isend1
+	jz	dat4
+	jmp	daterr
+dat4:	call	setdate
+	jnz	dat5
+	jmp	daterr
+dat5:	call	crlf
+	jmp	ccpret
+fulyr:	mov	di,offset year
+	call	process
+	call	isend1
+	jz	dat7
+	jmp	daterr
+dat7:	mov	ax,full
+	add	year,ax
+	call	setdate
+	jnz	dat8	
+	jmp	daterr
+dat8:	call	crlf
+	jmp	ccpret
+
+setdate:
+	mov	cx,year
+	mov	dh,month
+	mov	dl,day
+	mov	ah,2bh
+	int	33
+	inc	al
+	ret
+
+
+getdate:
+	mov	ah,2ah
+	int	33
+	mov	di,offset datestruc
+	mov	realdate,true
+	call	convdate
+	mov	dash1,'-'
+	mov	dash2,'-'
+	cmp	dayout,' '
+	jnz	noprob
+	mov	dayout,'0'
+noprob:	mov	cl,105
+	mov	dx,offset cpmdate
+	int	224
+	mov	ax,cpmdate			;divide number of days by 7
+	xor	dx,dx				;and note remainder. 
+	mov	cx,7
+	div	cx				
+	mov	al,3				;multiply remainder by 3 to 
+	mul	dl 				;index into "day of week table"
+	mov	dx,ax
+	add	dx,offset dayofweek
+	mov	si,dx
+	mov	cx,3
+	mov	di,offset datestruc 
+	rep	movsb	
+	ret
+
+;------------------------------------------------------------------------------
+;	Process takes one or two ascii characters and converts them to 
+;	a number.  The string need not be two digits. If the string is
+;	only one digit then it will return with the zero flag reset. 
+	
+
+process:call	getnum
+	mov	byte ptr [di],al
+	call	gtnum2
+	jnz	nextnum
+	mov	dl,al
+	mov	al,byte ptr [di]
+	mov	cl,10
+	mul	cl
+	add	al,dl
+	mov	byte ptr [di],al
+nextnum:ret	
+
+
+
+getdsh:	cmp	byte ptr [bx],'-'
+	jz	getxit
+getsls: cmp	byte ptr [bx],'/'
+	jmp	getxit
+getcol:	mov	cl,':'
+	jmp	tryit
+getper:	mov	cl,'.'	
+	jmp	tryit
+getnum:	mov	al,byte ptr [bx]
+	mov	dl,al
+	sub	al,30h
+	call	isnum
+	jmp	getxit
+gtnum2:	mov	al,byte ptr [bx]
+	mov	dl,al
+	sub	al,30h
+	call	isnum
+	jnz	notnum
+	inc	bx
+	xor	si,si
+	ret
+tryit:	mov	al,byte ptr [bx]
+	cmp	cl,al
+getxit:	jz	numok2
+	pop 	si
+	jmp	erroret
+numok2:	inc	bx
+notnum:	ret	
+
+asci:	xor 	ah,ah
+	xor	cx,cx
+	call	conv2asci
+	ret
+
+convdate:
+	push	dx
+	mov	ax,cx
+	xor	cx,cx
+	add	di,6
+	cmp	realdate,true
+	jz	isreal
+	sub	di,2
+isreal:	call	conv2asci
+	pop	ax
+	push	ax
+	xor	ah,ah
+	xor	cx,cx
+	sub	di,5
+	cmp	realdate,true
+	jz	real2
+	add	di,2
+real2:	call	conv2asci
+	pop	ax
+	xchg	al,ah
+	xor	ah,ah
+	sub	di,3
+	call	conv2asci
+	ret
+
+blnkfld:mov	ax,'  '
+	mov	cx,8
+	mov	di,offset padding
+	rep	stosw	
+	ret
+	
+
+isnum:	xor	si,si
+	cmp	dl,'0'				; is al a valid number?
+	jns	ntls0
+	jmp	ntnum
+ntls0:	cmp	dl,'9'
+	ja	ntnum
+numok:	or	si,si
+	ret
+ntnum:	dec	si
+	ret	
+;------------------------------------------------------------------------------
+;convert to ascii accepts 2 word values and a destination pointer.
+;The destination pointer (di) points to an 8 byte output buffer 
+;which will be filled with 8 ascii characters describing the decimal 
+;number corresponding to the value of ax:cx. Leading zeros are 
+;suppressed unless the value is zero, in which case one zero is
+;printed. 
+;
+conv2asci:
+	push	bx
+	push	di
+	mov	bx,9680h
+	mov	si,0098h
+	mov	dx,0
+go:	inc	dx
+	sub	ax,bx
+	sbb	cx,si
+	jns	go
+	add	ax,bx
+	adc	cx,si
+	dec	dx
+	call	printc
+	test	si,si
+	jz	nothy
+	cmp	si,0098h
+	jnz	not1
+	mov	si,000fh
+	mov	bx,4240h
+	jmp	go
+not1:	cmp	si,000fh
+	jnz	not2
+	mov	si,0001h
+	mov	bx,8680h
+	jmp	go
+not2:	xor	si,si
+	mov	bx,2710h
+	jmp	go
+nothy:	push	ax
+	mov	ax,bx
+	mov	bx,10
+	div	bx
+	mov	bx,ax
+	pop	ax
+	test	bx,bx
+	jz	donec
+	jmp	go
+donec:	pop	di
+	push	si
+	mov	si,di
+	add	si,7
+	cmp	byte ptr [si],' '
+	jnz	siok
+	mov	byte ptr [si],'0'
+siok:	pop	si
+	pop	bx
+	ret	
+
+
+printc:	test	dx,dx
+	jnz	digit
+	dec	di
+	cmp	byte ptr [di],' '
+	jz	supres
+	inc	di
+digit:	add	dx,'0'
+	mov	byte ptr [di],dl
+	xor	dx,dx
+	inc	di
+	ret
+supres:	inc	di
+	mov	byte ptr [di],' '
+	inc	di
+	ret
+
+;------------------------------------------------------------------------------
+;      print message string on terminal
+;      (BDOS function #9)
+;
+pmsg:   mov     ah,9
+        int     33
+        ret
+
+crlf:	mov	AH,2
+	mov	dl,0dh
+	int	33
+	mov	AH,2
+	mov	dl,0ah
+	int	33
+	ret 
+;
+;------------------------------------------------------------------------------
+;
+;      read line from console into inbuffer
+;      (calls BDOS function #10)
+;
+;      exit:   z  = set if null line
+;
+rcln:	mov	ah,10
+	mov	dx,offset inmax
+	int	33
+	mov	bx,offset inbuffer
+	add	bl,inlen
+	adc	bh,0
+	mov	byte ptr [bx],0
+	ret
+
+
+;------------------------------------------------------------------------------
+;
+;       consume all blanks and tabs - and note options and plus signs 
+;	that may occur between file specs.
+;
+;       input:  BX -> start of input string
+;       output: BX -> first non-blank character in string
+;               AL =  first non-blank character
+;
+eatblanks:
+	mov     al,byte ptr 0[bx]
+	cmp	al,blank
+	jnz	toofull
+	inc	bx
+	jmp	eatblanks
+toofull:ret	
+
+
+
+
+
+
+;------------------------------------------------------------------------------
+;               change every lower case alphabetic input character 
+;               to its equivalent upper case character.
+;
+;               count the number of option identifiers (/) found
+;
+upcase:
+upcase0:mov     word ptr ptr$inbuffer,bx; AL = first non-blank character 
+upstart:cmp     al,end$string		; BX -> input string
+        jnz     up0
+	ret                             ; end of input
+
+up0:    cmp     al,'a'                  ; if input char < 'a' then skip
+        jnb     up1
+        jmps    up2
+up1:    cmp     al,'z' + 1              ; if input > 'z' then skip
+        jnb     up2
+        sub     byte ptr 0[bx],20h      ; make uppercase
+up2:	inc     bx                      ; next character
+        mov     al,byte ptr [bx]
+        jmps    upstart                 ; while not end of string
+
+
+;------------------------------------------------------------------------------
+;
+;               tests to see if we are at the end of string,
+;               either EOS or a multiple command symbol
+;
+;       input:  AL = input character
+;       output: ZF = set if [AL] = EOS or multiple symbol
+;
+;
+isend:	call    eatblanks               ; remove any blanks
+isend1:	mov	al,byte ptr 0[bx]
+	cmp     al,end$string            ; EOS ?
+        ret
+
+ccpret:	jmpf	dword ptr home
+
+;******************************************************************************
+;
+;			       DATA AREA
+;
+;******************************************************************************
+stackseg	sseg
+		rs	128
+stack_end	rs	0
+
+		
+dataseg		dseg
+
+patch_data	db	'DATA PATCH AREA '
+		db	'DATA PATCH AREA '
+		db	'DATA PATCH AREA '
+		db	'DATA PATCH AREA '
+		db	'DATA PATCH AREA '
+		db	'DATA PATCH AREA '
+		db	'DATA PATCH AREA '
+		db	'DATA PATCH AREA '
+
+
+home		dw	0
+prefix		dw	0
+endtail		db	0
+daterror	db	'Invalid date $'
+datemsg1	db	'Current date is $'
+dayofweek	db	'SatSunMonTueWedThuFri'
+datemsg2	db	'Enter new date: $'
+erroret		dw	0
+realdate	db	0
+padding		db	'    '
+datestruc	db	'      '
+dash1		db	'-'
+dayout		db	'  '
+dash2		db	'-'
+yearout		db	'    $'
+cpmtime		dw	0	
+day		db	0
+month		db	0
+year		dw	0
+field		db	0
+full		dw	0
+end$string      db      0
+cpmdate		dw	0
+buf		rs	128
+inmax		db	127
+inlen           db      0
+inbuffer        rs      128			; console input buffer	
+pfncb		dw	(offset ptrinbuffer)
+ptrinbuffer	dw	0
+pfnfcb		dw	(offset pfcb)
+pfcb		rs	36
+		end     start
+                                                                                                                                                                     

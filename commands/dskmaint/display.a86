@@ -1,0 +1,818 @@
+title 'Display routines for IBM PC-XT Utilities'
+;
+;
+;
+;	Hopefully this will be somewhat portable.
+;
+;	The following utilities have been used to build this program:
+;		VEDIT
+;		RASM86
+;		LINK86
+;		SID86
+;
+;	ASSUMPTIONS:
+;
+;	o Key box is 6 chars x 3 chars
+;	o Key id is 3 chars
+;	o Work area on screen:
+;	    Upper left corner row = 3, col = 4
+;	    Lower right corner row = 19, col = 75
+;	o Row Column are 1 relative in all messages (1,1 is upper left corner)
+;
+eject
+;	Using the display routines.
+;
+;	The display routines are based on the following modes:
+;
+;	msg_mode 	display an ASCII string at current cursor position
+;	msg_mode_@	display an ASCII string at specified cursor position
+;			 with start and end attributes (blink,highlight,etc..)
+;	msg_mode_key	display key box and key-id with associated messages
+;	msg_mode_answer get a key from the operator and make sure it is in the
+;			 specified list of allowable keys
+;
+;	When using the above modes to display a menu any of the modes can be
+;	skipped. The data structure used to display a menu consists of:
+;
+;	word	pointer to structure for msg_mode
+;	word	pointer to structure for msg_mode_@
+;	word	pointer to structure for msg_mode_key
+;	word	pointer to structure for msg_mode_answer
+;
+;	A null pointer means skip this function.
+;
+;	The modes can be accessed directly through the MODES routine. In this
+;	 case the BX register contains the mode you want to use, and the SI
+;	 contains a pointer to the data structure.
+;
+;	In case of multiple messages for a mode, the DO_N_ROUTINES routine
+;	 allows you to build a structure with multiple messages.
+;
+;	The GET_CHOICE routine allows you to specify a list of allowable
+;	 answers or to return on the first (any) key.
+;
+;	The display routines are (see each routine for entry parameters):
+;
+;	DRAW_FRAME	draw the frame and title (see BOXFRAME.DAT)
+;	PERFORM_MENU	display a menu and get an answer
+;	MODES		perform the indicated message mode
+;	DO_N_ROUTINES	perform the MODES routine N times
+;	DISPLAY_KEY_BOX	display a key box with key-id and label
+;	DISPLAY_MESSAGE display ASCII message at specified cursor with
+;			 specified attributes
+;	GET_CHOICE	get a response from the keyboard and either validate
+;			 the key or return any key
+;	BLANK_BOX	blank the area within the frame
+;	NEXT_ROW	position cursor on next row and given starting column
+;	WRITE_STRING	display ASCII string at current cursor position
+;
+eject
+;
+;	PUBLIC and EXTRN declarations
+;
+	cseg
+;PCCRT
+	extrn	set_cursor:near, set_attribute:near
+;SYSTEM
+	extrn	check_mx_disk_lock:near, lock_mx_queue:near
+;SCREEN
+	extrn	save_screen:near
+	dseg
+	extrn	frame_title:word
+;
+;	These are for the other modules to use
+;
+	cseg
+	public	write_string,modes,do_n_routines
+	public	perform_menu,perform_menu_1
+	public	blank_box,blank_entry,hex_ascii_dec
+	public	next_row, system, draw_frame, get_choice
+	public	print_string,get_scan_code, err_beep
+	public	ctrl_c_stat
+	public	l_writeblk
+	public	show_help_key, show_esc_key
+;
+	dseg
+	public	chcb_segment, line_start,l_chcb_segment
+	cseg
+
+eject
+;
+;	EQUATES for the code area
+;
+ccpm31		equ	1421h		;version number
+sixteen		equ	16
+bad_get		equ	0ffffh
+;
+llc_pos		equ	1*256+24	;start frame bottom
+;			row   col
+ulc		equ	4*256+4		;place to start blanking the box
+lines_to_clear	equ	17		;that's how many lines to blank
+;
+;	SYSTEM calls
+;
+system_int	equ	224
+;
+c_rawio		equ	  6	;used to get scan code
+c_stat		equ	 11
+c_write		equ	  2	;write one character to console
+c_writeblk	equ	111	;used for all mesages
+c_writestr	equ	  9	;used for error messages
+;
+l_writeblk_call	equ	112
+;
+raw_in		equ	0fdh	;used with c_rawio
+;
+ctrl_c		equ	  3
+help_key	equ	';' or 80h
+eject
+;
+;	DRAW_FRAME
+;
+;	draw the frame for the utility
+;
+;	ENTRY	none
+;
+;	EXIT 	none
+draw_frame:
+	mov	al,frame_horline	;horizontal line for frame
+	mov	cx,hor_len		;# of chars in hor line
+	mov	di,offset hor_start	;beginning of hor line message
+	rep	stosb			;fill in the message
+;
+	mov	si,offset frame_top	;data structure to draw top line
+	mov	bx,msg_mode		;simple messages
+	call	do_n_routines		;put up more than one message
+;
+	mov	ax,left_ver		;start of vertical line on left edge
+	call	ver_line
+	mov	ax,right_ver		;now the right edge
+	call	ver_line
+;
+	mov	ax,llc_pos		;lower left corner position
+	call	set_cursor
+	mov	si,offset frame_bottom	;data structure to draw bottom line
+	mov	bx,msg_mode		;ASCII message
+	call	do_n_routines
+;
+	mov	si,offset frame_title	;get sign-on for utility
+	call	display_message		;put it there
+;
+	mov	al,frame_underline	;underline for title
+	mov	di,offset f_under_@	;start of message
+	mov	cx,f_under_len		;length of underline
+	rep	stosb			;fill in the message
+	mov	si,offset f_under	;offset of data structure
+	call	display_message		;put it there, do only one line
+	ret
+;
+;	draw a vertical line
+;
+ver_line:
+	mov	line_start,ax		;save start point
+	call	set_cursor		;
+	mov	cx,ver_len		;length of vertical line
+ver_loop:
+	push	cx
+	mov	dl,frame_verline	;get character for vertical line
+	mov	cl,c_write		;console write
+	call	system
+	call	next_row		;same column next row
+	pop	cx
+	loop	ver_loop
+	ret
+
+eject
+;
+;	PERFORM_MENU
+;
+;	display the main menu and get the response
+;
+;	ENTRY	SI = offset of menu structure
+;
+;	EXIT	BL = byte offset into table of answers (0 relative)
+;		AL = char that was input
+;
+perform_menu:
+	push	si
+	call	blank_box		;start with clean box
+	pop	si
+perform_menu_1:				;no blank box at this entry point
+	mov	bx,msg_mode_answer	;get an answer from the operator
+	call	modes			;do it all
+	xor	bx,bx			;clear out BX
+	mov	bl,operator_choice	;get byte offset
+	mov	al,operator_answer	;get the character
+	ret
+;
+; here the answer mode was chosen, and a byte offset
+; is being passed back from the GET_CHOICE routine
+;
+eject
+;
+;	MODES
+;
+;	performa the indicated message mode
+;
+;	ENTRY	BX = mode for message
+;		SI = PTR to first parameter
+;
+;	EXIT	NONE
+;
+modes:
+	mov	entry_mode,bx		;stash it for later comparison
+	xor	bx,bx			;make sure to clear mode index
+;
+mode_loop:
+	lodsw				;get a pointer to a display structure
+	or	ax,ax			;see if null pointer
+	jz	next_mode		;if yes, then skip this mode
+	push si ! push bx		;save'm
+	mov	si,ax			;put pointer in SI
+	call	do_n_routines		;perform routine indicated # of times
+	pop bx ! pop si			;recover the goodies
+next_mode:
+	cmp 	bx,entry_mode		;are we done with the request
+	je	mode_done		;if equal, then all done
+	inc bx ! inc bx			; else point to next mode routine
+	jmps	mode_loop		;do it again
+mode_done:
+	ret
+
+;
+;The idea here is that the functions are performed in order:
+;	o plain messages are printed
+;	o then messages with x,y position and screen attributes
+;	o then the key id's are shown
+;	o finally the operator makes a choice
+; Any part of this process can be skipped by having a null pointer
+; in the main structure.
+;
+;	MAIN STRUCTURE				CALLED ROUTINE
+;	word	PTR to plain message		write_string
+;	word	PTR to message structure	display_message
+;	word	PTR to key id structure		display_key_box
+;	word	PTR to answers structure	get_choice
+;
+eject
+;
+;	DO_N_ROUTINES
+;
+;	perform indicated routine N times
+;
+;	ENTRY	SI = pointer to a display structure for routine
+;		BX = offset of routine in branch table
+;
+;	EXIT	NONE
+;
+do_n_routines:
+	lodsw			;get # of entries
+	mov	cx,ax		;into loop counter
+dnr_loop:
+	push cx ! push bx	;counter and index for routine	
+	lodsw !	push si		;get a pointer and save index for pointer
+	mov	si,ax		;pointer into SI
+	call	display_routines[bx]	;call mode routine
+	pop si ! pop bx ! pop cx	;recover all that stuff
+	loop	dnr_loop
+	ret
+
+;
+;Each display structure will have the form:
+;
+;	word	# of entries
+;	word	PTR to data structure
+;	word	PTR
+;	...	...
+;
+eject
+;
+;	DISPLAY_KEY_BOX
+;
+;	display key boxes with labels
+;
+;	ENTRY	SI = PTR to key id structure
+;		word	row,col for key box
+;		3 bytes	key-id
+;		word	number of messages for label
+;		word	row,col for first label message
+;		word	PTR to message for label
+;		word	PTR ....
+;
+display_key_box:
+	lodsw ! mov line_start,ax	;get beginning position for key box
+	push	si
+	call	set_cursor		;let the OEM set the cursor
+	pop	si
+	call	show_key_box		;include the key_id, return with
+					; SI = SI + key_id_len
+	lodsw ! mov cx,ax		;that's the number of lines for label
+	jcxz	dkb_done		;no labels
+	lodsw				;get row,col for label
+	mov	line_start,ax		;remember it
+	push si ! push cx
+	call	set_cursor		;position for first line
+	pop cx ! pop si
+dc_loop:
+	push	cx
+	lodsw ! mov si,ax		;get a pointer to the label message
+	push	si
+	call	write_string		;and display it
+	call	next_row		;go to the next row, same start column
+	pop si ! pop cx
+	loop	dc_loop			;do all the lines for the label
+;
+dkb_done:
+	ret
+
+eject
+;
+;	SHOW_KEY_BOX
+;
+;	show the box outline with the key_id, at current cursor position
+;
+;	ENTRY	SI = PTR to 3 byte key_id
+;
+;	EXIT	SI = SI on entry + key_id_len
+;
+show_key_box:
+	mov	di, key_id_@ 		;start of area for key_id
+	mov	cx,key_id_len
+	push	es
+	mov ax,ds ! mov es,ax		;make sure ES points to local data
+	rep	movsb			;move the key_id into the box
+	pop	es
+	push 	si			;exit vaalue for SI
+	mov	si,offset key_top	;top of the box
+	call	write_string		;display it
+	call	next_row		;position for middle of box
+	mov	si,offset key_middle	;point to middle of key
+	call	write_string
+	call	next_row		;position for bottom	
+	mov	si,offset key_bottom
+	call	write_string		;box is now all visible
+	pop	si
+	ret
+
+eject
+;
+;	DISPLAY_MESSAGE
+;
+;	place cursor, attribute, message, end attribute
+;
+;	ENTRY:	SI = offset of message structure
+;		word	row,col of message
+;		word	start, stop attribute
+;		word	PTR message
+display_message:
+	lodsw ! push si			;get the cursor position
+	call	set_cursor		;this is OEM specific
+	pop si ! lodsw ! push si	;get the attributes
+	mov	end_attrib,ah		;save the end attribute
+	call	set_attribute		;this is also OEM specific
+	pop	si
+	mov	si,[si]			;pointer for message
+	call	write_string		;display message
+	mov	al,end_attrib		;get the ending attribute
+	call	set_attribute		; and set it
+	ret
+
+eject
+;
+;	GET_CHOICE
+;
+;	get key pressed and make sure it's legal
+;
+;	ENTRY	SI = PTR to answer structure
+;			byte	 # of keys
+;			byte	 key,key,...
+;
+;	EXIT	BL = operator_choice = byte offset in key list
+;		AL = operator_answer = actual key
+get_choice:
+	xor	ax,ax			;clear out holding register
+	lodsb				;get number of legit chars to scan
+	mov	char_scan,ax		;stash it
+	xchg	si,di			;need DI for SCASB
+gc_1:
+	push di ! push di		;YES! do it twice
+	call	get_scan_code		;returns with char in AL
+	cmp al,help_key ! jne gc_1_a
+	call	handle_help_key		;handle the help situation
+	jz	gc_1_a			;if help was off then fall through
+	pop di ! pop di
+	jmp	gc_1
+gc_1_a:
+	mov	operator_answer,al	;save the character
+	mov	cx,char_scan		;number of keys to scan
+	pop	di			;sure of start of string (1st POP)
+	jcxz	gc_2			;in case any key is asked for
+	repne	scasb			;scan the string
+	jnz	gc_3			;if no zero flag then not found
+;
+gc_2:
+	pop	di			;clean the stack (2nd POP)
+	mov	ax,char_scan		;total # of chars
+	sub	ax,cx			;subtract number that were scanned
+	dec	al
+	mov	operator_choice,al	;if offset were left in a register
+					; it could easily get lost in 
+					; the return to main level
+;
+	mov	bl,al			;offset in list
+	mov	al,operator_answer	;actual character
+	ret
+gc_3:
+	call	err_beep		;beep the bad choice
+	pop	di			;recover the pointer to start of
+					; answers (other 2nd POP)
+	jmps	gc_1			;then try again
+
+eject
+;
+;	SHOW_HELP_KEY
+;
+;	show/turn off HELP key
+;
+;	ENTRY	BX = 0 turn on help key
+;		BX = 1 turn off help key
+;		DX = offset of help string
+;
+;	EXIT	NONE
+;
+show_help_key:
+	mov	help_string,dx		;always remember this
+	cmp bx,help_state ! jz no_show	;if it's ok don't change it
+	mov	help_state,bx		;make it known to everybody
+	mov	si,offset help_key_table	;start of messages
+common_show:
+	xor	dx,dx
+	mov	ax,hkt_len
+	mul	bx			;make appropriate offset
+	add	si,ax			;point to entry
+	lodsw				;get the ptr to structure
+	mov	bx,[si]			;get the message mode
+	mov	si,ax			;make sure ptr in SI
+	call	do_n_routines		;put up the message
+no_show:
+	ret
+
+;
+;	SHOW_ESC_KEY
+;
+;	display option with ESC key
+;
+;	ENTRY	BX = 0 EXIT program
+;		BX = 1 Previous menu
+;		BX = 2 Stop operation
+;
+;	EXIT	NONE
+;
+show_esc_key:
+	cmp bx,esc_state ! jz no_show	;if it's ok don't change it
+	mov	esc_state,bx		;remember this
+	mov	si,offset esc_key_table	;start of table
+	jmp	common_show
+eject
+;
+;	BLANK_BOX
+;
+;	blank the work area without erasing the frame
+;
+blank_box:
+	mov	ax,ulc			;upper left of work area
+	mov	cx,lines_to_clear	;that's 20 lines
+blank_entry:
+	push	cx
+	mov	line_start,ax		;stash it
+	call	set_cursor		;establish start point
+	pop	cx
+bb_loop:
+	push	cx
+	mov	si,offset msg_blank_box_line
+	call	write_string		;that's one line blanked out
+	call	next_row		;that's the next row same start column
+	pop	cx			;lines left to do
+	loop	bb_loop
+	ret
+eject
+;
+;	NEXT_ROW
+;
+;	position cursor to next row same starting column
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+next_row:
+	inc	line_start_row	;bump the row position
+	mov	ax,line_start	;get new cursor position
+	call	set_cursor	;position the cursor
+	ret
+
+eject
+;
+;	SYSTEM
+;
+;	make the system call passed in CL
+;
+system:
+	int	system_int		;that's 224
+	ret
+
+;
+;	WRITE_STRING
+;
+;	use c_writeblk to display messages
+;
+;	ENTRY	SI = offset of string
+;		word	len
+;		byte	(message) byte,byte....
+write_string:
+	lodsw			;get the length
+	mov	chcb_len,ax	;put length in CHCB
+	mov	chcb_offset,si	;put offset in CHCB
+	mov	cl,c_writeblk	;that's the new call
+	mov	dx,offset chcb_offset	;point to CHCB data strucutre 
+	jmp	system		;RET from SYSTEM
+
+
+;
+;	PRINT_STRING
+;
+;	use function 9 to print error messages
+;
+;	ENTRY	SI = offset of string
+;
+print_string:
+	mov	cl,c_writestr
+	mov	dx,si
+	jmp	system
+
+;
+;	L_WRITEBLK
+;
+;	use function 112 to send messages to printer
+;
+;	ENTRY	SI = offset of string
+;
+l_writeblk:
+	lodsw				;length
+	mov	l_chcb_len,ax
+	mov	l_chcb_offset,si
+	mov	cl,l_writeblk_call
+	mov	dx,offset l_chcb_offset
+	jmp	system
+
+;
+;	ERR_BEEP
+;
+;	beep the beeper twice
+;
+err_beep:
+	mov	si,offset msg_beep
+	jmp	write_string	;RET from SYSTEM
+
+;
+;	GET_SCAN_CODE
+;
+;	get key using raw i/o
+;
+get_scan_code:
+	mov	dl,raw_in
+	mov	cl,c_rawio
+	jmp	system		;RET from SYSTEM
+
+eject
+;
+;	HEX_ASCII_DEC
+;
+;	convert hex number to ASCII and place in message area
+;
+;	ENTRY	AX = hex number
+;		CX = # of ASCII digits
+;		DI = offset of message area
+;
+;	EXIT	NONE
+;
+hex_ascii_dec:
+	dec di ! add di,cx	;poin to last digit
+	mov	bx,10
+hex_loop:
+	sub	dx,dx
+	div	bx		;divide by 10
+	add	dl,'0'		;make quotient into ASCII
+	mov [di],dl ! dec di	;move into message and dec the pointer
+	test ax,ax ! jz hex_done ;anything left to divide
+	loop	hex_loop	;do all the digits
+hex_done:
+	ret
+
+eject
+;
+;	CTRL_C_STAT
+;
+;	see if Ctrl-C has been typed
+;
+;	ENTRY	NONE
+;
+;	EXIT	zero flag set if CTRL-C has been typed, also look for ESC
+;
+ctrl_c_stat:
+	mov	cl,c_stat		;use function 11
+	call	system
+	or	al,al
+	jz	no_c
+	call	get_scan_code
+	cmp	al,ctrl_c
+	jz	yes_c
+	cmp	al,esc
+yes_c:
+	ret
+no_c:
+	inc	al			;unset zero flag
+	ret
+
+eject
+;
+;	HANDLE_HELP_KEY
+;
+;	do what must be done to handle help key
+;
+;	ENTRY	NONE
+;
+;	EXIT 	zero flag zet if HELP was off
+;
+handle_help_key:
+	cmp	help_state,help_yes		;see if help has been enabled
+	je	do_help				;handle it if yes
+	push	ax
+	xor	ax,ax				;signal no help
+	pop	ax
+	ret					;else just go back
+do_help:
+	call	check_mx_disk_lock		;release mx disk queue
+	mov	dx,help_string			;current help level
+	call	save_screen			;save the current screen
+;
+;at this point HELP is taking place, nothing to do on return
+;
+	call	lock_mx_queue			;get mx disk queue back
+	xor al,al ! inc al			;no zero flag
+	ret
+
+eject
+	DSEG
+include date.dat
+;
+;	EQUATES for the data section
+;
+include common.equ
+;
+;
+;
+line_start	dw	0		;row col for start of work area
+line_start_row	equ	byte ptr line_start ;row for above
+;
+end_attrib	db	0		;temp working space
+;
+entry_mode	dw	0		;for MODES routine
+;
+operator_choice	db	0		;offset of answer in answer list
+operator_answer	db	0		;actual input character
+;
+char_scan	dw	0		;number of cahracters to scan in
+					;answer list
+
+;
+;	these are the routines that perform the various
+;	message modes
+;
+display_routines dw	offset write_string	;msg_mode
+		dw	offset display_message	;msg_mode_@
+		dw	offset display_key_box	;msg_mode_key
+		dw	offset get_choice	;msg_mode_answer
+;
+;
+;	this is the CHCB (Character control block) to be used with the
+;	  C_WRITEBLK function call
+;
+chcb_offset	dw	0		;offset of message
+chcb_segment	dw	0		;segment of message
+chcb_len	dw	0		;length of message
+;
+l_chcb_offset	dw	0
+l_chcb_segment	dw	0
+l_chcb_len	dw	0
+eject
+;
+;at this point there will be an include file for the shape of the
+; box and frame
+;
+include boxframe.dat
+;
+;
+key_top		dw	offset key_middle - offset kt
+kt		db	box_ulc
+		db	box_horline,box_horline,box_horline,box_horline
+		db	box_urc
+;
+key_middle	dw	offset key_bottom - offset km
+km		db	box_verline
+		db	'    '
+		db	box_verline,' --',16
+key_id_@	equ	offset km + 2		;leave blank to the left of id
+;
+key_bottom	dw	offset kb_end - offset kb
+kb		db	box_llc
+		db	box_horline,box_horline,box_horline,box_horline
+		db	box_lrc
+;
+kb_end		equ	$
+;
+;
+msg_beep	dw	length mb
+mb		db	beep
+;
+msg_blank_box_line dw	(length mbbl * 2)+1
+mbbl		db	'                                    '
+		db	'                                     '
+;
+help_state	dw	-1
+esc_state	dw	-1
+;
+help_key_table	dw	offset help_on,msg_mode_key
+hkt_len		equ	offset $ - offset help_key_table
+		dw	offset help_off,msg_mode_@
+;
+esc_key_table	dw	offset exit,msg_mode_key
+		dw	offset previous,msg_mode_key
+		dw	offset stop,msg_mode_key
+;
+help_on		dw	1
+		dw	offset help_on_1
+;
+help_on_1	db	21,12			;row,col for box
+		db	'F1 '			;key-id
+		dw	1			;# of messages for label
+		db	22,23			;row,col for label
+		dw	offset help		;label
+;
+help		dw	length help_2
+help_2		db	' HELP '
+;
+help_off	dw	3			;3 lines to erase
+		dw	offset ho_1
+		dw	offset ho_2
+		dw	offset ho_3
+;
+ho_1		db	21,12,normal,normal	;starting position and attribs
+		dw	offset ho_blank		;blanks
+;
+ho_2		db	22,12,normal,normal
+		dw	offset ho_blank
+;
+ho_3		db	23,12,normal,normal
+		dw	offset ho_blank
+;
+ho_blank	dw	length ho_blank_@
+ho_blank_@	db	'                '
+;
+exit		dw	1
+		dw	offset exit_1
+;
+previous	dw	1
+		dw	offset previous_1
+;
+stop		dw	1
+		dw	offset stop_1
+;
+exit_1		db	21,40,'ESC'
+		dw	1
+		db	22,50
+		dw	offset exit_2
+;
+exit_2		dw	length exit_3
+exit_3		db	' Exit this program       '
+;
+previous_1	db	21,40,'ESC'
+		dw	1
+		db	22,50
+		dw	offset previous_2
+;
+previous_2	dw	length previous_3
+previous_3	db	' Go back to previous menu'
+;
+stop_1		db	21,40,'ESC'
+		dw	1
+		db	22,50
+		dw	offset stop_2
+;
+stop_2		dw	length stop_3
+stop_3		db	' Stop current operation  '
+;
+help_string	dw	offset help_string_@
+;
+help_string_@	db	'HELP STRING NOT INITIALIZED',10,13,'$'
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     

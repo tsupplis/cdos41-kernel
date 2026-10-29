@@ -1,0 +1,8 @@
+; SYSDISK: selects the existing OEM D.A86 implementation.
+; SYSDISK displays the system search path; SYSDISK [ON] or [OFF] enables or disables it; SYSDISK path sets it.
+
+false equ 000h
+true equ 0ffh
+cd equ false ! md equ false ! zd equ false ! sd equ true
+
+include d.a86

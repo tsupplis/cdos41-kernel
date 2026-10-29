@@ -1,0 +1,828 @@
+title 'FUNCTION for SQUID II'
+;
+;
+;	The PFK's will be programmed either from the keyboard or from
+;	 a file.
+;
+;
+	extrn	main_exit:near, err_out:near, main_exit_1:near
+	extrn	set_cursor:near, write_string:near, set_attribute:near
+        extrn   show_esc_key:near, show_help_key:near, perform_menu:near
+	extrn   get_choice:near, modes:near, blank_box:near, fill_buf:near
+;
+	dseg
+;
+	public	file_buf
+;
+  	cseg
+;	
+	public	chg_console, dump_to_file, get_con_value, set_con_key
+
+
+;
+;	Equates for code area
+;
+include common.equ
+prev_menu    	equ	1
+s_sysdat        equ	09Ah
+p_pdadr		equ	09Ch
+bdos		equ     0E0h
+c_rawio		equ	06h
+f_write		equ	015h
+f_multisec	equ	02ch
+f_make		equ	016h
+f_errmode	equ	02dh
+f_delete	equ	013h
+f_close		equ	010h
+f_dmaset	equ	01ah
+f1		equ     0bbh
+f2		equ     0bch
+f3		equ     0bdh
+f4		equ     0beh
+f5		equ     0bfh
+f6		equ     0c0h
+f7		equ     0c1h
+f8		equ     0c2h
+f9		equ     0c3h
+;
+recs_to_write	equ	17
+eject
+;
+;
+;	CHG_CONSOLE
+;      
+;	Routine prompts user for combination of keys
+;       to switch the console and makes the change
+;
+;
+;
+;
+chg_console:
+	call	get_con_value
+	mov     old_con_value,bl	;save console switch value
+        call    blank_box
+	mov bx,help_yes ! mov dx,offset func_help2
+	call    show_help_key
+        mov     bx,prev_menu
+	call	show_esc_key
+	mov	si,offset con_menu_struc
+	mov     bx,msg_mode_key
+	call    modes
+	mov     al,old_con_value	;arrow to be turned on
+	call    do_arrow_on   		;turn on arrow by current setting
+con_choice: 
+        mov     si,offset all@		;get choice from user
+	call    get_choice
+;
+	cmp     al,esc			;if esc then back to main
+	je      con_exit
+	call	set_con_key
+	mov	al,bl			;get value of arrow to be turned on
+	call	do_arrow_on		;turn it on
+	mov     al,old_con_value	;old value turn arrow off
+	call	do_arrow_off
+	mov     old_con_value,bl	;new value becomes old value
+        jmp     con_choice
+con_exit:
+        ret
+eject
+;
+;
+;	GET_CON_VALUE
+;
+;	Gets current value of console switching keys.
+;
+;	ENTRY:	NONE
+;
+;	EXIT:	AL = current BIOS Console switching key value
+;
+;		BL = Offset of key value in con_values. (for file write)
+;
+;
+get_con_value:
+	push	es
+	mov 	cl,s_sysdat          	;get old value
+	int     bdos
+   	mov     sysdataseg,es		;save system values
+	mov 	cl,p_pdadr
+	int	bdos
+  	mov     ax,es:word ptr 10h[bx]
+	mov     es_sav,ax
+;
+;
+	push	es
+	push 	ds
+        mov     ds,sysdataseg
+	mov     es,ax
+;
+	mov     cx,2
+	mov     ax,0Eh
+	callf   cs:dword ptr call_addr    	;returns pointer in BX
+	mov     al,byte ptr [bx]	;current key value
+	mov	dl,al			;save to retutn to caller
+; 
+	pop     ds
+	pop     es
+	pop     es
+	mov     con_loc,bx	;stash console switch location
+	mov	di,offset con_values
+	mov	cx,num_values
+	repne	scasb
+	mov	ax,num_values
+	sub	ax,cx			;find number enteries scanned
+	dec	al
+	mov	bl,al			;bl gets offset in con_values
+	mov	al,dl			;al gets original answer
+	ret
+;
+;
+call_addr	dw	0C03h
+sysdataseg 	rw	1
+eject
+;
+;
+;	SET_CON_KEY
+;
+;	Set Console switching keys
+;
+;	ENTRY:	BL = offset of console switching key con_values
+;		     according to the following table:
+;
+;		CON_VALUES		Key Combination		BL
+;		----------		---------------		--
+;		    0			None (Keypad Only)	0
+;		    2			Shift			1
+;		    4			Ctrl			3
+;		    6			Shift + Ctrl		5
+;		    8			Alt			2
+;		   10			Alt + Shift		4
+;		   12			Alt + Ctrl		7
+;		   14			Alt + Ctrl + Shift	6
+;
+;	EXIT:	BL = Same as Entry
+;
+;
+set_con_key:
+	push	bx			;Save desired value
+	call	get_con_value		;cheap way to find location
+	pop	bx			;location stashed in con_loc
+	mov	dl,bl			;save bl for return
+	mov     di,offset con_values	;di points to possible values
+	xor     bh,bh
+	mov     cl,byte ptr [di+bx]	;get right entry from list of values
+	mov     bx,con_loc		;find location
+        mov     ax,es_sav
+        push    es
+	push	ds
+	mov     es,ax
+	mov	ds,sysdataseg
+        mov     byte ptr[bx],cl		;poke new value
+	mov	bl,dl
+        jmp     con_done
+con_done:
+	pop	ds
+	pop     es
+	ret
+;
+;
+;	DO_ARROW_ON
+;
+;	ENTRY  AL = offset of function table
+;
+;
+do_arrow_on:
+	mov	turn_start,blink_on	;turn on blink 
+	mov     turn_end,blink_off
+	jmp     do_arrow
+do_arrow_off:
+	mov     turn_start,blink_off
+	mov     turn_end,blink_off
+do_arrow:
+	shl     al,1	;adjust to word offset
+	push	bx
+	mov     bx,offset arrow_struct
+	xor     ah,ah
+	add     bx,ax
+	mov     cx,word ptr [bx]
+	mov     turn_coord,cx
+	mov     bx,msg_mode_@
+	mov     si,offset turn_struct
+	call    modes
+	pop     bx
+	ret
+eject
+;
+;	DUMP_TO_FILE
+;
+dump_to_file:
+        mov bx,help_yes ! mov dx,offset func_help1
+        call	show_help_key
+	mov     bx,prev_menu
+	call    show_esc_key
+	mov     si,offset save_menu_struc
+	call    perform_menu
+do_sav_choice:
+	cmp	al,esc
+	je      sav_exit
+	cmp	al,f3 		;change file name?
+	je	chg_name
+file_save:
+	call	fill_buf   	;in func2 because data is there
+	call	do_file
+	jmp	save_loop
+chg_name:
+	mov	bx,msg_mode_@
+	mov	si,offset bsave_struc
+	call	modes		;erase 'saved' if it exists
+	mov     bx,msg_mode_@	;prepare to blank file name
+	mov     si,offset f_blank_struc	;point si to name location
+	call    modes		;blank and set cursor
+ 	call	get_name
+	mov	bx,msg_mode_@	;print name
+	mov	si,offset f_name_struc
+	call	modes
+save_loop:
+	mov	si,offset od@
+	call	get_choice	;get next input
+	jmp	do_sav_choice
+sav_exit:
+ 	ret  
+;
+;      GET_NAME
+;
+get_name:
+	mov	save_dr,0		;drive identifier set initially to default
+	mov	bx,offset sfi2_@	;name storage address
+get_next:
+	push	bx
+	mov     dl,0fdh			;set for input
+	mov	cl,c_rawio
+	int	bdos
+	call    check_char		;see if legal character
+	cmp	al,0ffh			;bad input
+	je	bad_input
+	cmp	al,0dh			;carriage return?
+	je	c_ret
+	cmp	al,2eh			;period?
+	je	c_ret			;treat like carriage return
+	cmp	al,08h			;back space?
+	je	b_space			;need special handler
+	cmp	al,':'			;colon?
+	je	colon
+;
+;
+;
+do_char:
+	mov	char_stor,al
+	mov     dl,al   		;output char
+	mov	cl,c_rawio
+	int     bdos			;onto screen
+	pop	bx
+	mov	al,char_stor
+	mov	byte ptr [bx],al	;store name
+	inc     bx
+	cmp     bx,offset sfi2_@ + 8	;full file name?
+	jl	get_next
+	cmp	save_dr,0		;new drive idntifier?
+	je      c_ret2			;no, then return
+	cmp     bx,offset sfi2_@ + 10	;full file name?
+	jne	get_next		;no, then get more
+	jmp     c_ret2
+;
+;
+b_space:
+	pop	bx
+	cmp     bx,offset sfi2_@
+	je	get_next		;if first char do not output
+	push	bx
+	call    show_back_space
+	pop	bx
+	dec	bx			;eliminate last character
+	cmp	byte ptr [bx],':'	;
+	je	colon_erase
+	jmp	get_next
+;
+;	
+colon_erase:
+	mov	save_dr,0		;drive identifier = default
+	jmp	get_next
+;
+;
+bad_input:
+	pop	bx
+bad_input_2:
+	jmp	get_next
+;
+;
+c_ret:
+	pop	bx
+	cmp	bx,offset sfi2_@
+	je	name_done	;if cr first input keep old name
+c_ret2:
+	mov	byte ptr[bx],'.'	;put null in final positions
+	inc	bx
+	mov	byte ptr[bx],'P'	;put null in final positions
+	inc	bx
+	mov	byte ptr[bx],'F'	;put null in final positions
+	inc	bx
+	mov	byte ptr[bx],'K'	;put null in final positions
+	inc	bx
+fill_loop:
+	mov	byte ptr[bx],' '	;put blank in final positions
+	inc	bx
+	cmp	bx,offset sfi2_@ + 15
+	jl	fill_loop
+	call	tran_name		;transfer new name to fcb
+name_done:
+	ret
+eject
+;
+;    COLON
+;
+;	checks legality of drive idntifier in subroutine
+;
+colon:
+	pop	bx
+	cmp	bx,offset sfi2_@ + 1	;is colon in second position
+	jne	bad_input_2		;if not bad character
+	dec	bx			;bx points to first character
+	mov	cl,byte ptr [bx]	;cl holds drive idntifier
+	inc	bx
+	cmp	cl,'A'			;legal identifier
+	jl	bad_input_2
+	cmp	cl,'P'			;to big for drive identifier
+	jg	bad_input_2		;then get new input
+	sub	cl,40h			;set code for fcb
+	mov	save_dr,cl		;store in FCB
+        push	bx			;calling routine excpects bx pushed
+	jmp	do_char
+;
+eject
+;
+;
+;
+;	CHECK_CHAR
+;
+;	test character to see if it is legal in a file name
+;	Converts character to upper case if legal Alpha Character
+;
+;	ENTER: AL = Char Input
+;
+;	EXIT:  AL = Char Input if legal, FFh if not.
+;
+check_char:
+	cmp	al,0dh	; CR let main routine handle
+	je	char_ret	
+	cmp	al,'.'	; period
+	je	char_ret	;let main routine handle
+	cmp	al,':'	;colon is special case
+	je	char_ret	;let main routine handle
+	cmp     al,08h	;special backspace case
+	je	char_ret ;let main routine handle
+	cmp	al,21h	;first 21 characters illegal
+	jl	bad_char
+	cmp	al,7eh	;anything above this = bad char
+	jg	bad_char
+	mov	di,offset bad_file_char
+	mov	cx,num_file_char
+	repne	scasb
+	cmp	cx,0
+	jne	bad_char
+	cmp	al,61h	;possible lower case?
+	jl	char_ret	;no, we're ok
+	cmp	al,7ah		 
+	jg	char_ret	;higher ascii than lower case 'z'
+	sub	al,20h		; yes, convert to upper
+	jmp	char_ret	;go back
+bad_char:
+	mov	al,0ffh
+char_ret:
+	ret
+;
+;
+;	TRAN_NAME
+;
+;	Transfer new file name to fcb
+;
+;	ENTRY,EXIT : NONE
+;
+tran_name:
+	mov	bx,offset sfi2_@	;bx points to new name
+	mov	di,offset save_name	;di points to file name in fcb
+	xor	cx,cx
+	cmp	save_dr,0		;drive identifier in name?
+	je	name_loop		;if not were pointed ok
+	add	bx,2			;if yes, reset pointer
+name_loop:
+	inc	cx
+	mov	al,[bx]
+	cmp	al,'.'			;are we done?
+	je	do_blanks		;then pad and exit
+	mov	[di],al
+	inc	di
+	inc	bx
+	jmp	name_loop
+do_blanks:
+	cmp	cx,9			;padded enough?
+	je 	tran_done 
+	mov	byte ptr[di],' '  		;pad with blank
+	inc	di
+	inc	cx
+	jmp	do_blanks
+tran_done:
+	ret
+;
+eject    
+;	SHOW_BACK_SPACE
+;
+;	Shows backspace 
+;
+;	ENTRY,EXIT: NONE
+;
+show_back_space:
+	mov	dl,08h
+	mov	cl,c_rawio
+	int	bdos
+	mov	dl,20h
+	mov	cl,c_rawio
+	int	bdos
+	mov	dl,08h
+	mov	cl,c_rawio
+	int	bdos
+	ret
+;
+eject
+;
+;
+;
+;	DO_FILE
+;
+;	Dump entries to file specified in fcb
+;
+;	ENTRY: NONE
+;
+;	EXIT:
+;	       AL = Return Code from file write
+;
+do_file:
+	mov	cl,f_errmode
+	mov	dl,0ffh		;set error mode to return
+	int	bdos
+	mov	cl,f_delete	;delete old file if it exists
+	mov	dx,offset save_dr	;offset fcb
+	int	bdos
+	mov 	save_cr,0h
+	mov	cl,f_make
+	mov	dx, offset save_dr
+	int 	bdos		;make file
+	cmp	ax,0		;make error?
+	jne	no_open
+	mov	dl,recs_to_write ;number of records to write
+	mov	cl,f_multisec
+	int	bdos		;set number of records to write
+	mov	cl,f_dmaset
+	mov	dx, offset file_buf
+	int	bdos
+ 	mov	cl,f_write
+	mov	dx,offset save_dr
+	int	bdos
+	cmp	al,0		;write error?
+	jne	no_write
+	mov	cl,f_close
+	mov	dx,offset save_dr
+	int	bdos
+	mov	bx,msg_mode_@	;print 'SAVED'
+	mov	si,offset save_struc
+	call	modes
+do_file_ret:
+	ret
+no_open:
+	call	open_error
+	jmp	do_file_ret
+no_write:
+	call	write_error
+	jmp	do_file_ret
+eject
+;
+;
+;	OPEN_ERROR
+;
+;	Print error message from F_MAKE call
+;
+;	ENTRY: AX = Error Code from F_MAKE call
+;
+;	EXIT: NONE
+;
+open_error:
+	mov	bx,msg_mode_@	;print error message
+	cmp	ah,0		;directory full?
+	jne	o_err_2
+	mov	si,offset dir_msg	;point to error message struct
+	call	modes
+	jmp	open_err_ret
+o_err_2:
+	cmp	ah,04h		;invalid drive?
+	jne	o_err_3
+	mov	si,offset drive_msg
+	call	modes
+	jmp	open_err_ret
+o_err_3:
+	cmp	ah,01h		;bad sector
+	jne	o_err_4
+	mov	si,offset sector_msg
+	call	modes
+	jmp	open_err_ret
+o_err_4:
+	cmp	ah,02h
+	jne	o_err_5		;read_only disk
+	mov	si,offset read_msg
+	call	modes
+	jmp	open_err_ret
+o_err_5:
+	mov	si,offset generic1_msg
+	call 	modes		;print generic1 can't open message
+;
+;
+open_err_ret:
+	mov	dl,0fdh
+	mov	cl,c_rawio
+	int	bdos		;wait for user to continue
+	mov	bx,msg_mode_@	;put back up file name
+	mov	si,offset do_name_struc
+	call	modes
+	ret
+;
+eject
+;
+;
+;	WRITE_ERROR
+;
+;	Print error message from F_WRITE call
+;
+;	ENTRY: AX = Error Code from F_WRITE call
+;
+;	EXIT: NONE
+;
+write_error:
+	mov	bx,msg_mode_@		;print error message
+	cmp	al,0ffh			;physical error?
+	je	phys_err	
+	cmp	al,01h
+	jne	w_err_2
+	mov	si,offset dir_msg	;point to error message struct
+	call	modes
+	jmp	wr_err_ret
+w_err_2:
+	cmp	al,02h			;disk full?    
+	jne	w_err_3
+	mov	si,offset full_msg
+	call	modes
+	jmp	wr_err_ret
+w_err_3:
+	mov	si,offset generic2_msg	;other error print generic message
+	call	modes
+	jmp	wr_err_ret
+phys_err:
+	cmp	ah,01h			;bad sector
+	jne	phys_err_1
+	mov	si,offset sector_msg
+	call	modes
+	jmp	wr_err_ret
+phys_err_1:
+	cmp	ah,02h
+	jne	phys_err_2		;read_only disk
+	mov	si,offset read_msg
+	call	modes
+	jmp	wr_err_ret
+phys_err_2:
+	mov	si,offset generic2_msg
+	call 	modes		;print generic2 can't open message
+;
+;
+wr_err_ret:
+	mov	dl,0fdh
+	mov	cl,c_rawio
+	int	bdos		;wait for user to continue
+	mov	bx,msg_mode_@	;put back up file name
+	mov	si,offset do_name_struc
+	call	modes
+	ret
+;
+eject
+	dseg
+con_loc     dw	0
+old_con_value   db      0
+es_sav		dw      0
+arrow_struct    db      8,47,8,19,11,47,11,19,14,47,14,19,17,47,17,19
+turn_struct     dw      0
+                dw	turn_num  
+turn_num        dw      1
+		dw	turn_coord
+turn_coord	dw      0
+turn_start	db	0
+turn_end	db	0
+turn_msg	dw	offset arrow_@
+arrow_@         dw      length arrow
+arrow		db	'--',16   
+con_values      db      0,2,8,4,10,6,14,12
+num_values	equ	(offset $ - offset con_values)
+f_blank_struc	dw	0		;structure to blank file name and reset cursor
+		dw	f_num
+f_num		dw	2
+		dw	f_blank		;blank file name
+		dw	f_cursor	;reposition cursor
+;
+f_blank		db	12	;row
+		db	(screen - length sfi_@)/2 + 50 	;col from savmenu.dat
+		db	normal,normal
+f_blank_msg	dw      offset f_blank_@
+;
+f_blank_@	dw	length f_blank_@@
+f_blank_@@	db	'          .PFK'
+;
+f_cursor	db	12
+		db	(screen - length sfi_@)/2 + 49 	;col from savmenu.dat
+		db      high_on,high_on
+		dw	offset f_cursor_@
+f_cursor_@	dw	length f_cursor_@@
+f_cursor_@@	db	' '
+;
+f_name_struc	dw	0		;structure to print file name
+		dw	f_nam
+f_nam		dw	1
+		dw	f_name		;print file name
+;
+f_name		db	12		;row
+		db	(screen - length sfi_@)/2 + 50 	;col from savmenu.dat
+		db	high_on,high_off
+		dw      offset sfi2
+;
+;
+save_struc	dw	0		;structure to print file name
+		dw	sav
+sav		dw	1
+		dw	save		;print file name
+;
+save		db	18		;row
+		db	20
+		db	high_on,high_off
+		dw      offset save_msg
+;
+save_msg	dw	length	save_msg_@
+save_msg_@	db	'SAVED'
+;
+bsave_struc	dw	0		;structure to print file name
+		dw	bsav
+bsav		dw	1
+		dw	bsave		;print file name
+;
+bsave		db	18		;row
+		db	20
+		db	normal,normal   
+		dw      offset bsave_msg
+;
+bsave_msg	dw	length	bsave_msg_@
+bsave_msg_@	db	'     '
+;
+drive_msg	dw	0		;structure to print drive error messg
+		dw	drive_@
+drive_@		dw	2
+		dw	drive_err
+		dw	err_name
+;
+drive_err	db	12		;row
+		db	10
+		db	normal,normal
+		dw	offset drive_err_msg
+;
+drive_err_msg	dw	length drive_err_msg_@
+drive_err_msg_@	db	'Invalid Drive                 -- Press any key to continue'
+;
+dir_msg	dw	0		;structure to print dir error messg
+		dw	dir_@
+dir_@		dw	2
+		dw	dir_err
+		dw	err_name
+;
+dir_err		db	12		;row
+		db	9 
+		db	normal,normal
+		dw	offset dir_err_msg
+;
+dir_err_msg	dw	length dir_err_msg_@
+dir_err_msg_@	db	'Directory Full                 -- Press any key to continue'
+;
+sector_msg	dw	0		;structure to print sector error messg
+		dw	sector_@
+sector_@		dw	2
+		dw	sector_err
+		dw	err_name
+;
+sector_err	db	12		;row
+		db	5 
+		db	normal,normal
+		dw	offset sector_err_msg
+;
+sector_err_msg	dw	length sector_err_@
+sector_err_@	db	'Bad Sector on Disk                 -- Press any key to continue'
+;
+read_msg	dw	0		;structure to print read error messg
+		dw	read_@
+read_@		dw	2
+		dw	read_err
+		dw	err_name
+;
+read_err	db	12		;row
+		db	9 
+		db	normal,normal
+		dw	offset read_err_msg
+;
+read_err_msg	dw	length read_err_msg_@
+read_err_msg_@	db	'Read Only Disk                 -- Press any key to continue'
+;
+;
+full_msg	dw	0		;structure to print full error messg
+		dw	full_@
+full_@		dw	2
+		dw	full_err
+		dw	err_name
+;
+full_err	db	12		;row
+		db	14
+		db	normal,normal
+		dw	offset full_err_msg
+;
+full_err_msg	dw	length full_err_msg_@
+full_err_msg_@	db	'Disk Full                 -- Press any key to continue'
+;
+generic1_msg	dw	0		;structure to print generic1 error messg
+		dw	generic1_@
+generic1_@	dw	2
+		dw	generic1_err
+		dw	err_name
+;
+generic1_err	db	12		;row
+		db	9 
+		db	normal,normal
+		dw	offset generic1_er_msg
+;
+generic1_er_msg	dw	length generic1_err_@
+generic1_err_@	db	'Unable to Open                 -- Press any key to continue'
+;
+generic2_msg	dw	0		;structure to print generic2 error messg
+		dw	generic2_@
+generic2_@	dw	2
+		dw	generic2_err
+		dw	err_name
+;
+generic2_err	db	12		;row
+		db	8 
+		db	normal,normal
+		dw	offset generic2_er_msg
+;
+generic2_er_msg	dw	length generic2_err_@
+generic2_err_@	db	'Unable to Write                 -- Press any key to continue'
+;
+do_name_struc	dw	0		;structure returns fiel name to screen
+		dw	do_name_@
+do_name_@	dw	2
+		dw	offset sel_file
+		dw	offset sel_file2	;these two from savmenu.dat
+;
+err_name	db	12		;row
+		db	25		;column
+		db	high_on,high_off
+		dw	sfi2		; file name
+;
+;
+;
+bad_file_char	db	40,41,42,44,58,59,60,61,62,63,91,92,93,124  ;bad char (decimal)
+num_file_char	equ     (offset $ - offset bad_file_char)
+char_stor	db	0	;temp save for input
+;
+;	save file FCB defenition
+;
+savefcb		dw	0
+save_dr		db	0
+save_name	db	'KEYS    '
+		db	'PFK'		;only type allowed
+save_ex		db	0
+save_cs		db	0
+save_rs		db	0
+save_rc		db	0
+d0__d15		db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+save_cr		db	0
+r0__r2		db	0,0,0
+;
+func_help1	db	'FUNCTION SAVE',0
+func_help2	db	'FUNCTION SWITCH',0
+include funcmen2.dat
+include funcmen3.dat
+;
+file_buf	rb	recs_to_write * 128
+		db	0
+;
+;
+;
+	end
+                                                                                                                                                                                                                                                                                                                                              

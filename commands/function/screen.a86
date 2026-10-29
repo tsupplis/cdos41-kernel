@@ -1,0 +1,385 @@
+title 'SAVE/RESTORE SCREEN ROUTINE '
+;
+;
+;	Routines to save contents of current console and restore it.
+;
+;	ENTRY POINT:
+;
+;	SAVE_SCREEN	save contents of current console, then blank console
+;
+;			no entry parameters, no exit parameters, no registers
+;			saved
+;
+;	call to HELP facility is made after screen has been saved
+;	DX will point to HELP parameters
+;	after call to HELP facility the screen will be restored
+;
+eject
+
+	public	save_screen
+;
+;for now this call is not made
+	extrn	help:near
+;
+
+	cseg
+ww_pointer	equ	16		;get pointer for vc stucture
+vs_crt_rows	equ	word ptr 40
+vs_vc_seg	equ	word ptr 22	;segment for vc buffer
+vs_top_left	equ	word ptr 2	;top left of screen
+vs_bot_right	equ	word ptr 4	;bot right of screen
+io_new_window	equ	20		;new window command
+io_switch	equ	7		;switch console command
+to_local	equ	0
+to_vc_buf	equ	not to_local	;direction flags
+blank_space	equ	0720h		;normal attribute and blank
+q_open		equ	135
+q_read		equ	137
+q_write		equ	139
+;
+s_sysdat	equ	154
+p_pdadr		equ	156
+p_uda		equ	word ptr 10h
+c_getnum	equ	153
+sys_flag	equ	1
+p_flag		equ	word ptr 6
+xios_entry	equ	dword ptr .28h
+cf_noswitch	equ	8
+ccb_state	equ	word ptr 0eh
+ccb_size	equ	2ch
+sys_ccb_offset	equ	54h
+eject
+;
+;	SAVE_SCREEN
+;
+;	the first time through do some initialization
+;
+;	then change the jump vector to point to other code
+;
+save_screen:
+	jmp	ds:current_state
+;
+initialization_routine:
+	push	dx
+	push	es
+	mov	cl,s_sysdat
+	call	system			;get SYSDAT segment
+	mov	sysdat,es
+	mov	cl,p_pdadr		;process descriptor
+	call	system
+	mov	pdaddr,bx
+	mov	ax,es:p_uda[bx]
+	mov	uda,ax			;UDA
+	mov	cl,c_getnum
+	call	system			;console
+	mov	console,al
+	xor	ah,ah
+	mov bx,ccb_size ! mul bx
+	add	ax,es:.sys_ccb_offset
+	mov	ccbaddr,ax
+;
+	mov	dl,console		;current console
+	mov	al,ww_pointer		;pointer to window structure
+	call	xios_call		;ask the XIOS
+	xchg	ax,bx			;pointer in BX
+	mov	vc_pointer,bx		;make local copy
+	mov	ax,es:vs_vc_seg[bx]	;get segment for vc buffer
+	mov	vc_seg,ax		;make local copy
+	mov	bx,es:vs_crt_rows[bx]	;number of rows to save
+	pop	es
+	mov	ax,80			;80 chars and attribs
+	mul	bx			;times the number of rows
+	mov	buf_size,ax
+	mov	al,console
+	add	al,'0'			;make ASCII prefix for queue name
+	mov	queue_suffix,al		;put it in the queue name
+	call	open_queue		;open the mx queue for the vc
+;
+;change jump vector to point to save code
+;
+	pop	dx			;recover HELP parameter
+	mov	current_state,offset save_routine
+	jmp	ds:current_state
+
+eject
+;
+;	SAVE_ROUTINE
+;
+;	save the contents of the current virtual console and blank the screen
+;
+;	ENTRY	DX = offset of HELP string (currently just use local string)
+;
+;	EXIT	NONE
+;
+save_routine:
+	push	dx			;save input string
+	mov	direction_byte,to_local	;from vc_buffer to local
+	call	get_mx_queue		;get MX queue for virtual console
+	call	update_virtual		;synch buffer and physical
+	call	move_buffer		;make copy of screen to be saved
+	call	blank_buffer		;blank the image
+	call	update_physical		;blank the screen
+	call	release_mx_queue
+	pop	dx			;string is back
+;
+;this call goes away with the real HELP
+;call	show_help_string
+;
+;this is the call to be made when HELP is available
+;
+	call	help
+;
+	call	restore_screen		;put the old stuff back
+	ret
+;
+;	RESTORE_SCREEN
+;
+;	restore contents of screen from local copy
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+restore_screen:
+	mov	direction_byte,to_vc_buf ;from local to vc buffer
+	call	get_mx_queue		;make sure nobody else is there
+	call	move_buffer		;from local to vc buffer
+	call	update_physical		;show the world
+	call	release_mx_queue	;let them go
+	ret
+
+eject
+;
+;	OPEN_QUEUE
+;
+;	open the queue for this vc
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+open_queue:
+	mov	cl,q_open		;open queue call
+common_queue:
+	call	system_pd		;need system bit to get VCMXQ
+	mov	dx,offset vc_queue	;offset of qpb
+	call	system			; that's int 224
+	call	non_system_pd		; turn it off after each use
+;
+;notice there is no error checking, this will probably bite us at some time
+;
+	ret
+;
+;	GET_MX_QUEUE
+;
+;	get the MX queue for the virtual console
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+get_mx_queue:
+	mov	cl,q_read		;reading the MX ties it up
+	jmps	common_queue
+;
+;	RELEASE_MX_QUEUE
+;
+;	let the queue go
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+release_mx_queue:
+	mov	cl,q_write		;writing to it lets it go
+	jmps	common_queue
+
+eject
+;
+;	UPDATE_PHYSICAL
+;
+;	make sure that the physical image matches the virtual
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+update_physical:
+	mov	si,vc_pointer			;pointer for current vc
+	push	es
+	mov	es,sysdat
+	mov	cx,es:vs_top_left[si]		;top_left of current vc
+	mov	bx,es:vs_bot_right[si]		;bottom right
+	pop	es
+	mov	al,io_new_window		;create same size window
+	mov	dl,console
+;
+;this has the effect of synching virtual with physical	
+;
+	call	xios_call
+	ret
+;
+;	UPDATE_VIRTUAL
+;
+;	make sure the virtual matches the physical
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+update_virtual:
+;
+;temporary fix for NO SWITCH mode marked by *****
+;
+	push	es			;***
+	mov	es,sysdat		;***
+	mov	bx,ccbaddr		;***
+	mov	ax,es:ccb_state[bx]	;***
+	push ax ! push bx		;***
+	and	es:ccb_state[bx],not  cf_noswitch	;***
+	mov	dl,console
+	mov	al,io_switch		;switch to yourself
+	call	xios_call		;  updates the virtual image
+	pop	bx
+	pop	ax			;***
+	mov	es:ccb_state[bx],ax	;***
+	pop	es			;***
+	ret
+
+eject
+;
+;	MOVE_BUFFER
+;
+;	move the vc buffer to local buffer; direction byte set up in main
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+move_buffer:
+	mov	cx,buf_size		;number of words to move
+	mov	ax,vc_seg		;buffer segment
+	mov	di,offset local_buf	;local offset
+	xor	si,si			;buffer starts a 0
+	mov bx,ds ! mov dx,es		;save them for now
+	mov	ds,ax			;source segment = buffer
+	mov	es,bx			;destination segment = local
+	cmp	es:direction_byte,to_local	;check for direction
+	jz	no_xchg
+	mov	ds,bx			;source = local
+	mov	es,ax			;destination = buffer
+	xchg	di,si			;reverse offsets
+no_xchg:
+	cld
+	rep	movsw			;move the buffer
+	mov ds,bx ! mov es,dx		;restore the segment regs
+	ret
+
+eject
+;
+;	BLANK_BUFFER
+;
+;	blank the vc buffer
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+blank_buffer:
+	mov	cx,buf_size		;number of words to blank
+	mov	ax,blank_space		;blank and attribute
+	mov	dx,es
+	mov	es,vc_seg		;point to vc_buffer
+	xor	di,di			;start at beginning
+	cld			
+	rep	stosw			;blank it all out
+	mov	es,dx
+	ret
+eject
+;
+;	SYSTEM_PD
+;
+;	turn on the system bit in process descriptor
+;
+system_pd:
+	push es ! push bx
+	mov	es,sysdat		;SYSDAT segment
+	mov	bx,pdaddr		;offset of process descriptor  SYSDAT
+	or	es:p_flag[bx],sys_flag	;turn on the system flag
+	pop bx ! pop es
+	ret
+;
+;
+;	NON_SYSTEM_PD
+;
+;	turn off the sys flag in pd
+;
+non_system_pd:
+	push es ! push bx
+	mov	es,sysdat
+	mov	bx,pdaddr
+	and	es:p_flag[bx],not sys_flag	;turn off the system flag
+	pop bx ! pop es
+	ret
+
+eject
+;
+;	SYSTEM
+;
+;	make the INT 224 call
+;
+system:
+	int	224
+	ret
+;
+;
+;	XIOS_CALL
+;
+;	make the direct XIOS call
+;
+xios_call:
+	push ds ! push es
+	mov	es,uda
+	mov	ds,sysdat
+	callf	xios_entry
+	pop es ! pop ds
+	ret
+
+eject
+;
+;	SHOW_HELP_STRING
+;
+show_help_string:
+;use help string that is passed in by program
+	mov	cl,9
+	int	224
+	mov	dx,offset help_string_1
+	mov	cl,9
+	int	224
+	mov	cx,1		;wait for a key
+	int	224
+	ret
+eject
+	dseg
+console		db	0
+uda		dw	0
+sysdat		dw	0
+pdaddr		dw	0
+;
+current_state	dw	offset initialization_routine	;jump vector for init
+vc_pointer	dw	0		;pointer to vc data structure
+vc_seg		dw	0		;pointer to vc buffer segment
+direction_byte	db	0		;direction of copy
+buf_size	dw	0		;24 or 25 lines to move
+local_buf	rw	25*80		;reserve enough for 25 lines
+vc_queue	dw	0,0,0,offset q_buf
+		db	'VCMXQ'
+queue_suffix	db	'@  '		;replace @ with console number
+q_buf		dw	0
+;
+help_string_1	db	10,13,10,13
+		db	'HELP FACILITY TAKES OVER AT THIS POINT.',10,13
+		db	'PRESS ANY KEY TO GET BACK TO PROGRAM.',10,13,'$'
+;
+ccbaddr		dw	0
+                                                                                                                                                    

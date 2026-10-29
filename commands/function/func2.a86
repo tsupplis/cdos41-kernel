@@ -1,0 +1,1557 @@
+title 'IBM PC-XT FUNCTION for SQUID'
+;
+;
+;
+;	Main portion of FUNCTION
+;
+;	This is were all the work will be done
+;
+;
+
+;	The PFK's will be programmed either from the keyboard or from
+;	 a file.
+;
+;
+	extrn	main_exit:near, err_out:near, main_exit_1:near
+	extrn	set_cursor:near, write_string:near, set_attribute:near
+	extrn	modes:near, do_n_routines:near, get_scan_code:near
+	extrn	get_choice:near
+	extrn	system:near, next_row:near
+	extrn	set_attribute:near, err_out_1:near
+	extrn	cursor_on:near, cursor_off:near
+	extrn	set_con_key:near, get_con_value:near
+	
+	public	do_func_key, program_keys, show_cur_page
+	public	file_mode, oem_setup_1, get_next_screen, fill_buf
+
+	dseg
+	extrn	console:byte, uda:word, sysdat:word, line_start:word
+	extrn   file_buf:byte
+	public	main_header, good_keys
+	cseg
+
+eject
+include common.equ
+;
+from_xios	equ	true
+fifteen		equ	15
+thirteen	equ	13
+ten		equ	10
+eight		equ	8
+neg1		equ	-1
+neg2		equ	-2
+neg3		equ	-3
+get_vc_pointer	equ	16
+key_num		equ	10*20 + 40 * 4		;10 @ 20 chars + 40 @ 4 chars
+pfk_pointer	equ	46
+xios_entry	equ	dword ptr .28h		;entry through SYSDAT
+ascii_start	equ	20h
+ascii_end	equ	7fh
+;
+;	list header
+cursor		equ	0
+entry_len	equ	2
+blank		equ	4
+entries		equ	6
+xios_len	equ	8
+header_len	equ	10
+;
+c_writeblk	equ	6fh
+c_write		equ	2
+bs		equ	8			;back space
+;
+;
+ret_disp_err	equ	0feh
+f_errmode	equ	45
+f_open		equ	15
+f_multisec	equ	44
+file_not_found	equ	00ffh
+dfcb		equ	byte ptr .5ch
+f_dmaset	equ	26
+f_read		equ	20
+logical_record	equ	128
+ctrl_z		equ	01ah			;EOF
+eject
+;
+;	SHOW_CUR_PAGE
+;
+;	display  current page
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+show_cur_page:
+	cmp display_flag,false ! je show_ret
+	mov	si,offset pages+2		;point to first page pointer
+	mov	ax,cur_page			;page to display
+	mov	bl,next_pointer
+	mul	bl				;offset to page pointer
+	add	si,ax				;point to page pointer
+	mov	si,[si]				;get the pointer
+	lodsw ! mov cx,ax			;get count of lists
+show_loop:
+	push cx ! push si
+	call	show_list			;show a list
+	pop si ! pop cx
+	inc si ! inc si				;point to next list
+	loop	show_loop
+show_ret:
+	ret
+
+eject
+;
+;	SHOW_LIST
+;
+;	ENTRY	SI = pointer to list header
+;
+;	EXIT	NONE
+;
+show_list:
+	lodsw					;get the offset of list header
+	mov	si,ax				;make it a pointer
+	mov	ax,cursor[si]			;get cursor
+	mov	line_start,ax			;this is for next_row
+	push	si
+	call	set_cursor			;position cursor to start area
+	pop	si
+	mov	ax,entry_len[si]		;get length of each entry
+	mov	show_chcb_len,ax		;put in the CHCB
+	mov	cx,entries[si]			;get number of entries
+	add	si,header_len			;point to first line
+	mov	show_chcb_offset,si		;offset of first line
+entry_loop:
+	push	cx
+	mov	cl,c_writeblk			;writeblock function
+	mov	dx,offset show_chcb		;offset of parameter block
+	call	system
+	call	next_row			;position to next row
+	mov	ax,show_chcb_len		;length of entry
+	add	show_chcb_offset,ax		;bump to point to next line
+	pop	cx
+	loop	entry_loop			;do them all
+	ret
+
+eject
+;
+;	DO_FUNC_KEY
+;
+;	allow the operator to program the key that was selected
+;
+;	ENTRY	BL = offset of key in key list
+;
+;	EXIT	NONE
+;
+do_func_key:
+	call	get_right_page		;make sure to show correct page
+	call	get_right_list		;get the correct list
+	call	get_operator_entry	;now get the entry
+	ret
+;
+get_right_list:
+	mov	si,offset pages + 2	;point to first page pointer
+	mov	dx,next_pointer		;length of each pointer
+	mov	ax,cur_page		;get page number
+	mul	dx			;offset for pointer
+	add	si,ax			;point to page pointer
+	mov	si,[si]			;get the page pointer
+	lodsw ! mov cx,ax		;get the number of lists
+df_loop:
+	lodsw ! mov di,si		;save curent list pointer in DI
+	mov	si,ax			;get list descriptor
+	cmp	bx,entries[si]		;is it in this list
+;
+;	remember bx is zero based [si] is one based
+;
+	jl	en_found		;if less then in this list
+	sub	bx,entries[si]		;subtract length of list
+	xchg	di,si			;get list pointer into SI
+	loop	df_loop
+en_found:
+	ret
+
+eject
+;
+;	GET_RIGHT_PAGE
+;
+;	is the right page displayed ?
+;
+;	ENTRY	BL = offset of key in key list
+;
+;	EXIT	BX = offset in page list
+;		CUR_PAGE = page number
+;
+get_right_page:
+	xor	bh,bh
+	mov	si,offset pages
+	lodsw ! mov cx,ax		;number of pages
+	lodsw			;SI points to number of entries on page
+do_1:
+	cmp	bx,[si]		;is it on this page
+	jl	found_page
+	sub	bx,[si]		;if not then subtract entries in this page
+	add	si,next_pointer
+	loop	do_1
+found_page:
+	push	bx		;Nth entry for page
+	mov	bx,pages
+	sub	bx,cx			;get the page to display
+	cmp	bx,cur_page		;is it the current page
+	je	show_same
+	mov	cur_page,bx		;else make it the current page
+	call	show_cur_page
+show_same:
+	pop	bx			;offset in page
+	ret
+eject
+;
+;	GET_OPERATOR_ENTRY
+;
+;	get the input from the operator and display in the appropriate format
+;
+;	ENTRY	BX = offset of entry in list
+;		SI = offset of description of entry list
+;
+;	EXIT	NONE
+;
+get_operator_entry:
+	push bx ! push si
+	mov	si,offset edit_header	;show the editing instructions
+	mov	bx,msg_mode_@		;message with row/col
+	call	modes
+;
+	pop si ! pop bx
+	call	get_input		;talk to the operator
+;
+	mov	si,offset main_header
+	mov	bx,msg_mode_@
+	call	modes
+	ret
+
+eject
+;
+;	GET_INPUT
+;
+;	set up the screen for input from operator
+;
+;	ENTRY	BX = offset of item in list
+;		SI = offset of list description
+;
+;	EXIT	NONE
+;
+get_input:
+	call	blank_display_entry
+	push	di			;save start of entry
+;
+;now display blank entry in highlight
+	mov	ax,cursor[si]		;get start cursor
+	add	al,bl			;make correct row - list offset
+	mov dx,ax ! add dh,byte ptr blank[si]
+	pop bx ! push bx		;get start of entry
+	push si ! push dx
+	mov	cx,entry_len[si]	;length of blank entry
+	mov	si,bx			;start of entry
+	call	show_high_entry		;show blank entry
+	call	cursor_on
+	pop	ax			;cursor for blank area
+	pop	si			;header
+	pop	di			;start of display entry
+;
+;now get the input from the operator
+	mov	cx,xios_len[si]		;number of chars to look for
+	add	di,blank[si]		;point to start of blank area
+	call	get_op_input		;talk to the nice person
+;
+	mov	al,high_off
+	call	set_attribute		;turn off the highlight
+	call	cursor_off
+	ret
+
+eject
+;
+;	BLANK_DISPLAY_ENTRY
+;
+;	get the entry to work on and zero it out
+;
+;	ENTRY	BX = offset of entry in list
+;		SI = offset of list header
+;
+;	EXIT	SI = offset of list header
+;		DI = offset of display area
+;
+blank_display_entry:
+;
+;first let's find the correct entry in the display area
+	mov	di,header_len		;length of descriptor
+	add	di,si			;start of display entries
+	mov	ax,entry_len[si]	;length of each entry
+	mul	bx			;multiply by offset
+	add	di,ax			;now DI = offset of display entry
+;
+;now fill it with zeros
+	push	di
+	add	di,blank[si]		;now point to start of blank area
+	mov	cx,entry_len[si]	;length of entry
+	sub	cx,blank[si]		;subtract offset of blank area
+	mov	al,zero			;make a zero
+	mov dx,ds ! mov es,dx		;point to current area
+	rep	stosb			;pre-fill with blanks
+	pop	di
+	ret
+eject
+;
+;	SHOW_HIGH_ENTRY
+;
+;	display a message with highlight turned on
+;
+;	ENTRY	AX = cursor position
+;		CX = length of entry
+;		SI = offset of entry
+;
+;	EXIT	NONE
+;	
+show_high_entry:
+	push	si ! push cx
+	call	set_cursor		;position the currsor
+	mov	al,high_on
+	call	set_attribute		;turn on the high bit
+	pop	show_chcb_len		;length of message
+	pop	show_chcb_offset	;offset of message
+	mov	cl,c_writeblk
+	mov	dx,offset show_chcb	;offset of CHCB
+	call	system
+	ret
+
+eject
+;
+;	GET_OP_INPUT
+;
+;	get the input from the operator  and
+;	 display it in the appropriate format
+;	 put it in the display buffer in the same format as above
+;
+;	ENTRY	AX = cursor position
+;		CX = number of chars to accept
+;		DI = offset of entry
+;
+get_op_input:
+	mov	start_count,cx		;save starting count
+	push cx ! push di
+	call	set_cursor		;start of blank area on screen
+	pop di ! pop cx
+goi_1:
+	push cx ! push di
+	call	get_scan_code		;get a key from the operator
+	pop di ! pop cx
+	cmp	al,zero			;is it a Ctrl-@
+	jne	goi_2
+	stosb				;put it in display buffer
+	jmps	goi_5
+goi_2:
+	cmp	al,bs			;is it a backspace
+	jne	goi_3
+	cmp	cx,start_count		;don't backspace if at the start of
+	jge	goi_1			; entry
+	call	bs_it			;backspace the sucker, and return
+;					with CX and DI as appropriate
+	jmps	goi_1			;don't dec the counter
+goi_3:
+	cmp	al,'\'			;special case the backslash
+	je	goi_slash
+	push	cx			;pointer to entry area
+	call	fix_char		;display and store
+	pop	cx
+goi_4:
+	loop	goi_1			;do all the chars
+goi_5:
+	ret
+;
+goi_slash:
+	push	cx			;save counter
+	call	fix_char		;store and display the \
+	mov	bx,di			;make a copy of location
+	push	bx			;start of this field
+	inc bx ! inc bx
+	push	bx			;start of next field
+	mov	bp,sp			;use bp as index
+goi_s1:
+	push	di
+	mov	si,offset hex_keys	;allowable keys
+	call	get_choice		;get a key
+	pop	di
+	cmp al,bs ! jne goi_s2		;skip this if not back-space
+	call	bs_it			;back space one
+	cmp	di,2[bp]
+	jge	goi_s1			;stay in this field
+	pop cx ! pop cx ! pop cx	;recover the counter
+	jmp	goi_1			;back into the loop with old count
+goi_s2:
+	call	fix_char		;store/display hex key
+	cmp	di,[bp]		;is it past the end of the field
+	jl	goi_s1			;if not keep on looking
+	pop cx ! pop cx			;clear the stack
+	pop	cx			;get back the counter
+	cmp	word ptr neg2[di],'00'	;is it a \00
+	je	goi_5			;if yes then terminate
+	jmps	goi_4			;else stay in loop
+
+eject
+;
+;	GET_NEXT_SCREEN
+;
+;	set up the menu structure for the next screen
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+get_next_screen:
+	mov	bx,cur_page		;get current page number
+	inc	bx
+	cmp	bx,pages		;compare against max page
+	jl	page_ok
+	xor	bx,bx			;else make it page 0
+page_ok:
+	mov	cur_page,bx		;put it back
+	ret
+
+eject
+;
+;	GET_PFKS
+;
+;	transfer PFK values; direction determined by direction_flag
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+oem_setup_1:
+	mov	show_chcb_seg,ds	;initialize the CHCB
+	mov	display_flag,false
+	call	get_pfks
+	mov	display_flag,true
+	ret
+;
+get_pfks:
+	push	ds
+	mov	dl,console		;get current virtual console
+	mov	al,get_vc_pointer	;get the data pointer for this console
+	mov	es,uda			;ES points to UDA for now
+	mov	ds,sysdat		;DS points to SYSDAT
+	callf	xios_entry		;call the XIOS
+	mov	bx,ax			;pointer in BX
+	mov	bx,pfk_pointer[bx]	;get pointer to PFK buffer
+	pop	ds			;DS back to program area
+	mov dx,ds ! mov es,dx
+	mov	pfk_start,bx		;stash it for later
+	mov	pfk_@,bx		;make starting adress
+get_pfks_1:
+	mov	si,offset pages
+	lodsw ! mov cx,ax		;get number of pages
+get_loop:
+	push	cx
+	mov	ax,[si]			;get page pointer
+	push	si			;save pointer into list of pages
+	mov	si,ax			;SI = pointer to page list
+	call	get_page		;do a page of PFK's
+	pop	si
+	add	si,next_pointer		;add length of each entry
+	pop	cx
+	loop	get_loop		;do all the pages
+	ret
+
+eject
+;
+;	PROGRAM_KEYS
+;
+;	program is about to be terminated move the new  PFK strings
+;	  into the XIOS
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+program_keys:
+	mov	direction_flag,not from_xios	;signal from display to XIOS
+	mov	bx,pfk_start			;start of XIOS buffer
+	mov	pfk_@,bx			;mark it
+	call	get_pfks_1			;go do the transfer
+
+	ret
+eject
+;
+;	GET_PAGE
+;
+;	get a bunch of PFK's and put them into the display areas
+;
+;	this routine makes the assumption that PFK's are laid out in the
+;	 XIOS buffer and the display area in the same order
+;
+;	ENTRY	SI = pointer to page list
+;
+;	EXIT	NONE
+;
+get_page:
+	lodsw			;get number of lists in page
+	mov	cx,ax		;for loop
+gp_1:
+	push	cx
+	lodsw ! push si		;get pointer to list
+	mov	si,ax
+	call	get_list
+	pop si ! pop cx
+	loop	gp_1
+	ret
+
+eject
+;
+;	GET_LIST
+;
+;	get a values for list of entries
+;
+;	ENTRY	SI = offset of list header
+;
+;	EXIT	NONE
+;
+get_list:
+	cmp	direction_flag,from_xios
+	jne	get_from_display
+;
+;	here going from XIOS to display area
+;
+	mov	ax,xios_len[si] 		;length of XIOS entry
+	mov	source_bump,ax
+	mov	xios_bump,ax
+	mov	ax,entry_len[si]		;length of display entry
+	mov	dest_bump,ax
+	mov	di,si
+	add	di,header_len			;point to first item
+	add	di,blank[si]			;offset of blank area
+	mov	cx,entries[si]			;number of entries
+	mov	si,pfk_@			;start of XIOS area
+	call	ge_loop
+	mov	pfk_@,si			;remember spot in XIOS
+	ret
+;
+ge_loop:
+	push cx ! push di ! push si
+	mov	cx,xios_bump
+	call	get_entry			;move and translate entry
+	pop si ! add si,source_bump		;next source
+	pop di ! add di,dest_bump		;next destination
+	pop	cx
+	loop	ge_loop
+ge_end:
+	ret
+
+eject
+;
+;	GET_FROM_DISPLAY
+;
+;	get entries from display buffer, and put into XIOS
+;
+;	ENTRY	SI = offset of list header
+;
+;	EXIT	NONE
+;
+get_from_display:
+	mov	ax,xios_len[si]		;length of XIOS entry
+	mov	dest_bump,ax		;destination is XIOS
+	mov	xios_bump,ax		
+	mov	ax,entry_len[si]	;length of display entry
+	mov	source_bump,ax		;source is display area
+	mov	ax,blank[si]		;offset to start of input
+	mov	cx,entries[si]
+	add	si,header_len		;point to start of entry
+	add	si,ax			;point to start of input
+	mov	di,pfk_@		;position in XIOS
+	call	ge_loop
+	mov	pfk_@,di		;remember spot in XIOS
+	ret
+eject
+;
+;	GET_ENTRY
+;
+;	get an entry and move it according to direction flag
+;
+;	ENTRY	CX = number of chars
+;		SI = offset source area
+;		DI = offset destination area
+;
+;	EXIT	NONE
+;
+get_entry:
+	cmp	direction_flag,from_xios ;which way do we go
+	jne	to_xios			;from here to XIOS
+get_entry_1:
+	mov	dx,es			;save ES
+	mov 	es,sysdat
+	lods	es:al			;get char from XIOS
+	mov	es,dx			;restore ES
+	or al,al ! jnz	get_going	;if 0 , then end of string
+	stosb				;put zero term in display
+	jmps	ge_done			;then quit this entry	
+get_going:
+	push cx ! push si
+	call	fix_char		;make it displayable
+	pop si ! pop cx
+	loop	get_entry_1
+ge_done:
+	ret
+
+
+;
+;	TO_XIOS
+;
+;	here are going from the display area to the XIOS buffer
+;
+;	ENTRY	CX = number of chars in XIOS entry
+;		SI = display area
+;		DI = offset in XIOS
+to_xios:
+	call	get_ascii		;get a char from display buffer
+	mov dx,es ! mov es,sysdat
+	stosb				;put it in the XIOS
+	mov	es,dx			;restore ES
+	or al,al ! jz to_x_done		;stop on zero
+	loop	to_xios
+to_x_done:
+	ret
+eject
+;
+;	FIX_CHAR
+;
+;	make the character displayable; if not an ASCII char, then
+;	 display in the form "\HH"
+;
+fix_char:
+	cmp	al,ascii_start		;
+	jbe	make_hex		;if less than 20h make ASCII hex chars
+	cmp	al,ascii_end-1		;high range
+	ja	make_hex
+	call	stos_char		;in buffer / display
+	ret
+;
+;
+make_hex:
+	mov	expando,true		;signal expansion of non ASCII
+	push	ax
+	mov	al,'\'			;delimiter for non-printable chars
+	call	stos_char
+	pop ax ! push ax		;get the character
+	shr al,1 ! shr al,1 ! shr al,1 ! shr al,1	;get high nibble
+	call	bin_ascii		;make ascii
+	call	stos_char
+	pop	ax
+	call	bin_ascii		;make the low nibble ASCII
+	call	stos_char
+	ret
+;
+;
+bin_ascii:
+	and	al,0fh			;make sure to work with low nibble
+	add	al,90h
+	daa				;decimal adjust the previous operation
+	adc	al,40h
+	daa
+	ret				;just use this don't try to understand
+
+
+;
+;
+stos_char:
+	stosb				;put it in the buffer
+	cmp	display_flag,true
+	jne	stos_done
+	push	di
+	mov	dl,al
+	mov	cl,c_write		;console write
+	call	system
+	pop	di
+stos_done:
+	ret
+
+eject
+;
+;	GET_ASCII
+;
+;	ENTRY	SI = offset of ASCII string
+;
+;	EXIT	AL = binary character
+;		SI = next entry in ASCII string
+;
+get_ascii:
+	lodsb			;get a byte
+	cmp	al,'\'		;is is start of hex number
+	jne	ga_done		;if not all done
+	lodsb			;get first byte
+	call	asc_bin		;make it binary byte
+	push	ax
+	lodsb			;get next char
+	call	asc_bin		;next binary
+	mov	bh,al		;store low digit
+	pop	ax		;get back high digit
+	shl al,1 ! shl al,1 ! shl al,1 ! shl al,1 ;make high nibble
+	and al,0f0h ! and bh,0fh ;clean high and low nibbles
+	or	al,bh		;mash em together
+ga_done:
+	ret
+
+eject
+;
+;	ASC_BIN
+;
+;	ASCII byte into binary
+;
+;	ENTRY	AL = ASCII byte
+;
+;	EXIT	AL = binary number
+;		carry set if not legal HEX digit
+;
+asc_bin:
+	mov	ah,al		;make a copy
+	cmp	al,'a'		;do we need to fold to upper case
+	jl	no_fold
+	cmp	al,'z'
+	jg	no_fold
+	and	al,0dfh		;fold to upper case
+no_fold:
+	sub	al,'0'		;start with 0
+	jb	bad_ascii	;not a valid ascii
+	cmp	al,9		;is it hex digit ?
+	jle	asc_bin_done	;if not then done
+	sub	al,7		;bring down the base
+	cmp	al,ten		;is it a legal number
+	jb	bad_ascii
+	cmp	al,fifteen
+	ja	bad_ascii
+asc_bin_done:
+	clc
+	ret
+bad_ascii:
+	stc
+	mov	al,ah
+	ret
+eject
+;
+;	BS_IT
+;
+;	send the specified number of backspace chars
+;
+;	ENTRY	CX = current input loop count
+;		DI = current offset in display area
+;
+;	EXIT	CX = adjusted loop count
+;		DI = adjusted offset
+;	
+bs_it:
+	inc cx ! push cx		;adjust loop counter
+	dec di ! mov byte ptr [di],' '
+	cmp	byte ptr neg2[di],'\'
+	je	b_hex
+	push	di
+	mov	cx,one
+	call	back_it_up
+	jmps	bs_end
+;
+b_hex:
+	dec di ! mov byte ptr [di],' '
+	dec di ! mov byte ptr [di],' '		;back two more spaces
+	push	di
+	mov	cx,three		;3 bs
+	call	back_it_up
+bs_end:
+	pop di ! pop cx
+	ret
+;
+back_it_up:
+	push	cx
+	mov	cl,c_write
+	mov	dl,bs
+	call	system
+	mov	cl,c_write
+	mov	dl,' '
+	call	system
+	mov	cl,c_write
+	mov	dl,bs
+	call	system
+	pop	cx
+	loop	back_it_up
+	ret
+
+eject
+;
+;	FILE_MODE
+;
+;	this is the non-interactive method
+;	  this routine is JMP'd not CALL'd
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+file_mode:
+	call	oem_setup_1		;fill the display buffer from XIOS
+	call	file_open		;open the file in the default FCB
+	jz	file_ok			;if zero then good open
+	jmp	err_out_1		;if bad open take the error path
+file_ok:
+	mov	display_flag,false	;don't display file input
+	call	read_records
+	cmp al,one ! jle fm_loop	;in case of one record files
+	jmps	fm_err
+fm_read:
+	call	read_records		;go read some records
+	or al,al ! jz fm_loop		;means good read
+	cmp al,one ! jz fm_done		;no more stuff
+	jmps	fm_err			;else assume an error
+fm_loop:
+	call	find_key_id		;scan for a valid key-id
+	jz	fm_read			;no more id's found, try new buffer
+					;return with SI = offset of string
+	cmp	bl,0ffh			;Screen Switch?
+	je	fm_screen		;special handling
+	call	program_string		;do the string
+	jmps	fm_loop
+fm_done:
+	call	program_keys		;move the new keys to XIOS
+	jmp	main_exit_1		;leave the screen alone
+fm_err:
+	mov	si,offset bad_read_msg
+	jmp	err_out_1
+fm_screen:
+	call	do_screen_switch
+	jmps	fm_loop
+eject
+;
+;
+;	DO_SCREEN_SWITCH
+;
+;	Read Screen Switch from file and change console switching key
+;
+;	ENTRY,EXIT: NONE
+;
+;
+do_screen_switch:
+	call	get_char
+	jz	switch_done		;if EOF forget it
+	call	asc_bin			;convert to binary
+	jc	switch_done		;if not a number forget it
+	cmp	al,07h			;check if legal code
+	jg	switch_done		;if not forget it
+	mov	bl,al
+	call	set_con_key		;set switching key properly
+switch_done:
+	call	get_char
+	jz	sw_ret			;if end of file ret
+	cmp	al,cr			;need to get rid of extraneous characters on line
+	jne	switch_done
+sw_ret:
+	ret
+;
+eject
+;
+;	FIND_KEY_ID
+;
+;	find the next valid key-id
+;
+;	ENTRY	NONE
+;
+;	EXIT	BX = offset of key-id in good_keys
+;
+find_key_id:
+	call	get_char		;get the next character
+	jz	no_id			;EOF
+;
+	cmp al,80h ! jnb no_id		;check only valid ASCII
+	cmp	al,021h			;screen switch identifier
+	je	scr_switch		;special handling
+	cmp al,'*' ! jne fk_1		;start of comment ?
+comments:
+	call get_char ! jz no_id
+	cmp al,'*' ! jne comments	;end of comment ?
+	jmp	find_key_id
+fk_1:
+	xor	cx,cx
+	mov	cl,good_keys		;number of keys
+	dec cx ! dec cx			;don't look at cr and esc
+	mov	dx,cx			;make a copy
+	mov bx,es ! mov di,ds ! mov es,di	;make sure
+	mov	di,offset good_keys_@
+	or	al,80h			;turn on the high bit (see data area)
+	repne	scasb			;scan the string
+	mov	es,bx
+	jne	find_key_id
+	dec	dx			;adjust for the SUB
+	sub	dx,cx			;make the offset from start of list
+	xor	bx,bx
+	mov	bl,dl			;put in BL for exit
+	inc	dl			;make sure zero flag not set
+f_ret:
+	ret
+;
+no_id:
+	xor	ax,ax			;set the zero flag for no id
+	jmps	f_ret
+scr_switch:
+	mov	bl,0ffh			;signal calling routine
+	inc	dl			;don't want zero flag set
+	jmp	f_ret
+eject
+;
+;	PROGRAM_STRING
+;
+;	program the string just found in the dma buffer
+;
+;	ENTRY	BL = offset of key id
+;
+;	EXIT	NONE
+;
+program_string:
+	call	get_right_page		;get the right page
+	call	get_right_list		;get the right list
+;
+;	BX = offset of entry in list
+;	SI = offset of list header
+;
+	call	blank_display_entry	;make'm all blanks
+;
+;	SI = offset of header
+;	DI = start of display entry
+;
+	mov	cx,xios_len[si]		;length of XIOS entry
+	add	di,blank[si]		;point to start of blank area
+ps_loop:
+	push cx ! push di
+	call	get_char		;get the next character
+	jz	ps_eof			;got an end of file
+	cmp	al,'\'			;start of ASCII hex number
+	jne	ps_it			;if not skip this stuff
+	call	get_char		;get the next char
+	jz	ps_eof			;end of file
+	call	asc_bin			;make a number
+	jc	ps_it			;if bad ASCII then forget it
+	push	ax			;save the first part of the number
+	call	get_char		;get the next char
+	jz	ps_eof_1		;still an EOF
+	call	asc_bin			;make second part of number
+	pop	bx
+	jc	ps_it			;forget this entry
+	shl bx,1 ! shl bx,1 ! shl bx,1 ! shl bx,1
+	add	al,bl			;make the binary number
+ps_it:
+	pop di ! pop cx
+	stosb				;put it in the buffer
+	cmp	al,zero			;end of entry ?
+	je	ps_done
+	loop	ps_loop			;else keep going
+ps_done:
+	ret
+ps_eof_1:
+	pop	ax
+ps_eof:
+	pop di ! pop cx
+	jmps	ps_done
+
+eject
+;
+;	FILE_OPEN
+;
+;	open the file specified in the default FCB
+;
+;	ENTRY	NONE
+;
+;	EXIT	zero flag set if good open
+;
+file_open:
+	mov	dl,ret_disp_err		;return and display error
+	mov	cl,f_errmode		;set extended error mode
+	call	system
+;
+	or	dfcb+5,80h		;unlocked attribute
+	or	dfcb+6,80h		;read only mode
+	cmp	dfcb+9,020h		;blank extent?
+	je	do_def_type		;then default type (pfk)
+	cmp	dfcb+9,0		;blank extent?
+	je	do_def_type		;then default type (pfk)
+open_file:
+	mov	dx,offset dfcb		;default FCB
+	mov	cl,f_open		;file open call
+	call	system
+	or	al,al			;checking for good return
+	jnz	bad_open	
+	ret
+bad_open:
+	mov	si,offset no_file_err
+	cmp	ax,file_not_found	;looking for AH=0 and AL=FF
+	je	bo			;if not not found then physical error
+	mov	si,offset phys_err	;error message
+bo:
+	add	al,ten			;unset the zero flag
+	ret
+do_def_type:
+	mov	dfcb+9,'P'
+	mov	dfcb+10,'F'
+	mov	dfcb+11,'K'
+	jmp	open_file
+
+eject
+;
+;	READ_RECORDS
+;
+;	read 8 logical records ( 1K ) into buffer
+;	 data placed in dma_buf, with char count in buf_chars
+;
+;	ENTRY	NONE
+;
+;	EXIT	AL = 0 good read
+;		AL = 1 EOF
+;		AL = 2 bad read
+;
+read_records:
+	cmp eof_found,true ! je no_records ;already got an eof
+	mov	dl,eight		;read eight records
+	mov	cl,f_multisec		;set multi-sector count
+	call	system			;make sure all the time
+;
+	mov	dx,offset dma_buf	;DMA buffer
+	mov	cl,f_dmaset		;set the DMA address
+	call	system
+;
+	mov	dx,offset dfcb		;default FCB
+	mov	cl,f_read
+	call	system			;do the read
+;
+	or al,al ! jz read_eight	;got all eight records
+	cmp al,one ! jz eof		;got an end of file
+	jmps	bad_read		;anything else is an error
+read_eight:
+	mov	cx,eight
+	jmps	rr_1
+eof:
+	mov	eof_found,true		;remember this
+	or ah,ah ! jz no_records	;if AH=0 then 0 records were read
+	xor cx,cx ! mov cl,ah		;CX = number of records that were read
+rr_1:
+	mov ax,logical_record ! mul cx	;how many characters were read
+	mov	buf_chars,ax		;remember how many chars are in buffer
+	mov	buf_index,zero		;restart the pointer
+	xor	al,al			;signal good_read
+rr_ret:
+	ret
+;
+no_records:
+	mov	al,one			;signal EOF
+	jmps	rr_ret			;and go back
+;
+bad_read:
+	mov	al,two
+	jmps	rr_ret			;signal read error
+
+eject
+;
+;	GET_CHAR
+;
+;	get a character from the dma buffer
+;
+;	ENTRY	NONE
+;
+;	EXIT	AL = char
+;		zero flag is EOF
+;
+get_char:
+	mov	si,buf_index		;current position in buffer
+	cmp	si,buf_chars		;is it the last character
+	jb 	go_get_it		;if less than get it
+	call	read_records		;read some more stuff
+	or al,al ! jz get_char		;if good read then get a character
+	cmp al,one ! jz get_ret		;if EOF then return
+	jmp	fm_err			;otherwise assume an error
+go_get_it:
+	add	si,offset dma_buf	;make the address
+	lodsb				;get the char
+	sub	si,offset dma_buf	;make the index
+	mov	buf_index,si		;restore index
+	cmp	al,ctrl_z		;is it an ASCII EOF
+get_ret:
+	ret				;flag set by the cmp
+
+eject
+
+;
+;	FILL_BUF
+;
+;	fills file_buf for dumping to file
+;
+;	ENTRY,EXIT : none
+;
+fill_buf:
+	call	oem_setup_1	;make sure we have values
+	mov	bx,offset file_buf	;bf will keep track of location
+	xor	cx,cx		;cx will keep track of number read
+	mov	di,offset f1_list	;di indexes display buffer
+	call    dump_page	;dump first page to file_buf
+	mov	di,offset nf1_list
+	call	dump_page
+	mov	di,offset af1_list
+	call	dump_page
+	mov	di,offset sf1_list
+	call	dump_page
+	mov	di,offset cf1_list
+	call	dump_page
+	call	dump_screen		;do screen switch key
+	mov	byte ptr[di],0dh	;carriage return
+	inc	di
+	mov	byte ptr[di],0ah
+	inc	di
+	mov	byte ptr[di],01ah	;end of file indicator
+	ret
+;
+eject
+;
+;	DUMP_PAGE
+;
+;	Dump page to file_buf leaving room for comment headers
+;
+;	ENTRY:	DI: Points to parameter list for page
+;		CX: Contains pointer to current entry in good_keys_@
+;		BX: Contains pointer to current spot in write buffer
+;
+;	EXIT:	None
+;
+dump_page:
+	add	di,2
+	mov	dx,[di]
+	mov	total_size,dx		;length of entry block
+	add	di,2
+	mov	dx,[di]
+	mov	e_offset,dx  		;offset to code area of entry
+	add	di,2
+	mov	dx,[di]
+	mov	num_entries,dx   	;number of entries
+	add	di,2
+	mov	dx,[di]
+	mov	e_length,dx          	;length of entries
+	mov	si,di 
+	add	si,2		;si points to beginning of list
+	mov	di,bx
+	xor	dx,dx	;need dx clean to keep track of records read
+do_entry:
+	call	do_comment
+	push	si		;save pointer to start
+	mov	bx,cx	;use bx for indexing
+	push	cx     
+	mov	cl,good_keys_@[bx]
+	and	cl,7fh	;clear high bit to make ascii
+	mov	byte ptr[di],cl		;
+	inc	di
+	add	si,e_offset	;si now points to start of coding
+	mov	cx,e_length 	;number of chars in string to move
+key_tran:
+	lodsb			;get byte of string
+	cmp	al,020h		;trailing blank?
+	je	key_end
+	stosb
+	cmp	al,05ch
+	je	do_bslash	;increment cx -- escape sequence
+	loop	key_tran
+key_end:
+	mov	byte ptr[di],'\'
+	inc	di
+	mov	byte ptr[di],'0'
+	inc	di
+	mov	byte ptr[di],'0'
+	inc	di
+	pop	cx
+	pop	si		;get pointer to start of message
+	inc	cx
+	inc	dx
+	cmp	dx,num_entries	;all done?
+	je	dump_return
+	add	si,total_size	;si points to start of next entry
+	jmp	do_entry
+;
+dump_return:
+	mov	bx,di
+	ret
+do_bslash:
+	inc	cx
+	jmp	key_tran
+eject
+;
+;
+;	DO_COMMENT
+;
+;	ENTRY:
+;	
+;	     DI = offset of write buffer
+;	     CX = Number of records read
+;
+;	EXIT:
+;	     DI = New Offset to write buffer
+;	     CX = Same as entry
+;
+do_comment:
+	push	si
+	mov	si,offset comment_list
+	push	dx	;dx will get wiped out by multiply
+	mov	ax,fifteen 
+	mul	cx
+	pop	dx
+	push	cx
+	mov	cx,fifteen 
+	add 	si,ax
+	rep	movsb
+	pop	cx
+	pop	si
+	ret
+;
+eject
+;
+;
+;	DUMP_SCREEN
+;
+;	Dump screen switch comment and entry to file buffer
+;
+;	ENTRY : DI = current point in file_buf
+;
+;	EXIT : DI = New point in file_buf
+;
+dump_screen:
+	mov	si,offset screen_com
+	mov	cx,fifteen
+	rep	movsb			;move string to file buf
+	mov	byte ptr[di],'!'	;indicator for screen switch
+	inc	di
+	push	di
+	call	get_con_value		; get current screen switch value
+	pop	di
+	add	bl,030h			;convert to ascii
+	mov	byte ptr[di],bl		;write to file buf
+	inc	di			;reset di
+	ret
+;
+eject;
+	dseg	
+include date.dat
+e_length		dw	0
+e_offset		dw	0	;stores offset of entry in data structure
+total_size		dw	0
+num_entries		dw	0
+show_chcb		equ	$	;used to print the various lists
+show_chcb_offset	dw	0
+show_chcb_seg		dw	0
+show_chcb_len		dw	0
+;
+bs_len		db	0		;number of backspaces for BS key
+;
+cur_page	dw	0		;current display page
+;
+display_flag	db	true		;echo flag for get_key
+;
+vc_pointer	dw	0	;storage for pointer to vc data structure
+;
+;
+expando		db	false
+direction_flag	db	from_xios	;direction of transfer
+pfk_@		dw	0
+pfk_start	dw	0
+xios_bump	dw	0
+entry_bump	dw	0
+dest_bump	dw	0
+source_bump	dw	0
+start_count	dw	0
+;
+;	the keys in the list are the codes sent back by the PFK's
+;	 with the high bit turned on
+;
+good_keys db	offset gk_end - offset $ -1
+good_keys_@ db	0bbh,0bch,0bdh,0beh,0bfh,0c0h,0c1h,0c2h,0c3h,0c4h ;F1-F10
+	db	0c7h,0c8h,0c9h,0cbh,0cdh,0cfh,0d0h,0d1h,0d2h,0d3h ;Keypad
+	db	0e1h,0e2h,0e3h,0e4h,0e5h,0e6h,0e7h,0e8h,0e9h,0eah ;Alt F1-F10
+	db	0ebh,0ech,0edh,0eeh,0efh,0f0h,0f1h,0f2h,0f3h,0f4h ;Shft F1-F10
+	db	0f5h,0f6h,0f7h,0f8h,0f9h,0fah,0fbh,0fch,0fdh,0feh ;Ctrl F1-F10
+	db	esc,cr
+gk_end		equ	$
+;
+hex_keys	db	hk_len
+		db	'0123456789aAbBcCdDeEfF',bs	;allow back-space
+hk_len		equ	offset $ -offset hex_keys - 1
+;	these are the data structures for the pages of the menus
+;
+pages		dw	pages_len
+pages_@		dw	offset page0,10			;page address
+next_pointer	equ	offset $ - offset pages_@
+		dw	offset page1,20
+		dw	offset page2,20
+pages_len	equ	(offset $ -offset pages_@)/next_pointer
+;
+page0		dw	page0_len
+		dw	offset f1_list
+page0_len	equ	(offset $ - offset page0 - 2)/2
+;
+page1		dw	page1_len
+		dw	offset nf1_list
+		dw	offset af1_list
+page1_len	equ	(offset $ - offset page1 - 2)/2
+;
+page2		dw	page2_len
+		dw	offset sf1_list
+		dw	offset cf1_list
+page2_len	equ	(offset $ - offset page2 - 2)/2
+page3		equ	$
+;
+fcol		equ	10
+frow		equ	10
+fblank		equ	6
+f1_list		db	fcol		;starting row
+    		db	frow		;starting column
+		dw	f_len		;length of each entry
+		dw	fblank		;offset to blank area
+		dw	f_entries	;number of entries
+		dw	20		;length of XIOS entry
+f_@	db	'F1:                                                               '
+f_len	equ	offset $ - offset f_@
+	db	'F2:                                                               '
+	db	'F3:                                                               '
+	db	'F4:                                                               '
+	db	'F5:                                                               '
+	db	'F6:                                                               '
+	db	'F7:                                                               '
+	db	'F8:                                                               '
+	db	'F9:                                                               '
+	db	'F10:                                                              '
+f_entries	equ	(offset $ - offset f_@)/ f_len
+;
+;
+nfcol		equ	10
+nfrow		equ	10
+nfblank		equ	8
+nf1_list	db	nfrow		;start row
+		db	nfcol		;start col
+		dw	nf_len		;length of entry
+		dw	nfblank
+		dw	nf_entries
+		dw	4		;length of XIOS entry
+;
+nf_@		db	' Home:                             '
+nf_len		equ	offset $ - offset nf_@
+		db	'    ',24,':                             '
+		db	'Pg Up:                             '
+		db	'   ',17,'-:                             '
+		db	'   -',16,':                             '
+		db	'  End:                             '
+		db	'    ',25,':                             '
+		db	'Pg Dn:                             '
+		db	'  Ins:                             '
+		db	'  Del:                             '
+nf_entries	equ	(offset $ -offset nf_@)/ nf_len
+;
+;
+afcol		equ	45
+afrow		equ	10
+afblank		equ	9
+af1_list	db	afrow
+		db	afcol
+		dw	af_len
+		dw	afblank
+		dw	af_entries
+		dw	4			;length of XIOS entry
+;
+af_@		db	'Alt F1:                          '
+af_len		equ	offset $ - offset af_@
+		db	'Alt F2:                          '
+		db	'Alt F3:                          '
+		db	'Alt F4:                          '
+		db	'Alt F5:                          '
+		db	'Alt F6:                          '
+		db	'Alt F7:                          '
+		db	'Alt F8:                          '
+		db	'Alt F9:                          '
+		db	'Alt F10:                         '
+af_entries	equ	(offset $ - offset af_@)/af_len
+;
+;
+sfcol		equ	10
+sfrow		equ	10
+sfblank		equ	11
+sf1_list	db	sfrow
+		db	sfcol
+		dw	sf_len
+		dw	sfblank
+		dw	sf_entries
+		dw	4			;length of XIOS entry
+;
+sf_@		db	'Shift F1:                          '
+sf_len		equ	offset $ - offset sf_@
+		db	'Shift F2:                          '
+		db	'Shift F3:                          '
+		db	'Shift F4:                          '
+		db	'Shift F5:                          '
+		db	'Shift F6:                          '
+		db	'Shift F7:                          '
+		db	'Shift F8:                          '
+		db	'Shift F9:                          '
+		db	'Shift F10:                         '
+sf_entries	equ	(offset $ - offset sf_@)/ sf_len
+;
+;
+cfcol		equ	45
+cfrow		equ	10
+cfblank		equ	10
+;
+cf1_list	db	cfrow,cfcol
+		dw	cf_len
+		dw	cfblank
+		dw	cf_entries
+		dw	4			;length of XIOS entry
+;
+cf_@		db	'Ctrl F1:                        '
+cf_len		equ	offset $ - offset cf_@
+		db	'Ctrl F2:                        '
+		db	'Ctrl F3:                        '
+		db	'Ctrl F4:                        '
+		db	'Ctrl F5:                        '
+		db	'Ctrl F6:                        '
+		db	'Ctrl F7:                        '
+		db	'Ctrl F8:                        '
+		db	'Ctrl F9:                        '
+		db	'Ctrl F10:                       '
+cf_entries	equ	(offset $ - offset cf_@)/cf_len
+;
+;
+main_header	dw	0
+		dw	main_lines
+;
+main_lines	dw	num_of_lines
+		dw	line0
+		dw	line1
+		dw	line2
+num_of_lines	equ	(offset $ -offset main_lines -2 )/2
+;
+line0		db	4,20
+		db	normal,normal
+		dw	offset line0_@
+;
+line0_@		dw	length line0_@@
+line0_@@	db	'Press the Function Key you wish to program   '
+;
+line1		db	5,20
+		db	normal,normal
+		dw	offset line1_@
+;
+line1_@		dw	length line1_@@
+line1_@@	db	'or Carriage Return to display the other sets of keys     '
+;
+line2		db	6,20
+		db	normal,normal
+		dw	offset line2_@
+;
+line2_@	dw	length line2_@@
+line2_@@	db	'                                                  '
+;
+edit_header	dw	0
+		dw	edit_lines
+;
+edit_lines	dw	num_of_elines
+		dw	eline0
+		dw	eline1
+		dw	eline2
+num_of_elines	equ	(offset $ -offset edit_lines -2 )/2
+;
+eline0		db	4,20
+		db	normal,normal
+		dw	offset eline0_@
+;
+eline0_@	dw	length eline0_@@
+eline0_@@	db	'You are now Programming the selected Key.    '
+;
+eline1		db	5,20
+		db	normal,normal
+		dw	offset eline1_@
+;
+eline1_@	dw	length eline1_@@
+eline1_@@	db	'To terminate the sequence enter Ctrl @ or \00         '
+;
+eline2		db	6,20
+		db	normal,normal
+		dw	offset eline2_@
+;
+eline2_@	dw	length eline2_@@
+eline2_@@	db	'Type ',17,'-- to erase a character                '
+;
+no_file_err	dw	nfe_len
+nfe_@		db	cr,lf,lf
+		db	'The file specified in the command line was not found.'
+		db	cr,lf,lf
+nfe_len		equ	offset $ - offset nfe_@
+;
+phys_err	dw	phys_err_len
+pe_@		db	cr,lf,lf
+		db	'The file specified in the command line cannot be opened.'
+		db	cr,lf
+phys_err_len	equ	offset $ - offset pe_@
+;
+bad_read_msg	dw	brm_len
+brm_@		db	cr,lf,lf
+		db	'Error while reading input file',cr,lf,lf
+brm_len		equ	offset $ - offset brm_@
+;
+comment_list    db	cr,lf,'*F1         *'
+		db	cr,lf,'*F2         *'
+		db	cr,lf,'*F3         *'
+		db	cr,lf,'*F4         *'
+		db	cr,lf,'*F5         *'
+		db	cr,lf,'*F6         *'
+		db	cr,lf,'*F7         *'
+		db	cr,lf,'*F8         *'
+		db	cr,lf,'*F9         *'
+		db	cr,lf,'*F10        *'
+		db	cr,lf,'*HOME       *'
+		db	cr,lf,'*UP         *'
+		db	cr,lf,'*PG UP      *'
+		db	cr,lf,'*LEFT       *'
+		db	cr,lf,'*RIGHT      *'
+		db	cr,lf,'*END        *'
+		db	cr,lf,'*DOWN       *'
+		db	cr,lf,'*PG DN      *'
+		db	cr,lf,'*INS        *'
+		db	cr,lf,'*DEL        *'
+		db	cr,lf,'*ALT F1     *'
+		db	cr,lf,'*ALT F2     *'
+		db	cr,lf,'*ALT F3     *'
+		db	cr,lf,'*ALT F4     *'
+		db	cr,lf,'*ALT F5     *'
+		db	cr,lf,'*ALT F6     *'
+		db	cr,lf,'*ALT F7     *'
+		db	cr,lf,'*ALT F8     *'
+		db	cr,lf,'*ALT F9     *'
+		db	cr,lf,'*ALT F10    *'
+		db	cr,lf,'*Shift F1   *'
+		db	cr,lf,'*Shift F2   *'
+		db	cr,lf,'*Shift F3   *'
+		db	cr,lf,'*Shift F4   *'
+		db	cr,lf,'*Shift F5   *'
+		db	cr,lf,'*Shift F6   *'
+		db	cr,lf,'*Shift F7   *'
+		db	cr,lf,'*Shift F8   *'
+		db	cr,lf,'*Shift F9   *'
+		db	cr,lf,'*Shift F10  *'
+		db	cr,lf,'*Ctrl F1    *'
+		db	cr,lf,'*Ctrl F2    *'
+		db	cr,lf,'*Ctrl F3    *'
+		db	cr,lf,'*Ctrl F4    *'
+		db	cr,lf,'*Ctrl F5    *'
+		db	cr,lf,'*Ctrl F6    *'
+		db	cr,lf,'*Ctrl F7    *'
+		db	cr,lf,'*Ctrl F8    *'
+		db	cr,lf,'*Ctrl F9    *'
+		db	cr,lf,'*Ctrl F10   *'
+screen_com	db	cr,lf,'*Scr swtch  *'
+buf_chars	dw	0	;number of chars to search in buffer
+buf_index	dw	0
+eof_found	db	false
+dma_buf		rb	1024	;start of buffer
+		db	0
+
+                                                                                                                                                                                                                                                                       

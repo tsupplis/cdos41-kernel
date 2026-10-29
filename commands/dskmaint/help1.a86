@@ -1,0 +1,163 @@
+;
+;	Concurrent CP/M-86 v2.0 with BDOS version 3.1
+;	Interface for HELP.PLM with separate code and data
+;	Created:
+;		October 5, 1981 by Danny Horovitz
+;	Revised:
+;		28 Mar 83 by Bill Fitler
+;		30 Apr 84 by Bruce Skidmore
+;		25 May 84 by Gordon Edmonds
+
+name	scd
+
+dgroup	group	dats
+cgroup	group	code
+sgroup	group	stack
+
+assume	cs:cgroup, ds:dgroup, ss:sgroup
+
+stack	segment	word	stack	'STACK'
+stack	ends
+dats     segment para public 'DATA'	;CP/M page 0 - LOC86'd at 0H
+
+	db	128 dup (?)
+sstack	db	0
+cmdrv	db	0
+fcb	db	36 dup (?)
+buff	db	128 dup (?)
+sysdat2 dw	0
+column  db	33
+tbuff	equ	buff
+
+
+saveax	dw 0			;save registers for mon functions
+savebx	dw 0
+savecx	dw 0
+savedx	dw 0
+oldsp	dw 0
+oldss	dw 0
+
+public	cmdrv
+public  column,sysdat2         	; for function 10 handler
+public	fcb
+public	buff,tbuff
+public	saveax,savebx,savecx,savedx
+
+dats ends
+
+
+code	segment	public	'CODE'
+public	xdos,mon1,mon2,mon3,mon4
+public	help,terminate,switch
+extrn	plmstart:near
+extrn   read:near
+
+help:	jmp	pastserial	; skip copyright
+	db	'COPYRIGHT(C)1983,84,DIGITAL RESEARCH'
+        db	'(05/02/84)XXXX-0000-654321'
+
+pastserial:
+	pushf
+	push	ds
+	push	es
+	push	ax
+	push	bx
+	push	cx
+	push	dx
+
+	push	es
+	push	dx
+	mov	cl,154		;get sysdatseg
+	int	224
+	mov	sysdat2,es
+	mov	bx,4bh
+	mov	al,es:[bx]	;system drive in sysdat
+	inc	al
+	mov	cmdrv,al
+	pop	dx
+	pop	es
+
+	cld
+	mov	si,dx
+	mov	ax,dats
+	mov	es,ax
+	mov	di,offset buff+1      ;move command string to tbuff
+	mov	cx,127
+	rep	movsb
+	mov	ax,dats
+	mov	ds,ax
+
+
+	mov	bx,offset tbuff
+more:	inc	bx
+	cmp	byte ptr [bx],0
+	jnz	more
+	sub	bx,offset tbuff+1
+	mov	tbuff,bl
+
+	mov 	oldss,ss
+	mov	oldsp,sp
+
+	call	switch
+
+	call	plmstart
+
+terminate:	
+done:	pushf
+	pop	bx
+	cli
+	mov	ss,oldss
+	mov	sp,oldsp
+	push	bx
+	popf
+	
+	pop	dx
+	pop	cx
+	pop	bx
+	pop	ax
+	pop	es
+	pop	ds
+	popf
+	ret
+	
+	
+xdos:	push	bp
+	mov	bp,sp
+	add	bp,4
+	mov	dx,[bp]
+	add	bp,2
+	mov	cx,[bp]
+	cmp	cl,10
+	jnz	goforit
+	call	read
+	jmp	readed
+goforit:int	224
+readed:	mov	saveax,ax
+	mov	savebx,bx
+	mov	savecx,cx
+	mov	savedx,dx
+	pop	bp
+	ret	4
+
+mon1	equ	xdos		; no returned value
+mon2	equ	xdos		; returns byte in AL
+mon3	equ	xdos		; returns address or word BX
+mon4    equ     xdos		; returns pointer in BX and ES
+
+
+				;switch to local stack
+switch:	pop	dx		;address of plm caller
+	pushf
+	pop	bx
+	cli
+	mov	cx,ds
+	mov	ss,cx
+	mov	sp,offset sstack
+	push	bx
+	popf	
+	push	dx
+	ret
+
+code	ends
+end
+

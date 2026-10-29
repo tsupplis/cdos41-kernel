@@ -1,0 +1,253 @@
+pagesize 70 ! pagewidth 128 ! title 'PCMODE disk secondary BOOT'
+;******************************************************************************
+;
+;	PCDOS compatible secondary bootstrap for CCP/M 3.1
+;
+;	Written by:	M.P. Vano, VAI	8-May-1984
+;
+;	LATEST REVSISION		2-Sep-1984 by M.P. Vano
+;
+;	COPYRIGHT (c)1984 Digital Research Inc.
+;
+;
+;	This secondary bootstrap is written to the first sector of the DOS
+;	partition by HDMAINT when it formats a DOS volume.
+;
+;	If this code is not functionally compatible in its behaviour and
+;	register values at exit with use by PC-DOS, the disk will be unusable
+;	if anyone ever uses the SYS command to write a DOS system to the
+;	partition.  The only recovery possible from such a situation is to
+;	re-FORMAT the partition (losing all files).
+;
+;	This version is completely compatible with PC-DOS use and so resolves
+;	the problem to the best of our knowledge.
+;
+;	This code sets up the registers to pass the values needed by the PCDOS 
+;	BIOS.  Please continue to ensure that it does!
+;	At jump to BIOS:
+;		-memory 50h:0 contains the first sector of the directory
+;		-AX= LOGICAL DISK NUMBER of boot disk (A:=0, etc)
+;		-BX= first PHYSICAL SECTOR # of DOS clusters of file data
+;		-DX= Physical ID of boot volume (not used by IBM)
+;		-CS:-> BIOS segment
+;		-SS:SP--> 0:7C00 (IBM BIOS DOESN'T CARE)
+;		-Direction flag cleared
+;
+;	Creat object subfile (for later manual merging with HDMAINT.CMD) by
+;	the following process:
+;
+;		ASM86 pcboot2 $fi
+;		GENCMD pcboot2 nhead code[b7c0]
+;		REN pcboot2.bin=pcboot2.cmd
+;
+;	this yields a headerless binary image ready for manual merge with SID.
+;
+;	NOTE: The present version won't work with a floppy because it does
+;	not deal with track boundary limitations of the 8272 in the subroutine
+;	read_block.  An inner loop added to this will solve the problem if
+;	a floppy boot is needed.(assuming the boot record fields all agree with
+;	the floppy paramters.)
+;
+;
+;  REVISIONS:
+;	2-Sep-84  By M.P. Vano: Vendor field of boot sector changed from DRI
+;			to "IBM" to make compatible with DOS 3.0 use.
+;******************************************************************************
+
+BOOT	equ	19h			;ROM BIOS INTERRUPTS
+DISK	equ	13h
+CRT	equ	10h
+KEYBOARD equ	16h
+EQUIPMENT equ	11h
+
+RUN_OFFSET equ	7c00h			;offset where this gets loaded
+BIOS_SEG equ	70h			;load segment of MSDOS BIOS
+
+CR	equ	0dh			;Ascii codes
+LF	equ	0ah
+BEL	equ	7
+
+eject
+	cseg
+	org	RUN_OFFSET
+
+bootstrap:				;entry here from whoever loads us
+	jmp begin
+
+;	This data structure is filled in by HDMAINT or the PCDOS FORMAT command
+;	with the actual data for the hard disk partition it is written to.
+;
+;	sample values are for an XT with 10 cylinder dos starting at cyl 10
+		db	'IBM  2.0'	;MSDOS "Vendor ID"
+bytes_per_sec	dw	512		;bytes/sector
+sec_per_cluster	db	2		;sect/cluster
+reserved_sec	dw	1		;reserved sectors
+n_fats		db	2		;# fats
+dir_size	dw	112		;# directory entries
+total_sect	dw	680		;total image size in sectors
+fat_id		db	0f8h		;media descriptor byte
+sec_in_fat	dw	1		;# of sectors in FAT
+sec_per_track	dw	17		;# of sectors per track
+n_heads		dw	4		;# of heads
+hidden_sec	dw	680		;# of hidden sectors
+;
+boot_unit	db	80h		;rom bios # of boot disk and start head
+not_used	db	0
+bios_length	db	10
+
+;	PCDOS BIOS INITIALIZATION requires THESE diskette parameters
+fd_newparms 	db	0dfh,2		;specify 1 & 2 bytes for 8272
+		db	37		;motor shutdown delay (1/8 secs)
+		db	2		;sector size (512)
+		db	9		;sectors/track
+		db	42		;gap length
+		db	255		;DTL
+		db	80		;format gap length
+		db	0f6h		;formatter fill byte
+		db	15		;head settle time in ms
+		db	2		;motor start time in 1/8 sec
+
+eject
+begin:	cli ! cld ! les di,FD_PARMS			;INITIALIZATION
+	mov ax,offset fd_newparms ! stosw		;set new floppy parms
+	mov ax,cs ! stosw
+;
+	mov ss,ax ! mov sp,RUN_OFFSET ! sti		; set local stack
+;
+	mov ah,15 ! int CRT ! mov ah,0 ! int CRT	;clear screen
+;
+	xor ax,ax ! int DISK ! jnc boot1		; send 8272 new parms
+	  jmp hard_error				; reset error is fatal
+;
+boot1:	mov al,n_fats ! cbw ! mul sec_in_fat		;find # sectors in fats
+	add ax,hidden_sec ! add ax,reserved_sec		;+hidden +reserved
+	xchg bp,ax					;BP=dir start, save it
+	mov ax,32 ! mul dir_size			;find dirsize in bytes
+	add ax,511 ! div bytes_per_sec			;convert to sectors
+	add ax,bp ! xchg bp,ax				;BP=file area start
+;
+;  BP=First sector # of file area, AX=First sector # of directory
+;  BP MUST BE PRESERVED FROM HERE UNTIL TRANSFER TO BIOS
+	xchg dx,ax ! mov al,1 ! les bx,DIR_PTR		;read 1st dir sector
+	call read_block ! jc hard_error			;fatal if can't read
+	 mov si,offset fnames1				;look for DOS files
+fname_search:
+	 xor di,di ! mov ah,0 ! mov cx,11		;as first 2 dir entries
+xor_string:
+	 mov al,cs:22[si] ! xor al,es:32[di] ! or ah,al	;compare second name
+	 lods fnames1 ! xor al,es:[di] ! or ah,al	;compare first name
+	 inc di ! loop xor_string			;do for 11 characters
+	 and ah,not 20h ! je sys_files_found		;matched except case?
+;
+	 cmp si,offset fnames2 ! je fname_search	;else try dri filenames
+
+;
+no_system:
+	  mov si,offset no_sys_msg ! jmps abort_boot	;if no files, abort
+;
+sys_files_found:
+	  mov dx,bp ! les bx,BIOS_PTR			;else read IBMBIO.COM
+	  mov al,bios_length! call read_block! jc hard_error
+;
+go_bios:   push cs ! pop ds
+	   sub ax,ax ! test boot_unit,80h! jz from_flpy	;AX=0 (A:) if floppy
+	    int EQUIPMENT! rol al,1! rol al,1		;else figure out unit
+	    and ax,3 ! jnz go_bios1			;(always at least C:)
+	     inc ax					;fake second floppy
+go_bios1:   inc ax					;CX= MIN(2,#floppies)
+from_flpy: push cs ! pop ds ! mov cx,ax ! mov bx,bp	;BX=file area start
+	   jmpf BIOS_PTR				;go to code we loaded
+
+
+
+;	print boot fail message and hang up to await CTRL/ALT/DELETE
+hard_error:
+	mov si,offset boot_fail_msg
+	;jmps abort_boot
+
+
+;	print zero terminated string CS:SI--> then hang up in tight loop
+abort_boot:
+	cld
+print_msg:
+	lods msg_byte
+wait:	or al,al ! jz wait			;print string until 0 then wait
+	  mov ah,14 ! mov bx,7
+	  int CRT ! jmps print_msg
+
+
+;	reads DOS BLOCK # specified in DX of # sectors in AL to ES:BX
+;	returns cy clear if succeeds, else cy set
+;	translates dos sector # into track,head  and sector number
+;
+;	CAUTION: this version only works on hard disk.  To make work on
+;		floppy, you must add code to ensure that multi-sector
+;		operations do not cross track boundaries.
+read_block:
+	push bp
+	push ax ! mov ax,dx
+	xor dx,dx ! div sec_per_track
+	inc dl ! mov cl,dl				;AX=track, DX=sector
+	xor dx,dx ! div n_heads				;AX=cylinder, DX=head
+	mov dh,dl ! mov dl,boot_unit
+	ror ah,1 ! ror ah,1 ! and ah,0c0h		;into weird IBM format
+	or ah,cl ! xchg ah,al ! xchg cx,ax		;CH=cyl, CL=sctr
+	pop ax ! mov ah,2				;ready for single read
+	int DISK
+	pop bp ! ret
+
+
+eject
+;	local variables (all in CSEG)
+msg_byte	rb	0		;dummy variable in codeseg
+
+no_sys_msg	db	BEL
+		db	CR,LF,'NO SYSTEM or BAD SYSTEM on boot disk!'
+		db	CR,LF,'...Install a system diskette'
+		db	CR,LF,'   then press CTRL/ALT/DEL.',0
+
+boot_fail_msg	db	BEL,CR,LF,'Can''t read from Boot disk!',0
+
+fnames1		db	'IBMBIO  COM'
+fnames2		db	'DRIBIO  COM'	;(2 sets of names are interleaved)
+		db	'IBMDOS  COM'
+		db	'DRIDOS  COM'
+
+;	Long pointer to BIOS load area
+bios_ptr_o  dw	0
+bios_ptr_s  dw	BIOS_SEG
+BIOS_PTR equ DWORD PTR bios_ptr_o
+
+;	Long pointer to Directory buffer
+dir_ofs	dw	0
+dir_seg	dw	50h
+DIR_PTR	equ DWORD PTR dir_ofs
+
+;	Long pointer to Floppy disk parameter pointer vector.
+fd_parm_ofs	dw	78h
+fd_parm_seg	dw	0
+FD_PARMS equ DWORD PTR fd_parm_ofs
+
+CNOTE	db	'(C)1984 DIGITAL RESEARCH'	;not enough room for full msg
+
+  if ((offset $) GT (offset bootstrap + 510))	;if size overflows cause error
+    		db	OOPS			;THE BOOTSTRAP CODE IS TOO BIG!
+  endif
+
+	org offset bootstrap + 510
+	dw	0aa55h				;signature
+
+;	BIOS ENTRY POINT DEFINITION
+;	NOTE:  if this is declared earlier, GENCMD goes wild.
+	cseg BIOS_SEG
+bios_begin:						;same as for CCP/M
+							;loader program.
+
+;	NOTE to system generator:  GENCMD will append 128 bytes of 00
+;	to the end of this file for reasons unknown.  Either manually
+;	remove them, or allow for them when patching or concatenating
+;	this file with another binary image.
+
+
+	end
+                                                                                                                                                                                                                                                                                                                                                                               

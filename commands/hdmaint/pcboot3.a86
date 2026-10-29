@@ -1,0 +1,758 @@
+pagesize 72 ! pagewidth 128 ! title 'PCMODE disk tertiary BOOT'
+;******************************************************************************
+;
+;	PCDOS compatible TERTIARY BOOTSTRAP for CCP/M 3.1
+;
+;	16-May-84	Written by: M.P. Vano, VAI
+;	28-Aug-84	Latest Revision
+;
+;	COPYRIGHT (c) 1984 Digital Research Inc.
+;
+;	This is the Concurrent CPM loader program which is written to the hard
+;	disk DOS partition in place of IBMBIO.COM.  It is loaded to 70:0 in the
+;	usual fashion by the PCDOS secondary bootstrap program and is entry
+;	compatible with IBMBIO.COM.  This program searches the DOS directory
+;	for CCPM.SYS and loads it correctly if it finds it.
+;
+;	This is a stand-alone program (i.e., no other support except ROM BIOS)
+;	to load a .CMD format absolute file from the DOS partition of an XT
+;	hard disk and transfer control to it.  It executes at on any paragraph
+;	boundary below the top 16k of memory in the machine.  It is entered by
+;	a far jump to offset zero in that paragraph with DL= unit number
+;	(in XT ROM BIOS terms) of the hard disk.  It will then:
+;
+;	  1)	Relocate itself to the top 16K of memory
+;	  2)	Read the partition table and find the DOS partition.
+;	  3)	Find the DOS secondary boot sector address from the partition
+;		table and read it to obtain the BOOT RECORD copy of the DOS
+;		BPB parameters needed for DOS file access.
+;	  4)	Read the FAT for that volume into a buffer
+;	  5)	Open the specified file in the root directory
+;	  6)	Read the first sector of the file and examine the CMD header
+;	  7)	Read the balance of the file to the specified load address
+;	  8)	Transfer control to it.
+;
+;	If any step fails, if any disk data structures are missing or invalid,
+;	or if the load file is too large for available memory, an appropriate
+;	error message will be printed, and the program will force the user to
+;	reboot using CTRL-ALT-DELETE.
+;
+;  SOME LIMITATIONS AND GROUND RULES:
+;
+;	1)	The loader needs enough RAM to buffer the ENTIRE FAT (6k)
+;	2)	The loader needs enough RAM to store an entire DOS CLUSTER (8k)
+;	3)	The loader can only do SEQUENTIAL READS
+;	4)	The loader buffer segment must not contain a 64K boundary
+;
+; REVISIONS
+;   24-May-84	M.P. Vano	Preliminary support for operation as a
+;				.COM file under DOS added
+;    4-Jun-84	M.P. Vano	Bad fat declaration (4k instead of 6k) fixed
+;    9-Jun-84	M.P. Vano	Flying Dutchman directory search fixed.
+;   13-Jun-84	M.P. Vano	Error messages reworked so DOS loader indicated
+;   16-Jun-84	M.P. Vano	Final version of .COM support added
+;   28-Aug-84	M.P. Vano	Wrong error message if no Hard disk fixed.
+;******************************************************************************
+eject
+;******************************************************************************
+;
+;  TO GENERATE THIS PROGRAM AS A LOADER:  (Set COMFILE equ 0)
+;
+;		ASM86 pcboot3 $FI
+;		GENCMD pcboot3 nhead 8080
+;
+;	generates a binary image ready for manual merge with HDMAINT under SID.
+;
+;  TO GENERATE A STANDALONE MSDOS .COM PROGRAM	(Set COMFILE equ -1)
+;
+;		ASM86 pcboot3 $FI
+;		GENCMD pcboot3 nhead code[b10]
+;		REN loadccpm.com=pcboot3.cmd
+;
+;******************************************************************************
+;	OPTION CONTROL CONSTANTS
+DEBUG	equ	00		;sets up debug with 256k CPM ("R" to 2000:0)
+COMFILE	equ	0		;makes an MSDOS standalone version .COM file
+if COMFILE
+  CODEBASE equ	100h
+endif
+if not COMFILE
+  CODEBASE equ 0
+endif
+
+;	IBM PC ROM BIOS INTERRUPTS
+CRT		equ	10h		;ROM BIOS CRT interrupt number
+DISK		equ	13h		;ROM BIOS DISK interrupt number
+MEMSIZE		equ	12h		;ROM BIOS MEMORY SIZE interrupt number
+CORRECTABLE	equ	11h		;error return means data WAS Corrected
+
+;	MISC constants
+CR	equ	0dh			;the usual
+LF	equ	0ah
+BS	equ	8
+
+eject
+	cseg
+	org	CODEBASE
+
+eject
+if COMFILE						;ONLY!!
+;	If we assemble this as a standalone DOS program, this checks if
+;	we are under PC-MODE CCPM, if so the program just exits with a message.
+;	Ifnot, (and if no-one is horsing around with vectors), it checks for
+;	command tail= 'AS' (as in  "ASK").  If that is not present, it will
+;	try to boot CCPM.  If the "ASK" command tail appears, (as might be
+;	desirable in an AUTOEXEC file), it prompts to find out which OS we
+;	want.  If we choose DOS, it merely exits back to existing OS.
+;
+;	NONE of the devices CCPM needs at init can have swi or hwi routines
+;	re-directed from ROM or an error messages will be output and the load
+;	operation will not take place.
+;
+	jmp go_alone
+	     db	'COPYRIGHT 1984 (C) '
+match_string db	'DIGITAL RESEARCH'
+	     db	'LOADCCPM 1.0 for Concurrent DOS 3.2 28-Aug-84'
+
+;	First MAKE SURE WE HAVE A HARD DISK! (bug in earlier versions)
+go_alone:
+	mov ah,8 ! mov dl,80h ! int DISK			;get drive info
+	  mov dx,offset no_hdmsg				;assume failure
+	or ah,ah ! jnz no_hdisk					;bad command?
+	or dl,dl ! jz no_hdisk					;any disks?
+;
+;  Now try and find out if CCP/M already loaded (the hard way) by searching
+;  for the words "DIGITAL RESEARCH" in the 2K following 50:0
+cc_srch:
+	mov ax,50h ! mov es,ax ! mov di,0
+	cld ! mov si,offset match_string
+cc_srch0:
+	push si ! push di
+	mov cx,8 ! repe cmpsw
+	pop di ! pop si ! jne cc_srch1				;found it
+	  mov dx,offset not_again				;already loaded
+no_hdisk:  mov ah,9 ! int 21h					;print msg
+	  ret							;and exit
+cc_srch1:
+	inc di ! cmp di,7f0h ! jb cc_srch0
+;
+;  Now check if critical vectors are safely in ROM
+	sub ax,ax ! mov es,ax				;check out vectors
+	cld ! mov si,offset iv_check			;must all be >=c000h
+iv_check_loop:
+	lodsw ! cmp ax,-1 ! je ask_os			;end of table?
+	mov di,ax ! cmp es:word ptr[di],0C000h
+	jae iv_check_loop
+	  mov dx,offset redir_msg ! mov ah,9 ! int 21h	;print re-dir error msg
+	  ret						;and exit
+;
+;  OK to load, check if we must ask first or just go ahead and try.
+ask_os: cmp word ptr .5dh,'SA' ! jne go_load		;if no tail, go load it
+	  mov ah,9 ! mov dx,offset which_os ! int 21h	;else prompt
+	  mov ax,0c01h ! int 21h			;get reply
+	  cmp al,'y' ! je go_load			;ignore case
+	  cmp al,'Y' ! je go_load
+not_rom:    ret						;stay in DOS
+go_load: mov dl,80h ! jmp begin				;set unit and go
+
+
+;	subroutine called AFTER RELOCATION to fixup any dangerous vectors
+iv_stuffer:
+	pushf ! cld
+	mov si,offset iv_stuff				;pack unneeded vectors
+	sub ax,ax ! mov es,ax
+	mov bx,offset dummy_ret
+iv_stuff_loop:
+	lodsw ! cmp ax,-1 ! je iv_stuff1
+	  mov di,ax ! mov ax,bx ! stosw
+	  mov ax,cs ! stosw ! jmps iv_stuff_loop
+iv_stuff1:
+	mov es:word ptr .78h,offset dsk_parms		;set safe disk parms
+	mov es:word ptr .7ah,cs
+;
+	in al,21h ! or al,10011100b ! out 21h,al	;kill unneeded ints
+	popf ! ret
+;
+
+dummy_ret:
+	iret
+
+which_os  db	'Load Concurrent PC-DOS? (Y or N)? $'
+
+not_again db	'Concurrent PC-DOS is already loaded.$'
+
+no_hdmsg  db	7,'Requires a Fixed Disk.$'
+
+redir_msg db	7
+  db	CR,LF,'CAN''T LOAD CCPM.SYS - Input/output devices are now in use by'
+  db	CR,LF,'                      a MODE, ramdisk, or spooler command.'
+  db	CR,LF,LF,'Try making "LOADCCPM ask" the FIRST command in your'
+  db	' AUTOEXEC.BAT file.'
+  db	CR,LF,'$'
+
+;	Interrupt vector list: all the vector segment addresses listed
+;	in this table must point above 0C000h or loading must not be allowed.
+;	The end of the list is marked by 0ffffh
+iv_check	dw	22h,26h			;rtc isr, kbd isr
+		dw	36h,3ah			;disk isr, diskette isr
+		dw	42h,44h,4ah		;video swi,equip swi,mem swi
+		dw	4eh,52h,5eh		;disk swi,com swi,printer swi
+		dw	102h,106h		;hard disk special vectors
+		dw	-1,-1,-1		;end of list and spares
+		dw	-1,-1,-1
+		dw	-1,-1,-1
+
+;	Interrupt vector list: all the vectors in this list must be pointed
+;	to a safe place or loading must not be allowed.
+iv_stuff	dw	14h,28h,2ch		;print screen,isr2,isr3
+		dw	30h,5ch,6ch		;isr4,isr7,KB break
+		dw	70h,8			;timer tick,NMI
+		dw	-1,-1,-1		;end of list and spares
+		dw	-1,-1,-1
+;
+;	We must (once again) make sure these are in a safe place.
+dsk_parms	db	0cfh,2,25,2		;back to ROM BIOS values AGAIN
+		db	8,2ah,0ffh,050h
+		db	0f6h,25,4
+endif
+
+eject
+;	PC-DOS boot sector normally loads this code  to 70:0 and then jumps
+;	here with the ROM BIOS disk number in DL.
+;
+;	NOTE that this relocation code allows IPL address to be above, below,
+;	or equal to the execution address.
+begin:	cli ! mov ax,cs ! mov ds,ax			;set local environment
+	mov ss,ax ! mov sp,offset stack_top
+;
+	mov disk_num,dl					;save disk unit #
+;
+	int MEMSIZE ! and ax,not 15			;down to 16k boundary
+	sub ax,LOADER_MEM/1024				;back off amount needed
+	mov cl,6 ! shl ax,cl				;convert to paragraphs
+  if DEBUG
+	  sub ax,800h					;stay out of SID's way
+	  mov disk_num,80h				;fake (unit number)
+  endif
+	mov reloc_ptr_s,ax				;set transfer pointer
+;
+	mov es,ax ! mov cx,LOADER_MOVE_SIZE		;move us there
+	cli ! cld ! sub si,si				;assume move down
+	mov bx,ds ! cmp ax,bx ! jb movedown		;going down?
+	  std ! mov si,cx ! dec si			;else going up
+	  xchg bx,ax					;switch compare sense
+movedown:
+	add ax,LOADER_MOVE_SIZE/16			;DON'T OVERLAP
+	cmp ax,bx ! ja after_moved
+	  mov di,si ! rep movsb				;no interrupts in move
+debug_stop:
+	  jmpf RELOC_PTR				;and jump to next
+
+eject
+;	RELOC_PTR points to the moved copy of this code entry point
+after_moved:
+	mov ax,cs ! mov ss,ax ! mov ds,ax		;set new context
+	sti ! cld					;interrupts ok now
+	call clear_screen				;always needed
+  if COMFILE
+	call iv_stuffer					;make sure vectors OK
+  endif
+;
+;  LOGIN THE PCDOS VOLUME
+	call login_disk ! cmp al,0 ! je vol_ok
+	  mov si,offset nodos_msg ! jmp error
+;
+;  GET FILENAME AND TRY TO OPEN FILE
+vol_ok:
+	mov dx,offset fcb ! call get_filename		;put filename in fcb
+	mov dx,offset fcb ! call open_f
+	cmp al,0 ! je ld_open_ok			;did we find it?
+	    mov si,offset nofile_msg ! jmp fname_error	;...No such file?
+;
+;  READ AND ANALYZE THE .CMD HEADER
+ld_open_ok:
+	mov dma_seg,ds ! mov dma_ofs,offset header_buffer
+	mov dx,offset fcb ! call read_f
+	cmp al,0 ! je load0				;did read work?
+	  mov si,offset bad_sys_msg ! jmp fname_error
+load0:	cmp ccpm_cseg_typ,1 ! je load1			;any code group?
+	  sub ax,ax ! jmp fname_error			;no, bad header
+load1:	sub ax,ax ! mov dma_ofs,ax ! mov ccpm_ptr_o,ax	;will load paragraphs
+	mov ax,ccpm_base ! mov dma_seg,ax		;start address
+	mov ccpm_ptr_s,ax ! mov bx,ax			;save for size check
+	mov bx,ccpm_cseg_siz
+	cmp ccpm_dseg_typ,0 ! je load3
+	  cmp ccpm_dseg_typ,2 ! je load2
+	    sub ax,ax ! jmp fname_error			;si still ->bad_hdr_msg
+load2:	  add bx,ccpm_dseg_siz ! mov load_size,bx	;set load counter
+load3:	add ax,bx ! inc ax				;check end of load
+	cmp ax,reloc_ptr_s ! jb load4
+	  mov si,offset mem_size_msg
+	  sub ax,ax ! jmp fname_error			;no-go, clobbers loader
+load4:	mov si,offset load_msg ! call print_msg		;print loading message
+	call print_filename
+  if DEBUG
+	mov dma_seg,1000h				;don't clobber cpm-86
+  endif
+;
+;  LOAD THE OBJECT FILE IMAGE
+load_loop:
+	mov dx,offset fcb ! call read_f			;should not hit EOF
+	cmp al,0 ! je load_cont
+	  mov si,offset bad_sys_msg ! jmp fname_error	;early EOF or read err
+load_cont:
+	test dot_count,7fh ! jnz load_cont_nodot	;every 16k print dot
+	  mov al,'.' ! call putc
+load_cont_nodot:
+	inc dot_count
+	add dma_seg,128/16 ! sub load_size,128/16 ! ja load_loop
+;
+;  GO EXECUTE AT START ADDRESS
+go_cpm:	call clear_screen				;all loaded, go do it
+	mov dl,disk_num					;DEAN REQUIRES this
+	mov ds,ccpm_dseg ! jmpf cs:CCPM
+
+eject
+;	SUBROUTINES USED BY LOADER
+
+;	common handler for errors that display filename after message
+;	if al=0ffh on entry, a physical error is assumed otherwise the
+;	error message passed in SI is printed before the abort
+fname_error:
+	cmp al,0ffh ! jne fname_error1		;al=-1 means physical
+read_error:
+	  mov si,offset read_err_msg		;entry here prints read error
+fname_error1:
+	call print_msg
+	call print_filename
+reboot_wait:
+	mov si,offset reboot_msg ! call print_msg	;print prompt
+	jmps $						;spin wheels in sand
+
+
+
+;	print simple error message si--> and hang-up to await ctrl-alt-delete
+;	if entered with al=-1, a physical media error message takes precedence.
+;
+error:	cmp al,0ffh ! je read_error			;physical error
+	  call print_msg				;print error message
+	  jmps reboot_wait
+
+
+;	subroutine clears crt screen and homes cursor but saves current mode
+clear_screen:
+	mov ah,15 ! int CRT ! mov ah,0 ! int crt	;reset to current mode
+	ret
+
+
+;	print zero terminated string using ROM BIOS write_tty function
+;	on current crt page in normal intensity white
+;	call with DS:SI--> string
+print_msg:
+	mov ah,15 ! int crt			;get page, mode, etc
+print_msg_loop:
+	cmp byte ptr[si],0 ! jne print_msg_next
+	  ret
+print_msg_next:
+	cld ! lodsb ! mov bl,7
+	mov ah,14 ! int CRT ! jmps print_msg_loop
+
+
+;	print the single character in AL using rom bios interrupt
+putc:	push ax ! mov ah,15 ! int CRT ! pop ax		;get CRT page
+putc1:	mov bl,7 ! mov ah,14 ! int CRT ! ret		;write TTY
+
+
+;	prints filename from global fcb
+print_filename:
+	mov ah,15 ! int CRT				;get page, mode, etc.
+	mov si,offset fcb+1 ! mov cx,8
+print_fname_l1:
+	cld ! lodsb					;get next character
+	cmp al,' ' ! je print_fname_ext			;suppress trailing ' 's
+	push cx ! call putc1 ! pop cx
+	loop print_fname_l1
+print_fname_ext:
+	mov al,'.' ! call putc1
+	mov si,offset fcb+9
+	mov cx,3
+print_fname_l2:
+	cld ! lodsb
+	push cx ! call putc1 ! pop cx
+	loop print_fname_l2
+	ret
+
+
+;	checks if FCB contains a filename, if not, prompts for one
+;	(.SYS extension assumed) (NOT YET IMPLEMENTED)
+get_filename:
+	mov bx,dx ! cmp byte ptr 1[bx],' ' ! jne got_filename
+;.....else do what we must do to get one from user.
+got_filename:
+	ret
+
+eject
+;******************************************************************************
+;	THIS IS KLUGE_DOS, a sequential, read-only hard disk dos designed
+;	to read a single file in the IBM PC hard disk root directory ONCE.
+;
+;	In general, on return from PUBLIC DOS routines open_f, read_f and
+;	login_disk	0=success, 0ffh=media error
+;	other values are used for logical errors such as file not found.
+;	internal error conventions may be different.
+;******************************************************************************
+;	system definition of fcb for open file
+f_drive	equ byte ptr 0
+f_name equ byte ptr 1
+f_ext equ byte ptr 9
+f_current_cluster equ word ptr 12
+f_rec_size equ word ptr 14
+f_size_lo equ word ptr 16
+f_size_hi equ word ptr 18
+f_date equ word ptr 20
+f_start_cluster equ word ptr 30
+f_rec_lo equ word ptr 32
+f_rec_hi equ word ptr 34
+
+;	same definitions for FCB as it appears in directory entry
+d_name equ byte ptr 0
+d_ext equ byte ptr 8
+d_attrib equ byte ptr 11
+d_time equ word ptr 22
+d_date equ word ptr 24
+d_start_cluster equ word ptr 26
+d_size_lo equ word ptr 28
+d_size_hi equ word ptr 30
+
+eject
+;	Opens file of filename specified by caller on current disk for read.
+;	(This searches directory and inits FCB in the usual fashion, returns
+;	AL=1 if the directory entry cannot be matched, AL=0 if the file is
+;	found.  If a media error occurs, AL=0ffh on return.
+;
+;	NOTE that the CLUSTER deblocking buffer is used to buffer the directory
+;	during the search and is clobbered.
+;
+open_f:	mov si,dx ! inc si				;si--> callers filename
+	mov ax,BT_fat_size ! mul BT_nfats ! mov cx,ax	;cx=rel_sctr dir start
+	mov dx,BT_dirsize				;dx=# entries to scan
+;
+;	head of loop that gets the next 8k of directory and searches it
+open_f1: ; cx=cur dir sector, dx=cur dir count, si--> search fcb
+	push cx ! push dx ! push si
+	push ds ! pop es ! mov bx,offset cluster_buffer
+	mov dl,16 ! call rd_sector_rel ! jnc open_f2	;read next 8k
+	  mov al,-1 ! pop si ! pop dx ! pop cx ! ret	;if error, exit
+open_f2:
+	pop si ! pop dx ! mov di,offset cluster_buffer
+	mov cx,16*16 ! cmp cx,dx ! jb open_f3		;number of entries read
+	  mov cx,dx					;not that many left
+open_f3:
+	cld ! sub dx,cx
+;	search current buffer for matching filename
+open_f4:
+	push si ! push di ! push cx			;save fcb ptr and count
+	mov cx,11 ! repe cmpsb
+	pop cx	! pop di ! pop si ! je open_foundit	;check if matches
+	add di,32 ! loop open_f4
+	  pop cx ! add cx,16 ! cmp dx,0 ! jne open_f1	;get next block
+	    xor ax,ax ! inc ax ! ret			;file not found
+;
+;	directory entry matched, translate into FCB fields in user's FCB
+open_foundit:
+	pop cx ! dec si					;point to FCB head
+	mov ax,d_size_lo[di] ! mov f_size_lo[si],ax
+	mov ax,d_size_hi[di] ! mov f_size_hi[si],ax
+	mov ax,d_date[di] ! mov f_date[si],ax
+	mov ax,d_start_cluster[di] ! mov f_start_cluster[si],ax
+	mov f_current_cluster[si],0			;show no cluster open
+	mov f_rec_size[si],80h				;128 byte record size
+	xor ax,ax ! ret					;return success
+
+
+;	READS next 128 bytes of file using fcb passed in dx to current dma
+;	address.  Returns Al=0 if succeeds, 1 if EOF, 0ffh if media error.
+;
+;	CAUTION: Only works for 128 byte reads of sequential records for
+;	files smaller than 8192k in the ROOT directory !!  User is still
+;	responsible for zeroing CURRENT RECORD fields (16 bit) after open.
+;
+;	CAUTION: ASSUMES 512 byte physical records on disk, DOES NOT ADAPT to
+;	other record sizes.
+;
+read_f:	mov si,dx
+	mov ax,f_rec_lo[si] ! mul f_rec_size[si]		;check eof
+	add ax,128 ! adc dx,0
+	cmp dx,f_size_hi[si] ! jb read_noteof
+	  ja read_eof
+	    cmp ax,f_size_lo[si] ! ja read_eof
+read_noteof:
+	mov al,BT_sctr_per_cluster ! cbw			;see if first
+	shl ax,1 ! shl ax,1 ! dec ax				;128 byte sctrs
+	test f_rec_lo[si],ax ! jnz read_f1			;got cluster
+	  mov cx,f_current_cluster[si]				;check buffer
+	  or cx,cx ! jnz readf_gnext				;first read?
+	    mov cx,f_start_cluster[si] ! jmps readf_gcurrent	;yes, start it
+readf_gnext:
+	  call next_cluster ! jc read_eof			;else get next
+readf_gcurrent:
+	    mov f_current_cluster[si],cx
+	    push si ! call rd_cluster ! pop si ! jnc read_f1
+	      mov al,-1 ! jmps read_f_ret		;read  err
+;	desired record is in the cluster buffer now, find it and move it
+read_f1:
+	mov cx,f_rec_size[si]				;get move length
+	mov al,BT_sctr_per_cluster ! sub ah,ah		;get record in buff
+	shl ax,1 ! shl ax,1 ! dec ax
+	and ax,f_rec_lo[si] ! mul f_rec_size[si]	;calculate index
+	inc f_rec_lo[si]				;update cur record
+	mov si,ax ! lea si,cluster_buffer[si]		;set source ptr
+	les di,DMA_PTR ! cld ! rep movsb		;set dest and do move
+	sub ax,ax ! jmps read_f_ret			;return success
+;
+read_eof:
+	  xor ax,ax ! inc ax				;return eof
+read_f_ret:
+	ret
+
+eject
+;	This must be called before you attempt to open a file.  It collects
+;	needed info about the disk volume by: reading PT to locate boot record
+;	then reading the  boot record to obtain BPB info , and then reading
+;	the FAT its buffer.
+;
+;	returns al=-1 if media error, al=0 if all succeed, al=1 if logical err.
+login_disk:
+	test disk_num,80h ! jz login_disk_fail	;must be fixed disk
+;
+	call rd_pt ! jc login_disk_err		;disk err reading PT?
+	cmp bx,-1 ! je login_disk_fail		;No dos partition?
+;
+	mov dh,1[bx] ! mov cx,2[bx]		;get info from PT
+	push ds ! pop es			;and use to read boot record
+	mov bx,offset boot_rec_buffer
+	mov ax,0201h ! mov dl,disk_num		;read boot sector
+	call rom_io ! jc login_disk_err		;can't read it, exit
+;
+	cmp word ptr boot_rec_buffer+510,0AA55h	;check if signature
+	jne login_disk_fail			;error if no signature
+;
+	call rd_fat ! jc login_disk_err		;can we read the FAT?
+	  xor ax,ax ! jmps login_ret		;yes, return success
+;
+login_disk_fail:
+	mov ax,1 ! jmps login_ret		;logical error
+login_disk_err:
+	stc ! sbb ax,ax 			;physical error
+login_ret:
+	ret
+
+
+eject
+;	INTERNAL PRIVATE DOS SUBROUTINES
+
+;	reads partition table and returns pointer to PCDOS partition if any.
+;	at return, cy set=physical error, BX==-1 means no partition or no PT
+rd_pt:	sub cx,cx
+	push ds ! pop es ! mov bx,offset master_boot_buffer
+	mov ax,0201h ! mov cx,1 ! mov dh,0
+	mov dl,disk_num ! call rom_io ! jc rd_pt_ret
+	cmp signature[bx],0AA55H ! jne rd_pt_fail
+	lea bx,p0[bx] ! mov cx,4
+rd_pt_hunt:
+	cmp sys_ind[bx],1 ! je rd_pt_ret
+	  add bx,16 ! loop rd_pt_hunt
+rd_pt_fail:
+	xor bx,bx ! mov bx,0ffffh
+rd_pt_ret:
+	ret
+
+;	reads the FAT from the current hard disk using global info
+rd_fat:
+	sub cx,cx				;first after reserved is FAT
+	push ds ! pop es ! mov bx,offset fat_buffer
+	mov dx,BT_fat_size ! jmps rd_sector_rel
+
+;	reads sectors relative to start of DOS area on disk (start=0)
+;	same parameters as rd_sector
+rd_sector_rel:
+	add cx,BT_hidden_sectors ! add cx,BT_reserved_sectors
+	jmps rd_sector
+	
+
+;	reads absolute sectors from hard disk using rom bios
+;	dl=number of sectors
+;	ES:BX--> data transfer address
+;	DS:--> program global data segment
+;	absolute disk sector number (16 bit,0-65535)) is passed in CX
+rd_sector:
+	push cx ! push dx				;save parameters
+;
+	mov ax,cx ! xor dx,dx ! div BT_sectors_per_track ; calculate disk addr
+	mov cl,dl ! inc cl				;CL=sector # (1-n)
+	sub dx,dx ! div BT_nheads ! mov dh,dl		;DH=head #
+	ror ah,1 ! ror ah,1 ! or cl,ah ! mov ch,al	;CX=IBM cyl & sector #
+;
+	pop ax ! push ax ! mov ah,2			;AH=read cmd ,AL=count
+	mov dl,disk_num ! call rom_io
+	pop cx ! pop dx ! ret				;if CY, AH=error code
+
+
+;	lower level rom access routine tries set up operation 5 times
+;	all registers are set at entry and exit as if INT 13h was to
+;	be executed.  This routine merely:
+;		-ignores corrected data errors
+;		-handles 5 reset/retry cycles
+;		-ensures direction flag is restored on return
+rom_io:	push si ! mov si,4				;retry count
+	push di ! mov di,ax				;command storage
+rom_io_again:
+	mov ax,di ! int DISK ! jnc rom_io_ret
+	  cmp ah,CORRECTABLE ! jne rom_io_retry
+	    xor ax,ax ! jmps rom_io_ret
+rom_io_retry:
+	  xor ax,ax ! int DISK				;reset ROMBIOS
+	    sub si,1 ! jnc rom_io_again			;5 tries yet?
+rom_io_ret:
+	pop si ! pop di ! cld ! ret
+
+
+;	reads one cluster from current hard disk using ROM BIOS into buffer
+;	at entry, CX=DOS Cluster number.
+rd_cluster:
+	call xlate_cluster ! mov cx,ax
+	push ds ! pop es ! mov bx,offset cluster_buffer
+	mov dl,BT_sctr_per_cluster ! jmps rd_sector_rel
+
+
+;	Finds the NEXT cluster after the one passed in CX in an allocation
+;	chain by using the FAT.  Returns the carry set if the end of chain
+;	mark is found, otherwise returns the NEW cluster # in CX.
+next_cluster:
+	push dx ! push bx
+	mov bx,cx ! add bx,bx ! add bx,cx ! shr bx,1	;multiply by 1.5
+	mov bx,fat_buffer[bx] ! jnc even_fat		;if even entry, done
+	  mov cl,4 ! shr bx,cl				;else need to justify
+even_fat:
+	mov cx,bx ! and cx,0fffh			;bx[0..11] are cluster
+	cmp cx,0ff8h ! jge next_cluster_eof		;check for end mark
+	  clc ! jmps next_cluster_ret
+next_cluster_eof:
+	stc						;  end of chain
+next_cluster_ret:
+	pop bx ! pop dx ! ret
+
+
+;	translates a cluster number passed in CX into the relative start sector
+;	number of cluster using information in the boot record data structure.
+;	Returns AX=start block in DOS AREA (0 based from head of first FAT).
+xlate_cluster:
+	sub cx,2					;cl 2 is data area head
+	mov al,BT_sctr_per_cluster ! cbw
+	mul cx ! mov cx,ax 				;CX=data area sector #
+	mov ax,BT_fat_size ! mul BT_nfats ! add ax,cx	;AX=end of FAT sectors
+	mov bx,BT_dirsize ! add bx,0fh ! and bx,not 0fh	;round up dir sectors
+	mov cl,4 ! shr bx,cl				;calculate dir sectors
+	add ax,bx ! ret					;and add dir size
+
+
+eject
+;	INITIALIZED DATA SEGMENT
+
+CODE_END equ offset $					;8080 model
+	dseg
+	org CODE_END
+
+reloc_ptr_o	dw 	after_moved		;where moved routine continues
+reloc_ptr_s	dw	0			;segment we are moved to.
+RELOC_PTR equ dword ptr reloc_ptr_o
+
+ccpm_ptr_o	dw	0			;long ptr to CCPM entry point
+ccpm_ptr_s	dw	0
+CCPM equ dword ptr ccpm_ptr_o
+
+dma_ofs		dw	0			;current dma longword ptr
+dma_seg		dw	0
+DMA_PTR	 equ dword ptr dma_ofs
+
+
+disk_num	db	0			;physical unit # of disk
+
+;	WARNING, this is not exactly a normal DOS FCB, nor is it a CP/M FCB
+fcb	db	0				;drive # not really used here
+filename	db	'CCPM    SYS'
+		dw	0
+rec_siz		dw	80h			;MUST BE LEFT ALONE
+file_size_lo	dw	0
+file_size_hi	dw	0
+file_date	dw	0
+		db	0,0,0,0,0,0,0,0,0,0
+current_record_lo dw	0
+current_record_hi  dw	0
+
+
+;	ccpm load loop variables
+load_size	dw	0			;total # of paragraphs to load
+dot_count	db	0			;used to display progress
+
+;	fragments of compound messages
+read_err_msg	db	CR,LF,'Disk error reading DOS file:',0
+mem_size_msg	db	CR,LF,'Not enough memory for DOS file: ',0
+bad_sys_msg	db	CR,LF,'Defective DOS file: ',0
+nofile_msg	db	CR,LF,'Can''t find DOS file: ',0
+load_msg	db	'Loading from DOS partition: ',0
+;	simple messages
+nodos_msg	db	CR,LF,'Can''t find DOS partition.',0
+reboot_msg	db	CR,LF,'  Insert a boot diskette in A:'
+		db	CR,LF,'  then press Ctrl/Alt/Del...',0
+crlf_msg	db	CR,LF,0
+
+;	END OF INITIALIZED STORAGE
+; size of code and data to move (rounded up to next paragraph boundary)
+LOADER_MOVE_SIZE	equ	(offset $+16) and not 15
+
+eject
+stack			rw	256
+stack_top:
+
+header_buffer		rb	128		;where to store .cmd header
+  ccpm_cseg_typ	equ	byte ptr header_buffer+0	;should be a 1
+  ccpm_cseg_siz	equ	word ptr header_buffer+1	;cseg size
+  ccpm_base	equ	word ptr header_buffer+3	;start paragraph
+  ccpm_dseg_typ	equ	byte ptr header_buffer+9	;should be a 2
+  ccpm_dseg_siz	equ	word ptr header_buffer+10	;dseg size
+  ccpm_dseg	equ	word ptr header_buffer+12
+
+
+;	THESE OBJECTS MUST BE ALIGNED SO THAT NONE OF THEM CROSS 64K
+;	BYTE BOUNDARIES (AND LOAD TIME RELOCATION MUST HONOR THIS!)
+
+master_boot_buffer	rb	512
+  p0		equ word ptr 512-66
+  sysind	equ byte ptr 4
+  signature	equ word ptr 510
+
+boot_rec_buffer		rb	512
+  BTREC			equ	byte ptr boot_rec_buffer
+    BT_bytes_per_sector	equ	word ptr BTREC + 0bh
+    BT_sctr_per_cluster	equ	byte ptr BTREC + 0dh
+    BT_reserved_sectors	equ	word ptr BTREC + 0eh
+    BT_nfats		equ	byte ptr BTREC + 10h
+    BT_dir_size		equ	word ptr BTREC + 11h
+    BT_total_sectors	equ	word ptr BTREC + 13h
+    BT_fatid		equ	byte ptr BTREC + 15h
+    BT_fat_size		equ	word ptr BTREC + 16h
+    BT_sectors_per_track equ	word ptr BTREC + 18h
+    BT_nheads		equ	word ptr BTREC + 1ah
+    BT_hidden_sectors	equ	word ptr BTREC + 1ch
+
+;
+fat_buffer		rw	0		;easier access as words
+			rb	(4096 * 3)/2
+
+cluster_buffer		rb	8192
+
+LOADER_MEM	equ	(offset $ + 3ffh) and not 3ffh	;rounded up to next 1K
+
+	end
+                                                                                                                                                                         

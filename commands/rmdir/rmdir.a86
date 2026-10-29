@@ -1,0 +1,8 @@
+; RMDIR: selects the existing OEM D.A86 implementation.
+; RMDIR [drive:]path removes a directory.
+
+false equ 000h
+true equ 0ffh
+cd equ false ! md equ false ! zd equ true ! sd equ false
+
+include d.a86

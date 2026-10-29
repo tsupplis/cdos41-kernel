@@ -1,0 +1,865 @@
+title 'Disk Format Routines for XT DKSMAINT'
+;
+;All code related to AT is identified by  AT@ 
+;
+;	DISK MAINTENANCE PROGRAM for SQUID
+;
+;	Format routines and associated messages
+;
+;	PUBLIC and EXTRN declarations
+;
+	cseg
+;SQUIDDM2
+	extrn	common_menu:near,do_message:near, do_function:near
+	extrn	warn_user_1:near, cd_err_1:near, verify_it:near
+	extrn	seldsk:near
+;DISPLAY
+	extrn	ctrl_c_stat:near, perform_menu:near
+	extrn	show_help_key:near, show_esc_key:near
+
+	dseg
+;SQUIDDM2
+	extrn	func_title_@:word, func_prompt_@:word,sel_drive:word
+	extrn	source_disk:byte, warn_disk:byte, flops:byte
+	extrn	cur_msg:word, source_disk:byte
+	extrn	dma_seg:word, cur_disk:byte, track:word, sector:word
+	extrn	dma_off:word, cur_op:byte, mcnt:byte, writing:word
+	extrn	max_track:word
+;SYSTEM
+	extrn	uda:word, sysdat:word
+
+	cseg
+	public	format, format_disk, check_for_AT
+	dseg
+	public	w5_msg, disk_type,num_clusters,cluster_list
+	cseg
+eject
+;
+;	EQUATES for the code area
+;
+side_@		equ	byte ptr .1ffh	;offset for side byte in sec.0
+loader_code_@	equ	900h		;offset for loader
+boot_table_start equ	11		;start of disk table in boot sector
+;
+;these are for getting at  the IOPB
+;
+clean_IOPB_f	equ	12	;number of stack params on XIOS call * 2
+forty		equ	40
+;
+;
+;	SYSTEM calls
+;
+xios_seldsk	equ	9
+xios_entry	equ	dword ptr .28h	;XIOS entry point in SYSDAT
+p_delay		equ	141		;BDOS call
+;
+include common.equ
+eject
+;
+;	FORMAT
+;
+;	put up format menu and get the choice; set up the params for the
+;	  appropriate disk format
+;
+;	ENTRY	NONE
+;
+;	EXIT	NONE
+;
+format:
+	mov	dx,offset dskmaint_format	;help prompt and
+	mov bx,help_yes ! call show_help_key	; help key and
+	mov bx,previous_menu ! call show_esc_key;   ESC key stuff
+	mov	si,offset format_menu		;menu structure
+	call	common_menu			;get the offset of selection
+	jz	format_done			;zero flag set if ESC key
+	xor bh,bh ! shl bl,one			;make a word offset
+;
+	mov	si,current_menu_types	;get pointer to list of offsets
+	mov	bx,[bx+si]		;get offset into disk_type list
+	mov	last_choice,bx			;save last operator choice
+format_again:
+	mov	bx,disk_type[bx]		;get disk table address
+	push bx ! push bx
+	mov bx,help_no ! call show_help_key	;turn off help prompt
+	pop	bx
+	mov	ax,func_@[bx]			;type of diskette message
+	mov	func_title_@,ax
+	mov	func_prompt_@,offset sel_form_dsk ; function prompt
+	mov	si,offset sel_drive		;select drive screen
+	call	common_menu
+	jnz format_1 ! pop bx ! jmps format	;if ESC key start again
+format_1:
+	xor	bh,bh
+	mov	bl,flops[bx]		;get drive code for choice
+	mov	source_disk,bl		;set the drive code
+	add	bl,'A'			;make ASCII drive code
+	mov	warn_disk,bl		;warning message
+	mov	format_@,bl		;put in format message
+	call	warn_user_1		;are you sure ?
+	pop	bx			;get the disk_type back
+	jz	format			;if zero then bail out
+	call	format_disk		;go do the job
+	jz	format			;if bad disk start again
+	call	write_sys_tracks[bx]	;write the system tracks
+	jnz	format			;zero flag means OK
+	mov	ax,tracks_to_format[bx]	;total number of tracks
+	dec	ax			;highest numbered track
+	mov	max_track,ax		; and save it away
+	mov	ax,sectors_per_track[bx];sectors per track
+	mov	mcnt,al			; save as multi sector count
+	call	verify_it		;make sure the disk is readable
+	mov	bx,last_choice		;see if they want another disk
+	jmps	format_again
+;
+format_done:
+	ret
+
+eject
+;
+;	FORMAT_DISK
+;
+;	format the entire disk, assume all tracks to be the same
+;
+;	ENTRY	BX = offset of disk table for disk to be formatted
+;
+;	EXIT	zero flag set if error
+;
+format_disk:
+	push	bx
+	mov bx,stop_op ! call show_esc_key	;legend for ESC key
+	pop	bx
+	mov	si,offset format_IOPB		;get IOPB for format operation
+	call	initialize_IOPB
+	mov	cx,tracks_to_format[bx]		;number of tracks to format
+	mov	ax,offset formatting
+	mov	cur_msg,ax			;message for format operation
+format_operation:
+	push	cx			;save count of tracks
+	push bx ! push si
+	call	ctrl_c_stat		;check for ESC key or ^C
+	pop si ! pop bx ! jnz go_format
+	pop cx ! jmps format_end
+go_format:
+	call	update_format_block	;update CHRN values for XIOS
+	call	do_f_function		;format one track, BX SI preserved
+	pop	cx			;tracks left to do
+	or al,al ! jnz format_error	;AL = 0 means NO ERROR
+	inc	iopb_track[si]		;next track
+	loop	format_operation	;loop away, based on tracks_to_format
+format_end:
+	ret				;ZERO flag means ERROR
+format_error:
+	call	cd_err_1		;put up bad disk message
+	xor	ax,ax			;set zero flag
+	jmps	format_end
+
+eject
+;
+;	UPDATE_FORMAT_BLOCK
+;
+;	change the CHRN values to match current track
+;
+;	ENTRY	SI = IOPB in use
+;		BX = disk table
+;
+;	EXIT	SI and BX preserved
+;
+update_format_block:
+	mov	ax,iopb_track[si]	;current track in AL
+	xor	ah,ah			;head 0 to start
+	cmp	al,end_side_0[bx]	;is it head 0 or head 1
+	jbe	still_head0		;
+; if head 1 then cylinder  = tracks_per_disk - current logical track
+	neg ax ! dec ax
+	add	ax,tracks_per_disk[bx] ; AL = cylinder #
+	mov	ah,one			;make it head 1
+still_head0:
+	mov	cx,sectors_per_track[bx] ;number of CHRN fields
+	push	bx			;save disk table
+	mov	bx,offset format_block	;start of CHRN fields
+block_loop:
+	mov	[bx],ax			;move in cylinder and head #
+	add	bx,fb_element		;next element
+	loop	block_loop
+	pop	bx			;preserve BX
+	ret
+
+eject
+;
+;	INITIALIZE IOPB
+;
+;	set up the starting values in the IOPB
+;
+;	ENTRY	BX = disk table
+;		SI = IOPB
+;
+;	EXIT	BX and SI preserved
+;
+initialize_IOPB:
+	mov	ax,sectors_per_track[bx]
+	xchg	ah,al
+	mov	al,source_disk
+	mov	cur_disk_mcnt[si],ax	;current disk and multi-sector count
+	mov	ax,format_start[bx]
+	mov	iopb_track[si],ax	;starting track
+	mov	ax,first_sector[bx]
+	mov	iopb_sector[si],ax	;first sector
+	mov	iopb_dma_seg[si],ds	;point to CHRN fields
+	mov	iopb_dma_off[si],offset format_block
+	mov	ax,filler_gpl[bx]
+	mov	iopb_filler_gpl[si],ax	;filler and gap length
+	mov	ax,format_op[bx]	;XIOS function number
+	mov	iopb_op[si],ax		; for format entry point
+	ret
+
+eject
+;
+;	CPM_SYS_LOADER
+;
+;	write the boot loader to the system track, and mark the diskette
+;	  as one or two sided
+;
+;	ENTRY	BX = disk table
+;
+;	EXIT	zero flag set if operation OK
+;
+cpm_sys_loader:
+
+;
+;	first, make the image of track zero,including the loader
+;
+	push	es
+	mov	es,cmd_eseg_base		;set up base of buffer
+	mov	dma_seg,ax			;tell the do_function routine
+	xor	di,di				;offset of zero
+	mov	al,0e5h				;fill char
+	mov	cx,bytes_track[bx]		;number of chars to do
+	rep	stosb				;pre-fill the track
+	xor	di,di				;zero again
+	mov	si,offset boot			;start of boot loader
+	mov	cx,boot_len			;guess what that is
+	rep	movsb				;move the boot
+	mov ax,sides[bx] ! dec al		;number of sides -1
+	mov	es:side_@,al			;put it in the image
+	mov	di,loader_code_@		;start of loader image
+	mov	si,offset ldr			;move the second stage
+	mov	cx,ldrlen			;  loader into the image
+	rep	movsb
+	mov	ax,sectors_per_track[bx]
+	mov	mcnt,al				;number of sectors to write
+	call	write_boot_tracks		;write the boot tracks
+	pop	es
+	ret
+
+eject
+;
+;	WRITE_BOOT_TRACKS
+;
+;	ENTRY	mcnt, source_disk initialied
+;
+;	EXIT	zero flag set if operation OK
+;	
+write_boot_tracks:
+	mov cl,source_disk ! mov cur_disk,cl	;disk to write to
+	xor ax,ax ! mov track,ax ! mov sector,ax ;track and sector 0
+	mov	dma_off,ax			;dma offset
+	mov	ax,cmd_eseg_base
+	mov	dma_seg,ax			;dma segment
+	mov	cur_op,io_write
+;
+	push	bx
+	mov	si,offset writing
+	mov	cur_msg,si			;writing loader message
+	call	do_message
+	call	do_function			;write the bloody thing
+;
+	or	al,al			;set flag for exit,AL=0 is success
+	pop	bx
+	ret
+
+eject
+;
+;	DOS_SYS_TRACKS
+;
+;	make system tracks for DOS diskette
+;	diskettes are DATA ONLY, no DOS system is put out there
+;
+;	ENTRY	BX = disk table
+;
+;	EXIT	zero flag if error writing system tracks
+;
+dos_sys_tracks:
+	push	es
+	mov	es,cmd_eseg_base	;ES points to  
+	call	zero_out_tracks		;start with all zeroes
+	call	make_boot_sector	;initialize boot sector
+	call	make_fat_entries	;make the FAT sectors
+	call	write_first_two_tracks	;write out first two tracks
+	pop	es
+	ret
+;
+zero_out_tracks:
+	cld
+	xor	di,di			;offset of zero
+	mov	cx,bytes_track[bx]	;actually doing two tracks	
+	xor	ax,ax			;  because moving words
+	rep	stosw			;  instead of bytes
+	ret
+;
+make_boot_sector:
+	cld
+	xor	di,di			;start again
+	mov	si,offset pc_loader	;start of loader image
+	mov	cx,bytes_sector[bx]	;one sector's worth
+	rep	movsb			;boot sector in image
+	push	di			;remember where we left off
+	mov	cx,boot_table_len	;length of table
+	mov	si,boot_table[bx]	;start of table
+	mov	di,boot_table_start	;spot in boot sector
+	rep	movsb			;move it
+	pop	di			;get back old di
+	ret
+;
+make_fat_entries:
+	mov	si,offset dos_directory	;start of media parameters
+	mov	ax,dt_element		;length of each element
+	mul	media_type[bx]		;index for type
+	add	si,ax			;pointing to media parameters
+	lodsb ! mov dl,al		;media type (0fch - 0ffh)
+	mov	es:[di],al		;put in media type
+	mov	es:word ptr one[di],0ffffh ;these are required,
+;first copy of FAT done
+	mov	cx,bytes_sector[bx]
+	xor	ax,ax
+	lodsb ! mov dh,al		;number of sectors in FAT
+	push	dx			;save media type and # of sectors
+	mul	cx			;byte offset to next FAT
+	pop	dx			;the MUL operation destroys DX
+	add	di,ax			;DI points to second copy of FAT
+	mov	es:[di],dl		;media parameter
+	mov	es:word ptr one[di],0ffffh ;
+;second copy of FAT done
+	ret
+;
+write_first_two_tracks:
+	xor	ax,ax
+	mov	al,one			;that's the boot sector
+	add al,dh ! add al,dh		;two copies of fat
+	add	al,[si]			;number of sectors in directory
+	push	ax
+	mov	mcnt,two	;just two sectors for now,includes FAT id
+	call	write_boot_tracks	;write only two sectors
+	jz	first_ok		;zero flag on error	
+	pop	ax
+	ret				;this is the error path
+first_ok:
+;first two sectors are necessary so that a SELDSK can be performed
+; else the XIOS does not know what kind of disk it is writing to
+;
+	push	bx
+	mov	cl,cur_disk		;SELDSK is necessary to make sure that
+	call	seldsk			;the XIOS knows that a DOS disk is
+	pop	bx			;being used
+	pop	ax
+	mov	mcnt,al			;number of sectors to write
+	call	write_boot_tracks	;first two sectors are re-written
+	ret
+eject
+;
+;	DO_F_FUNCTION
+;
+;	set up the IOPB and perform the indicated function call
+;
+;	ENTRY	BX = disk table
+;		SI = format IOPB
+;
+;	EXIT	AL = 0 if no error
+;		AL = 1 if physical error
+;		AL = FFh if change in media density
+;		BX and SI are preserved
+;
+do_f_function:
+	push bx ! push si ! push si
+	mov	ax,iopb_track[si]	;current track
+	mov	track,ax
+	call	do_message		;put current track message
+	pop	bx			;get IOPB back
+	push es ! push ds
+	mov	es,uda			;needed for XIOS entry point
+	push	iopb_filler_gpl[bx]	;gap length and filler byte
+	push	cur_disk_mcnt[bx]	;current disk
+	push	iopb_track[bx]		;track
+	push	iopb_sector[bx]		;sector
+	push	iopb_dma_seg[bx]	;dma segment
+	push	iopb_dma_off[bx]	;dma offset
+    	mov	ax,iopb_op[bx]		;current operation
+	mov	ds,sysdat		;needed for XIOS call
+	callf	xios_entry		;make the call
+	add	sp,clean_IOPB_f		;get rid of IOPB
+	pop ds ! pop es			;get back seg registers
+	mov	bx,track
+	cmp	bl,end_side_0[bx]	;are we done with side 0
+	jne	no_delay		;if we are then,
+	push	ax			;  save error return
+	mov	cl,p_delay		;  delay one tick when switching to
+	mov	dx,one			;  head 1, might solve some problems
+	int	224			;  with too many errors on track 40
+	pop	ax			;  error return back
+no_delay:
+	pop si ! pop bx			;BX and SI preserved
+	ret
+eject
+;AT@
+;
+;	CHECK_FOR_AT
+;
+;	see if running on the AT, and adjust menu accordingly
+;
+;	ENTRY	none
+;
+;	EXIT	current_menu_type points to appropriate list
+;
+;	this gets called only by oem_setup_1; for right now this code
+;	does not get executed
+;
+check_for_AT:
+	push	es
+	mov	ax,0ffffh		;high end of RAM
+	mov	es,ax
+	cmp	es:byte ptr.0eh,0fch	;looking for AT machine id
+	pop	es
+	jnz	no_AT			;not there, do nothing
+;
+	mov	al,0eh
+	call	get
+	test	al,0c0h			;check battery, checksum
+	jnz	no_AT
+;
+	mov	al,10h
+	call	get			;get drive types
+	test	al,00100010b		;looking for high dense drive
+	jz	no_AT
+;
+;at this point we have an AT with high density drive
+;
+	mov	ax,offset at_list
+	mov	current_menu_types,ax	;point to AT list of offsets
+	mov	ax,offset dos_high_dense
+	mov	f_f7_prompt,ax		;put in correct prompt
+no_AT:
+	ret
+;
+get:
+	out	70h,al
+	jmps	$+2			;waste some time
+	in	al,71h
+	ret
+
+
+eject
+	DSEG
+include date.dat
+;these lists are position dependent, and are based on the order of
+;  things in disk_type
+;
+;because of REPNZ SCASW this list is in reverse order
+;
+;add a cluster size of 2373 in front of 317, when support for the AT@
+; is enabled	;
+
+cluster_list	dw	2373,317,315,0,0,356,353   ;# of clusters by disk type
+n_clusters	equ	(offset $ -offset cluster_list)/2 ;
+num_clusters	dw	n_clusters
+;
+current_menu_types	dw	offset XT_list
+;
+;
+;these lists are based on the menu presented, if running on the AT@
+;  then cpm_1_8 will be replaced by dos_15
+;
+xt_list		dw	0,2,4,6		;offset of first four types
+at_list		dw	0,2,12,6	;includes high dense drive
+;
+disk_type	dw	offset dos_1_9		;DOS SS 9 sector
+		dw	offset dos_2_9		;DOS DS 9   "
+		dw	offset cpm_1_8		;CPM SS 8   "
+		dw	offset cpm_2_8		;CPM DS 8   "
+		dw	offset dos_1_8		;DOS SS 8   "
+		dw	offset dos_2_8		;DOS DS 8   "
+;AT@
+		dw	offset dos_15		;DOS hi-dense 15 SPT 160 traks
+;
+;	definition of disk table
+;
+sectors_per_track	equ	word ptr 0	;
+tracks_per_disk		equ	word ptr 2	;
+sides			equ	word ptr 4	;number of sides
+bytes_sector		equ	word ptr 6	;
+bytes_track		equ	word ptr 8	;
+bytes_disk		equ	word ptr 10	;NOT USED
+media_type		equ	byte ptr 12	;gets FAT ID, # FATS, dir secs
+filler_gpl		equ	word ptr 13	;filler byte and gap length
+filler			equ	byte ptr 14
+gpl			equ	byte ptr 13
+func_@			equ	word ptr 15	;ASCII message-disk type
+format_start		equ	word ptr 17	;first track to format
+tracks_to_format	equ	word ptr 19	;number of tracks to format
+format_op		equ	word ptr 21	;which XIOS entry point
+write_sys_tracks	equ	word ptr 23	;offset system track routine
+first_sector		equ	word ptr 25	;starting sector number
+boot_table		equ	word ptr 27	;table for boot sector
+end_side_0		equ	byte ptr 29	;last track on side 0
+;
+;
+dos_1_9		dw	9,40,1,512,512*9,0
+		db	dos_media_1_9
+		dw	0f650h,offset dos_single,0,40,io_new_format
+		dw	offset dos_sys_tracks,01
+		dw	offset dos_1_9_tbl
+		db	39
+;
+dos_2_9		dw	9,80,2,512,512*9,0
+		db	dos_media_2_9
+		dw	0f650h,offset dos_double,0,80,io_new_format
+		dw	offset dos_sys_tracks,01
+		dw	offset dos_2_9_tbl
+		db	39
+;
+cpm_1_8		dw	8,40,1,512,512*8,0
+		db	cpm_media
+		dw	0e550h,offset cpm_single,0,40,io_new_format
+		dw	offset cpm_sys_loader,0,0
+		db	39
+;
+cpm_2_8		dw	8,80,2,512,512*8,0
+		db	cpm_media
+		dw	0e550h,offset cpm_double,0,80,io_new_format
+		dw	offset cpm_sys_loader,0,0
+		db	39
+;
+dos_1_8		dw	8,40,1,512,512*8,0
+		db	dos_media_1_8
+		dw	0f650h,offset dos_single,0,40,io_new_format
+		dw	offset dos_sys_tracks,01
+		dw	offset dos_1_9_tbl	;not used
+		db	39
+;
+dos_2_8		dw	8,80,2,512,512*8,0
+		db	dos_media_2_8
+		dw	0f650h,offset dos_double,0,80,io_new_format
+		dw	offset dos_sys_tracks,01
+		dw	offset dos_2_9_tbl	;not used
+		db	39
+;
+;disk table for the AT@
+dos_15		dw	15,160,2,512,512*15,512*15*160
+		db	dos_media_15
+		dw	0f654h,offset dos_high_dense,0,160,io_new_format
+		dw	offset dos_sys_tracks,1
+		dw	offset dos_15_tbl
+		db	79
+;
+;	
+cpm_media		equ	0		;offsets in dos_directory
+dos_media_1_9		equ	1		; where each element is 
+dos_media_2_9		equ	2		;  three bytes
+dos_media_1_8		equ	3
+dos_media_2_8		equ	4
+dos_media_15		equ	5
+;
+dos_directory	db	0,0,0			;dummy entry for CP/M
+dt_element	equ	(offset $ - offset dos_directory)
+		db	0fch,2,4		;FAT ID
+		db	0fdh,2,7		;  # of sectors in FAT
+		db	0feh,1,4		;    # of sectors in directory
+		db	0ffh,1,7
+;AT@
+		db	0f9h,7,14		;high density drive
+;
+format_block	db	0,0,1,2		;C H R N values for format operation
+fb_element	equ	offset $ - offset format_block
+		db	0,0,2,2		;Cylinder and Head are changed 
+		db	0,0,3,2		;  with each track
+		db	0,0,4,2
+		db	0,0,5,2		;Record (sector) is not changed
+		db	0,0,6,2
+		db	0,0,7,2		;N=2 is 512 byte sector, not changed
+		db	0,0,8,2
+		db	0,0,9,2		;from here out it's DOS only
+		db	0,0,0ah,2	;the 0a - 0f are for the
+		db	0,0,0bh,2	; high density disk
+		db	0,0,0ch,2
+		db	0,0,0dh,2
+		db	0,0,0eh,2
+		db	0,0,0fh,2
+;
+;	one of these tables gets put into the boot sector at offset 0Bh
+;
+dos_1_9_tbl	dw	512		;bytes per sector
+		db	1		;sectors per allocation unit
+		dw	1		;reserved sectors starting with 0
+		db	2		;number od fat's
+		dw	40h		;number of root dir entries
+		dw	168h		;number of sectors in logical image
+		db	0fch		;media descriptor
+		dw	2		;number of sectors in fat
+		dw	9		;sectors per track
+		dw	1		;number of heads
+		dw	0		;number of hidden sectors
+boot_table_len	equ	offset $ - offset dos_1_9_tbl
+;
+dos_2_9_tbl	dw	512
+		db	2
+		dw	1
+		db	2
+		dw	70h
+		dw	2d0h
+		db	0fdh
+		dw	2
+		dw	9
+		dw	2
+		dw	0
+;AT@
+dos_15_tbl	dw	512		;bytes per sector
+		db	1		;sectors per allocation unit
+		dw	1		;reserved sectors starting with 0
+		db	2		;number of fat's
+		dw	0E0h		;number of root dir entries
+		dw	960h		;number of sectors in logical disk
+		db	0fch		;media descriptor
+		dw	7		;number of sectors in fat
+		dw	15		;sectors per track
+		dw	2		;number of heads
+		dw	0		;number of hidden sectors
+		
+;
+;	definition of working IOPB
+;
+iopb_filler_gpl	equ	word ptr 0	;filler and gap length
+cur_disk_mcnt	equ	word ptr 2	;current disk and multi sector count
+iopb_track	equ	word ptr 4	;current track
+iopb_sector	equ	word ptr 6	;current sector
+iopb_dma_seg	equ	word ptr 8	;current dma segment
+iopb_dma_off	equ	word ptr 10	;current dma offset, points to CHRN tbl
+iopb_op		equ	word ptr 12	;current XIOS function number
+;
+format_iopb	rs	14
+;
+last_choice	dw	0
+;
+;	here are the menus
+;
+format_menu	dw	0			;skip the plain message
+		dw	offset f_prompts	;titles
+		dw	offset f_keys		;F? keys and legends
+		dw	offset f_answers	;allowable answers
+;
+f_prompts	dw	2			;2 titles
+		dw	offset f_head		;title 1
+		dw	offset f_sel_func	;title 2
+;
+f_head		db	5			;row
+		db	(screen - length fh_@)/2 ;col
+		db	normal,normal		;start attribute, end attrib
+		dw	offset fh		;actual message string
+;
+fh		dw	length fh_@		;length of string
+fh_@		db	'Format Diskettes'	;and finally the string itself
+;
+f_sel_func	db	7
+		db	(screen - length fss_@)/2
+		db	high_on,high_off
+		dw	offset fss
+;
+fss		dw	length fss_@
+fss_@		db	'   S E L E C T   T Y P E   O F   D I S K E T T E   T O   F O R M A T   '
+;
+f_keys		dw	4			;4 keys to display
+		dw	offset f_f3		;F3 key, etc. etc.
+		dw	offset f_f5
+		dw	offset f_f7
+		dw	offset f_f9
+;
+f_f3		db	9,26,'F3 '		;row, col, keyname
+		dw	1			;lines in legend
+		db	10,36			;row, col of legend
+		dw	offset dos_single	;ASCII string
+;					
+dos_single	dw	length ds_@		;length of string
+ds_@		db	' PC-DOS single sided, 9 sectors'	;ASCII string
+;
+f_f5		db	12,26,'F5 '		;Wouldn't it be nice if there
+		dw	1			; were a real macro assembler
+		db	13,36			;  that would allow the
+		dw	offset dos_double	;    definition of structures
+;
+dos_double	dw	length dd_@
+dd_@		db	' PC-DOS double sided, 9 sectors'
+;
+f_f7		db	15,26,'F7 '
+		dw	1
+		db	16,36
+f_f7_prompt	dw	offset cpm_single
+;
+cpm_single	dw	length cs_@
+cs_@		db	' CP/M single sided, 8 sectors'
+;
+;AT@
+dos_high_dense	dw	length dhd_@
+dhd_@		db	' PC-DOS high density'
+;
+f_f9		db	18,26,'F9 '
+		dw	1
+		db	19,36
+		dw	offset cpm_double
+;
+cpm_double	dw	length cd_@
+cd_@		db	' CP/M double sided, 8 sectors'
+;
+f_answers	dw	1			;number of lists
+		dw	offset fa		;list of acceptable answers
+;
+fa		db	offset fa_2 - offset fa_1	;number of keys
+fa_1		db	'=' or 80h, '?' or 80h		;key id with high
+		db	'A' or 80h, 'C' or 80h		; bit on
+		db	1bh				;ESC key
+fa_2		equ	$				;F3 F5 F7 F9 ESC
+;
+sel_form_dsk	dw	length sfd_@
+sfd_@		db	'           S E L E C T   D I S K E T T E   T O   F O R M A T           '
+; 
+form1_msg	dw	length fm1_@
+fm1_@		db	'  Format a Single Sided Diskette   '
+;
+form2_msg	dw	length fm2_@
+fm2_@		db	'  Format a Double Sided Diskette   '
+;
+;
+;
+;
+w5_msg		dw	w5_msg_@_len
+w5_msg_@	db	'Formatting the Diskette in Drive '
+format_@	db	' :'
+w5_msg_@_len	equ	offset $ -offset w5_msg_@
+;
+formatting	dw	length formatting_@
+formatting_@	db	'Formatting track '
+;
+;
+f_t		dw	for_len
+f_t_@		db	'Formatting Diskette in Drive '
+form_disk	db	' :'			;fill in with drive leter
+for_len		equ	offset $ -offset f_t_@
+eject
+side_byte	db	0
+
+;
+;	loader taken from DSKMAINT for ABALONE ( 19 SEPT 83 Version 1.3 )
+;
+;	BOOTSTRAP LOADER HEX IMAGE FOR FORMAT
+;
+BOOT	DB	0FAH,8CH,0C8H,8EH,0D8H,8EH,0D0H,0BCH,00H,7CH,0FBH,0CDH
+	DB	12H,2DH,08H,00H,0B1H,06H,0D3H,0E0H,0A3H,51H,7CH,0B4H
+	DB	00H,0CDH,13H,8EH,06H,51H,7CH,0BAH,00H,00H,0B9H,05H
+	DB	00H,0BBH,00H,00H,0B8H,04H,02H,0CDH,13H,73H,09H,0FEH
+	DB	0EH,53H,7CH,75H,0E2H,0E9H,04H,00H,0FFH,2EH,4FH,7CH
+	DB	0BEH,54H,7CH,0FCH,0ACH,0B4H,0EH,2BH,0DBH,0CDH,10H,0ACH
+	DB	84H,0C0H,75H,0F5H,0FBH,0EBH,0FDH,00H,01H,00H,00H,04H
+	DB	0DH,0AH,0AH,2AH,2AH,2AH,20H,45H,72H,72H,6FH,72H
+	DB	20H,77H,68H,69H,6CH,65H,20H,72H,65H,61H,64H,69H
+	DB	6EH,67H,20H,4CH,6FH,61H,64H,65H,72H,20H,2AH,2AH
+	DB	2AH,0DH,0AH,54H,72H,79H,20H,61H,6EH,6FH,74H,68H
+	DB	65H,72H,20H,64H,69H,73H,6BH,65H,74H,74H,65H,2EH
+	DB	0DH,0AH,00H
+;
+boot_len	EQU	OFFSET $ - OFFSET BOOT
+;
+;	CP/M OR CCP/M SECOND STAGE LOADER IMAGE
+;
+LDR	DB	8CH,0C8H,8EH,0D8H,8EH,0D0H,0BCH,00H,01H,0E8H,3CH,01H
+	DB	0E8H,0BDH,00H,0C7H,06H,3AH,03H,8CH,03H,0C7H,06H,3CH
+	DB	03H,0A6H,03H,0C7H,06H,34H,03H,00H,25H,0E8H,1BH,00H
+	DB	0C7H,06H,3AH,03H,99H,03H,0C7H,06H,3CH,03H,0B7H,03H
+	DB	0C7H,06H,34H,03H,00H,00H,0E8H,06H,00H,0BEH,0C9H,03H
+	DB	0E9H,4FH,01H,0E8H,0C3H,00H,74H,01H,0C3H,0E8H,19H,00H
+	DB	0E8H,0BAH,00H,75H,08H,0C6H,06H,40H,03H,03H,0E8H,4FH
+	DB	00H,0E8H,2EH,01H,0FEH,0EH,40H,03H,75H,0EAH,0E9H,3DH
+	DB	01H,8BH,36H,3CH,03H,0E8H,2CH,01H,0FFH,06H,3EH,03H
+	DB	0E8H,96H,00H,74H,0EH,0E8H,12H,01H,0E8H,8EH,00H,74H
+	DB	06H,0BEH,0AH,04H,0E9H,0FH,01H,0E8H,04H,01H,8BH,3EH
+	DB	41H,03H,8AH,45H,10H,0E8H,23H,01H,0E8H,0DDH,00H,0BEH
+	DB	80H,00H,0E8H,98H,00H,83H,2EH,45H,03H,08H,0BBH,11H
+	DB	00H,0B9H,0FH,00H,0E8H,0CH,00H,0C3H,0B0H,2EH,0E8H,5DH
+	DB	01H,0BBH,10H,00H,0B9H,10H,00H,03H,1EH,41H,03H,8AH
+	DB	07H,84H,0C0H,75H,03H,0E9H,0E2H,00H,53H,51H,0E8H,0EEH
+	DB	00H,2BH,0F6H,0E8H,67H,00H,59H,5BH,43H,0E2H,0E8H,0C3H
+	DB	0C7H,06H,43H,03H,4EH,04H,0C6H,06H,4AH,03H,04H,0B0H
+	DB	00H,0E8H,0D3H,00H,0BFH,4EH,04H,0B9H,40H,00H,0B8H,7FH
+	DB	7FH,0FCH,80H,25H,0F0H,21H,45H,09H,20H,45H,0BH,83H
+	DB	0C7H,20H,0E2H,0F2H,0C7H,06H,43H,03H,4EH,0CH,0C6H,06H
+	DB	4AH,03H,08H,0C6H,06H,49H,03H,0FFH,0C3H,1EH,07H,0C7H
+	DB	06H,41H,03H,4EH,04H,0B9H,40H,00H,0FCH,51H,8BH,36H
+	DB	3AH,03H,8BH,3EH,41H,03H,8BH,0EH,3EH,03H,0F3H,0A6H
+	DB	59H,74H,09H,83H,06H,41H,03H,20H,0E2H,0E7H,0CH,0FFH
+	DB	0C3H,8BH,0EH,2EH,03H,2BH,0CEH,03H,36H,47H,03H,2BH
+	DB	0FFH,8EH,06H,45H,03H,0FCH,0F3H,0A4H,0A1H,30H,03H,01H
+	DB	06H,45H,03H,0C3H,2BH,0C0H,8EH,0C0H,0B8H,00H,04H,26H
+	DB	80H,3EH,0FFH,7DH,01H,75H,03H,0B8H,00H,08H,0A3H,2EH
+	DB	03H,0B1H,04H,0D3H,0E8H,0A3H,30H,03H,0B1H,05H,0D3H,0E8H
+	DB	0A2H,32H,03H,0C3H,8BH,1EH,47H,03H,8BH,47H,03H,0A3H
+	DB	36H,03H,0A3H,45H,03H,80H,7FH,09H,00H,74H,03H,8BH
+	DB	47H,0CH,0A3H,38H,03H,0C3H,8BH,36H,3AH,03H,0FEH,44H
+	DB	0CH,0C3H,0E8H,03H,00H,0FBH,0EBH,0FDH,0ACH,0E8H,6EH,00H
+	DB	0ACH,84H,0C0H,75H,0F8H,0C3H,0E8H,6CH,00H,0A1H,38H,03H
+	DB	8EH,0D8H,8EH,0C0H,0B2H,00H,2EH,0FFH,2EH,34H,03H,0C6H
+	DB	06H,4BH,03H,05H,0F6H,26H,32H,03H,0F6H,36H,33H,03H
+	DB	8AH,0ECH,0B1H,00H,0D1H,0E1H,81H,0C1H,4EH,0CH,89H,0EH
+	DB	47H,03H,3AH,06H,49H,03H,75H,01H,0C3H,0A2H,49H,03H
+	DB	0B6H,00H,04H,01H,8AH,0E8H,3CH,28H,72H,06H,0B5H,4FH
+	DB	2AH,0E8H,0B6H,01H,1EH,07H,0B1H,01H,8BH,1EH,43H,03H
+	DB	0A0H,4AH,03H,0B4H,02H,0CDH,13H,72H,01H,0C3H,0B4H,00H
+	DB	0CDH,13H,0FEH,0EH,4BH,03H,75H,0ECH,0BEH,0AH,04H,0E9H
+	DB	88H,0FFH,0B7H,00H,0B4H,0EH,0CDH,10H,0C3H,0B4H,01H,0CDH
+	DB	16H,74H,1AH,0B4H,00H,0CDH,16H,3CH,3FH,75H,12H,0BEH
+	DB	4CH,03H,0B9H,40H,00H,0ACH,32H,0C1H,0E8H,0DFH,0FFH,0E2H
+	DB	0F8H,0F6H,0E4H,0E2H,0FCH,0C3H,00H,00H,00H,00H,00H,08H
+	DB	00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,0CH,00H
+	DB	02H,00H,00H,00H,00H,00H,00H,00H,00H,0FFH,00H,00H
+	DB	4DH,35H,33H,37H,71H,4EH,59H,51H,18H,58H,50H,15H
+	DB	40H,5BH,5BH,42H,10H,4CH,41H,49H,49H,0BH,43H,5AH
+	DB	08H,45H,54H,4AH,51H,44H,4AH,55H,00H,6BH,71H,3DH
+	DB	65H,74H,6FH,39H,7AH,6EH,38H,3BH,3AH,33H,15H,55H
+	DB	75H,6EH,60H,2DH,4EH,6AH,66H,65H,69H,75H,62H,02H
+	DB	09H,0EH,0FH,0BH,00H,43H,50H,4DH,20H,20H,20H,20H
+	DB	20H,53H,59H,53H,00H,00H,43H,43H,50H,4DH,20H,20H
+	DB	20H,20H,53H,59H,53H,00H,4CH,6FH,61H,64H,69H,6EH
+	DB	67H,20H,43H,50H,4DH,2EH,53H,59H,53H,2EH,00H,4CH
+	DB	6FH,61H,64H,69H,6EH,67H,20H,43H,43H,50H,4DH,2EH
+	DB	53H,59H,53H,2EH,00H,2AH,2AH,2AH,20H,43H,61H,6EH
+	DB	6EH,6FH,74H,20H,66H,69H,6EH,64H,20H,43H,50H,4DH
+	DB	2EH,53H,59H,53H,20H,6FH,72H,20H,43H,43H,50H,4DH
+	DB	2EH,53H,59H,53H,20H,2AH,2AH,2AH,0DH,0AH,54H,72H
+	DB	79H,20H,61H,6EH,6FH,74H,68H,65H,72H,20H,64H,69H
+	DB	73H,6BH,65H,74H,74H,65H,2EH,0DH,0AH,00H,0DH,0AH
+	DB	0AH,2AH,2AH,2AH,20H,45H,72H,72H,6FH,72H,20H,77H
+	DB	68H,69H,6CH,65H,20H,72H,65H,61H,64H,69H,6EH,67H
+	DB	20H,53H,79H,73H,74H,65H,6DH,20H,46H,69H,6CH,65H
+	DB	20H,2AH,2AH,2AH,0DH,0AH,54H,72H,79H,20H,61H,6EH
+	DB	6FH,74H,68H,65H,72H,20H,64H,69H,73H,6BH,65H,74H
+	DB	74H,65H,2EH,0DH,0AH,00H
+;
+LDRLEN		EQU	OFFSET $ - OFFSET LDR
+;
+;
+;	this is the boot loader for the PC-DOS data disk
+;
+;	use DDT to put the image of the loader into the DSKMAINT.CMD file,
+;	  instructions are in the file LS.SUB as part of LINK procedure
+;
+;	the boot loader is DOSBOOT.LDR, the source file is DOSBOOT.A86
+;
+pc_loader	db	'PUT THE PC LOADER HERE'
+		rs	512 - length pc_loader
+;
+dskmaint_format	db	'DSKMAINT FORMAT',0	;HELP prompt
+                                                                                                                                                                                             

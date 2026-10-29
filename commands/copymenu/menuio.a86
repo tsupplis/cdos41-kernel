@@ -1,0 +1,975 @@
+;MENUIO.A86
+;******************************************************************************
+;	Serial terminal I/O routines for EDITMENU and COPYMENU for CDOS 4.1.
+;	9 MAR 85  JMB
+;
+;	This module handles the serial output for EDITMENU when that
+;	program finds itself running on a serial terminal.  It uses
+;	the "TERM.DAT" idea to configure itself for different serial terminals.
+;	First looking for TERMX.DAT on the system disk (P:) user 0 for that
+;	console, where X=1 to 16, corresponding to the console number.
+;	If that file is not found, it attempts to open the TERMDAT queue
+;	which will contain the segment address of the terminal parameters
+;	which has been previously been read by another TMP.  Else, it tries
+;	to open TERM.DAT on 0P:.
+
+;	If still unsuccessful, the "cannot run on this console" message
+;	is written.
+
+
+PUBLIC	FREPEAT, FDRAW, set_attrp, pcursor, expand_off, expand_on
+PUBLIC	cursor_off, cursor_on, clr_scr, wrap_off, wrap_on
+PUBLIC	io_pointer, putc_1, update_phys, wm_sync, WM_MXQ
+PUBLIC	printf_x
+
+extrn	SQ_FREPEAT:near, SQ_FDRAW:near, sq_set_attrp:near, sq_pcursor:near
+extrn	sq_expand_off:near, sq_cursor_off:near, sq_cursor_on:near
+extrn	sq_expand_on:near, sq_wrap_on:near, sq_wrap_off:near
+extrn	sq_clr_scr:near, fputc:near
+extrn	malloc:near, update_phys_x:near, wm_sync_x:near, WM_MXQ_X:near
+extrn	printf:near
+
+PUBLIC	ser_term_init, ser_normalize
+
+;TERM.DAT constants:
+PREAMBLE	equ	0
+CHAR		equ	PREAMBLE + 256
+CH_ON		equ	CHAR + 256
+CH_OFF		equ	CH_ON + 256*2
+ATTR		equ	CH_OFF + 256*2
+TERM_STR	equ	ATTR + 256*2
+
+;Serial terminal string numbers:
+CUR_POS_NUM	equ	0*2
+CLR_SCR_NUM	equ	1*2
+CLR_EOL_NUM	equ	2*2
+CLR_EOS_NUM	equ	3*2
+WRAP_ON_NUM	equ	4*2
+WRAP_OFF_NUM	equ	5*2
+CURS_ON_NUM	equ	6*2
+CURS_OFF_NUM	equ	7*2
+CURS_UP_NUM	equ	8*2
+CURS_DOWN_NUM	equ	9*2
+CURS_RIGHT_NUM	equ	10*2
+CURS_LEFT_NUM	equ	11*2
+SET_ATTR_NUM	equ	12*2
+
+;Misc. constants:
+TRUE		equ	1
+FALSE		equ	0
+ROW_FIRST	equ	0
+COL_FIRST	equ	1
+NORMAL_IBM_ATTR equ	07h
+
+C_WRITE		equ	2
+C_WRITEBLK	equ	111
+F_CLOSE		equ	16
+F_DMAOFF	equ	26
+F_DMASEG	equ	51
+F_MULTISEC	equ	44
+F_OPEN		equ	15
+F_READ		equ	20
+F_SIZE		equ	35
+F_USERNUM	equ	32
+M_ALLOC		equ	128
+Q_MAKE		equ	134
+Q_OPEN		equ	135
+Q_READ		equ	137
+Q_WRITE		equ	139
+
+SYSCALL		equ	224
+
+
+CGROUP group CODE
+DGROUP group DATA
+
+	DSEG
+
+io_pointer	dw	squid_routines		;set in init
+
+squid_routines	dw	sq_cursor_on
+		dw	sq_cursor_off
+		dw	sq_wrap_on
+		dw	sq_wrap_off
+		dw	sq_expand_on
+		dw	sq_expand_off
+		dw	sq_set_attrp
+		dw	sq_pcursor
+		dw	SQ_FREPEAT
+		dw	SQ_FDRAW
+		dw	sq_clr_scr
+		dw	fputc
+		dw	update_phys_x
+		dw	wm_sync_x
+		dw	WM_MXQ_X
+		dw	printf
+
+serial_routines	dw	ser_cursor_on
+		dw	ser_cursor_off
+		dw	ser_wrap_on
+		dw	ser_wrap_off
+		dw	ser_expand_on
+		dw	ser_expand_off
+		dw	ser_set_attrp
+		dw	ser_pcursor
+		dw	ser_frepeat
+		dw	ser_fdraw
+		dw	ser_clr_scr
+		dw	ser_putc
+		dw	ser_update_phys
+		dw	ser_wm_sync
+		dw	ser_wm_mxq
+		dw	ser_printf
+
+CURSOR_ON_NUM_E		equ	0*2
+CURSOR_OFF_NUM_E	equ	1*2
+WRAP_ON_NUM_E		equ	2*2
+WRAP_OFF_NUM_E		equ	3*2
+EXPAND_ON_NUM_E		equ	4*2
+EXPAND_OFF_NUM_E	equ	5*2
+SET_ATTRP_NUM_E		equ	6*2
+PCURSOR_NUM_E		equ	7*2
+FREPEAT_NUM_E		equ	8*2
+FDRAW_NUM_E		equ	9*2
+CLR_SCR_NUM_E		equ	10*2
+PUTC_NUM_E		equ	11*2
+UPDATE_NUM_E		equ	12*2
+WMSYNC_NUM_E		equ	13*2
+WMMXQ_NUM_E		equ	14*2
+PRINTF_NUM_E		equ	15*2
+
+	CSEG
+eject
+
+;Begin public branch points to squid-io routines or serial io:
+
+clr_scr:
+;-------
+	mov	bx,io_pointer
+	jmp	word ptr CLR_SCR_NUM_E[bx]
+cursor_on:
+;---------
+	mov	bx,io_pointer
+	jmp	word ptr CURSOR_ON_NUM_E[bx]
+cursor_off:
+;----------
+	mov	bx,io_pointer
+	jmp	word ptr CURSOR_OFF_NUM_E[bx]
+wrap_on:
+;-------
+	mov	bx,io_pointer
+	jmp	word ptr WRAP_ON_NUM_E[bx]
+wrap_off:
+;--------
+	mov	bx,io_pointer
+	jmp	word ptr WRAP_OFF_NUM_E[bx]
+expand_on:
+;---------
+	mov	bx,io_pointer
+	jmp	word ptr EXPAND_ON_NUM_E[bx]
+expand_off:
+;----------
+	mov	bx,io_pointer
+	jmp	word ptr EXPAND_OFF_NUM_E[bx]
+set_attrp:
+;---------
+	mov	bx,io_pointer
+	jmp	word ptr SET_ATTRP_NUM_E[bx]
+pcursor:
+;-------
+	mov	bx,io_pointer
+	jmp	word ptr PCURSOR_NUM_E[bx]
+FREPEAT:
+;-------
+	mov	bx,io_pointer
+	jmp	word ptr FREPEAT_NUM_E[bx]
+FDRAW:
+;-----
+	mov	bx,io_pointer
+	jmp	word ptr FDRAW_NUM_E[bx]
+putc_1:
+;---------
+	mov	bx,io_pointer
+	jmp	word ptr PUTC_NUM_E[bx]
+update_phys:
+;-----------
+	mov	bx,io_pointer
+	jmp	word ptr UPDATE_NUM_E[bx]
+wm_sync:
+;-------
+	mov	bx,io_pointer
+	jmp	word ptr WMSYNC_NUM_E[bx]
+WM_MXQ:
+;------
+	mov	bx,io_pointer
+	jmp	word ptr WMMXQ_NUM_E[bx]
+printf_x:
+;--------
+	mov	bx,io_pointer
+	jmp	word ptr PRINTF_NUM_E[bx]
+eject
+
+;Begin serial routines:
+
+ser_putc:
+;--------
+	pop	ret_store			;return addr.
+	mov	al,curs_row
+	mov	bl,80*2				;char per row
+	mul	bl				;result in ax
+	mov	dx,ax
+	mov	al,curs_col
+	cbw
+	shl	ax,1				;char. to char/attr
+	add	dx,ax
+	pop	ax				;get char.
+	mov	ah,last_attr
+	mov	cx,1
+	push bp ! push di ! push si
+	mov	di,dx
+	call	s_rep_stosw
+	pop si ! pop di ! pop bp
+	push	ax				;adjust stack
+	xor	ax,ax				;return code
+	jmp	ret_store			;"return"
+
+ser_printf:			;will not handle %d, etc.
+;----------
+	pop	ret_store_1			;return address
+	mov	ax,si				;save
+	pop	si				;address of string
+	push	ax				;save si
+s_pr_lp:
+	lodsb
+	or	al,al
+	 jz	s_pr_done
+	sub	ah,ah
+	push	ax
+	call	ser_putc
+	pop	ax
+	jmps	s_pr_lp
+s_pr_done:
+	pop	si
+	push	si				;adjust stack
+	jmp	ret_store_1			;"return"
+
+ser_cursor_off:				;remove the cursor from the screen
+;--------------
+	mov	bx,CURS_OFF_NUM
+	jmps	branch_off
+ser_cursor_on:				;enable cursor display
+;-------------
+	mov	bx,CURS_ON_NUM
+	jmps	branch_off
+ser_wrap_on:				;enable line wrap
+;-----------
+	mov	bx,WRAP_ON_NUM
+	jmps	branch_off
+ser_wrap_off:				;disable line-wrap
+;------------
+	mov	bx,WRAP_OFF_NUM
+;	jmps	branch_off
+
+branch_off:
+;..........
+	push	bp
+	mov	bp,sp
+	push si ! push di
+
+	call	put_esc_string
+
+	pop di ! pop si
+	pop	bp
+ser_expand_off:
+;--------------
+ser_expand_on:
+;-------------
+ser_update_phys:
+;---------------
+ser_wm_sync:
+;-----------
+ser_wm_mxq:
+;----------
+	ret
+
+ser_clr_scr:
+;-----------
+	mov	bx,CLR_SCR_NUM
+	call	branch_off
+	mov	row_col,0		;cursor is home
+	ret
+
+ser_pcursor:
+;-----------
+; ENTRY:	col = 4[bp],
+;		row = 6[bp],
+	push	bp
+	mov	bp,sp
+	push di ! push si
+	mov	ah,4[bp]
+	mov	al,6[bp]
+	call	ser_posn_cursor
+	pop si ! pop di
+	pop	bp
+	ret
+
+ser_normalize:
+;-------------
+; Routine to flush any pending character-off string:
+	push	bp
+	mov	bp,sp
+	push di ! push si ! push ES
+	les	di,term_ptr
+	mov	bx,pend_ch_off
+	or	bx,bx
+	 jz	norm_attr
+	lea	si,[di+bx]
+	call	string_out
+	mov	pend_ch_off,0
+norm_attr:
+;	mov	ah,NORMAL_IBM_ATTR
+;	call	set_attr
+
+	pop ES ! pop si ! pop di
+	pop	bp
+	ret
+
+
+ser_set_attrp:
+;------------
+;	Set attributes
+;	Input:	4[bp] has IBM PC attribute
+
+	push	bp
+	mov	bp,sp
+	push si ! push di
+	
+	mov	ax,4[bp]
+	cmp	last_attr,al
+	 je	ser_sa_ret
+
+	push	ES
+	les	di,term_ptr
+	xchg	ah,al
+	call	set_attr
+	pop	ES
+
+ser_sa_ret:
+	pop di ! pop si
+	pop	bp
+	ret
+
+ser_frepeat:
+;-----------				;see FDRAW.A86 for entry/exit
+	push	bp
+	mov	bp,sp
+	push si ! push di
+	push	ES
+
+	mov	al,4[bp]		;character
+	mov	di,6[bp]		;dest. offset
+	mov	cx,8[bp]		;count
+	mov	ah,10[bp]		;attribute
+	mov	es,12[bp]		;dest. segment
+
+	call	s_rep_stosw
+
+	pop	ES
+	pop di ! pop si
+	pop	bp
+	ret
+
+ser_fdraw:
+;---------
+	push	bp
+	mov	bp,sp
+	push si ! push di
+	push	ES
+
+	mov	si,4[bp]		;source offset.
+	mov	di,6[bp]		;destination offset
+	mov	cx,8[bp]		;count
+	mov	ax,10[bp]		;attribute
+	mov	ah,al
+	mov	es,12[bp]		;destination seg.
+	cld
+	push	ax			;save attribute
+inner_lupe:
+	pop	ax			;get attribute
+	push	ax			;save it
+	lodsb				;get char
+	test	al,0ffh			;EOS?
+	 jz	blank_rest
+	push cx ! push si
+	mov	cx,1
+	call	s_rep_stosw
+	pop si ! pop cx
+	loop	inner_lupe
+	pop	ax
+
+back:
+	pop	ES
+	pop di ! pop si
+	pop	bp
+	ret
+
+blank_rest:
+	pop	ax		;get back attribute
+	mov	al,' '
+	call	s_rep_stosw
+	jmps	back
+eject
+
+;Subroutines:
+
+put_esc_string:
+;..............
+;	Enter w/ bx=string number*2 in term.dat
+
+	push	ES
+	les	di,term_ptr
+	mov	bx,ES:TERM_STR[di+bx]
+	or	bx,bx			;anything?
+	 jz	pes_ret
+	lea	si,[di+bx]
+	call	string_out
+pes_ret:
+	pop	ES
+	ret
+
+ser_posn_cursor:
+; Position cursor
+; Input:	ah = column 0 - 79
+;		al = row 0 - 23
+
+	mov	row_col,ax		;make local copy
+	push di ! push bx ! push ES
+	mov si,DS ! mov ES,si		;string is in DSEG
+	mov	si,offset local_posn_str
+	cmp	byte ptr [si],0
+	 jnz	s_p_ok
+	pop ES ! pop bx ! pop di ! ret
+s_p_ok:
+	xor	bh,bh
+	mov	bl,[si]			;string_length
+	add	bx,si			;bx now points to last byte
+	dec	bx			;bx now points to last 2 bytes
+	
+	cmp	r_c,ROW_FIRST
+	 je	p_c_c_1
+	xchg	ah,al
+p_c_c_1:
+	add	ax,cur_pos_bias		;insert ASCII bias
+	mov	[bx],ax
+	jmp	string_out_1
+
+eject
+
+s_rep_stosw:
+;--------------
+;	This routine is entered with AX = a character(al) plus attribute(ah),
+;	ES:DI pointing to what would normally be a character position in
+;	the PC Video RAM, and CX = the number of times to insert the
+;	char/attr pair in the map.  This routine effectively replaces a 
+;	"REP STOSW" in the RUNMENU code.
+;	DI must be preserved and incremented appropriately.
+;	The screen must not scroll up if the last character position
+;	(row=24, col.=80) is filled. 
+	
+	jcxz	so_ret1			;skip if nothing there
+	cmp	di,0f00h
+	 jae	so_ret1
+	jmps	not_zero
+so_ret1:
+	ret
+not_zero:
+	push	ES
+	mov	dx,cx			;save counter
+	 mov	bx,di			;make copy of original pointer
+	 shl	cx,1			;take care of di right away
+	 add	bx,cx
+	 push	bx			;save the corrected ptr...pop into di
+ 	sub	bx,80*2*24		;will this group of characters cause the
+					;screen to scroll up?
+	 jb	no_prob
+	not bx ! inc bx ! shr bx,1	;how many to reduce the count
+	sub	dx,bx			;so only this many
+
+no_prob:
+	cmp	dx,0			;any to send?
+	 jnz	some
+	jmp	no_loop
+some:
+	push dx	! push ax		;save original counter and character
+	mov	ax,di			;operate on ptr.
+	shr	ax,1			;turn into screen of chars/no attr.
+	mov	bl,80			;dividend	
+	div	bl			;row is in AL, col. is in AH
+	cmp	row_col,ax
+	 je	no_curs_pos
+	call	ser_posn_cursor
+no_curs_pos:
+	pop	ax			;char/attr
+	les	di,term_ptr		;point to terminal information
+	mov	ch_save,al		;save character
+
+;Process attribute:
+	cmp	last_attr,ah		;this one same as last?
+	 jz	same_attr		;jump if same
+	call	set_attr		;else tell the terminal
+same_attr:
+
+;Process character:
+	mov	al,ch_save
+	xor	bh,bh
+	mov	bl,al			;make char. a word index
+	shl	bx,1
+	mov	si,ES:CH_ON[bx+di]	;examine the character-on string
+	or	si,si			;anything there
+	 jz	set_up			;skip down if no
+	cmp	si,last_ch_on		;same as the last one sent?
+	 jne	set_up			;skip down if no
+	mov	ax,ES:CH_OFF[bx+di]	;examine the character-off string
+	cmp	ax,pend_ch_off		;same as any pending?
+	 je	on_with_it		;jump if yes
+
+set_up:
+	mov	bp,pend_ch_off		;get the pending turner-offer
+	or	bp,bp
+	 jz	set_1			;jump if nix
+	lea	si,[di+bp]
+	call	string_out
+
+set_1:
+	mov	ax,ES:CH_OFF[bx+di]
+	mov	pend_ch_off,ax
+	mov	bp,ES:CH_ON[bx+di]
+	mov	last_ch_on,bp
+	or	bp,bp			;anything there?
+	 jz	on_with_it		;jump if no
+	lea	si,[di+bp]
+	call	string_out
+
+on_with_it:
+	mov	al,ch_save		;retrieve char.
+	lea	bx,CHAR[di]
+	db 26h ! xlat al
+	mov	dl,al			;put character in place
+	pop	cx			;counter
+	 jcxz	no_loop
+so_loop:
+	push cx ! push dx
+	cmp	row_col,79*256 + 23	;at EOS?
+	 jne	so_ok
+	 mov	cx,offset s1		;addr. to return to
+	 push	cx
+	 jmp	handle_last
+so_ok:
+	call	put_char
+	call	bump_cursor
+s1:
+	pop dx ! pop cx
+	loop	so_loop
+no_loop:
+	pop	di		;restore corrected pointer
+	pop	ES
+	ret
+
+;Deal with the last char. on the screen:
+handle_last:
+	push	dx			;save char.
+
+;First see if there is any wrap-off string:
+	mov	bx,WRAP_OFF_NUM
+	push	ES
+	les	di,term_ptr
+	mov	bx,ES:TERM_STR[di+bx]
+	or	bx,bx			;anything?
+	pop	ES
+	 jnz	yes_wrap		;if no wrap-off, skip last char.
+	pop	dx
+	ret
+yes_wrap:
+	call	ser_wrap_off
+	pop	dx
+	call	put_char
+	call	ser_wrap_on
+	ret
+
+;Adjust the curs. pos so we don't have to position it each time:
+bump_cursor:
+	inc	curs_col
+	 cmp	curs_col,80
+	  jb	no_lf
+	 mov	curs_col,0
+	 inc	curs_row
+	  cmp	curs_row,24
+	   jb	no_lf
+	  mov	curs_row,23		;no lf at end of screen
+no_lf:
+	ret
+eject
+
+string_out:
+;..........
+; ENTRY: ES:SI points at a string, 1st byte of which is length.
+; EXIT:  ES, DI, and BX preserved.
+
+	or	si,si
+	 jz	st_ret			;jump if nullptr
+	push di ! push bx ! push ES
+string_out_1:				;alt. entry
+	db 26h ! lodsb			;get string length
+	test	al,080h			;test for special string
+;	test	al,0C0h			;test for special string
+	 jnz	special_case		;jump if special
+	cbw				;zero ah
+
+	mov	chcb_len,ax		;prepare for C_WRITEBLK
+ship_it:
+	mov	chcb_seg,ES
+ship_it1:
+	mov	chcb_off,si
+	mov	cl,C_WRITEBLK
+	mov	dx,offset chcb
+	int	SYSCALL
+	pop ES ! pop bx ! pop di
+st_ret:
+	ret
+
+special_case:
+;	mov	ah,al			;special count to ah
+;	db 26h ! lodsb			;get mask
+;	push	ax			;save both
+
+	db 26h ! lodsb			;get ANDer
+	mov	ah,al
+	db 26h ! lodsb			;get ORer
+	push	ax			;save both
+
+	mov	si,offset local_attr_str
+	mov	bx,si
+	lodsb				;get attr. string length
+	cbw				;AH=0
+	add	bx,ax			;bx now ptr to attribute byte
+	mov	cl,attr_bias
+	sub	[bx],cl
+	mov	chcb_len,ax
+	mov	chcb_seg,DS		;string is local
+;	pop	ax			;restore spec. count and mask
+	pop	ax			;restore ANDer and ORer
+
+;	test	ah,80h			;OR
+;	 jz	and_it			;jump if not
+;	or	[bx],al
+;	add	[bx],cl			;restore the bias
+;	jmps	ship_it1
+;and_it:
+;	and	[bx],al
+
+	and	[bx],ah
+	or	[bx],al
+
+	add	[bx],cl
+	jmps	ship_it1
+eject
+
+set_attr:
+;--------
+; ENTRY:  AH = IBM PC attribute, ES:DI = term.dat
+	mov	last_attr,ah
+	mov	bl,ah
+	xor	bh,bh
+	shl	bx,1			;table of words
+	mov	bx,ES:ATTR[di+bx]
+	or	bx,bx
+	 jz	s_a_ret
+	lea	si,[di+bx]
+	call	string_out
+s_a_ret:
+	ret
+
+put_char:
+
+;write single char, saving ES and DI
+;ENTRY: char in dl
+
+	push ES ! push di
+	mov	cl,C_WRITE
+	int	SYSCALL
+	pop di ! pop ES
+	ret
+eject
+
+;Initialize information for the serial terminal:
+;Entry:  VC number in 4[bp]
+;Algo:	1. try to open TERMVC.DAT on 0P:, if succ. goto 4
+;	2. else try to open termdat queue, if succ., goto 7
+;	2.5 else try to open TERM.DAT on 0P:
+;	3. if all unsucc, return AX=ffff
+;	4. else, get sizeof file
+;	5. alloc. mem.
+;	6. read file.
+;	7. set up bias variables.
+;	9. ret
+;	10. read segment of TERM.DAT
+;	11. set up bias variables
+;	12. ret
+ser_term_init:
+;-------------
+	push	bp
+	mov	bp,sp
+	push si ! push di
+
+;Con. mode...thx WD:
+	mov	cl,109			;C_MODE
+	mov	dx,10001110b		;normal C_STAT
+	push	ES
+	int	224
+	pop	ES
+
+	mov	ax,4[bp]		;get vcnumber
+	mov	io_pointer,offset serial_routines
+
+	mov	bx,offset TERM_FCB+5
+	inc	al			;make console # 1 relative
+	cmp	al,10
+	 jb	below_ten
+	mov	cl,10
+	div	cl			;AL=hi, AH = lo
+	add	al,30h
+	mov	[bx],al
+	inc	bx
+	xchg	ah,al
+below_ten:
+	add	al,'0'
+	mov	[bx],al
+;FCB now patched for terminal-specific data file
+
+	mov	cl,F_USERNUM
+	mov	dl,0FFh
+	int	SYSCALL			;get present user #
+	push	ax			;save
+
+	mov	cl,F_USERNUM
+	mov	dl,0
+	int	SYSCALL			;set to user 0
+
+	mov	cl,F_OPEN
+	mov	dx,offset TERM_FCB	
+	int	SYSCALL
+	inc	al
+	 jnz	process_file
+
+;Here if the TERMXX.DAT file could not be found:
+	mov	cl,Q_OPEN
+	mov	dx,offset QPB
+	int	SYSCALL
+	inc	ax
+	 jz	try_other_file
+
+	mov	cl,Q_READ		;read the TERM.DAT seg. addr.
+	mov	dx,offset QPB
+	int	SYSCALL
+
+	mov	cl,Q_WRITE
+	mov	dx,offset QPB
+	int	SYSCALL
+
+	jmp	init_vars		;initialize the variables
+
+try_other_file:
+	mov	word ptr TERM_FCB + 5,2020h
+	mov	cl,F_OPEN
+	mov	dx,offset TERM_FCB
+	int	SYSCALL
+	inc	al
+	 jnz	process_file
+	mov	ax,0ffffh		
+	jmp	user_ret
+
+process_file:
+	mov	opened,TRUE
+	mov	cl,F_SIZE
+	mov	dx,offset TERM_FCB
+	int	SYSCALL
+	inc	al
+	 jnz	p_f_1
+	mov	ax,0ffffh
+	jmp	user_ret
+
+p_f_1:
+	mov	dx,FCB_SIZE			;get # recs
+	push	dx
+	mov	cl,F_MULTISEC
+	int	SYSCALL				;set count to that many
+	pop	ax
+
+	mov	cl,7				;bytes per sector
+	shl	ax,cl
+	push	ax
+	call	malloc
+	add	sp,2
+	or	ax,ax				;good alloc
+	 jne	good_alloc
+	mov	ax,0ffffh
+	jmp	user_ret
+
+good_alloc:
+	mov	term_seg,ds
+	mov	term_off,ax
+
+	mov	dx,ax
+	mov	cl,F_DMAOFF
+	int	SYSCALL
+
+	mov	cl,F_READ
+	mov	dx,offset TERM_FCB
+	int	SYSCALL
+	 test	al,0FFh
+	 jz	init_vars
+	mov	ax,0FFFFh
+	jmp	user_ret
+
+init_vars:
+	mov	cl,F_MULTISEC
+	mov	dl,1
+	int	SYSCALL
+
+;Copy the cursor-posn string and set_attr string (if there) to local DSEG:
+	push	ES
+	mov di,DS ! mov ES,di
+	mov	di,offset local_posn_str	;destination
+	lds	si,term_ptr			;source
+	mov	bx,(TERM_STR+CUR_POS_NUM)[si]
+	or	bx,bx				;any cursor positioner?
+	 jnz	i_v_1
+i_v_err:
+	mov di,ES ! mov DS,di			;restore DS
+	pop	ES
+	mov	ax,0ffffh
+	jmps	user_ret
+i_v_1:
+	lea	si,[bx+si]			;source set up
+	xor	ch,ch
+	mov	cl,[si]
+	inc	cx				;to get count, too.
+	cmp	cl,MAX_POSN_LENGTH
+	 ja	i_v_err
+	cld
+	rep	movsb				;move the string
+
+;Do the attribute string, if present:
+	mov	di,offset local_attr_str	;destination
+	mov	ES:byte ptr [di],0		;init. to show no string
+	mov	si,ES:term_off			;source
+	mov	bx,(TERM_STR+SET_ATTR_NUM)[si]
+	or	bx,bx				;any attribute string?
+	 jz	skip_it
+	lea	si,[bx+si]
+	xor	ch,ch
+	mov	cl,[si]				;string length
+	inc	cx				;to get count, too.
+	cmp	cl,MAX_ATTR_LENGTH
+	 ja	i_v_err
+	rep	movsb
+
+skip_it:
+	mov di,ES ! mov DS,di
+
+	mov	bx,offset local_posn_str
+	test	byte ptr [bx],80h		;r/c or c/r
+	 jz	row_then_col
+	mov	r_c,COL_FIRST
+	and	byte ptr [bx],not 80h		;remove it
+row_then_col:
+	mov	al,[bx]				;get str. length
+	dec	al
+	cbw
+	add	bx,ax				;point to last 2 bytes
+	mov	ax,[bx]
+	mov	cur_pos_bias,ax			;save it
+
+;Init the attr. bias if present:
+	mov	bx,offset local_attr_str
+	test	byte ptr [bx],0ffh		;anything there?
+	 jz	no_set_attr
+	mov	al,[bx]				;get length
+	cbw
+	add	bx,ax
+	mov	al,[bx]				;get bias
+	mov	attr_bias,al			;save it
+no_set_attr:
+	mov	ax,term_seg			;return the data seg.
+	pop	ES
+user_ret:
+	cmp	opened,TRUE
+	 jne	not_opened
+	push	ax				;save return code
+	mov	cl,F_CLOSE
+	mov	dx,offset TERM_FCB
+	int	224
+	pop	ax
+not_opened:
+	pop dx					;get user #
+	push	ax				;save return code
+
+	mov	cl,F_USERNUM
+	int	SYSCALL
+
+	pop	ax				;retrieve return code
+
+	pop di ! pop si
+	pop	bp
+	ret
+eject
+	DSEG
+
+last_attr	db	0			;previous PC attribute
+last_ch_on	dw	0			;previous char.-on string
+pend_ch_off	dw	0			;pending char.-off string
+ch_save		db	0
+
+cur_pos_bias	dw	0			;cursor positioning bias
+r_c		db	ROW_FIRST		;r/c or c/r
+row_col		rw	0
+ curs_row	db	0ffh			;init. to impossible value
+ curs_col	db	0ffh			;to force initial positioning
+attr_bias	db	0			;set-attribute bias
+ret_store	rw	1			;for putc_1
+ret_store_1	rw	1			;for ser_printf
+
+term_ptr	rd	0			;dword address of TERM.DAT
+term_off	dw	0
+term_seg	dw	0
+
+chcb		rw	0
+chcb_off	dw	0
+chcb_seg	dw	0
+chcb_len	dw	0
+
+TERM_FCB	db	16,'TERM    DAT'		;drive p:
+		db	0,0,0,0,0,0,0,0,0,0,0,0
+		db	0,0,0,0,0,0,0,0,0
+FCB_SIZE	dw	0
+		db	0
+opened		db	FALSE
+eject
+
+QPB		dw	0,0,0,term_seg
+		db	'termdat '
+
+mpb		rw	0
+mpb_start	dw	0
+mpb_min		dw	0,0,0,0
+
+MAX_POSN_LENGTH	equ	16
+MAX_ATTR_LENGTH equ	16
+
+local_posn_str	rb	MAX_POSN_LENGTH
+local_attr_str	rb	MAX_ATTR_LENGTH
+
+		end
+
+;END OF EMENUIO.A86
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      

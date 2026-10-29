@@ -1,0 +1,1293 @@
+	TITLE 'PC-DOS COPY UTILITY' 
+
+;*******************************************************
+;*
+;*	Generation Procedure
+;*
+;*	RASM86 pccopy $lo
+;*
+;*	Under Concurrent with PC-MODE CompuPro or IBM PC
+;*
+;*	LINK86.EXE copy = pccopy[nop]
+;*
+;*******************************************************
+
+	cseg
+
+true	equ	0ffh
+false	equ	000h
+cr	equ	0dh
+lf	equ	0ah
+tab	equ	9h
+blank	equ	20h
+memsize	equ	2000h
+plus	equ	'+'
+slash	equ	'/'
+
+	db	'COPYRIGHT(C)1984,'
+	db	'DIGITAL RESEARCH(05/02/84)'
+	db	'XXXX-0000-654321'
+
+patch_code:
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop
+	
+start:	mov	bx,dataseg
+
+	mov	es,bx			;set es to data segment
+	mov	es:prefix,ds		;save old data segment
+	mov	es:concat,false		;initialize concat flag
+	mov	di,offset buf
+	mov	si,81h			;mov command tail into local data seg
+	mov	cx,80h			;
+	mov	dl,'+'			;
+	mov	al,' '			;
+moveit:	cmp	dl,byte ptr [si]	;
+	jnz	isntpls			;
+	mov	es:concat,true		;
+	stosb				;
+isntpls:movsb				;
+	loop	moveit			;
+					;
+	mov	ds,bx			;set ds to local data segment
+					;
+	mov	dl,0ffh			;
+	mov	cl,45			;set error return code
+	int	224			;
+					;
+
+	mov	dl,0ffh
+	call	setuser			;get user number 
+	mov	olduser,al		;set return user
+	mov	bx,offset buf		;uppercase everything
+	mov	al,byte ptr [bx]	;
+	call	upcase			;
+	call	eatblanks		;
+					;
+	mov	dl,0ffh
+	call	setuser			;get user number 
+	mov	user,al			;set local user
+	mov	srcuser,al		;source user number
+	mov	destuser,al		;destination user number
+;------------------------------------------------------------------------------
+;
+;       COPY Command
+;
+;------------------------------------------------------------------------------
+
+copy:	mov	bx,offset buf		;   copy  x.x+y.y+z.z a.a
+	mov	ptrinbuffer,bx		;         / \  \   /    \
+	mov	wild1,false		;      wild1   wild2    wild3
+	mov	wild2,false		;
+	mov	wild3,false		; wild3 will equal wild1 if there is no
+	mov	isphysical,false	; destination spec
+	push	ptrinbuffer		; 
+	push	bx
+	mov	dx,offset dfcb
+getfst:	call	gfn
+	mov	al,dfcb				
+	mov	copyfcb,al
+	push	bx
+	call	testdrv
+	pop	bx
+	mov	ah,user
+	mov	srcuser,ah
+	mov	destuser,ah
+	push	bx
+	call	device				;this section of code
+	call	iswild				;pre-parses the filenames
+	pop	bx
+	jnz	nextf				;to determine what method of
+	mov	wild1,true			;wild-carding will be used.
+	mov	wild3,true			;Its goal is to set up three
+nextf:	cmp	plusflag,true			;flags - wild1 wild2 and
+	jnz	last1				;wild3.	 Wild1
+	call	gfn				;indicates that the source side
+	mov	al,dfcb				;
+	push	bx
+	call	testdrv				;
+	call	iswild				;of copy is wild. wild3 
+	pop	bx
+	jnz	nextf				;indicates that the first
+	mov	wild1,true			;filespec of the copy command
+	jmps	nextf				;line is wild.
+last1:	test	bx,bx				;
+	jnz	isdest				;"wild2"
+	mov	al,wild1			;being true indicates that
+	mov	wild2,al			;the destination file spec 
+	mov	byte ptr dfcb,0
+	jmps	dont_parse				;is wild.
+isdest:	call	gfn
+dont_parse:
+	mov	al,dfcb
+	call	testdrv
+	call	filstar
+	mov	ah,dfcb
+	mov	copyfcb,ah
+	mov	al,user
+	mov	destuser,al
+	call	device
+	mov	ah,dfcb+1
+	call	iswild
+	jnz	go_on
+	mov	wild2,true
+
+go_on:	cmp	wild2,true			;if dest is wild and first spec
+	jnz	copythm				;is not then destination is
+	cmp	wild3,false			;not really wild
+	jnz	copythm				;and follows rules accordingly
+	mov	wild2,false			;so mark as not wild
+
+copythm:mov	bflag,false
+	mov	dl,srcuser
+	mov	user,dl
+	call	setuser	
+	mov	files,0				;initialize file number
+	pop	bx
+	pop	ptr$in$buffer
+	mov	dmaptr,offset copybuf
+	call	setdma
+
+	cmp	wild1,true			;if source is wild and
+	jnz	spec1				;destination is not then
+	cmp	wild2,true			;go to spec2
+	jz	spec1				;else go to spec1
+	jmp	spec2				;spec2 handles implicit concat.
+
+
+	
+spec1:	cmp	concat,true			;if concatenating, default 
+	jz	notcat				;bflag = off
+	mov	bflag,true			;else default bflag = on
+	mov	ah,bflag			;save default bflag
+	mov	defbflag,ah			;for wildcard search
+notcat:	call	eatblanks			;eat blanks off front of spec
+	mov	al,user
+	mov	srcuser,al
+	push	ptrinbuffer			;save position in command line
+	mov	dx,offset source1		;source1 = source spec 
+	call	gfn				;get spec
+	mov	al,user
+	mov	srcuser,al
+	mov	ah,bflag			;set bdest in case there is 
+	mov	bdest,ah			;no dest spec to get bflag from
+	call	sf				;search for it in directory
+	inc	al				;did the search succeed? 
+	jnz	nofrst 				;if so then continue
+	mov	dx,offset filenotfnd
+	call	pmsg
+	jmp	abort				;else report 0 files and exit
+nofrst:	call	copytop				;make and initialize temp file
+	call	fname				;print file name if * to *
+	pop	ptrinbuffer			;restore buffer pointer
+longer:	push	ptrinbuffer			;save buffer pointer
+	mov	ah,defbflag			;restore default bflag
+	mov	bflag,ah			;for next set of files
+	call	getfile				;read file(s) in command line
+	mov	bx,ptrinbuffer			;set bx so can eat blanks
+	pop	ptrinbuffer			;restore buffer pointer
+	call	sn				;get next source spec
+	inc	al				;did it succeed?	
+	jz	s1don	   ;spec1 is used	;no - we're done
+	call	fname	   ;except the		;print file name if neccesary
+	call	copytop	   ;one described	;reinitialize temp file
+	jmp	longer	   ;below		;transfer another set of specs
+s1don:	mov	ptrinbuffer,bx			;done copying
+	call	fini				;output number of files copied
+
+spec2:	mov	bflag,false			;we are concatenating here.
+	mov	spec2f,true			;turn on spec2 flag.
+	call	eatblanks			;eat blanks off front of spec.
+	mov	ah,user
+	mov	srcuser,ah
+	push	ptrinbuffer			;save current com line position.
+	mov	dx,offset source1		;get a filename in advance
+	call	gfn				;so that copytop has a name in
+	mov	al,user
+	mov	srcuser,al
+	mov	ah,bflag			;save bflag into bdest in case 
+	mov	bdest,ah			;there is no dest spec
+	call	sf				;source2 to use as a temp name.
+	mov	si,offset source2		;move source2 into dest as
+	mov	di,offset destfcb		;place to get characters from
+	mov	cx,6				;from in the event of a wild-
+	rep	movsw				;card in the destination spec
+	call	copytop				;initialize temporary file
+	pop	ptrinbuffer			;restore old position in com line
+morefls:mov	dx,offset source1		;source1 = source spec 
+	call	gfn				;get spec
+	mov	al,user
+	mov	srcuser,al
+	call	sf				;search for it in directory
+morewld:inc	al	   			;did the search succeed? 
+	jz	next	   			;if not then get another spec
+	mov	si,offset source2		;move source file 
+	mov	di,offset dfcb			;from source1 
+	mov	cx,6				;to dfcb.
+	rep	movsw				;
+	mov	dx,offset xdfcb			;dx points to filespec
+	mov	di,offset dfcb+32		;zero out current-record-
+	mov	byte ptr [di],0			;count in source fcbs
+	call	dosopen	   			;open file and initialize cr
+	cmp	al,true	  			;if bad open
+	jz	morewld	  ;spec2 is used	;then search for another                
+	call	readit	  ;in the case		;read file into buffer			
+	call	dosclose  ;where there is	;close file
+	call	sn	  ;implicit wild	;get next source spec
+	jmp	morewld	  ;card concatenation	;read it if it is good
+next:	inc	plusflag  ;i.e.			;check to see if plus was used
+	jnz	s2don	  ;copy *.tst a.out	;if not then must be dest file
+	jmp	morefls	  ;copy h.out +*.tst a.*;if so then get another spec
+s2don:	call	dest				;output remainder of buffer
+	mov	ptrinbuffer,bx			;reset ptr for dest file
+	call	fini				;output number of files copied
+	
+copytop:mov	dl,destuser
+	call	setuser
+	cmp	isphysical,true			;if destination is a physical
+	jnz	notphys				;device, do not copy to a 
+	mov	cx,6				;temp file - instead copy 
+	mov	si,offset devfcb		;directly to the device
+	mov	di,offset copyfcb		
+	rep	movsw
+	jmps	topgo
+notphys:mov	cx,4				;build unique filename.$$$
+	mov	si,offset source2+1		;but do not change drive that 
+	mov	di,offset copyfcb+1		;was installed by the preparser
+	rep	movsw
+	mov	si,offset dollars		;copy in dollar signs
+	mov	cx,3				;if this is not a physical 
+	rep	movsb				;destination
+	mov	di,offset copyfcb+2
+	mov	byte ptr [di],'$'		;make it really unique.
+topgo:	mov	di,offset copyfcb+33		;di = low (random record number)
+	mov	word ptr [di],0			;set dest rrn to 0
+	add	di,2				;di = high (rrn)
+	mov	word ptr [di],0			;set dest rrn to 0
+	mov	dmaptr,offset copybuf
+	mov	totsiz,0
+	mov	dx,offset copyfcb		;temporary file fcb
+ 	call	dosmake				;make temporary file
+	cmp	al,true
+	jnz	crok
+	mov	dx,offset createrr
+	call	pmsg
+	jmp	abort
+crok:	mov	di,offset copyfcb+32
+	mov	byte ptr [di],0			;zero out current rec in dest.
+	mov	dl,srcuser
+	call	setuser
+	ret	
+
+abort:	mov	dx,offset copyfcb		;error routine - 
+	mov	cx,19				;zero files copied
+	int	224				;delete temporary file 
+
+fini:	mov	ax,files			;termination routine
+	mov	cx,0				;convert number of files
+	mov	di,offset filestruc + 1		;to ascii output format
+	call	conv2asci			;and put result in the
+	mov	dx,offset filestruc		;strucure filestruc
+	call	pmsg				;output the msg
+	mov	dl,olduser
+	call	setuser
+ccpret: jmpf	dword ptr home			;termination	
+
+
+
+getfile:mov	al,srcuser
+	mov	olduser,al
+getfile1:
+	mov	dx,offset dfcb			;source filenames go in dfcb
+	mov	al,srcuser
+	mov	user,al
+	call	gfn				;get file name
+	mov	al,user
+	mov	srcuser,al
+	call	filfcb				;fill in wildcards
+	mov	di,offset dfcb+32		;zero out current-record-
+	mov	byte ptr [di],0			;count in source fcbs
+	sub	dx,7				;point to xdfcb
+	call	dosopen				;open file
+	cmp	al,0FFH				;if file doesn't exist
+	jz	nxtspc				;then get another spec 
+	call	readit				;else read the good file
+	call	dosclose			;close file
+nxtspc:	inc	plusflag			;if concatenation 
+	jz	getfile1			;then get another file
+	call	dest				;else write out buffer
+	mov	dl,olduser
+	mov	srcuser,dl			;reset the source user no.
+	call	setuser
+	ret					;and return
+
+;------------------------------------------------------------------------------
+;Read file into copyfcb.$$$
+;
+
+readit: push	dx
+	mov	concolon,false			;initialize con: flag to false
+	mov	si,offset dfcb+1		;match fcb
+	mov	di,offset con			;against "CON"
+	mov	cx,4				;3 characters
+	repz	cmpsb				;
+	jnz	notcon				;if not then go to notcon
+	mov	concolon,true			;else turn on con: flag
+	mov	bflag,false			;force ascii switch to on
+notcon:	mov	di,offset dfcb+16		;di -> low  (filesize) 
+	mov	cx,[di]				;cx = low  (filesize)
+	add	di,2				;di -> high (filesize)
+	mov	dx,[di]				;dx = high (filesize)
+	mov	bx,memsize			;bx = maximum dma size
+	mov	si,offset dfcb+14		;si = ptr to recsize in fcb1
+	mov	di,offset copyfcb+14		;di = ptr to recsize in fcb2
+	mov	[si],memsize			;set recsize in source and
+	mov	[di],memsize			;destination fcb's to max
+	cmp	concolon,true			;if con: then set recsize to 1
+	jnz	chksiz				;else set to max
+	mov	word ptr [si],1			;recsize = 1
+	mov	dx,0				;set high(filesize) to 0
+	mov	cx,1				;set low(filesize) to 1
+chksiz:	push	dx
+	mov	dx,offset dfcb
+	mov	ah,14h				;read from source files
+	int	33
+	pop	dx
+	cmp	bflag,true			;if binary flag is on then
+	jz	dntsiz				;ignore internal ctl-z's   
+	call	size				;else check for them
+dntsiz:	mov	ax,memsize			;ax = buffer size
+	cmp	dx,0
+	jnz	allful
+	cmp	cx,memsize			;cmp filesize,buffersize
+	jae	allful				;if filesize>bufsize then allfl
+	mov	ax,cx				;ax = file size
+allful:	cmp	concolon,true			;if con: and
+	jnz	subahd				; filesize=0 then subtract
+	cmp	ax,1				;else do not subtract
+	jz	nosub				;from filesize (it always = 1)
+subahd:	sub	cx,memsize
+	sbb	dx,0
+nosub:	add	dmaptr,ax			
+	add	totsiz,ax
+	cmp	totsiz,memsize
+	jl	notyet				;buffer not full yet
+	call 	copywrite
+notyet:	call	setdma				
+	test	dx,dx
+	jns	chksiz
+	pop	dx
+	ret
+;------------------------------------------------------------------------------
+;Deblock from buffer and close destination file
+;
+
+dest:	mov	dl,destuser
+	call	setuser
+
+	mov	dmaptr,offset copybuf
+	call	setdma
+	mov	si,1024
+	call	setrrn
+	mov	si,128
+	call	setrrn
+	mov	si,16
+	call	setrrn
+	mov	si,1
+	call	setrrn
+	jmp	closeit
+	
+setrrn:	mov	di,offset copyfcb+35
+	mov	bx,[di]				
+	mov	di,offset copyfcb+33
+	mov	ax,[di]
+	mov	di,offset copyfcb+14
+	mov	cx,[di]
+	call	multiply			;bx:ax X cx = bx:ax
+	mov	cx,si
+	call	divide				;bx:ax / cx = dx:ax  
+	mov	di,offset copyfcb+14
+	mov	[di],si
+	mov	di,offset copyfcb+33
+	mov	[di],ax
+	mov	di,offset copyfcb+35
+	mov	[di],dx
+	call	wrtout	
+	ret
+
+wrtout:	push	di
+	mov	di,offset copyfcb+35
+	mov	bx,offset copyfcb+33
+writemr:cmp	totsiz,si
+	js	to_sml
+	mov	dx,offset copyfcb
+	cmp	isphysical,true			;if this is a physical 
+	jnz	notdevi				;destination then we must 
+	mov	ah,15h				;do sequential writes and
+	int	33				;avoid the verification
+	call	isitout
+	jmps	continu
+notdevi:mov	ah,22h
+	int	33				;else is is a normal file:
+	call	isitout				;do random writes,	
+	call	verify				;call verify to check the
+	add	word ptr [bx],1			;writes, and increment the rrn
+	adc	word ptr [di],0	
+continu:sub	totsiz,si			;subtract the amount written
+	add	dmaptr,si			;from the filesize, and reset
+	call	setdma				;the dma address
+	jmp	writemr
+to_sml: pop	di
+	ret	
+
+isitout:cmp	al,1
+	jnz	ntfull
+	mov	dx,offset outofspace
+	call	pmsg
+	jmp	abort
+ntfull:	ret
+
+closeit:mov	bx,ptrinbuffer			;if destination file specified
+	mov	si,offset source2
+	cmp	bx,0				;then replaced default file
+	jz	useno1				;with the dest file
+
+	mov	dx,offset destfcb		
+	call	gfn				
+	mov	ah,bflag			;set bdest = bflag	
+	mov	bdest,ah			;destination file is in 
+	call	filstar				;command line - put it where 
+	call	filfcb				;the first file was.
+	mov	si,offset destfcb
+
+useno1:	cmp	bdest,true			
+	jz	notbin				
+	mov	bx,dmaptr			;if ascii option is specified
+	mov	byte ptr [bx],01ah		;for the destination file then
+	mov	dx,offset copyfcb		;add that control-z as the last
+	mov	ah,22h				;character in the file.
+	int	33
+
+notbin:	mov	dx,offset copyfcb
+	call	dosclose			;move first file to destination
+	mov	di,offset copyfcb+16		;area for renaming. first file
+	mov	cx,6				;in command line if one was 
+	rep	movsw				;available.
+
+renam:	mov	ah,copyfcb
+	mov	copyfcb+16,ah
+	cmp	isphysical,true			;if dest file is physical, then
+	jz	renok1				;do not delete and rename 
+						;it did not go through a temp. 
+	mov	dx,offset copyfcb+16
+	mov	cl,19				;delete destination file
+	int	224
+	
+	inc	al
+	jnz	filegone			;delete ok 
+
+	cmp	ah,0
+	jz	filegone
+	mov	dx,offset cantdelete		
+	call	pmsg
+	mov	dx,offset copyfcb
+	mov	cl,19
+	int	224				;delete temp. file
+	jmp	fini
+
+filegone:mov	dx,offset copyfcb
+	mov	ah,17h				;rename temp file to dest file 
+	int	33
+	cmp	al,0ffh
+	jnz	renok
+	mov	dx,offset createrr
+	call	pmsg
+	jmp	fini 				
+renok:	mov	al,att
+
+	test	al,1				;interrogate attribute byte of
+	jz	notro				;last opened file and set dest
+	or	copyfcb+16+9,80h
+notro:	test	al,4				;file to match it.
+	jz	notsys
+	or	copyfcb+16+10,80h
+notsys:	mov	cl,30
+	mov	dx,offset copyfcb+16		;set attributes
+	int	224
+
+renok1:	inc	files					
+	mov	dmaptr,offset copybuf		;reset dma to copybuf
+	call	setdma
+	mov	bx,dmaptr			;move ctl-z into first slot in
+	mov	byte ptr [bx],1ah		;buffer in case next file is null
+	mov	bflag,0
+	mov	dl,srcuser
+	call	setuser
+	ret
+;------------------------------------------------------------------------------
+;Assorted subroutines
+;
+
+fname:	cmp	wild1,true
+	jnz	noprnt
+	cmp	wild2,true
+	jnz	noprnt
+	mov	dx,offset source2
+	call	pfn
+	call	crlf
+noprnt:	ret	
+
+device:	mov	bx,offset dfcb + 1
+	mov	cx,4				; # of types to check
+	mov	si,offset con
+what00:	mov	al,byte ptr [bx]
+	cmp	al,[si]				; if dfcb(i) = device(i)
+	jz	what02
+	add	si,5
+	loop	what00
+	jmp	notdev
+what02: mov	cx,4				; test all 5 characters
+rest:	inc	si
+	inc	bx
+	mov	al,byte ptr [bx]
+	cmp	al,[si]
+	jnz	notdev				; next character not a match
+	loop	rest
+	mov	si,offset dfcb+9
+	cmp	byte ptr [si],' '		; not device if ftype(1) <> ' '
+	jnz	notdev
+	mov	cx,6
+	mov	si,offset dfcb
+	mov	di,offset devfcb		; is device so copy into devfcb
+	rep	movsw
+	mov	isphysical,true
+	jmps	devdon
+notdev:	mov	isphysical,false 
+devdon:	ret
+
+filstar:mov	di,dx
+	inc	di
+	cmp	byte ptr [di],' '
+	jnz	notblk
+	mov	al,'?'
+	mov	cx,11
+	rep	stosb
+	mov	wild2,true
+notblk:	ret
+
+
+
+
+sf:	mov	dx,offset xsource2
+	call	setbuf
+	mov	si,offset source1
+	mov	di,offset source3
+	mov	cx,6
+	rep	movsw
+	mov	dx,offset xsource3
+	mov	ah,11h
+	int	33
+	cmp	al,0ffh
+	jz	s_don
+	mov	bx,offset xsource2+19
+	mov	ah,byte ptr [bx]
+	mov	att,ah
+	jmp	s_don
+sn:	mov	dx,offset xsource2
+	call	setbuf
+	mov	dx,offset xsource3
+	mov	ah,11h
+	int	33
+	mov	si,offset source1
+	mov	di,offset source3
+	mov	cx,6
+	rep	movsw
+	mov	ah,12h
+	int	33
+	cmp	spec2f,true			;if implicit concatenation
+	jz	s_don
+	cmp	al,0ffh
+	jz	s_don				;only set att on first search
+	mov	bx,offset xsource2+19		;
+	mov	ah,byte ptr [bx]		;set attribute byte
+	mov	att,ah
+s_don:	mov	di,offset source3
+	mov	si,offset source2
+	mov	cx,6
+	rep	movsw
+	call	setdma
+	ret
+
+size:	push	bx
+	push	di
+	push	cx
+
+	mov	bx,memsize
+	mov	cx,memsize
+	mov	di,dmaptr
+	mov	al,1ah
+	cmp	concolon,true
+	jnz	notcon2
+	cmp	al,[di]
+	jnz	dntdec
+	mov	cx,0
+	pop	di
+	jmps	restor
+notcon2:repne	scasb
+	sub	bx,cx				;file size = old file size - cx
+	test	cx,cx
+	jz	dntdec
+	dec	bx				;don't output ctl-Z
+	mov	cx,bx				;new value for filesize	
+conout:	xor	dx,dx				;new value for filesize
+	pop	di				;balance stack
+	jmp	restor
+dntdec:	pop	cx				;restore cx to original file
+restor:	pop	di				;size
+	pop	bx
+	ret
+	
+filfcb: mov	di,dx
+	mov	si,offset source2
+	cmp	spec2f,true
+	jnz	nottru
+	mov	si,offset destfcb
+nottru:	mov	cx,11
+deqm:	inc	di
+	inc	si
+	dec	cx
+	js	doneqm
+	cmp	byte ptr [di],'?'
+	jnz	deqm
+	movsb	
+	dec	di
+	dec	si
+	jmp	deqm
+doneqm:	ret
+
+copywrite:
+	push	cx
+	push	di
+	push	si
+	push	dx
+
+	mov	dl,destuser
+	call	setuser
+
+	mov	dx,offset copybuf
+	call	setbuf
+
+	mov	dx,offset copyfcb
+	cmp	isphysical,true			;if this is a physical device
+	jnz	norm				;do a sequential write and
+	mov	ah,15h				;don't bother with the 
+	int	33				;verification
+	call	isitout
+	jmps	cont
+
+norm:	mov	ah,22h				;write out full buffer
+	int	33				;(random i/o for normal file)
+	call	isitout
+notfull:mov	dmaptr,offset copybuf		;so verify knows to start at beg. of buffer
+	call	verify				;verify if necessary
+
+	mov	di,offset copyfcb+35		;increment random record #
+	mov	si,offset copyfcb+33
+	add	word ptr [si],1
+	adc	word ptr [di],0
+
+
+cont:	sub	totsiz,memsize			
+	mov	cx,totsiz			;Move overflowed bytes from
+	mov	di,offset copybuf		;copybuf2 into copybuf1. Then 
+	mov	dmaptr,di			;adjust dmaptr and totsiz
+	add	dmaptr,cx			;accordingly.
+	mov	si,offset copybuf2		
+	rep	movsb
+
+	mov	dl,srcuser
+	call	setuser
+	
+	pop	dx
+	pop	si
+	pop	di
+	pop	cx
+	ret
+
+verify:	cmp	vflag,true
+	jnz	nov
+	push	bx
+	push	si
+	push	di
+	mov	dx,offset verifybuf		;set dma to verify buffer
+	call	setbuf
+	mov	bx,offset copyfcb+14		;save off record size
+	push	word ptr [bx]
+	mov	dx,offset copyfcb		;close the file	
+	call	dosclose			
+	call	dosopen
+	pop	word ptr [bx]			;restore recsize
+	mov	ah,33				;read the file
+	int	33				
+	mov	bx,offset copyfcb+14
+	mov	cx,[bx]
+	mov	si,offset verifybuf
+	mov	di,dmaptr
+	rep	cmpsb
+	jz	vok
+	mov	dx,offset verifyerr
+	call	pmsg
+	jmp	abort
+vok:	pop	di
+	pop	si
+	pop	bx
+nov:	ret
+
+divide: jcxz	divo
+	cmp	cx,1
+	jne	ntdiv1		;     bx:ax  /  cx  =  dx:ax   ,   cx (rem)  
+	mov	dx,bx
+	xor	cx,cx
+	ret
+ntdiv1:	xor	dx,dx
+	xchg	ax,bx
+	push	ax
+	div	cx
+	mov	di,ax
+	mul	cx
+	pop	dx
+	sub	dx,ax	
+	mov	ax,bx
+	div	cx
+	mov	cx,dx
+	mov	dx,di
+	ret
+divo:	mov	ax,-1
+	mov	bx,ax
+	mov	dx,ax
+	ret
+
+multiply:
+	mul	cx	
+	push	dx	
+	xchg	ax,bx			
+	mul	cx	
+	pop	dx	
+	add	ax,dx   	;    bx:ax  X  cx   =  bx:ax	
+	xchg	ax,bx
+	ret
+
+setdma: push	dx
+	mov	dx,dmaptr
+	mov	ah,1ah
+	int	33
+	pop	dx
+	ret
+
+;------------------------------------------------------------------------------
+
+testdrv:push	dx
+	dec	al
+	js	isdef
+	push	ax			;save disk to test
+	mov	cl,25			;get current disk
+	int	224			;
+	pop	dx			;restore disk to test
+	push	ax			;select it
+	mov	cl,14			;if ah <> 0ffh then reselect default
+	int	224			;else print message and 
+	inc	al			;fall through to abort routine
+	jnz	selok			;
+	mov	dx,offset badrive	;
+	call	pmsg			;
+	jmp	ccpret			;
+selok:	pop	dx			;reselect default
+	mov	cl,14			;
+	int	224			;
+isdef:	pop	dx
+	ret				;
+
+
+iswild:	xor	ah,ah
+        mov     al,'?'                  ;scan file spec for wild card
+	mov	di,dx
+	inc	di
+	mov	cl,11
+	repe	scasb
+	jnz	wild0
+	mov	ah,true
+wild0:  mov     di,dx
+        inc     di
+        mov     cl,11
+	repne   scasb                   ;ZF set if ? found
+        ret
+
+
+;-----------------------------------------------------------------------
+;
+;      print message string on terminal
+;      (BDOS function #9)
+;
+pmsg:   mov     ah,9
+        int	33
+        ret
+
+;-----------------------------------------------------------------------
+;
+;      set disk buffer address
+;      (BDOS function #26)
+;
+;      entry:  dx -> buffer ("setbuf" only)
+;
+;      must also specify dma base register with function 51 call
+;
+sbuf:   mov     dx,offset buf
+setbuf: mov     ah,1ah
+        int     33
+        ret
+
+dosclose:
+	mov	ah,10h
+	int	33
+	cmp	al,0ffh
+	jnz	clsok
+	mov	dx,offset closerr
+	call	pmsg
+	jmp	abort
+clsok:	ret
+
+dosopen:mov	ah,0fh
+	int	33
+	inc	al
+	jnz	fileok
+	cmp	concat,true
+	jz	fileok			;don't abort if concatinating
+	mov	dx,offset cantopen
+	call	pmsg
+	jmp	abort
+fileok: ret
+
+dosmake:mov	ah,16h
+	int	33
+	ret
+
+;------------------------------------------------------------------------------
+;
+;       consume all blanks and tabs - and note options and plus signs 
+;	that may occur between file specs.
+;
+;       input:  BX -> start of input string
+;       output: BX -> first non-blank character in string
+;               AL =  first non-blank character
+;
+eatblanks:
+	mov	plusflag,false
+eatmor: mov     al,byte ptr 0[bx]
+        cmp     al,blank
+	jz      eat1
+	cmp     al,tab
+	jz      eat1
+	cmp	al,plus
+	jnz	notpls
+	mov	plusflag,true
+	jmp	eat1
+notpls:	cmp	al,slash
+	jnz	fullup
+	call	optnck
+	jmp	eatmor
+fullup: ret
+
+eat1:   inc     bx
+        jmp     eatmor
+
+;------------------------------------------------------------------------------
+;
+;       is character a delimiter?
+;
+;       input:  ndelim  - # of delimiters
+;               delimptr -> delimiter string list
+;               AL      - input character
+;
+;       output: BL      - 0 or index of delimiter in list
+;               ZF      - set if character is a delimiter
+;                         reset if character is not a delimiter
+;
+separator:
+        push    di              ; save registers
+        push    cx
+        push    bx
+        mov     ch,0
+        mov     cl,ndelim
+        mov     bx,cx                   ; save count
+        mov     di,word ptr delimptr
+	repne   scasb                   ; while(cx > 0 &(char ~= delimiter(i++))
+	pop     bx
+        pop     cx
+        pop     di
+        ret     
+
+;------------------------------------------------------------------------------
+;
+;               change every lower case alphabetic input character 
+;               to its equivalent upper case character.
+;
+;               count the number of option identifiers (/) found
+;
+upcase:	mov     word ptr ptr$inbuffer,bx; AL = first non-blank character 
+	push	bx
+upstart:cmp     al,0			; BX -> input string
+        jnz     up0
+	pop	bx
+	ret                             ; end of input
+
+up0:    cmp     al,'a'                  ; if input char < 'a' then skip
+        jnb     up1
+        jmps    up2
+up1:    cmp     al,'z' + 1              ; if input > 'z' then skip
+        jnb     up2
+        sub     byte ptr 0[bx],20h      ; make uppercase
+up2:	inc     bx                      ; next character
+        mov     al,byte ptr [bx]
+        jmps    upstart                 ; while not end of string
+
+
+;------------------------------------------------------------------------------
+;
+;       FILE NAME PARSER  -  get file name 
+;
+;       BDOS FUNCTION 152 INTERFACE
+;
+;       entry:  ptr$inbuffer -> input buffer
+;               DX -> .fcb
+;       exit:   ptr$inbuffer =  0  if no more input
+;                               ~= 0 if more    
+;
+gfn:	mov     bx,ptr$inbuffer
+    	call	eatblanks
+	mov	ptr$inbuffer,bx
+    	push    dx                      ; save .fcb
+        mov     dx,pfncb                ; .parse file block 
+        mov     cl,152
+        int     224                     ; parse filename (152)
+        pop     dx                      ; restore .fcb
+        inc     bx                      ; from 152, BX = 0 (no more)
+	jnz	gfn3
+	mov	dx,offset filebad
+	call	pmsg
+	jmp	abort
+gfn3:   dec     bx                      ; if BX = 0 then end of string
+	call	eatblanks
+	or	bx,bx
+        jz      gfn4
+	mov	al,byte ptr [bx]	; move past delimiter
+	call	separator
+	jnz	gfn4
+	inc	bx
+gfn4:   mov     ptr$inbuffer,bx         ; update pointer -> next string
+	push	bx
+        push    dx
+        mov     bx,(offset pfcb)        ; BX -> parsed FCB
+        mov     cl,16                   ; # bytes to copy to DX
+        mov     di,dx			; destination
+        mov     si,bx  			; source
+	rep     movsb			; copy
+        pop     dx
+	pop	bx
+gfnend: ret
+
+;------------------------------------------------------------------------------
+;
+;       SUBROUTINES 
+;
+;------------------------------------------------------------------------------
+;
+;      print file name
+;
+pfn:	inc     dx
+        mov     bh,8      		;set # characters to print, clear # printed
+        call    pfn1                    ;print name field
+	mov	al,'.'
+	call    pfc
+	mov     bh,3                    ;set # characters to print
+pfn1:   mov     si,dx                   ;get character
+        mov     al,[si]
+        and     al,7fh
+	cmp	al,' '
+	jz 	blnk
+        call    pfc                     ;print it if not
+blnk:   inc     dx
+        dec     bh                      ;loop if more to print
+        jnz     pfn1
+	ret
+
+pfc:	push	bx
+	push	dx
+	mov	ah,2
+	mov	dl,al
+	int	33
+	pop	dx
+	pop	bx
+	ret
+	
+;------------------------------------------------------------------------------
+;
+;               tests to see if we are at the end of string,
+;               either EOS or a multiple command symbol
+;
+;       input:  AL = input character
+;       output: ZF = set if [AL] = EOS or multiple symbol
+;
+;
+isend:	call    eatblanks               ; remove any blanks
+isend1:	mov	al,byte ptr 0[bx]
+	cmp     al,0			; EOS ?
+        ret
+
+
+optnck:	push	dx
+	mov	once,false
+	inc	bx
+	mov	al,[bx]
+notp:	cmp	al,'V'
+	jnz	notv
+	mov	vflag,true
+	jmps	optdon
+notv:	cmp	al,'A'
+	jnz	nota
+	mov	bflag,false
+	jmps	optdon
+nota:	cmp	al,'B'
+	jnz	notb
+	mov	bflag,true
+	jmps	optdon
+notb:	mov	dx,offset optdon
+usernm:	cmp	al,'0'
+	jae	high
+	jmp	dx
+high:	cmp	al,'9'
+	jbe	low
+	jmp	dx
+low:	cmp	once,true
+	jz	onehere
+	sub	al,30h
+	mov	user,al
+	inc	bx
+	mov	al,[bx]
+	mov	once,true
+	mov	dx,offset notnum
+	jmps	usernm
+onehere:sub	al,30h
+	cmp	user,1
+	ja	baduser
+	jb	noten
+	add	al,10
+noten:	mov	user,al
+	jmps	setit
+notnum:	dec	bx
+setit:	mov	dl,user
+	cmp	dl,0fh
+	ja	baduser
+	call	setuser
+optdon:	inc	bx
+	pop	dx
+	ret
+
+baduser:mov	dx,offset buser
+	call	pmsg
+	jmp	abort
+
+;------------------------------------------------------------------------------
+;convert to ascii accepts 2 word values and a destination pointer.
+;The destination pointer (di) points to an 8 byte output buffer 
+;which will be filled with 8 ascii characters describing the decimal 
+;number corresponding to the value of ax:cx. Leading zeros are 
+;suppressed unless the value is zero, in which case one zero is
+;printed. 
+;
+conv2asci:
+	push	bx
+	push	di
+	mov	bx,9680h
+	mov	si,0098h
+	mov	dx,0
+go:	inc	dx
+	sub	ax,bx
+	sbb	cx,si
+	jns	go
+	add	ax,bx
+	adc	cx,si
+	dec	dx
+	call	printc
+	test	si,si
+	jz	nothy
+	cmp	si,0098h
+	jnz	not1
+	mov	si,000fh
+	mov	bx,4240h
+	jmp	go
+not1:	cmp	si,000fh
+	jnz	not2
+	mov	si,0001h
+	mov	bx,8680h
+	jmp	go
+not2:	xor	si,si
+	mov	bx,2710h
+	jmp	go
+nothy:	push	ax
+	mov	ax,bx
+	mov	bx,10
+	div	bx
+	mov	bx,ax
+	pop	ax
+	test	bx,bx
+	jz	donec
+	jmp	go
+donec:	pop	di
+	push	si
+	mov	si,di
+	add	si,7
+	cmp	byte ptr [si],' '
+	jnz	siok
+	mov	byte ptr [si],'0'
+siok:	pop	si
+	pop	bx
+	ret	
+
+
+printc:	test	dx,dx
+	jnz	digit
+	dec	di
+	cmp	byte ptr [di],' '
+	jz	supres
+	inc	di
+digit:	add	dx,'0'
+	mov	byte ptr [di],dl
+	xor	dx,dx
+	inc	di
+	ret
+supres:	inc	di
+	mov	byte ptr [di],' '
+	inc	di
+	ret
+
+setuser:push	bx
+	mov	cl,32
+	int	224
+	pop	bx
+	ret
+
+
+crlf:	push	dx
+	mov	dx,offset crlfstr
+	call	pmsg
+	pop	dx
+	ret
+
+
+;******************************************************************************
+;
+;			       DATA AREA
+;
+;******************************************************************************
+
+stackseg	sseg
+		rs	128
+stack_end	rs	0
+
+dataseg		dseg
+
+patch_data	db	'DATA PATCH AREA '
+		db	'DATA PATCH AREA '
+		db	'DATA PATCH AREA '
+		db	'DATA PATCH AREA '
+		db	'DATA PATCH AREA '
+		db	'DATA PATCH AREA '
+		db	'DATA PATCH AREA '
+		db	'DATA PATCH AREA '
+
+
+concolon	db	0
+con		db	'CON  '
+lpt		db	'LPT1 '
+nul		db	'NUL  '
+prn		db	'PRN  '
+dollars		db	'$$$'
+filestruc	db	'        0 File(s) copied $'
+buser		db	'Invalid user number',13,10,'$'
+verifyerr	db	'Verification error',13,10,'$'
+outofspace	db	'Insufficient disk space',13,10,'$'
+createrr	db	'File creation error',13,10,'$'
+filebad		db	'Invalid file specified',13,10,'$'
+filenotfnd	db	'File not found',13,10,'$'
+badrive		db	'Invalid drive specified$'
+closerr		db	'Error closing file',13,10,'$'
+cantdelete	db	'Cannot copy to destination',13,10,'$'
+cantopen	db	'Cannot open source file',13,10,'$'
+			
+crlfstr		db	13,10,'$'
+
+copyfcb		db	0,'COPYTEMP$$$'
+morecopyfcb	dw	0,0,0,0,0,0,0,0,0,0,0,0,0
+once		db	0
+user		db	0
+olduser		db	0
+srcuser		db	0
+destuser	db	0		
+isphysical	db	0
+destfcb		rb	37
+devfcb		rb	36
+spec2f		db	0
+xdfcb		db	0ffh,0,0,0,0,0,4
+dfcb		rb	16
+dfcb1		rb	20
+pad2		rb	2	
+wild1		db	0
+wild2		db	0
+wild3		db	0
+files		dw	0
+dmaptr		dw	0
+totsiz		dw	0
+avail_ram	db	0
+home		dw	0
+prefix		dw	0
+erroret		dw	0
+realdate	db	0
+delimiters	db	' ,![]><=:;/',0h
+delimptr	dw	offset delimiters
+vflag		db	0			;verify option for copy
+bflag		db	0			;binary option for copy
+bdest		db	0			;binary option for copy 
+plusflag	db	0			;concat option for copy
+wildflg		db	0
+wldflag		db	0
+concat		db	0
+defbflag	db	0
+ndelim          db      0ch
+index           db      0
+att		db	0
+source1		rs	36
+xsource3	db	0ffh,0,0,0,0,0,4
+source3		rs	36
+xsource2	db	0ffh,0,0,0,0,0,4
+source2		rs	36
+buf		rs	140
+inmax		db	127
+inlen           db      0
+inbuffer        rs      128			; console input buffer	
+pfncb		dw	(offset ptrinbuffer)
+ptrinbuffer	dw	0
+pfnfcb		dw	(offset pfcb)
+pfcb		rs	36
+		rb	16
+verifybuf	rb	2000h
+copybuf		rb	2000h
+copybuf2	rb	2000h
+		end     start
+                                                                                                                                                                                                                                                                                                                                                                                                                                                  
