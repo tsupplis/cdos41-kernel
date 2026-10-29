@@ -1,0 +1,71 @@
+*  This is the CONTROL.BR file that tells BackRest how to operate 
+*  on your CP/M and DOS files under Concurrent.
+*  This control file is for a personal computer with a color screen
+*  and standard (80 column) printer. 
+*  See "Setting Up BackRest" in BACKREST.DOC on the Concurrent
+*  distribution disk
+
+*  SCREEN CONTROL RECORDS
+*  The CLEAR: record contains the code used to erase the screen.
+*  The seven ATTRIBUTE: records determine the colors BackRest will
+*  use to display its messages.
+
+CLEAR: 2,27,69						<-- Clear Screen
+ATTRIBUTE: start screen: 9,27,99,0,27,97,3,27,98,2	<-- Green
+ATTRIBUTE: leave screen: 3,27,98,7			<-- Grey
+ATTRIBUTE: general:	 3,27,98,2			<-- Green
+ATTRIBUTE: errors:	 3,27,98,15			<-- White
+ATTRIBUTE: message:	 3,27,98,14			<-- Yellow
+ATTRIBUTE: data:	 3,27,98,3			<-- Cyan
+ATTRIBUTE: input:	 3,27,98,12			<-- Red
+
+*  PRINTER INFORMATION RECORDS
+
+PRINTER INIT: 1,13		<-- Start with a carriage return.
+FORMFEED: 1,12			<-- Printer code for a form feed.
+LENGTH: 60			<-- Number of lines per page.
+WIDTH: 80			<-- Number of columns per page.
+
+*  REPORT RECORDS
+*  Change the "ID:" record to the heading you want BackRest to print
+*  on its reports.
+
+REPORT PRINT: true		<-- Print report when finished.
+SHOW SKIPS: true		<-- Report on files not backed up.
+ID: Concurrent PC DOS Hard Disk Backup
+
+*  CONTROL RECORDS 
+*  The following records control backup and restore operations.
+
+SPLIT: true			<-- Divide backup files if required.
+BELL REPEAT: false		<-- Set to "true" for repeating bell prompt.
+DEST DRIVE: a			<-- Backup diskette drive.
+SOURCE: c,d			<-- Hard disk drives to be backed up. 
+CONTROL DRIVE: c		<-- BackRest system work drive.
+VERIFY: true			<-- Verify each file by read after write.
+REUSE: false			<-- Do no reuse backup diskettes. 
+ERASE: true			<-- Always erase destination disk first.
+* The following are user numbers to backup and restore on CP/M media:
+USERS: 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+
+*  EXCEPTION RECORDS 
+*  Least ambiguous exceptions must appear first.
+*  DO NOT REMOVE THE FIRST TWO EXCEPTIONS.
+*  Only the DOS files that reside in the subdirectories declared
+*    by a preceeding PATH: record will be effected by an exception
+*    with a "D" in the first field.
+*  Five fields are mandatory for exception records.  These are: 
+*
+*  1                  ,2    ,3           ,4                 ,5 
+*  user or "D" for DOS,drive,process flag,d(elete) or k(eep),filename.extension
+*
+*  A sixth field, password, may be added for CP/M files.
+
+
+PATH: c:\                       <-- Subdirectories to backup and restore.
+
+EXC: ?,?,c,k,control?.br	<-- Backup CONTROL.BR if modified.
+EXC: ?,?,n,k,*.br?		<-- Do not backup .BR files.
+EXC: ?,?,n,k,*.bak		<-- Do not backup .BAK files.
+EXC: ?,?,n,d,*.$$$		<-- Delete .$$$ files.
+
