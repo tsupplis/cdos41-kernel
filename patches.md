@@ -122,3 +122,56 @@ is unchanged (raw BDOS 6/FD input). The old DIR-only trailing space is removed.
 `make check-aliases` boots disposable PCE images, checks both pause prompts,
 executes DEL from TMP and a BAT file, and verifies only the named files
 were deleted. The fixtures do not modify the distribution images.
+
+## PUT/GET/RDR: direct console input selectors
+
+The imported shared redirection engine now recognizes BDOS 6 FDh (blocking
+input) and FEh (console status), alongside FFh (input if ready). PIP checks
+status then uses FDh; previously that input call bypassed GET and waited on
+the keyboard. The change is confined to commands/putget/putget.lib.
+
+`make check-redirection` boots disposable floppy images, tests multi-record PUT
+capture and append, feeds a copy command to PIP through GET and RDR, checks the
+copied bytes and captured output, and verifies return to the shell.
+
+## SDIR: DOS directories and missing options
+
+The original 4.1 binary and imported CCP/M sources both treated translated
+DOS directories as 0k files. SDIR now retains the subdirectory flag from
+search results through its buffered records, shows <DIR> in FULL/SIZE and
+backslash markers in SHORT/SIZE, and counts directories separately. CP/M
+DIR/SYS attribute filtering keeps its original meaning. The record-address
+helper now uses SIZE rather than a literal 23-byte stride.
+
+SHORT and HELP, present only in inactive source/help code, are now accepted.
+SHORT shares the buffered search/sort/filter path. HELP.DAT documents these
+options, ATTRIBUTES/SORT/DATE and the DOS-directory display rules.
+
+`make check-sdir` runs the OEM and rebuilt commands on disposable CP/M/FAT12
+images, compares legacy behavior and checks the intentional extensions,
+including paging, NOPAGE and Ctrl-C.
+
+## TYPE: exact DOS EOF and compatibility review
+
+The Concurrent 3.2 reference and imported CCP/M implementation share the
+file/password/record-read logic. Both formerly displayed zero padding from
+a DOS file's final partial 128-byte record when no Ctrl-Z was present.
+TYPE now detects the DOS open FCB flag bytes and keeps the 32-bit byte length
+from FCB bytes 28..31 in a local counter. It stops at actual DOS EOF while
+preserving Ctrl-Z and CP/M record semantics. Bracketed PAGE/P01..P23 paging uses physical screen rows; the old
+unbracketed P/PNN syntax is intentionally rejected.
+
+`make check-type` compares ordinary/error paths, protected-file passwords
+and editing, EOF boundaries (including 65537 bytes), and paging under PCE on
+disposable CP/M/FAT12 images. commands/type/README.md records the intentional
+differences and coverage limits. The Concurrent 3.2 binary remains in base
+as a test reference; it is not packaged in place of the rebuilt command.
+
+## TYPE: bracketed page length
+
+TYPE accepts [PAGE] (23 physical rows) or [PNN], with exactly two digits
+01..23. Both use the same row counter, native pause prompt and Ctrl-C path.
+Unbracketed P/PNN and [P] are rejected, as are zero, lengths above 23,
+malformed options and extra arguments. Detailed behavior is documented in
+commands/type/README.md. Regression checks cover the numeric limits,
+case-insensitivity, EOF boundaries and rejection of the removed syntax.

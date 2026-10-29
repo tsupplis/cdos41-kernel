@@ -4916,7 +4916,9 @@
     {
       "path": "commands/sdir/disp.plm",
       "origin": "ccpm86-kernel/commands/sdir/disp.plm",
-      "sha256": "e01d4059edec68e80a7fabf72717c0879a77931ad79b1ad6bbea86b670de32b3"
+      "sha256": "2ae27bb06fe42aefb7dd87eba28f54518ff72bf7464702e86bf55b9eed65e8ae",
+      "original_sha256": "e01d4059edec68e80a7fabf72717c0879a77931ad79b1ad6bbea86b670de32b3",
+      "modifications": "CDOS SDIR directory identity, SIZE-based record addressing and SHORT/HELP options; documented in commands/sdir/README.md."
     },
     {
       "path": "commands/sdir/dpb.lit",
@@ -4936,7 +4938,9 @@
     {
       "path": "commands/sdir/finfo.lit",
       "origin": "ccpm86-kernel/commands/sdir/finfo.lit",
-      "sha256": "b27535453844925d054eeb3248eb7fab4b743d6e530bee60b68aed974a9ad3b1"
+      "sha256": "001d3dd7f2cfb9bb7ea07526e9c89d138cde6abdf90c58a91b40762e63c07ccc",
+      "original_sha256": "b27535453844925d054eeb3248eb7fab4b743d6e530bee60b68aed974a9ad3b1",
+      "modifications": "CDOS SDIR directory identity, SIZE-based record addressing and SHORT/HELP options; documented in commands/sdir/README.md."
     },
     {
       "path": "commands/sdir/format.lit",
@@ -4971,7 +4975,9 @@
     {
       "path": "commands/sdir/sdirmain.plm",
       "origin": "ccpm86-kernel/commands/sdir/sdirmain.plm",
-      "sha256": "40d300ef442de4a93291a15f510b265a7cf130e54ec643dc9d90a74c8d56e003"
+      "sha256": "5083f3dfbffa8ec058e54913ae45aa7240308f949487b1d0dbcf13d8c3dec7bf",
+      "original_sha256": "40d300ef442de4a93291a15f510b265a7cf130e54ec643dc9d90a74c8d56e003",
+      "modifications": "CDOS SDIR directory identity, SIZE-based record addressing and SHORT/HELP options; documented in commands/sdir/README.md."
     },
     {
       "path": "commands/sdir/search.lit",
@@ -4981,12 +4987,16 @@
     {
       "path": "commands/sdir/search.plm",
       "origin": "ccpm86-kernel/commands/sdir/search.plm",
-      "sha256": "8128248b7e45590c314e128a7c7a8cd4208f685df1da2d883d5e90872ad00929"
+      "sha256": "aff1962dc90eb21d7fb5ddf6b53fd3d446af15e20ea29c0859fb85153df976d9",
+      "original_sha256": "8128248b7e45590c314e128a7c7a8cd4208f685df1da2d883d5e90872ad00929",
+      "modifications": "CDOS SDIR directory identity, SIZE-based record addressing and SHORT/HELP options; documented in commands/sdir/README.md."
     },
     {
       "path": "commands/sdir/sort.plm",
       "origin": "ccpm86-kernel/commands/sdir/sort.plm",
-      "sha256": "b5c17c24dfaaf34db8e497b9e4c329c7aae921a07ed5d29d9b4fbc2a1ae5a1f6"
+      "sha256": "a3e3ba94218154eed47d58675c221946b5b9aadf19cd38ed67d0684512ca853d",
+      "original_sha256": "b5c17c24dfaaf34db8e497b9e4c329c7aae921a07ed5d29d9b4fbc2a1ae5a1f6",
+      "modifications": "CDOS SDIR directory identity, SIZE-based record addressing and SHORT/HELP options; documented in commands/sdir/README.md."
     },
     {
       "path": "commands/sdir/timest.plm",
@@ -5240,7 +5250,9 @@
     {
       "path": "commands/type/pager.lit",
       "origin": "ccpm86-kernel/commands/type/pager.lit",
-      "sha256": "868957623bf8eb1db4e8e35790a354ffd5c3dadc1bb2c223b3bc10c748e02070"
+      "sha256": "83f72f1a5341063f9db0097cc03cbcd9eb6d0009dc01c16514497877f4e531a5",
+      "original_sha256": "868957623bf8eb1db4e8e35790a354ffd5c3dadc1bb2c223b3bc10c748e02070",
+      "modifications": "TYPE bracketed PAGE/P01..P23 paging; old P/PNN rejected. CDOS TYPE also honors exact DOS EOF; see tool README."
     },
     {
       "path": "commands/type/Makefile",
@@ -5260,7 +5272,9 @@
     {
       "path": "commands/type/type.plm",
       "origin": "ccpm86-kernel/commands/type/type.plm",
-      "sha256": "d906a5b8df7f562d0ed73ef68d70f7bad4d80760e967a1566e482fe036c7778b"
+      "sha256": "033df3d76705d00ba304e50e18d9e4a06b82aee3cacbdbf14f14881593707493",
+      "original_sha256": "d906a5b8df7f562d0ed73ef68d70f7bad4d80760e967a1566e482fe036c7778b",
+      "modifications": "TYPE bracketed PAGE/P01..P23 paging; old P/PNN rejected. CDOS TYPE also honors exact DOS EOF; see tool README."
     },
     {
       "path": "commands/type/vaxcmd.lit",
@@ -5404,7 +5418,9 @@
     {
       "path": "commands/help/help.dat",
       "origin": "ccpm86-kernel/commands/help/help.dat",
-      "sha256": "be082138ed971b145f4e44678fb8add340002dbdb86a4bbfd640859428cb61c7"
+      "sha256": "b2ec00da7abbe7bf0294cf2ff4b8191dfb231cbe86e3c13627e420c2a78a215d",
+      "original_sha256": "be082138ed971b145f4e44678fb8add340002dbdb86a4bbfd640859428cb61c7",
+      "modifications": "Document SDIR parity changes and TYPE EOF/password/bracketed paging."
     },
     {
       "path": "commands/print/sqlink.inp",
@@ -5419,7 +5435,9 @@
     {
       "path": "commands/putget/README.md",
       "origin": "ccpm86-kernel/commands/putget/README.md",
-      "sha256": "fdf3b3f313dc09af78c4fc3e62234a48a5f6ce784dc89cbf63ad7d765e9c50af"
+      "sha256": "131cc5e67c58d17b87fef60adcae56eed478b82ed3b2feaf193567b3baf77892",
+      "original_sha256": "fdf3b3f313dc09af78c4fc3e62234a48a5f6ce784dc89cbf63ad7d765e9c50af",
+      "modifications": "Document CDOS 4.1 scope, media placement and live regression."
     },
     {
       "path": "commands/putget/get.a86",
@@ -5444,12 +5462,170 @@
     {
       "path": "commands/putget/putget.lib",
       "origin": "ccpm86-kernel/commands/putget/putget.lib",
-      "sha256": "7a51e14707b34f662d768430d7335582b0b969612e2b8e43a9e951cff9125f5c"
+      "sha256": "40817b9411f7f08bcac2a2d6d5b8e4ba43395a1eee807e8e31ecf91c59a78ad6",
+      "original_sha256": "7a51e14707b34f662d768430d7335582b0b969612e2b8e43a9e951cff9125f5c",
+      "modifications": "Handle BDOS 6 FDh input and FEh status on 4.1."
     },
     {
       "path": "commands/putget/rdr.a86",
       "origin": "ccpm86-kernel/commands/putget/rdr.a86",
       "sha256": "b62395bb97164341498fc7d967e98999527bcf8d01193130ed3be36de27b74cc"
+    }
+  ],
+  "removed_base_binaries": [
+    {
+      "path": "base/batch.cmd",
+      "sha256": "2708c980a587c72da8dbb43b0488f707301c01c9ae01f9810ddd9e50d3c7461e",
+      "bytes": 10240,
+      "replacement": "commands/batch/batch.cmd",
+      "reason": "Superseded by the local CDOS 4.1 source build."
+    },
+    {
+      "path": "base/chdir.cmd",
+      "sha256": "0771f485ef104e11c34157a706368f3fe73e1fb284c940bde11cba658592d434",
+      "bytes": 2432,
+      "replacement": "commands/chdir/chdir.cmd",
+      "reason": "Superseded by the local CDOS 4.1 source build."
+    },
+    {
+      "path": "base/chset.cmd",
+      "sha256": "cc23f3506ef40c9d4fb78918169c315bc65a5e10971d516b3ee9ed54dc4beafc",
+      "bytes": 21760,
+      "replacement": "commands/chset/chset.cmd",
+      "reason": "Superseded by the local CDOS 4.1 source build."
+    },
+    {
+      "path": "base/copy.exe",
+      "sha256": "29d0917a45cea17040dea5ba991ce706db3876f0ced13724bb687551bb4ddf5b",
+      "bytes": 29184,
+      "replacement": "commands/copy/copy.exe",
+      "reason": "Superseded by the local CDOS 4.1 source build."
+    },
+    {
+      "path": "base/copymenu.cmd",
+      "sha256": "1a05eafe170d8c4bacaffbcaf838d9d7ba62fae67864baf5cae8da42348e6255",
+      "bytes": 37120,
+      "replacement": "commands/copymenu/copymenu.cmd",
+      "reason": "Superseded by the local CDOS 4.1 source build."
+    },
+    {
+      "path": "base/date.exe",
+      "sha256": "c2ff20e9e6d11c81fababe0aab48ea00298eb2d4665d327528a56ab233e69b7c",
+      "bytes": 2560,
+      "replacement": "commands/datetime/date.exe",
+      "reason": "Superseded by the local CDOS 4.1 source build."
+    },
+    {
+      "path": "base/dredix.cmd",
+      "sha256": "338be5c24ec6ceb4882a2d0b6a5c1a8c591e5660b8a70b75df13bf7fc4f4c93e",
+      "bytes": 49408,
+      "replacement": "commands/dredix/dredix.cmd",
+      "reason": "Superseded by the local CDOS 4.1 source build."
+    },
+    {
+      "path": "base/dskmaint.cmd",
+      "sha256": "e70332946f5325d7a85b31accf4dec8361f07610a91f61fc60aa3326e4c3c3b8",
+      "bytes": 21504,
+      "replacement": "commands/dskmaint/dskmaint.cmd",
+      "reason": "Superseded by the local CDOS 4.1 source build."
+    },
+    {
+      "path": "base/dsp.cmd",
+      "sha256": "7818cc55e963d8ac7687c5720679c049f7d38871c5254103fca5f0bb5e9d1607",
+      "bytes": 4608,
+      "replacement": "commands/dsp/dsp.cmd",
+      "reason": "Superseded by the local CDOS 4.1 source build."
+    },
+    {
+      "path": "base/editmenu.cmd",
+      "sha256": "0222eb0a8484c9b26c4326e7a9ffc814c30b8a207e29c847d937c3f5870d0877",
+      "bytes": 55680,
+      "replacement": "commands/editmenu/editmenu.cmd",
+      "reason": "Superseded by the local CDOS 4.1 source build."
+    },
+    {
+      "path": "base/eraq.cmd",
+      "sha256": "33a891ac207a2f916c2e13923a10e167a4329a9f57c1795c2ca71741d307d16f",
+      "bytes": 3968,
+      "replacement": "commands/era/eraq.cmd",
+      "reason": "Superseded by the local CDOS 4.1 source build."
+    },
+    {
+      "path": "base/erase.exe",
+      "sha256": "952abb7ecad67b91b1c890a626b593240ef960b9aed517504bbb99d099019a89",
+      "bytes": 1536,
+      "replacement": "commands/erase/erase.exe",
+      "reason": "Superseded by the local CDOS 4.1 source build."
+    },
+    {
+      "path": "base/function.cmd",
+      "sha256": "5d826a2ab22a074969fe1744359793009336400f29db35b4bdd6772450daae34",
+      "bytes": 25216,
+      "replacement": "commands/function/function.cmd",
+      "reason": "Superseded by the local CDOS 4.1 source build."
+    },
+    {
+      "path": "base/help.cmd",
+      "sha256": "839ed1af41a8e64b9f415eaf78b338ad8866e2fffc420fe865c041911a22b4bf",
+      "bytes": 7680,
+      "replacement": "commands/help/help.cmd",
+      "reason": "Superseded by the local CDOS 4.1 source build."
+    },
+    {
+      "path": "base/initdir.cmd",
+      "sha256": "e8b36210b48f0abdb400ab9a9e5f8577fb546b48033fbd5ff764add6bd9a2a1d",
+      "bytes": 36992,
+      "replacement": "commands/initdir/initdir.cmd",
+      "reason": "Superseded by the local CDOS 4.1 source build."
+    },
+    {
+      "path": "base/loadccpm.com",
+      "sha256": "f4a72b60115ebfef88fc28c3d3c73e34b057b638751066d265091f7b3d327967",
+      "bytes": 1536,
+      "replacement": "commands/loadccpm/loadccpm.com",
+      "reason": "Superseded by the local CDOS 4.1 source build."
+    },
+    {
+      "path": "base/mkdir.cmd",
+      "sha256": "44cba90dc9176713001b58a364a7e6d384cdd7282dd198d8cb8dd1ad70a043c9",
+      "bytes": 2304,
+      "replacement": "commands/mkdir/mkdir.cmd",
+      "reason": "Superseded by the local CDOS 4.1 source build."
+    },
+    {
+      "path": "base/path.exe",
+      "sha256": "e69ce810865ca8134b7a1ecb4def68b77033c7bab17f75dfe8964389e769bf3a",
+      "bytes": 2560,
+      "replacement": "commands/path/path.exe",
+      "reason": "Superseded by the local CDOS 4.1 source build."
+    },
+    {
+      "path": "base/pip.cmd",
+      "sha256": "f0e3618ad44aba886cdeda1926e2324d0014288301ec153989a4a261d5c420e0",
+      "bytes": 9344,
+      "replacement": "commands/pip/pip4.cmd",
+      "reason": "Superseded by the local CDOS 4.1 source build."
+    },
+    {
+      "path": "base/printmgr.cmd",
+      "sha256": "5460b1e46f6d169fbd27bde3532f31e9300c84d36e032210a622ee92549b327c",
+      "bytes": 30848,
+      "replacement": "commands/printmgr/printmgr.cmd",
+      "reason": "Superseded by the local CDOS 4.1 source build."
+    },
+    {
+      "path": "base/rmdir.cmd",
+      "sha256": "2385e819a48878e65034af0cd2ecfa2361ba0ddca7eb5dc18851fa6f95450086",
+      "bytes": 2176,
+      "replacement": "commands/rmdir/rmdir.cmd",
+      "reason": "Superseded by the local CDOS 4.1 source build."
+    },
+    {
+      "path": "base/sysdisk.cmd",
+      "sha256": "14720b3601d9269f370082519966c5ee021470ce6ad6414539baa7f2d6ac7614",
+      "bytes": 2304,
+      "replacement": "commands/sysdisk/sysdisk.cmd",
+      "reason": "Superseded by the local CDOS 4.1 source build."
     }
   ]
 }

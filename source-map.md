@@ -48,7 +48,7 @@ DSKMAINT, HDMAINT, GENLDR and LOADCCPM on disks 08, 10 and 11.
 | `copymenu` | CMED*.C + screen/window/attribute helpers (07/08/09) | Verified build, enabled |
 | `editmenu` | MED*.C + shared screen/window helpers (08/09) | Verified build, enabled |
 | `copy` | PCCOPY.A86, COPY.BAT (07) | Verified build, enabled; DOS .EXE output |
-| `datetime` | PCDATE.A86, DATE.BAT (08) | Verified build, enabled; DOS DATE.EXE; TIME.EXE reserved for later |
+| `datetime` | PCDATE.A86, DATE.BAT (08) | Verified DATE.EXE build; TIME.EXE reconstructed in PCTIME.A86, behavioral verification pending |
 | `date` | Unchanged CCP/M DATE.PLM and source-build Makefile | Native DATE.CMD build |
 | `erase` | PCERASE/MEDIA.A86, ERASE.BAT (09) | Verified build, enabled; DOS .EXE output |
 | `path` | PATHX.A86, PATH.BAT (11) | Verified build, enabled; DOS .EXE output |
@@ -70,8 +70,11 @@ WINDOW/WMENU, DATE.CMD, SDIR, SHOW, HEXCOM, PRINT, SET, TYPE, DIR, ED and
 DCOPY/DCOMP are now imported with their Makefiles. PRINT adds build diagnostic
 and output checks; its C/assembly sources are unchanged. Existing 4.1
 CHSET is retained. ERA and ERAQ share a directory and the local 4.1 startup.
-HELP.DAT is copied unchanged from CCP/M as the baseline for a later 4.1 review.
-These imports establish local builds; alignment with base binaries is deferred.
+HELP.DAT uses the CCP/M baseline, with local SDIR option/directory updates.
+SDIR is recompiled from CCP/M-86 3.1 and adapted for parity: its OEM comparison,
+DOS directory display and restored SHORT/HELP options are documented in
+commands/sdir/README.md and checked by make check-sdir. Other imports establish
+local builds; their alignment with base binaries remains incremental.
 
 ## Headers and common code
 
@@ -168,3 +171,50 @@ from the CCP/M project. The native console-redirection programs are installed
 on cdos86.img. Their current mechanism launches native CMD programs through
 P_CLI and intercepts INT E0h; DOS execution/redirection is not added by this
 import. ORDER is the 4.1 command-order interface; SETDEF will not be ported.
+
+## Removed pre-4.1 reference binaries
+
+The redundant base/ed.cmd and base/submit.cmd copies were removed after
+byte-for-byte archive comparisons. ED matches COMPUPRO/CDOS-816/V3-1D/D2
+(and CCPM86/V2-0); SUBMIT matches COMPUPRO/CCPM86/V3-1D and CDOS-816/V3-1D.
+Their SHA-256 values were respectively
+4918a195e488b9ce9ad763ec6e4f937b7ba2106bd59906b61574246745ec3d5e and
+3ece11c64ab97f625a0e8b859e65cc489012ba000b9a547bcfe58883fa537947.
+
+Media continues to use commands/ed/ed.cmd and commands/submit/submit.cmd.
+The 2304-byte base/dir.cmd was subsequently removed too. Its SHA-256 was
+1c547b862bf5b671efafea202a93563c3b51fbb12364aed06eabd91c63c5b7fe.
+Rebuilding the archived CCP/M 3.1 D9/dirm.plm with the local DIR layout
+produces the same 1504-byte code group after normalizing linked addresses:
+113 data-address operands shift by -22 bytes, four message pointers shift by
++32 bytes, and the startup stack pointer changes with stack placement.
+All remaining instruction bytes and control-flow offsets are identical.
+The current maintained source differs from that archived listing logic by
+local include paths and the optional paging implementation.
+
+The earlier comparison with archived Compupro binaries alone was insufficient:
+those binaries have a different layout, but that does not establish new 4.1
+listing behavior. Media already selects commands/dir/dir.cmd, independently
+of the CDOS 4.1 TMP built-in DIR. Full 4.1 behavior review remains pending.
+
+## Base cleanup after 4.1 recompilation
+
+Original executable copies are removed once a local CDOS 4.1 source build
+replaces them. This cleanup removes BATCH, CHDIR, CHSET, COPY.EXE, COPYMENU,
+DATE.EXE, DREDIX, DSKMAINT, DSP, EDITMENU, ERAQ, ERASE.EXE, FUNCTION, HELP,
+INITDIR, LOADCCPM.COM, MKDIR, PATH.EXE, PIP, PRINTMGR, RMDIR and SYSDISK.
+Their SHA-256 values and local replacement paths are recorded under
+removed_base_binaries in sources.json. All media recipes already selected
+the rebuilt outputs, so no disk payload changes are required.
+
+HDMAINT remains explicitly exempt. Original help/support data, kernel images
+and command references awaiting their individual review are retained.
+
+## TYPE compatibility
+
+base/type.cmd is the retained Concurrent 3.2 reference, SHA-256
+a372b945ef0b54544469e803a55d94f92a384b88b7afe983a1cc22232f49e0b3.
+The maintained TYPE is recompiled from CCP/M-86 3.1 and adapted for parity.
+The parse/open/password/record logic matches; DOS byte-length EOF is corrected
+and bracketed PAGE/P01..P23 paging replaces the old P/PNN forms. See commands/type/README.md and
+make check-type for the behavioral comparison and documented differences.
