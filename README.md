@@ -2,8 +2,8 @@
 
 **Early work in progress — boots from floppy images.**
 
-This project preserves Digital Research's Concurrent DOS 4.1 (CCP/M-86 follow up) multitasking OS,
-including PC-MODE, as a usable, rebuildable system for running and exploring
+This project preserves Digital Research's Concurrent DOS 4.1, multitasking OS (CCP/M-86 follow up),
+including PC-MODE DOS 2.0 Compatibility, as a usable, rebuildable system for running and exploring
 classic 16-bit software. Runnable disks, development tools and patch notes
 accompany the sources, with CP/M-Plus-style usability improvements.
 
