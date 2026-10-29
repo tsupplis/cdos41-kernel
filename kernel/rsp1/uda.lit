@@ -1,0 +1,13 @@
+
+/* Concurrent DOS  User Data Area (UDA) */
+
+declare uda$pointer pointer;
+declare uda$ptr structure (off word, segment word) at (@uda$pointer);
+declare uda$structure lit 'structure (dparam word, dma$ofst word,
+	dma$seg	word, func byte, searchl byte, searcha word, searchabase word,
+	dcnt word, dblk	word, error$mode byte, mult$cnt	byte,
+	df$password (8) byte, pd$cnt byte, uspace1 byte, uspace2 (34) word,
+	dinsys byte)';
+
+declare uda based uda$pointer uda$structure;
+
