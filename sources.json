@@ -2978,17 +2978,20 @@
     {
       "path": "commands/pip/Makefile",
       "origin": "ccpm86-kernel/commands/pip/Makefile",
-      "sha256": "d27eac6b5003d42069d601cc8c63fbb7d815a349b24cf23de9cb7f84e4e0678f"
-    },
-    {
-      "path": "commands/pip/pip3.plm",
-      "origin": "ccpm86-kernel/commands/pip/pip3.plm",
-      "sha256": "fd98429adc4dfdeb09eb7efafbd02fa91f87295af8015cba6dc15e7e8f9d0dad"
+      "sha256": "fd9834d9162d898d06657452bbf977e514bf0a14b65facb14bff56a7cade9078",
+      "original_sha256": "d27eac6b5003d42069d601cc8c63fbb7d815a349b24cf23de9cb7f84e4e0678f",
+      "modifications": [
+        "Remove PIP3 build; retain only the 4.1 PIP4 target."
+      ]
     },
     {
       "path": "commands/pip/pip4.plm",
       "origin": "ccpm86-kernel/commands/pip/pip4.plm",
-      "sha256": "3e9eb5a3b3d955699a3582a459ae6e2202bb9f4842765a9c3c9c8f43763e7fc5"
+      "sha256": "0109fd431e7a09ae03ea945905b079b1faf0c909dbf027dd47132b460cb1fc40",
+      "original_sha256": "3e9eb5a3b3d955699a3582a459ae6e2202bb9f4842765a9c3c9c8f43763e7fc5",
+      "modifications": [
+        "Update the displayed PIP version banner to 4.1N."
+      ]
     },
     {
       "path": "commands/pip/inpout.a86",
@@ -3331,32 +3334,32 @@
       "sha256": "3678cb6fc70cacf50466cec12aa2b05e3013cc42fc537f935955b9d6f2ea2eea"
     },
     {
-      "path": "commands/eraq/eraq.sub",
+      "path": "commands/era/eraq.sub",
       "origin": "41SRC_09.IMG.DIR/ERAQ.SUB",
       "sha256": "463d25f7a77ef5b8a478f76b0cb9080d7d47c093841927929271f69935d16d18"
     },
     {
-      "path": "commands/eraq/eraq.plm",
+      "path": "commands/era/eraq.plm",
       "origin": "41SRC_09.IMG.DIR/ERAQ.PLM",
       "sha256": "c0632a3b7c99b1d07aa693ad4aec4d51da1a049cbf4532c3e114ca5acb3fbcf2"
     },
     {
-      "path": "commands/eraq/vermpm.lit",
+      "path": "commands/era/vermpm.lit",
       "origin": "41SRC_09.IMG.DIR/VERMPM.LIT",
       "sha256": "292f2e3af580df8454969aafed0fd02652ed208ee17b53696b36ef8005de7320"
     },
     {
-      "path": "commands/eraq/vaxcmd.lit",
+      "path": "commands/era/vaxcmd.lit",
       "origin": "41SRC_09.IMG.DIR/VAXCMD.LIT",
       "sha256": "ef6013ae6c5826ff78f996d595654cdb30c178a6e26cf4c11700251777c1b633"
     },
     {
-      "path": "commands/eraq/copyrt.lit",
+      "path": "commands/era/copyrt.lit",
       "origin": "41SRC_09.IMG.DIR/COPYRT.LIT",
       "sha256": "eca873c32518da7505476d0db64e413cd339601c0ec8c4c3dbc169e3856c2f86"
     },
     {
-      "path": "commands/eraq/scd3.a86",
+      "path": "commands/era/scd3.a86",
       "origin": "41SRC_09.IMG.DIR/SCD3.A86",
       "sha256": "1682f21013f560c3d472c86e3ff92db7ca9ac522aff16189a25844031c6bd5b8"
     },
@@ -4076,12 +4079,12 @@
       "sha256": "41db7e8dcf64b867cba166c0e3abc3b270df9c1edc002b9dbd1251232c91325e"
     },
     {
-      "path": "commands/date/date.bat",
+      "path": "commands/datetime/date.bat",
       "origin": "41SRC_08.IMG.DIR/DATE.BAT",
       "sha256": "5f6644def6aba850e1189ac27dbffb19ae7e61949d4ea91e264877ab144d2584"
     },
     {
-      "path": "commands/date/pcdate.a86",
+      "path": "commands/datetime/pcdate.a86",
       "origin": "41SRC_08.IMG.DIR/PCDATE.A86",
       "sha256": "4a363c680f10f0ff73c3fcc8f4d6c0bec2d628084d655181eb75515ae1b820d5",
       "original_sha256": "b8f07e62515c0f6d67170404a4d48c6f6c33282ebc35b0ca8e220671bd9eb5b7",
@@ -4627,6 +4630,779 @@
       "modifications": [
         "Use cdos86.img and cdostools.img on two floppy drives."
       ]
+    },
+    {
+      "path": "commands/asm80/8080/as0com.asm",
+      "origin": "ccpm86-kernel/commands/asm80/8080/as0com.asm",
+      "sha256": "f630e56633c9ce0d40af6cc645ae7b228164e02e639b5081a0ed5c87dd9aa13b"
+    },
+    {
+      "path": "commands/asm80/8080/as1io.asm",
+      "origin": "ccpm86-kernel/commands/asm80/8080/as1io.asm",
+      "sha256": "1a9aafaa4504281a30e6bd7f7a7351169e5b104530b6e60fb0c08bc2199679aa"
+    },
+    {
+      "path": "commands/asm80/8080/as2scan.asm",
+      "origin": "ccpm86-kernel/commands/asm80/8080/as2scan.asm",
+      "sha256": "31d815c88d17556bd5c94842fc0dcd5436a12b29348edd6838331b497d0ebeea"
+    },
+    {
+      "path": "commands/asm80/8080/as3sym.asm",
+      "origin": "ccpm86-kernel/commands/asm80/8080/as3sym.asm",
+      "sha256": "b2562e1cd14e93be621ed4ad142fd5c310cbea7ea57493d80445edfcd0c76ada"
+    },
+    {
+      "path": "commands/asm80/8080/as4sear.asm",
+      "origin": "ccpm86-kernel/commands/asm80/8080/as4sear.asm",
+      "sha256": "42ffaf63873fb0f10a7baf2cfddd3c83f0533b5ddceb58734187a062fa8b9f2a"
+    },
+    {
+      "path": "commands/asm80/8080/as5oper.asm",
+      "origin": "ccpm86-kernel/commands/asm80/8080/as5oper.asm",
+      "sha256": "b4dffa948ac992376c32525bfaa39e75b1e40747c3a8db7e5e018f0407ebdc7a"
+    },
+    {
+      "path": "commands/asm80/8080/as6main.asm",
+      "origin": "ccpm86-kernel/commands/asm80/8080/as6main.asm",
+      "sha256": "2bb6a9e6ca9a8b0c0aa505268d08fe50135adcb0f3bd2e09aab25944f73c9c82"
+    },
+    {
+      "path": "commands/asm80/Makefile",
+      "origin": "ccpm86-kernel/commands/asm80/Makefile",
+      "sha256": "24cb9318d1db051de9721e20c50abb4c39d6bed1936c83a4b58059cceaa4836e"
+    },
+    {
+      "path": "commands/asm80/asm80.a86",
+      "origin": "ccpm86-kernel/commands/asm80/asm80.a86",
+      "sha256": "5b7bcbc61d34950292093db8ddf31f0c65b8bd231b3da541c3f3794f74b0e9b3"
+    },
+    {
+      "path": "commands/asm80/test80.asm",
+      "origin": "ccpm86-kernel/commands/asm80/test80.asm",
+      "sha256": "3b76734434b3cef5e54829d0ff2a82f32810c05f569dedee2db262d3a59bb560"
+    },
+    {
+      "path": "commands/ren/Makefile",
+      "origin": "ccpm86-kernel/commands/ren/Makefile",
+      "sha256": "a75ec37a9764f9cc12110dfd0d615892a729281f75a4ecd74c06dd893886a62e"
+    },
+    {
+      "path": "commands/ren/copyrt.lit",
+      "origin": "ccpm86-kernel/commands/ren/copyrt.lit",
+      "sha256": "e78e20de7fe487c1066b4cb3789103672cb0fb577854c3f5c0dd2c4f3c198305"
+    },
+    {
+      "path": "commands/ren/proces.lit",
+      "origin": "ccpm86-kernel/commands/ren/proces.lit",
+      "sha256": "2da54590aedb32960f6e800aa130ad5537f97e339e520be9b4761780bc86f2d9"
+    },
+    {
+      "path": "commands/ren/ren.plm",
+      "origin": "ccpm86-kernel/commands/ren/ren.plm",
+      "sha256": "84f8d0491e78cc8a33c6bc67d902c09943624436a0d89f62574844433adcde01"
+    },
+    {
+      "path": "commands/ren/scd.a86",
+      "origin": "ccpm86-kernel/commands/ren/scd.a86",
+      "sha256": "657f644ed64ab895fe4aca6733230b6b4a9c588d381f2e55dab998c86c434638"
+    },
+    {
+      "path": "commands/ren/uda.lit",
+      "origin": "ccpm86-kernel/commands/ren/uda.lit",
+      "sha256": "104c0e707aa08e0400e3e51077581c2487154e2ccaa1e6c4b785224be5931dc0"
+    },
+    {
+      "path": "commands/ren/vaxcmd.lit",
+      "origin": "ccpm86-kernel/commands/ren/vaxcmd.lit",
+      "sha256": "b52dd66286e4318984a3092d0af0224cf502797c59b978eac9d1ec0ddb5f62e6"
+    },
+    {
+      "path": "commands/ren/vermpm.lit",
+      "origin": "ccpm86-kernel/commands/ren/vermpm.lit",
+      "sha256": "6385c109cfdf0a365aee89eacd6aa94041cec1965cd0631b77a20395c1ff3fe2"
+    },
+    {
+      "path": "commands/systat/Makefile",
+      "origin": "ccpm86-kernel/commands/systat/Makefile",
+      "sha256": "37e14c778dcf138771e2a75049884b4ecbf2d51dbb774d951529e50fd949ac2e"
+    },
+    {
+      "path": "commands/systat/copyrt.lit",
+      "origin": "ccpm86-kernel/commands/systat/copyrt.lit",
+      "sha256": "e78e20de7fe487c1066b4cb3789103672cb0fb577854c3f5c0dd2c4f3c198305"
+    },
+    {
+      "path": "commands/systat/flag.lit",
+      "origin": "ccpm86-kernel/commands/systat/flag.lit",
+      "sha256": "2846f843bbd36fc6f569dc4832b6896fd3576b024d431cb68d0ca9585fa33d6c"
+    },
+    {
+      "path": "commands/systat/mdsat.lit",
+      "origin": "ccpm86-kernel/commands/systat/mdsat.lit",
+      "sha256": "790babed7a5713c9f7e0cab1b7af37d59c28bf55e866f00e9833432e9dd4225d"
+    },
+    {
+      "path": "commands/systat/newcom.lit",
+      "origin": "ccpm86-kernel/commands/systat/newcom.lit",
+      "sha256": "c933f4ab96b7d37320d849206c6888cc8a8ff96ff6a7672886056c6a3c3060ab"
+    },
+    {
+      "path": "commands/systat/proces.lit",
+      "origin": "ccpm86-kernel/commands/systat/proces.lit",
+      "sha256": "2da54590aedb32960f6e800aa130ad5537f97e339e520be9b4761780bc86f2d9"
+    },
+    {
+      "path": "commands/systat/qd.lit",
+      "origin": "ccpm86-kernel/commands/systat/qd.lit",
+      "sha256": "9d89609980e3c46894d07a0ef733c4f192adfde350720a5475bce50f89bcc425"
+    },
+    {
+      "path": "commands/systat/scd.a86",
+      "origin": "ccpm86-kernel/commands/systat/scd.a86",
+      "sha256": "657f644ed64ab895fe4aca6733230b6b4a9c588d381f2e55dab998c86c434638"
+    },
+    {
+      "path": "commands/systat/scomon.plm",
+      "origin": "ccpm86-kernel/commands/systat/scomon.plm",
+      "sha256": "d98a18c6012954fd52c07d0cddb9c8671304dbbcc0ada2b488d1be322e75dc1b"
+    },
+    {
+      "path": "commands/systat/sd.lit",
+      "origin": "ccpm86-kernel/commands/systat/sd.lit",
+      "sha256": "1604f29696d03df247a1052968f820e6fcf824c178e0593764e3c37bb47e35b9"
+    },
+    {
+      "path": "commands/systat/systat.plm",
+      "origin": "ccpm86-kernel/commands/systat/systat.plm",
+      "sha256": "838f802127bedccaa9ec7790c0747a559061f62322172b8f9c115bb4c0a13401"
+    },
+    {
+      "path": "commands/systat/uda.lit",
+      "origin": "ccpm86-kernel/commands/systat/uda.lit",
+      "sha256": "104c0e707aa08e0400e3e51077581c2487154e2ccaa1e6c4b785224be5931dc0"
+    },
+    {
+      "path": "commands/systat/vaxcmd.lit",
+      "origin": "ccpm86-kernel/commands/systat/vaxcmd.lit",
+      "sha256": "b52dd66286e4318984a3092d0af0224cf502797c59b978eac9d1ec0ddb5f62e6"
+    },
+    {
+      "path": "commands/systat/vccb.lit",
+      "origin": "ccpm86-kernel/commands/systat/vccb.lit",
+      "sha256": "584197fc9c6b71a9ec242388dd7cda577e5a314677fe34f748164423db34bda5"
+    },
+    {
+      "path": "commands/window/.gitignore",
+      "origin": "ccpm86-kernel/commands/window/.gitignore",
+      "sha256": "10d7f2b466d9fcde6373f84aa1b1a1d96a43d85279efaf5a010489aed2f3cc8b"
+    },
+    {
+      "path": "commands/window/Makefile",
+      "origin": "ccpm86-kernel/commands/window/Makefile",
+      "sha256": "4908282ac5d4d5c1b15163c9d5a34f624b8dd1d078c2e93090f46da69fe6dab4"
+    },
+    {
+      "path": "commands/window/README.md",
+      "origin": "ccpm86-kernel/commands/window/README.md",
+      "sha256": "4114a28d7acc3baf467c380cd099a2271de5237bc69d9eefce281b9f65f8de44"
+    },
+    {
+      "path": "commands/window/command.c",
+      "origin": "ccpm86-kernel/commands/window/command.c",
+      "sha256": "ca8424754254bee1249ce8a678e6d9f7254d464b61bcdffb74140844809d28f0"
+    },
+    {
+      "path": "commands/window/format.c",
+      "origin": "ccpm86-kernel/commands/window/format.c",
+      "sha256": "d6dab3a98ef2ef17593001f70d49abcdfa0dcdc4f2ea6fc8f4907862e6c40d9b"
+    },
+    {
+      "path": "commands/window/hostcheck.c",
+      "origin": "ccpm86-kernel/commands/window/hostcheck.c",
+      "sha256": "076bfcbcc3466ea71acf0731922efdb34a96c891f864a940584aa08e6befd889"
+    },
+    {
+      "path": "commands/window/livetest.c",
+      "origin": "ccpm86-kernel/commands/window/livetest.c",
+      "sha256": "327129b31301d10126802d857933da9d45f66b7a0f9d76f8e92def4871d8a7e7"
+    },
+    {
+      "path": "commands/window/start.c",
+      "origin": "ccpm86-kernel/commands/window/start.c",
+      "sha256": "df9828d9ed49726c55575806eab6d2f281d9c99672e076c335fbeee3b132b7d0"
+    },
+    {
+      "path": "commands/window/win.c",
+      "origin": "ccpm86-kernel/commands/window/win.c",
+      "sha256": "ebec4c99073d9161c1ccaf4acf856079e08c9ce06caa2ff687e4b4ad8e015f1b"
+    },
+    {
+      "path": "commands/window/win.h",
+      "origin": "ccpm86-kernel/commands/window/win.h",
+      "sha256": "0b8ccb22d5865dacf1f49ccbd93614aa819da2af5238eac27ece0b9bc4fbe97f"
+    },
+    {
+      "path": "commands/window/window.c",
+      "origin": "ccpm86-kernel/commands/window/window.c",
+      "sha256": "3d9f5e657b27ae1a95daf8fb36416ccd6a72f4a18c3a6c0a7b3cee5aefc44c60"
+    },
+    {
+      "path": "commands/window/wmenu.c",
+      "origin": "ccpm86-kernel/commands/window/wmenu.c",
+      "sha256": "de5c621d0d3137725b270019e3eccaf1557943155130611f27242dae286a0a29"
+    },
+    {
+      "path": "commands/window/xios.a86",
+      "origin": "ccpm86-kernel/commands/window/xios.a86",
+      "sha256": "6e96b6128e87edeac52ffd2fd99c24b17831f9c201c4af5a9032442ca5afa508"
+    },
+    {
+      "path": "commands/date/Makefile",
+      "origin": "ccpm86-kernel/commands/date/Makefile",
+      "sha256": "e545cde11beb5ee9fa8222c596c929ae12209826deed3d451f7e1b7d51c82f36"
+    },
+    {
+      "path": "commands/date/copyrt.lit",
+      "origin": "ccpm86-kernel/commands/date/copyrt.lit",
+      "sha256": "e78e20de7fe487c1066b4cb3789103672cb0fb577854c3f5c0dd2c4f3c198305"
+    },
+    {
+      "path": "commands/date/date.plm",
+      "origin": "ccpm86-kernel/commands/date/date.plm",
+      "sha256": "61dc85ae2e9c7f95b126e2b93eb4a549390a4f4b11360d800e0a0bff77524c63"
+    },
+    {
+      "path": "commands/date/scd.a86",
+      "origin": "ccpm86-kernel/commands/date/scd.a86",
+      "sha256": "657f644ed64ab895fe4aca6733230b6b4a9c588d381f2e55dab998c86c434638"
+    },
+    {
+      "path": "commands/date/vaxcmd.lit",
+      "origin": "ccpm86-kernel/commands/date/vaxcmd.lit",
+      "sha256": "b52dd66286e4318984a3092d0af0224cf502797c59b978eac9d1ec0ddb5f62e6"
+    },
+    {
+      "path": "commands/date/vermpm.lit",
+      "origin": "ccpm86-kernel/commands/date/vermpm.lit",
+      "sha256": "6385c109cfdf0a365aee89eacd6aa94041cec1965cd0631b77a20395c1ff3fe2"
+    },
+    {
+      "path": "commands/sdir/pager.lit",
+      "origin": "ccpm86-kernel/commands/sdir/pager.lit",
+      "sha256": "9b87340c6957236fa3ad985cdfe5d90c6ddef68d4f190f7f06003875d00f2f6c"
+    },
+    {
+      "path": "commands/sdir/Makefile",
+      "origin": "ccpm86-kernel/commands/sdir/Makefile",
+      "sha256": "084892da6ed7eab82b201958861e3e15d2a854a1efdf54ee6fa6c035703765ab"
+    },
+    {
+      "path": "commands/sdir/comlit.lit",
+      "origin": "ccpm86-kernel/commands/sdir/comlit.lit",
+      "sha256": "5e4bcb33046bc4a03214ee8593178f3e1fd941a5a9540fdd2824dba1b4fbc019"
+    },
+    {
+      "path": "commands/sdir/copyrt.lit",
+      "origin": "ccpm86-kernel/commands/sdir/copyrt.lit",
+      "sha256": "e78e20de7fe487c1066b4cb3789103672cb0fb577854c3f5c0dd2c4f3c198305"
+    },
+    {
+      "path": "commands/sdir/disp.plm",
+      "origin": "ccpm86-kernel/commands/sdir/disp.plm",
+      "sha256": "e01d4059edec68e80a7fabf72717c0879a77931ad79b1ad6bbea86b670de32b3"
+    },
+    {
+      "path": "commands/sdir/dpb.lit",
+      "origin": "ccpm86-kernel/commands/sdir/dpb.lit",
+      "sha256": "1f5b6ef82d54cee9dfd8ecd3f3d2e0accb1348bbb66fb0bfd0588b963df03e34"
+    },
+    {
+      "path": "commands/sdir/dpb.plm",
+      "origin": "ccpm86-kernel/commands/sdir/dpb.plm",
+      "sha256": "1631626d02528bc99df59f56298bf61d91aac6f98dc6d7375ebff6281be5197c"
+    },
+    {
+      "path": "commands/sdir/fcb.lit",
+      "origin": "ccpm86-kernel/commands/sdir/fcb.lit",
+      "sha256": "fa3968cca850ffc89e2eee6357b1c93d3e435557a0f059d7899e87f33a635330"
+    },
+    {
+      "path": "commands/sdir/finfo.lit",
+      "origin": "ccpm86-kernel/commands/sdir/finfo.lit",
+      "sha256": "b27535453844925d054eeb3248eb7fab4b743d6e530bee60b68aed974a9ad3b1"
+    },
+    {
+      "path": "commands/sdir/format.lit",
+      "origin": "ccpm86-kernel/commands/sdir/format.lit",
+      "sha256": "8015f1df7ee577978125928bbe793419a5d17e11f3befca7d5acb3d378b430e0"
+    },
+    {
+      "path": "commands/sdir/mon.plm",
+      "origin": "ccpm86-kernel/commands/sdir/mon.plm",
+      "sha256": "c6f9463119b21d6dbc37f292e0ff02f3babbdf650c6ce273d33fcbbd0559ab83"
+    },
+    {
+      "path": "commands/sdir/scan.lit",
+      "origin": "ccpm86-kernel/commands/sdir/scan.lit",
+      "sha256": "a5de536f7a1edb2a3fb9451962756092f73bc10e71482263b9058860408e0dd8"
+    },
+    {
+      "path": "commands/sdir/scan.plm",
+      "origin": "ccpm86-kernel/commands/sdir/scan.plm",
+      "sha256": "2f8ea86e7da9cbf7484cc4782e2f2ec3ba778f88a3aec97ae75afdb1f76b85bf"
+    },
+    {
+      "path": "commands/sdir/scd.a86",
+      "origin": "ccpm86-kernel/commands/sdir/scd.a86",
+      "sha256": "657f644ed64ab895fe4aca6733230b6b4a9c588d381f2e55dab998c86c434638"
+    },
+    {
+      "path": "commands/sdir/sdir.plm",
+      "origin": "ccpm86-kernel/commands/sdir/sdir.plm",
+      "sha256": "79377117ce3e09c96564d17db203bade1efd29c4771698f133628b5f923abdcc"
+    },
+    {
+      "path": "commands/sdir/sdirmain.plm",
+      "origin": "ccpm86-kernel/commands/sdir/sdirmain.plm",
+      "sha256": "40d300ef442de4a93291a15f510b265a7cf130e54ec643dc9d90a74c8d56e003"
+    },
+    {
+      "path": "commands/sdir/search.lit",
+      "origin": "ccpm86-kernel/commands/sdir/search.lit",
+      "sha256": "ce440502e47079f9c5665b16a721ddc1a7f0b8f0ced7952eaf806c172b2dabdf"
+    },
+    {
+      "path": "commands/sdir/search.plm",
+      "origin": "ccpm86-kernel/commands/sdir/search.plm",
+      "sha256": "8128248b7e45590c314e128a7c7a8cd4208f685df1da2d883d5e90872ad00929"
+    },
+    {
+      "path": "commands/sdir/sort.plm",
+      "origin": "ccpm86-kernel/commands/sdir/sort.plm",
+      "sha256": "b5c17c24dfaaf34db8e497b9e4c329c7aae921a07ed5d29d9b4fbc2a1ae5a1f6"
+    },
+    {
+      "path": "commands/sdir/timest.plm",
+      "origin": "ccpm86-kernel/commands/sdir/timest.plm",
+      "sha256": "56f8deb02b14185dda76518e6e72f397df19efc88265d1e174e8c613aa4dcaf7"
+    },
+    {
+      "path": "commands/sdir/util.plm",
+      "origin": "ccpm86-kernel/commands/sdir/util.plm",
+      "sha256": "0668ae3f32236ba7c48bc212bb174f015feba36e7c9a29cd73ca7a812875de5a"
+    },
+    {
+      "path": "commands/sdir/vers.lit",
+      "origin": "ccpm86-kernel/commands/sdir/vers.lit",
+      "sha256": "4356b942d4444287cc138b39ef51f82e50f8948631b3b41878a491abe0d7526e"
+    },
+    {
+      "path": "commands/sdir/xfcb.lit",
+      "origin": "ccpm86-kernel/commands/sdir/xfcb.lit",
+      "sha256": "5ae088751310ed722d8c25b10cb3c1409ce2da2a7f17d5249bc61a5bca9f2002"
+    },
+    {
+      "path": "commands/show/Makefile",
+      "origin": "ccpm86-kernel/commands/show/Makefile",
+      "sha256": "e1ae4b74c0c5e12e95255ad5393997276379dbb363939254488923e1a330d689"
+    },
+    {
+      "path": "commands/show/copyrt.lit",
+      "origin": "ccpm86-kernel/commands/show/copyrt.lit",
+      "sha256": "e78e20de7fe487c1066b4cb3789103672cb0fb577854c3f5c0dd2c4f3c198305"
+    },
+    {
+      "path": "commands/show/scd.a86",
+      "origin": "ccpm86-kernel/commands/show/scd.a86",
+      "sha256": "657f644ed64ab895fe4aca6733230b6b4a9c588d381f2e55dab998c86c434638"
+    },
+    {
+      "path": "commands/show/show.plm",
+      "origin": "ccpm86-kernel/commands/show/show.plm",
+      "sha256": "00adb564a465acefeca278b73e856d8e709aabbb3d0d857a7aca04d0035b8a28"
+    },
+    {
+      "path": "commands/show/vaxcmd.lit",
+      "origin": "ccpm86-kernel/commands/show/vaxcmd.lit",
+      "sha256": "b52dd66286e4318984a3092d0af0224cf502797c59b978eac9d1ec0ddb5f62e6"
+    },
+    {
+      "path": "commands/hexcom/LICENSE.md",
+      "origin": "ccpm86-kernel/commands/hexcom/LICENSE.md",
+      "sha256": "917e17c93314a5952f70a85369ff27d92ec4d2e968ae6f590eab649577fff94f"
+    },
+    {
+      "path": "commands/hexcom/Makefile",
+      "origin": "ccpm86-kernel/commands/hexcom/Makefile",
+      "sha256": "f475a91b1cc35cdfb3f3d35c9cd2a7713dd7dd0fe2d7c802d6b0a54589459d39"
+    },
+    {
+      "path": "commands/hexcom/hello.asm",
+      "origin": "ccpm86-kernel/commands/hexcom/hello.asm",
+      "sha256": "3b76734434b3cef5e54829d0ff2a82f32810c05f569dedee2db262d3a59bb560"
+    },
+    {
+      "path": "commands/hexcom/hello.com",
+      "origin": "ccpm86-kernel/commands/hexcom/hello.com",
+      "sha256": "9e69c4bb8e97a0b481421a84891395e89772f67a459c40666a87973d2086a48d"
+    },
+    {
+      "path": "commands/hexcom/hello.hex",
+      "origin": "ccpm86-kernel/commands/hexcom/hello.hex",
+      "sha256": "f4bafa718c64f32fb813423e41469e8fd8d2c52363af1977bc7ef9de17781197"
+    },
+    {
+      "path": "commands/hexcom/hexcom.c",
+      "origin": "ccpm86-kernel/commands/hexcom/hexcom.c",
+      "sha256": "abd4ba9880d408ec144741ba8d67a37f18230f8cb9bc889e6a1f95e928bae9c9"
+    },
+    {
+      "path": "commands/print/Makefile",
+      "origin": "ccpm86-kernel/commands/print/Makefile",
+      "sha256": "b3dde78abc36bc62dd0fa1a43377961267604ee62bc4254a20b4c05de46392a8",
+      "original_sha256": "6bbfb346d3868610cfdf4c0ab90aedd1315e8efb07a80bf00b7220652acab66f",
+      "modifications": [
+        "Validate compiler/linker diagnostics and the produced PRINT.CMD header."
+      ]
+    },
+    {
+      "path": "commands/print/README.md",
+      "origin": "ccpm86-kernel/commands/print/README.md",
+      "sha256": "e374fd16f8e7fd2eb3a21938b3f86610d1d8de240cd6ce01b3aef1523c6233c5"
+    },
+    {
+      "path": "commands/print/cpmerr.c",
+      "origin": "ccpm86-kernel/commands/print/cpmerr.c",
+      "sha256": "22fa3911fb20caccf3245193b3db1d68439a128c34809cbb988dbf372637cac4"
+    },
+    {
+      "path": "commands/print/cpmfunc.h",
+      "origin": "ccpm86-kernel/commands/print/cpmfunc.h",
+      "sha256": "1ccef0f884d2a3d3e553f942f498b725c50716f3c9cda11b79c268bd0bd9c19e"
+    },
+    {
+      "path": "commands/print/cpmif.a86",
+      "origin": "ccpm86-kernel/commands/print/cpmif.a86",
+      "sha256": "8e210489c89f657d1994ed036a9f1fb418b836c1a612833c83591d5621946711"
+    },
+    {
+      "path": "commands/print/cpyucase.c",
+      "origin": "ccpm86-kernel/commands/print/cpyucase.c",
+      "sha256": "3d99ab359d08f1f1b2922381192b88403af6c7f3d257d147c1131521b1fc49b8"
+    },
+    {
+      "path": "commands/print/crlf.c",
+      "origin": "ccpm86-kernel/commands/print/crlf.c",
+      "sha256": "4247753db59350ce4a7794cd51a42db8701969f1686fa0ea29c416725dede4b3"
+    },
+    {
+      "path": "commands/print/fileopen.c",
+      "origin": "ccpm86-kernel/commands/print/fileopen.c",
+      "sha256": "cd952d9fad7c74a140375e18a9dfb7d5d8c89798b80952a83a89e3c22ded3749"
+    },
+    {
+      "path": "commands/print/firstch.c",
+      "origin": "ccpm86-kernel/commands/print/firstch.c",
+      "sha256": "1d9249d284a1fbb95002f207de35115f8aa8b41f355100a0e9808c95a443688a"
+    },
+    {
+      "path": "commands/print/getdrv.c",
+      "origin": "ccpm86-kernel/commands/print/getdrv.c",
+      "sha256": "862bc622dec806c770775462367e62854a66d5db9d63dab0e9ca8d7586036b47"
+    },
+    {
+      "path": "commands/print/getnum.c",
+      "origin": "ccpm86-kernel/commands/print/getnum.c",
+      "sha256": "1f8ab6b72ab0eea17744e5de2bd7d4aec9f4816f596d7d5c9f1919188b80148f"
+    },
+    {
+      "path": "commands/print/gettail.c",
+      "origin": "ccpm86-kernel/commands/print/gettail.c",
+      "sha256": "9f687312233e846bd10a79cb6cab113f8d99d5419e63d7a08f799a7d7dccedde"
+    },
+    {
+      "path": "commands/print/issysfil.c",
+      "origin": "ccpm86-kernel/commands/print/issysfil.c",
+      "sha256": "d782b8d37678098748b0ace49bbbd213ad056eac85cbfc1fedb45e998f0f20cf"
+    },
+    {
+      "path": "commands/print/itoa.c",
+      "origin": "ccpm86-kernel/commands/print/itoa.c",
+      "sha256": "805552b3def18979605725bfd7b5f1cb50202a9c7ef182aa4512fc18860e39a9"
+    },
+    {
+      "path": "commands/print/main.c",
+      "origin": "ccpm86-kernel/commands/print/main.c",
+      "sha256": "21ce7a4d79e7540cef179aeccba3a12d98126777e3dd0936a4b573d0d7806285"
+    },
+    {
+      "path": "commands/print/nextfcb.c",
+      "origin": "ccpm86-kernel/commands/print/nextfcb.c",
+      "sha256": "d39b23dfe6c42ef537c92bcc06d143935fb5e852c72857720bc53adb159ca680"
+    },
+    {
+      "path": "commands/print/okver.c",
+      "origin": "ccpm86-kernel/commands/print/okver.c",
+      "sha256": "7f2fea4109897118cb0c76c531655693903010a15ea9fb0ebc1f2027add1ffde"
+    },
+    {
+      "path": "commands/print/parse.c",
+      "origin": "ccpm86-kernel/commands/print/parse.c",
+      "sha256": "b2bdc4a9cf88370c80091d015162cab2fcda027a82cf2cc45f47508425855048"
+    },
+    {
+      "path": "commands/print/portab.h",
+      "origin": "ccpm86-kernel/commands/print/portab.h",
+      "sha256": "339419816542473e7cbec8052c2d48c04b4bebd43c5d29664d169e89a6363567"
+    },
+    {
+      "path": "commands/print/putfname.c",
+      "origin": "ccpm86-kernel/commands/print/putfname.c",
+      "sha256": "87ee7956b99e1e97a713280499fb8f930f75b7c706818152fea498ae5686125c"
+    },
+    {
+      "path": "commands/print/readsect.c",
+      "origin": "ccpm86-kernel/commands/print/readsect.c",
+      "sha256": "b72865b19a7754c22d9ca812518a205f7987a3694e5d1ea0a5235dde79669fa7"
+    },
+    {
+      "path": "commands/print/reverse.c",
+      "origin": "ccpm86-kernel/commands/print/reverse.c",
+      "sha256": "321fb8328f349cc1013ea3a7821121fdd2f51eb59bfbaf19c005528b2e3be241"
+    },
+    {
+      "path": "commands/print/sqprint.c",
+      "origin": "ccpm86-kernel/commands/print/sqprint.c",
+      "sha256": "497d25a44bb78043dac1ef5be396ab67d91a0c90167d14f06a00c1c524c1c98e"
+    },
+    {
+      "path": "commands/print/tlex.c",
+      "origin": "ccpm86-kernel/commands/print/tlex.c",
+      "sha256": "8fc057cedc02a1e12915cfd463ea6da74c723f3b3f7787d2cd2b67a43c6597a7"
+    },
+    {
+      "path": "commands/print/utildef.h",
+      "origin": "ccpm86-kernel/commands/print/utildef.h",
+      "sha256": "101d4c02d8ed25aece9d36a4bc54437bfa34bb85836849211508edbcc34478c0"
+    },
+    {
+      "path": "commands/print/valid.c",
+      "origin": "ccpm86-kernel/commands/print/valid.c",
+      "sha256": "5ce46c4c84dd039779899a483364a781ab3fd291c395e19cfd7d1d236cc24202"
+    },
+    {
+      "path": "commands/set/Makefile",
+      "origin": "ccpm86-kernel/commands/set/Makefile",
+      "sha256": "ce879f47b53841b050020a3dfaf2083081d1a549bc5cf3dc5abadf15efee51a0"
+    },
+    {
+      "path": "commands/set/copyrt.lit",
+      "origin": "ccpm86-kernel/commands/set/copyrt.lit",
+      "sha256": "e78e20de7fe487c1066b4cb3789103672cb0fb577854c3f5c0dd2c4f3c198305"
+    },
+    {
+      "path": "commands/set/proces.lit",
+      "origin": "ccpm86-kernel/commands/set/proces.lit",
+      "sha256": "2da54590aedb32960f6e800aa130ad5537f97e339e520be9b4761780bc86f2d9"
+    },
+    {
+      "path": "commands/set/scd.a86",
+      "origin": "ccpm86-kernel/commands/set/scd.a86",
+      "sha256": "657f644ed64ab895fe4aca6733230b6b4a9c588d381f2e55dab998c86c434638"
+    },
+    {
+      "path": "commands/set/set.plm",
+      "origin": "ccpm86-kernel/commands/set/set.plm",
+      "sha256": "60cc64d60b7cd2130c9b7e44cae0e635d4df1e4d59a15231b82d4edbf60f33c1"
+    },
+    {
+      "path": "commands/set/uda.lit",
+      "origin": "ccpm86-kernel/commands/set/uda.lit",
+      "sha256": "104c0e707aa08e0400e3e51077581c2487154e2ccaa1e6c4b785224be5931dc0"
+    },
+    {
+      "path": "commands/set/vaxcmd.lit",
+      "origin": "ccpm86-kernel/commands/set/vaxcmd.lit",
+      "sha256": "b52dd66286e4318984a3092d0af0224cf502797c59b978eac9d1ec0ddb5f62e6"
+    },
+    {
+      "path": "commands/set/vermpm.lit",
+      "origin": "ccpm86-kernel/commands/set/vermpm.lit",
+      "sha256": "6385c109cfdf0a365aee89eacd6aa94041cec1965cd0631b77a20395c1ff3fe2"
+    },
+    {
+      "path": "commands/type/pager.lit",
+      "origin": "ccpm86-kernel/commands/type/pager.lit",
+      "sha256": "868957623bf8eb1db4e8e35790a354ffd5c3dadc1bb2c223b3bc10c748e02070"
+    },
+    {
+      "path": "commands/type/Makefile",
+      "origin": "ccpm86-kernel/commands/type/Makefile",
+      "sha256": "d668e4ffc4f48fcb8e51ca11212d34db19469c63a18db5788e50e762699c426d"
+    },
+    {
+      "path": "commands/type/copyrt.lit",
+      "origin": "ccpm86-kernel/commands/type/copyrt.lit",
+      "sha256": "e78e20de7fe487c1066b4cb3789103672cb0fb577854c3f5c0dd2c4f3c198305"
+    },
+    {
+      "path": "commands/type/scd.a86",
+      "origin": "ccpm86-kernel/commands/type/scd.a86",
+      "sha256": "657f644ed64ab895fe4aca6733230b6b4a9c588d381f2e55dab998c86c434638"
+    },
+    {
+      "path": "commands/type/type.plm",
+      "origin": "ccpm86-kernel/commands/type/type.plm",
+      "sha256": "d906a5b8df7f562d0ed73ef68d70f7bad4d80760e967a1566e482fe036c7778b"
+    },
+    {
+      "path": "commands/type/vaxcmd.lit",
+      "origin": "ccpm86-kernel/commands/type/vaxcmd.lit",
+      "sha256": "b52dd66286e4318984a3092d0af0224cf502797c59b978eac9d1ec0ddb5f62e6"
+    },
+    {
+      "path": "commands/type/vermpm.lit",
+      "origin": "ccpm86-kernel/commands/type/vermpm.lit",
+      "sha256": "6385c109cfdf0a365aee89eacd6aa94041cec1965cd0631b77a20395c1ff3fe2"
+    },
+    {
+      "path": "commands/dir/pager.lit",
+      "origin": "ccpm86-kernel/commands/dir/pager.lit",
+      "sha256": "c3eab3714f92847694a975e523171319ee821b629952fd010d7deb2471a5359a"
+    },
+    {
+      "path": "commands/dir/Makefile",
+      "origin": "ccpm86-kernel/commands/dir/Makefile",
+      "sha256": "9d16a8d51302e8c443445410824e5f216c89f91e4bcff7f547d54c6e7d365d1b"
+    },
+    {
+      "path": "commands/dir/comlit.lit",
+      "origin": "ccpm86-kernel/commands/dir/comlit.lit",
+      "sha256": "5e4bcb33046bc4a03214ee8593178f3e1fd941a5a9540fdd2824dba1b4fbc019"
+    },
+    {
+      "path": "commands/dir/copyrt.lit",
+      "origin": "ccpm86-kernel/commands/dir/copyrt.lit",
+      "sha256": "e78e20de7fe487c1066b4cb3789103672cb0fb577854c3f5c0dd2c4f3c198305"
+    },
+    {
+      "path": "commands/dir/dir.plm",
+      "origin": "ccpm86-kernel/commands/dir/dir.plm",
+      "sha256": "701d7dfab74caedf0db26a00a61c41df80a59e9dade9b1aa2d6f4e74d858fcc9"
+    },
+    {
+      "path": "commands/dir/dirm.plm",
+      "origin": "ccpm86-kernel/commands/dir/dirm.plm",
+      "sha256": "464f12c58d5439eab229b39cbcc62b4dcf300c0e7cd077f438e1546c30c9ccbf"
+    },
+    {
+      "path": "commands/dir/mfunc.lit",
+      "origin": "ccpm86-kernel/commands/dir/mfunc.lit",
+      "sha256": "8e634e56ea66a9e43ad9974ad6721dce77ee6d7c51bb178e48291ceb0fe494d6"
+    },
+    {
+      "path": "commands/dir/proces.lit",
+      "origin": "ccpm86-kernel/commands/dir/proces.lit",
+      "sha256": "2da54590aedb32960f6e800aa130ad5537f97e339e520be9b4761780bc86f2d9"
+    },
+    {
+      "path": "commands/dir/qd.lit",
+      "origin": "ccpm86-kernel/commands/dir/qd.lit",
+      "sha256": "9d89609980e3c46894d07a0ef733c4f192adfde350720a5475bce50f89bcc425"
+    },
+    {
+      "path": "commands/dir/scd.a86",
+      "origin": "ccpm86-kernel/commands/dir/scd.a86",
+      "sha256": "657f644ed64ab895fe4aca6733230b6b4a9c588d381f2e55dab998c86c434638"
+    },
+    {
+      "path": "commands/ed/Makefile",
+      "origin": "ccpm86-kernel/commands/ed/Makefile",
+      "sha256": "af3009c8c15e64c0156d3c350a05e2b4145ae694b2e1e79bc31873fe0ae35a0b"
+    },
+    {
+      "path": "commands/ed/copyrt.lit",
+      "origin": "ccpm86-kernel/commands/ed/copyrt.lit",
+      "sha256": "e78e20de7fe487c1066b4cb3789103672cb0fb577854c3f5c0dd2c4f3c198305"
+    },
+    {
+      "path": "commands/ed/ed.plm",
+      "origin": "ccpm86-kernel/commands/ed/ed.plm",
+      "sha256": "be998576bfc6ac978c63322c9433c9bb983ce28510e41b629855a5726516124a"
+    },
+    {
+      "path": "commands/ed/scd.a86",
+      "origin": "ccpm86-kernel/commands/ed/scd.a86",
+      "sha256": "657f644ed64ab895fe4aca6733230b6b4a9c588d381f2e55dab998c86c434638"
+    },
+    {
+      "path": "commands/disk/LICENSE.md",
+      "origin": "ccpm86-kernel/commands/disk/LICENSE.md",
+      "sha256": "67554b4b4f336e6c1fa2e06802f3295e38ecb298f045d1adf93adde4a8a4c61d"
+    },
+    {
+      "path": "commands/disk/Makefile",
+      "origin": "ccpm86-kernel/commands/disk/Makefile",
+      "sha256": "b177b4a038108ad3ab5fd87715844c72265d259b7acae867c5fceb112c9fbc6a"
+    },
+    {
+      "path": "commands/disk/README.md",
+      "origin": "ccpm86-kernel/commands/disk/README.md",
+      "sha256": "dba4810e3429585e10d4fbca69236d505716a733345cc83eba71569c3c2d397d"
+    },
+    {
+      "path": "commands/disk/ccpmio.a86",
+      "origin": "ccpm86-kernel/commands/disk/ccpmio.a86",
+      "sha256": "83916a6199604a5ef0d72c4155dbc5aadc1c8d4397ba1527da08a9838610ecab"
+    },
+    {
+      "path": "commands/disk/dcomp.a86",
+      "origin": "ccpm86-kernel/commands/disk/dcomp.a86",
+      "sha256": "89502470bd74c94ffb68c36ba03b8dde599a2be6f2e55606ebdc3ba47d1d0798"
+    },
+    {
+      "path": "commands/disk/dcopy.a86",
+      "origin": "ccpm86-kernel/commands/disk/dcopy.a86",
+      "sha256": "9fb4bc31cf486e5b2bca41a1b5c2e0ad03d38b0e706898fe56dfb8901fcd6d8d"
+    },
+    {
+      "path": "commands/disk/tests/dsktest.asm",
+      "origin": "ccpm86-kernel/commands/disk/tests/dsktest.asm",
+      "sha256": "cae788a3a3c85de3d0b1756a6e7a7698290708b057d64070399b1c46f04ad2f7"
+    },
+    {
+      "path": "commands/era/era.plm",
+      "origin": "ccpm86-kernel/commands/era/era.plm",
+      "sha256": "d2493ab6ebd58688fce276621eb6face93f8fa040aedf5640ac45d63cf0905c4",
+      "original_sha256": "1e3cdbcdcb24681821c2d0d23f8778b1ba060ea17a64ae532d8f938efb0aac07",
+      "modifications": [
+        "Use 4.1 SCD3 PL/M entry name PLM, matching the 4.1 ERAQ entry change; erase logic unchanged."
+      ]
+    },
+    {
+      "path": "commands/era/proces.lit",
+      "origin": "ccpm86-kernel/commands/era/proces.lit",
+      "sha256": "2da54590aedb32960f6e800aa130ad5537f97e339e520be9b4761780bc86f2d9"
+    },
+    {
+      "path": "commands/era/uda.lit",
+      "origin": "ccpm86-kernel/commands/era/uda.lit",
+      "sha256": "bb63cabb547c7267bb5658025af42262bbf3b10fa2c6f9acae91de58b1f46d3c"
+    },
+    {
+      "path": "tools/dsktest.py",
+      "origin": "ccpm86-kernel/tools/dsktest.py",
+      "sha256": "fa1c7f19e71e74bcdc2fffbcefd6a2b94edbf68f4589bc934ee50f76cdf8c332"
+    },
+    {
+      "path": "commands/help/help.dat",
+      "origin": "ccpm86-kernel/commands/help/help.dat",
+      "sha256": "be082138ed971b145f4e44678fb8add340002dbdb86a4bbfd640859428cb61c7"
+    },
+    {
+      "path": "commands/print/sqlink.inp",
+      "origin": "ccpm86-kernel/commands/print/sqlink.inp",
+      "sha256": "0a4d875d3fabc7763a91c8ba706c5cef03e866e4d28a6c268d5df3f026850892"
     }
   ]
 }
