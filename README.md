@@ -61,11 +61,18 @@ with the 4.1 wildcard dialog. The Makefile stages only those components in
 a fresh directory; `sysgen.log` records the generation transcript.
 
 `boot/` builds the IBM PC floppy boot chain from local source copies.
-`media/` follows the CCP/M packaging sequence and produces `cdos86.img`
-(kernel, minimal STARTUP.0, PIP, BATCH and SYSDISK) and `cdostools.img` (development
-tools). Its base.img is generated locally. `make test` runs the matching
-`media/cdos86` launcher and `media/cdos86.cfg`, with system/tools on A:/B:.
-The user reports the initial image booting; build/media checks pass.
+`media/` now builds seven 320 KB disks following the CCP/M packaging sequence:
+cdos86 (bootable system), cdostools, cdosmaint (bootable maintenance), cdosmenu,
+cdosdos and cdosoem1/cdosoem2. Every enabled command output is packaged; original
+OEM commands/data are selected explicitly where a rebuilt replacement is absent.
+See [media/README.md](media/README.md) for the full table and preservation status.
+
+`make test` runs media/cdos86 and cdos86.cfg with system/tools on A:/B:.
+`make check` validates every packaged file, boot track and image size.
+`make dist` creates root-level image copies, disks.zip and
+`dist/cdos86-source.tar.gz`; `make source-dist` can run separately and
+`make check-dist` checks the archive containers. Both project licenses accompany
+the disk archive. The build and releases use only project-local inputs.
 
 ## Enabled command builds
 
@@ -95,8 +102,8 @@ The source-built HELP.HLP uses an unchanged copy of CCP/M HELP.DAT as its initia
 text, indexed by native 4.1 HELP.CMD. The indexer runs under EMU2_CPM_VER=4.1.
 Some inherited help topics describe CCP/M-specific features; 4.1 text review
 and comparison of imported commands with base binaries remain a later task.
-The initial media selection remains explicit; enabling a command build does
-not automatically add it to the two existing floppy images.
+The distribution lists every source-built output explicitly; media checks
+compare each selected payload, including the original OEM fallbacks.
 
 RMDIR and SYSDISK select the original ZD and SD modes of `D.A86`, using
 small new wrappers patterned on CHDIR/MKDIR. D.A86 is a shared module,
@@ -117,8 +124,8 @@ warnings in the shared maintenance HELP module.
 Remaining command gaps:
 
 - HDMAINT is pending the missing flat LBDOS loader; no older loader is
-  substituted. Its components can be built separately for investigation.
-- REDOS implementation source is missing.
+  substituted. Its original 4.1 binary/manual are preserved on cdosoem2.img.
+- REDOS implementation source is missing; its original COM is preserved on cdosdos.img.
 - Menu utilities' serial-terminal mode needs separate TERM data.
 
 ## Source catalog
@@ -183,3 +190,6 @@ CLS is a shell built-in. USER reports the user number without the media note.
 Both images include the unchanged source-built 4.1 SYSDISK.CMD: `SYSDISK`
 displays the system search path, `SYSDISK [OFF]`/`[ON]` disables/enables it,
 and a path argument sets it. It retains the local DOS-directory support.
+
+`DEL` invokes native ERA.CMD in both PCTMP and BATCH. System, tools, maintenance and DOS images
+include ERA.CMD; `DELQ` continues to invoke ERAQ.CMD. See ccp.md for aliases.

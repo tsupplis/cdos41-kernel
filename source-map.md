@@ -150,3 +150,12 @@ true byte settings. The old output was 00 FF FF, an invalid waiter pointer.
 `tools/sysgen_check.py` rejects that table before accepting CCPM.SYS and
 also checks the resident-process chain and conventional-memory bounds.
 Original/current hashes for these source changes are retained in sources.json.
+
+## Complete media and release packaging
+
+Seven explicit image recipes package every enabled source-built output and
+selected original OEM binaries/data; see media/README.md. System and maintenance
+are bootable. Unrebuilt HDMAINT, REDOS and TIME are preserved as original inputs,
+without changing their source-build status. No old kernel binary is packaged.
+HELP's rebuilt baseline and the historical 4.1 text are on separate disks.
+Top-level dist/source-dist/check-dist follow the CCP/M artifact conventions.

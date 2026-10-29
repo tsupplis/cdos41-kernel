@@ -29,3 +29,8 @@
 
 /media/*.lock
 /media/*.cas
+
+# Distribution copies and generated indexes/host tests.
+/*.img
+/commands/help/help.hlp
+/commands/window/hostcheck

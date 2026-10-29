@@ -105,3 +105,20 @@ ERAQ; comparison of the two ERAQ versions found no algorithm changes.
 Other newly requested CCP/M command imports retain their source bytes and
 Makefiles. PIP3 was removed; PIP4 remains the distribution PIP. HELP.HLP is
 indexed from imported CCP/M text with the emulator reporting 4.1.
+
+## PCTMP/BATCH: native DEL alias
+
+DEL now expands to ERA.CMD in both kernel/rsp3/tmpdir.lib and
+commands/batch/tmpdir.lib. The alias string remains eleven bytes, so the
+existing fixed-slot rewrite preserves the original tail and its length.
+DELQ still invokes ERAQ.CMD. ERA.CMD is included on both initial images.
+
+## PCTMP/BATCH: common PAUSE prompt
+
+PAUSE and DIR's /P prompt now use `Press any key to continue...`, exactly
+matching CCP/M 3.1 PCTMP. Both TMP source copies are updated; key handling
+is unchanged (raw BDOS 6/FD input). The old DIR-only trailing space is removed.
+
+`make check-aliases` boots disposable PCE images, checks both pause prompts,
+executes DEL from TMP and a BAT file, and verifies only the named files
+were deleted. The fixtures do not modify the distribution images.

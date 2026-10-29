@@ -1522,7 +1522,7 @@ suspendemsg	db	CR,LF,'Invalid Suspend State,'
 suspendmsg	db	CR,LF,'Suspend = $'
 
 
-pausemsg	db	'Strike a key when ready . . .$'
+pausemsg	db	'Press any key to continue...$'
 
 dircmd		db	'DIR      '
 clscmd		db	'CLS      '
@@ -1548,7 +1548,7 @@ stpcmd		db	'STOP     '
 
 stopcmd		db	'STOP.CMD   '
 renamecmd	db	'REN.EXE    '
-erasecmd	db	'ERASE.EXE  '
+erasecmd	db	'ERA.CMD    '	;DEL: native ERA, 11-byte alias slot
 eraqcmd		db	'ERAQ.CMD   '
 chdircmd	db	'CHDIR.CMD  '
 mkdircmd	db	'MKDIR.CMD  '
@@ -1564,7 +1564,7 @@ typ		db	'CMD '
 
 supmsg		db	'Start up command: $'
 fnf	        db      'File not found $'
-pausmsg		db	'Strike a key when ready . . . $'  
+pausmsg		db	'Press any key to continue...$'  
 dirmsg		db	'Directory of Drive $'
 dosmsg		db	'  (DOS Media)$'
 cpmmsg		db	'  (CP/M Media)$'

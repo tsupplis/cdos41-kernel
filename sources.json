@@ -2667,10 +2667,12 @@
     {
       "path": "kernel/rsp3/tmpdir.lib",
       "origin": "41SRC_03.IMG.DIR/TMPDIR.LIB",
-      "sha256": "8e55b0e57e7bdc9b3ea1778a1940740e53384239bffdb8e34add442cac9df791",
+      "sha256": "c5e3653d020bacda4b38700657afe2dc13d93ed70bb8678d433ae057d2a83de9",
       "original_sha256": "74374f01d1fd312cdc6d05520bb2326c1afde142492c0ba6c200c2e3f1db92d1",
       "modifications": [
-        "Remove unused USER warning string; add CLS command/string."
+        "Remove unused USER warning string; add CLS command/string.",
+        "Map DEL to native ERA.CMD; preserve the eleven-byte alias slot and existing argument shift.",
+        "Use the CCP/M 3.1 PAUSE message for PAUSE and DIR /P."
       ]
     },
     {
@@ -3031,7 +3033,12 @@
     {
       "path": "commands/batch/tmpdir.lib",
       "origin": "41SRC_03.IMG.DIR/TMPDIR.LIB",
-      "sha256": "74374f01d1fd312cdc6d05520bb2326c1afde142492c0ba6c200c2e3f1db92d1"
+      "sha256": "a04e2307795e661f052ba014f573ef7fe9f3f191fedb6784af7e13cef1ee1ed4",
+      "original_sha256": "74374f01d1fd312cdc6d05520bb2326c1afde142492c0ba6c200c2e3f1db92d1",
+      "modifications": [
+        "Map DEL to native ERA.CMD; preserve the eleven-byte alias slot and existing argument shift.",
+        "Use the CCP/M 3.1 PAUSE message for PAUSE and DIR /P."
+      ]
     },
     {
       "path": "commands/batch/tmpmenu.lib",
