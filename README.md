@@ -80,7 +80,7 @@ The top-level build now includes these 27 command families:
 RMDIR and SYSDISK select the original ZD and SD modes of `D.A86`, using
 small new wrappers patterned on CHDIR/MKDIR. D.A86 is a shared module,
 not a standalone command. Historical 4.1 program sources remain unchanged except for the documented
-DATE.EXE short-year correction.
+DATE.EXE short-year correction and GENCCPM compiler workarounds.
 
 ASM86, GENCMD and SUBMIT use unchanged source/Makefile copies from the CCP/M
 project. GENLDR uses its missing SCD2 startup from the CCP/M 3.1 archive.
@@ -136,3 +136,10 @@ paths are covered, including 00/77/78/99, 19/20, explicit four-digit years,
 2000-02-29 and malformed years. The harness captures function 2Bh rather
 than changing a clock. It rejects the original unmodified DATE.EXE at
 `1/2/00`. The top-level `make check` runs this regression check too.
+
+GENCCPM applies the existing CCP/M workaround for DRC 1.11's `char = -1`
+miscompilation. It emits each RTM flag as FF FF FF and uses literal FF for
+true byte settings. The old output was 00 FF FF, an invalid waiter pointer.
+`tools/sysgen_check.py` rejects that table before accepting CCPM.SYS and
+also checks the resident-process chain and conventional-memory bounds.
+Original/current hashes for these source changes are retained in sources.json.

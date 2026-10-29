@@ -17,3 +17,10 @@ The OS label is PC-MODE Personality. GENCCPM's transcript is sysgen.log.
 memory boundary. The DATA file group contains separately segmented RSPs
 and can exceed 64 KB; the older 3.1 check imposing a 64 KB group limit is
 not applicable here. Live boot validation belongs to the media check.
+
+GENCCPM applies the existing CCP/M workaround for DRC 1.11's `char = -1`
+miscompilation. It emits each RTM flag as FF FF FF and uses literal FF for
+true byte settings. The old output was 00 FF FF, an invalid waiter pointer.
+`tools/sysgen_check.py` rejects that table before accepting CCPM.SYS and
+also checks the resident-process chain and conventional-memory bounds.
+Original/current hashes for these source changes are retained in sources.json.

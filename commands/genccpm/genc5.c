@@ -197,7 +197,7 @@ msetbool(bp,cvp)
 		return "value must be 'yes' or 'no'";
 	}
 	if( bv < 4 )
-		*bp = -1;		/* zap to 0xFFFF */
+		*bp = 0xff;		/* explicit true byte: DRC char=-1 becomes 0 */
 	else 	*bp = 0;		/* zap to zero */
 	return NULLPTR;
 }

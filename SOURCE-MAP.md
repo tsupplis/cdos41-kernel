@@ -138,3 +138,10 @@ commands; cdostools.img is a data-only development disk. `make test` uses
 media/cdos86 and cdos86.cfg, adapted from the CCP/M launcher/configuration
 with the two local image names and two drives. Build rules read no sibling
 project. HDMAINT's missing loader is not on this floppy boot path.
+
+GENCCPM applies the existing CCP/M workaround for DRC 1.11's `char = -1`
+miscompilation. It emits each RTM flag as FF FF FF and uses literal FF for
+true byte settings. The old output was 00 FF FF, an invalid waiter pointer.
+`tools/sysgen_check.py` rejects that table before accepting CCPM.SYS and
+also checks the resident-process chain and conventional-memory bounds.
+Original/current hashes for these source changes are retained in sources.json.

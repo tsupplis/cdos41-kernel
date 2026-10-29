@@ -2901,7 +2901,11 @@
     {
       "path": "commands/genccpm/genc5.c",
       "origin": "41SRC_04.IMG.DIR/GENC5.C",
-      "sha256": "0d49336812ae6a7235c3940ec0ad0f5d3356246abf7b87e3b4349ec4d7feab71"
+      "sha256": "aa10bf8f6eeba593608c79e2517734666a53ef15c936e6d959dd283c11a174bf",
+      "original_sha256": "0d49336812ae6a7235c3940ec0ad0f5d3356246abf7b87e3b4349ec4d7feab71",
+      "modifications": [
+        "Use literal 0xff for true byte assignments; DRC 1.11 miscompiles char = -1 as zero."
+      ]
     },
     {
       "path": "commands/genccpm/genc4.c",
@@ -2911,7 +2915,11 @@
     {
       "path": "commands/genccpm/genc3.c",
       "origin": "41SRC_04.IMG.DIR/GENC3.C",
-      "sha256": "2c2b16ac0115ac3aa682771487155465e59d5ceebd861f9b62920411737ce29f"
+      "sha256": "7291272e3e07e08cadfddd5226423d9604402b545e187a9da2b6ccad09662c54",
+      "original_sha256": "2c2b16ac0115ac3aa682771487155465e59d5ceebd861f9b62920411737ce29f",
+      "modifications": [
+        "Initialize on-disk RTM flags as explicit FF FF FF bytes, matching the existing CCP/M compiler workaround."
+      ]
     },
     {
       "path": "commands/genccpm/genc2.c",
