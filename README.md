@@ -10,6 +10,7 @@ No build rule reads another project or the historical source archive.
 ```sh
 make                 # commands, kernel, CCPM.SYS, boot track and two disk images
 make check           # command regressions, system headers, boot track and media checks
+make check-pce       # headless PCE shell, editing/recall, console shortcuts and PIP copy
 make test            # launch the initial system in PCE, as in the CCP/M project
 make xios-alt        # optional modular OEM XIOS; currently blocked below
 make clean
@@ -61,7 +62,7 @@ a fresh directory; `sysgen.log` records the generation transcript.
 
 `boot/` builds the IBM PC floppy boot chain from local source copies.
 `media/` follows the CCP/M packaging sequence and produces `cdos86.img`
-(kernel, minimal STARTUP.0, PIP and BATCH) and `cdostools.img` (development
+(kernel, minimal STARTUP.0, PIP, BATCH and SYSDISK) and `cdostools.img` (development
 tools). Its base.img is generated locally. `make test` runs the matching
 `media/cdos86` launcher and `media/cdos86.cfg`, with system/tools on A:/B:.
 The user reports the initial image booting; build/media checks pass.
@@ -80,7 +81,8 @@ The top-level build now includes these 27 command families:
 RMDIR and SYSDISK select the original ZD and SD modes of `D.A86`, using
 small new wrappers patterned on CHDIR/MKDIR. D.A86 is a shared module,
 not a standalone command. Historical 4.1 program sources remain unchanged except for the documented
-DATE.EXE short-year correction and GENCCPM compiler workarounds.
+DATE.EXE, GENCCPM, PIN input-queue, XIOS cursor/console-shortcut, CIO editor
+and PCTMP CLS/USER changes listed in patches.md.
 
 ASM86, GENCMD and SUBMIT use unchanged source/Makefile copies from the CCP/M
 project. GENLDR uses its missing SCD2 startup from the CCP/M 3.1 archive.
@@ -143,3 +145,22 @@ true byte settings. The old output was 00 FF FF, an invalid waiter pointer.
 `tools/sysgen_check.py` rejects that table before accepting CCPM.SYS and
 also checks the resident-process chain and conventional-memory bounds.
 Original/current hashes for these source changes are retained in sources.json.
+
+`patches.md` records only changes made for the 4.1 rebuild, including the
+DATE/GENCCPM fixes and the local PIN queue/cursor corrections. The former
+alternating-key loss was two consoles sharing VINQ000; PIN now creates a
+separate input queue for each console. See `make check-pce` for the live
+single-keystroke, line-editing, console-switch and shell regressions, and
+`make check` for the built-cursor fixtures.
+
+Function 10 editing follows the CCP/M port: Ctrl-A/F move left/right,
+Ctrl-B toggles Home/End, Ctrl-G deletes, Ctrl-K/X remove the suffix/prefix,
+and Ctrl-W recalls the last nonempty line on an empty input (otherwise End).
+Left/Right, Home/End, Delete and Up work during buffered input; Up is Ctrl-W.
+Recall is per console. Ctrl-U clears with #/newline, Ctrl-R retypes and Ctrl-E
+continues on a new row. Ctrl+Alt+1..4 selects consoles; Ctrl+Alt+Tab cycles.
+
+CLS is a shell built-in. USER reports the user number without the media note.
+Both images include the unchanged source-built 4.1 SYSDISK.CMD: `SYSDISK`
+displays the system search path, `SYSDISK [OFF]`/`[ON]` disables/enables it,
+and a path argument sets it. It retains the local DOS-directory support.

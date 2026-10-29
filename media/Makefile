@@ -3,13 +3,13 @@ FORMAT=ccpm86-320
 TWIST=$(PYTHON) ../tools/cpm86twist.py
 CPMCP=cpmcp -f $(FORMAT)
 IMAGES=cdos86.img cdostools.img
-SYSTEM_COMMANDS=../commands/batch/batch.cmd
+SYSTEM_COMMANDS=../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd
 TOOLS_COMMANDS=../commands/asm86/asm86.cmd ../commands/gencmd/gencmd.cmd \
     ../commands/submit/submit.cmd ../commands/genccpm/genccpm.cmd \
-    ../commands/batch/batch.cmd
+    ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd
 PIP=../commands/pip/pip4.cmd
 
-.PHONY: all check test clean
+.PHONY: all check check-pce test clean
 .DELETE_ON_ERROR:
 all: $(IMAGES)
 
@@ -54,6 +54,8 @@ check: all
 	    dd if="$$tmp/logical.img" bs=4096 count=1 2>/dev/null | cmp ../boot/boottrack.bin -; \
 	    $(CPMCP) "$$tmp/logical.img" 0:PIP.CMD "$$tmp/pip.cmd"; \
 	    cmp $(PIP) "$$tmp/pip.cmd"; \
+	    $(CPMCP) "$$tmp/logical.img" 0:SYSDISK.CMD "$$tmp/sysdisk.cmd"; \
+	    cmp ../commands/sysdisk/sysdisk.cmd "$$tmp/sysdisk.cmd"; \
 	done; \
 	$(TWIST) untwist cdos86.img "$$tmp/logical.img"; \
 	$(CPMCP) "$$tmp/logical.img" 0:CCPM.SYS "$$tmp/ccpm.sys"; \
@@ -66,6 +68,9 @@ check: all
 	    cmp $$source "$$tmp/$$name"; \
 	done
 	@echo 'Media: both boot tracks and packaged source-built files verified'
+
+check-pce: check
+	$(PYTHON) ../tools/boot_check.py
 
 # Same interactive PCE test target and launcher pattern as CCP/M.
 test: cdos86.img cdostools.img cdos86 cdos86.cfg

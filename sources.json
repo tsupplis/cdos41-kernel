@@ -2041,7 +2041,11 @@
     {
       "path": "kernel/con/xinit.lib",
       "origin": "41SRC_05.IMG.DIR/XINIT.LIB",
-      "sha256": "cf04ecaf440ada29fcdda1e4a3c208816f299330079dbd6dd3ce03ddb2a74603"
+      "sha256": "af68b4956470266e47973f388b59055699436ac78577f644c9c38c5dd726a8db",
+      "original_sha256": "cf04ecaf440ada29fcdda1e4a3c208816f299330079dbd6dd3ce03ddb2a74603",
+      "modifications": [
+        "Detect EGA/VGA text character height for the cursor, preserving legacy defaults and disabling CGA retrace waits on enhanced color adapters."
+      ]
     },
     {
       "path": "kernel/con/xhard.lib",
@@ -2056,12 +2060,20 @@
     {
       "path": "kernel/con/xcon2.lib",
       "origin": "41SRC_05.IMG.DIR/XCON2.LIB",
-      "sha256": "d0259a22962a8a9454281ded07b2348630776c910b7ba7f2d558f3a9cdae41c5"
+      "sha256": "5d45d76d2e559a471971c25d67a245c691cb62d74fb0eaf51d6d4b1798aac897",
+      "original_sha256": "d0259a22962a8a9454281ded07b2348630776c910b7ba7f2d558f3a9cdae41c5",
+      "modifications": [
+        "Store the adjustable monochrome cursor default alongside the existing color cursor."
+      ]
     },
     {
       "path": "kernel/con/xcon1.lib",
       "origin": "41SRC_05.IMG.DIR/XCON1.LIB",
-      "sha256": "20ba702ef48845cbec4a0b45697549df671dea739ed2ed8af37c1613b62dbdc6"
+      "sha256": "b5fd9349f396e932a6c05c74eef1a31f06744b1270ad18ab42cb303c196f8c8a",
+      "original_sha256": "20ba702ef48845cbec4a0b45697549df671dea739ed2ed8af37c1613b62dbdc6",
+      "modifications": [
+        "Use a detected monochrome cursor variable with the original MDA default."
+      ]
     },
     {
       "path": "kernel/con/xaux.lib",
@@ -2071,12 +2083,20 @@
     {
       "path": "kernel/con/xchar.lib",
       "origin": "41SRC_05.IMG.DIR/XCHAR.LIB",
-      "sha256": "c94d23e632e3275104ab2831877f32c173c0e41fb4a04c6f48a2beb08ac02d89"
+      "sha256": "dac6c9fc4c6256f58926921125c96cac6dd18be4368f25603739e5f88594833d",
+      "original_sha256": "c94d23e632e3275104ab2831877f32c173c0e41fb4a04c6f48a2beb08ac02d89",
+      "modifications": [
+        "Translate navigation to tagged editor events only during Function 10; retain 4.1 PC-mode and programmable keys otherwise."
+      ]
     },
     {
       "path": "kernel/con/xbegin.lib",
       "origin": "41SRC_05.IMG.DIR/XBEGIN.LIB",
-      "sha256": "52e2eab2f8f9dc3bfc8fbf37c7f99cdfefbe8af3f2796a3013d3a12d69df9e69"
+      "sha256": "f6e3b51186cb4aac17adb36f1a82d025c3ff3a0ba6ce94809e7a6cd6df821cd6",
+      "original_sha256": "52e2eab2f8f9dc3bfc8fbf37c7f99cdfefbe8af3f2796a3013d3a12d69df9e69",
+      "modifications": [
+        "Port Ctrl+Alt+1..4 and Ctrl+Alt+Tab through the existing PIN console-switch events, plus editor CCB flag equates."
+      ]
     },
     {
       "path": "kernel/con/black.a86",
@@ -2281,12 +2301,20 @@
     {
       "path": "kernel/con/chario.cio",
       "origin": "41SRC_01.IMG.DIR/CHARIO.CIO",
-      "sha256": "d05facfb74eacba51cd5266ab62301107690371f6f4262750cc954952a0d8eec"
+      "sha256": "e99cdaf13de70db3295a198c80a245958c0694266a40a6a4ccefb4518becc81e",
+      "original_sha256": "d05facfb74eacba51cd5266ab62301107690371f6f4262750cc954952a0d8eec",
+      "modifications": [
+        "Port CCP/M Function 10 editing and per-console single-line recall without changing CCB/UDA layouts."
+      ]
     },
     {
       "path": "kernel/con/console.cio",
       "origin": "41SRC_01.IMG.DIR/CONSOLE.CIO",
-      "sha256": "d4c9daa6f490d23321dd1d0c533a4bb0e7f6fb417c200c7d618fad5d18ff8245"
+      "sha256": "e24e4336ac27bbc98910bfe41db7d293fd529881997183e3c0bf978032155ba5",
+      "original_sha256": "d4c9daa6f490d23321dd1d0c533a4bb0e7f6fb417c200c7d618fad5d18ff8245",
+      "modifications": [
+        "Clear line-editor ownership on process termination in either VOUT configuration."
+      ]
     },
     {
       "path": "kernel/con/aux.cio",
@@ -2311,7 +2339,11 @@
     {
       "path": "kernel/con/vccb.def",
       "origin": "41SRC_01.IMG.DIR/VCCB.DEF",
-      "sha256": "7640d2520cc05230120b970975c0b3a9ff492b1efdf1a6ccf3fa9d4f240012e1"
+      "sha256": "c88e3963a6208f2758e96f3ab98e4cc4f68105fe8388d4128187cab02aa8e512",
+      "original_sha256": "7640d2520cc05230120b970975c0b3a9ff492b1efdf1a6ccf3fa9d4f240012e1",
+      "modifications": [
+        "Reserve free CCB flag 40h for Function 10 navigation translation."
+      ]
     },
     {
       "path": "kernel/con/acb.def",
@@ -2476,7 +2508,11 @@
     {
       "path": "kernel/rsp1/pin.plm",
       "origin": "41SRC_02.IMG.DIR/PIN.PLM",
-      "sha256": "3baceb6258f53006efecf4f2a08ce56b434517e43e4944095560243cbbdc74a7"
+      "sha256": "aa8d5b6e0ba7cf552214c39480df81f79898bb2cf5ef71528b93e51ead3415b6",
+      "original_sha256": "3baceb6258f53006efecf4f2a08ce56b434517e43e4944095560243cbbdc74a7",
+      "modifications": [
+        "Read the current virtual console inside DOQ, avoiding OPTIMIZE(3) stale based-pointer arguments and duplicate VINQs."
+      ]
     },
     {
       "path": "kernel/rsp1/qd.lit",
@@ -2631,12 +2667,20 @@
     {
       "path": "kernel/rsp3/tmpdir.lib",
       "origin": "41SRC_03.IMG.DIR/TMPDIR.LIB",
-      "sha256": "74374f01d1fd312cdc6d05520bb2326c1afde142492c0ba6c200c2e3f1db92d1"
+      "sha256": "8e55b0e57e7bdc9b3ea1778a1940740e53384239bffdb8e34add442cac9df791",
+      "original_sha256": "74374f01d1fd312cdc6d05520bb2326c1afde142492c0ba6c200c2e3f1db92d1",
+      "modifications": [
+        "Remove unused USER warning string; add CLS command/string."
+      ]
     },
     {
       "path": "kernel/rsp3/tmpmenu.lib",
       "origin": "41SRC_04.IMG.DIR/TMPMENU.LIB",
-      "sha256": "aed3e7be5396817e0c9ac86d3934779584e4f4a11bb41c6c1d4c8a91e5cdb8ed"
+      "sha256": "c29e3cf915ed77a59491b650cbe9fb7dc869ff04a71f6c98dbf0c26ee95487b3",
+      "original_sha256": "aed3e7be5396817e0c9ac86d3934779584e4f4a11bb41c6c1d4c8a91e5cdb8ed",
+      "modifications": [
+        "Remove obsolete USER media warning."
+      ]
     },
     {
       "path": "kernel/xios/auxio.a86",
