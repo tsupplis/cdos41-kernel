@@ -1,0 +1,284 @@
+; CONFIDD.EQU - constant definition file for CONFIDD
+
+
+NOLIST
+FALSE	equ	0
+TRUE	equ	NOT(FALSE)
+
+;	conditional assembly flags
+;DEBUG	equ	TRUE	
+DEBUG	equ	FALSE	
+
+
+;  General equates
+
+Max_Paras	equ	4ch		; offset of the max para field 
+INT21_ADDR	equ	21h * 4		; offset of the int 21 vector
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;	equates relating to CCP/M
+
+
+;	Concurrent system functions
+C_ATTACH	equ	146		;attach console
+C_DETACH	equ	147		;detach console
+C_WRITESTR	equ	  9		;write string to console
+F_CLOSE		equ	 16		;close file
+F_DMAOFF	equ	 26		;set DMA offset
+F_DMASEG	equ	 51		;set DMA segment
+F_ERRMODE	equ	 45		;set error mode
+F_MULTISEC	equ	 44		;set multi sector count
+F_OPEN		equ	 15		;open file
+F_READ		equ	 20		;read sequential
+F_SIZE		equ	 35		;compute file size
+M_ALLOC		equ	129		;allocate memory
+M_FREE		equ	130		;free memory
+P_DISPATCH	equ	142		;dispatch
+P_PRIORITY	equ	145		;set priority
+F_PARSE		equ	152		;parse filename
+S_SYSDAT	equ	154		;get SYSDAT address
+
+BDOS		equ	224		;BDOS interrupt number
+RETURN_MODE	equ	 -1		;return error mode for F_ERRMODE
+F_EOF		equ       1		;end of file return value for F_READ
+
+
+;	Concurrent CP/M XIOS function numbers
+X_CONSTAT	equ	0	;console status
+X_CONIN		equ	1	;console input
+X_CONOUT	equ	2	;console output
+X_LISTST	equ	3	;list status
+X_LISTOUT	equ	4	;list output
+X_AUXIN 	equ	5	;aux input
+X_AUXOUT	equ	6	;aux output
+X_SWITCH	equ	7	;screen switch
+X_STATLINE	equ	8	;status line
+X_SELECT	equ	9	;select disk
+X_READ		equ	10	;disk read
+X_WRITE		equ	11	;disk write
+
+
+;	CCP/M Disk I/O Equates
+;	Equates for parameter passing for read and write from the
+;	BDOS.
+
+;	At the disk read and write function entries,
+;	all disk I/O parameters are on the stack.
+;	The stack at these entries appears as
+;	follows:
+;
+;           +-------+-------+
+;       +14 |  DRV  | MCNT  |   Drive and Multi sector count
+;           +-------+-------+
+;       +12 |     TRACK     |   Track number
+;           +-------+-------+
+;       +10 |    SECTOR     |   Physical sector number
+;           +-------+-------+
+;        +8 |    DMA_SEG    |   DMA segment 
+;           +-------+-------+
+;        +6 |    DMA_OFF    |   DMA offset
+;           +-------+-------+
+;        +4 |    RET_SEG    |   BDOS return segment
+;           +-------+-------+
+;        +2 |    RET_OFF    |   BDOS return offset
+;           +-------+-------+
+;      SP+0 |    RET_ADR    |   Return address to BIOS ENTRY routine
+;           +-------+-------+
+;
+;	These parameters may be indexed and modified
+;	directly on the stack by the BIOS read and write rotines
+;	They will be removed by the BDOS when the BIOS completes
+;	the read/write function and returns to the BDOS.
+
+
+Selected_Disk		equ	byte ptr 14[bp]
+Multi_Sector_Count	equ	byte ptr 15[bp]
+Selected_Track		equ	word ptr 12[bp]
+Selected_Sector		equ	word ptr 10[bp]
+DMA_segment		equ	word ptr 8[bp]
+DMA_offset		equ	word ptr 6[bp]
+
+
+;	relevant CCP/M structure definitions
+SD_XIOS_OFFSET	equ	word ptr 028h	;XIOS entry point
+SD_XIOS_SEGMENT	equ	word ptr 02ah	
+SD_SYSDISK	equ	04bh		;system disk field in SYSDAT
+FCB_RREC	equ	word ptr 021h	;random record field in FCB
+DPH_TBL_BASE	equ	0C18h		;fixed offset of dph table in XIOS
+
+;	Memory allocation parameter block
+MPB_START	equ	word ptr 0	;base of allocation
+MPB_MIN		equ	word ptr 2	;minimum size required
+MPB_MAX		equ	word ptr 4	;maximum size required
+MPB_PDADR	equ	word ptr 6	;process descriptor address
+MPB_FLAGS	equ	word ptr 8	;flag word
+
+; XIOS Disk Parameter Header (DPH) structure
+DPH_XLT		equ	word ptr 0	; Translate table pointer
+DPH_SCRATCH	equ	word ptr 2	; Scratch areas for BDOS
+DPH_MEDIA	equ	byte ptr 5	; Media flag
+DPH_DPB		equ	word ptr 8	; Disk Parameter Block (DPB) pointer
+DPH_CSV		equ	word ptr 10	; Check buffer pointer
+DPH_ALV		equ	word ptr 12	; Allocation vector pointer
+DPH_DIRBCB	equ	word ptr 14	; Directory buffer c.b.
+DPH_DATBCB	equ	word ptr 16	; Data buffer c.b.
+DPH_HASH	equ	word ptr 18	; Hash table segment
+
+; XIOS Disk Parameter Block (DPB) structure - PC Mode version thereof
+DOS_DPB_EXTFLAG	equ	word ptr 0	; DOS DPB flag
+DOS_DPB_NFATS	equ	word ptr 2	; number of FATS
+DOS_DPB_NFATRECS equ	word ptr 4	; records per FAT
+DOS_DPB_NCLSTRS	equ	word ptr 6	; number of clusters
+DOS_DPB_CLSIZE	equ	word ptr 8	; cluster size
+DOS_DPB_FATADD	equ	word ptr 10	; starting FAT sector
+DPB_SPT		equ	word ptr 12	; Number of 128 byte sectors per track
+DPB_BSH		equ 	byte ptr 14	; Block shift = log2(alloc block size)
+DPB_BLM		equ	byte ptr 15	; Block mask
+DPB_EXM		equ	byte ptr 16	; Extent mask
+DPB_DSM		equ	word ptr 17	; Total number of allocation blocks - 1
+DPB_DRM		equ	word ptr 19	; Total number of directory entries - 1
+DPB_AL0		equ	byte ptr 21	; Directory block allocation
+DPB_AL1		equ	byte ptr 22	; Directory block allocation
+DPB_CKS		equ	word ptr 23	; Size of directory check vector
+DPB_OFF		equ	word ptr 25	; Number of reserved tracks
+DPB_PSH		equ	byte ptr 27	; Physical shift factor 
+DPB_PRM		equ	byte ptr 28	; Physical record mask
+
+;	origin values for fixed RSP data items
+rsp_top		equ	0	;rsp offset
+rsp_pd		equ	010h	;PD offset
+rsp_uda		equ	040h	;UDA offset
+rsp_bottom	equ	140h	;end rsp header
+
+;	Values of Process descriptor p_status field:
+
+ps_run		equ	0	;in ready list root
+ps_poll		equ	1	;in poll list
+ps_delay	equ	2	;in delay list
+ps_swap		equ	3	;in swap list
+ps_term		equ	4	;terminating
+ps_sleep	equ	5	;sleep processing
+ps_dq		equ	6	;in dq list
+ps_nq		equ	7	;in nq list
+ps_flagwait	equ	8	;in flag table
+ps_ciowait	equ	9	;waiting for character
+
+;	Bit flags in Process descriptor p_flag field:
+
+pf_sys		equ	00001h	;system process
+pf_keep		equ	00002h	;do not terminate
+pf_kernal	equ	00004h	;resident in kernal
+pf_pure		equ	00008h	;pure memory descibed
+pf_table	equ	00010h	;from pd table
+pf_resource	equ	00020h	;waiting for resource
+pf_raw		equ	00040h	;raw console i/o
+pf_ctlc		equ	00080h	;abort pending
+pf_active	equ	00100h	;active tty
+pf_tempkeep	equ	00200h	;don't terminate yet...
+pf_ctld		equ	00400h	;explicit detach occured
+pf_childabort	equ	00800h	;child terminated abnormally
+pf_noctls	equ	01000h	;control S not allowed
+pf_dskld	equ	02000h	;process was loaded from disk
+
+;*******************************************************************
+
+;	equates relating to MS-DOS
+
+;	structure definitions
+
+;	MS-DOS FIDD header
+FH_Next_FIDD	equ	dword ptr 0	;next FIDD in chain
+FH_Attributes	equ	word ptr 4	;attribute bit map
+FH_Strategy	equ	word ptr 6	;strategy routine address
+FH_Interrupt	equ	word ptr 8	;interrupt routine address
+FH_Dev_Name	equ	byte ptr 10	;character device name
+FH_no_units	equ	byte ptr 10	;number of units supported in fidd
+
+;	MS-DOS RPH definition
+RPH_length	equ	byte ptr 0	; the length of the packet
+RPH_unit	equ	byte ptr 1	; the relative logical drive in fidd
+RPH_command	equ	byte ptr 2	; the command to execute
+RPH_status	equ	word ptr 3	; the return codes
+RPH_DOS_link	equ	Dword ptr 5	; link in DOS request queue
+RPH_FIDD_link	equ	Dword ptr 9	; link in FIDD request queue
+
+; values for INIT
+RPH_No_units	equ	byte ptr 0dH	; number of drives supported
+RPH_Break_Addr	equ	Dword ptr 0eH	; first free byte after FIDD
+RPH_BPB_array	equ	Dword ptr 12H	; pointer to table of BPBs
+RPH_cmdtl_off	equ	word ptr 12H	; pointer to command line from
+RPH_cmdtl_seg	equ	word ptr 14H	; config.sys
+
+; values for MEDIA CHECK
+RPH_Old_med	equ	byte ptr 0dH	; old media descriptor byte.
+RPH_Media_chk	equ	byte ptr 0eH	; the media check byte
+
+; values for BUILD BPB
+RPH_media_desc	equ	byte ptr 0dH	; the media descriptor from BPB
+RPH_tran_addr	equ	Dword ptr 0eH	; the first sector from the FAT
+RPH_tran_off	equ	word ptr 0Eh
+RPH_tran_seg	equ	word ptr 010h
+RPH_BPB		equ	Dword ptr 12H	; the pointer to the BPB returned
+
+; values for READ and WRITE
+;RPH_media_desc	equ	byte ptr 0dH	; the media descriptor from BPB
+;RPH_tran_addr	equ	Dword ptr 0eH	; the first sector from the FAT
+RPH_sec_count	equ	word ptr 12h	; count of sectors/bytes to transfer
+RPH_sec_start	equ	word ptr 14h	; the starting sector of transfer
+
+; value for Non destructive read
+RPH_byte	equ	byte ptr 0dH	; the returned byte from read
+
+
+
+; values for BPB (BIOS Parameter Block)
+BPB_sect_size	equ	word ptr 0h	; size of a sector in bytes
+BPB_sect_alloc	equ	byte ptr 2h	; number of sectors per alloc unit
+BPB_sect_res	equ	word ptr 3h	; number of reserved sectors in boot
+BPB_fats	equ	byte ptr 5h	; number of copies of fats on disk
+BPB_dir_ents	equ	word ptr 6h	; number of directory entries in root
+BPB_sect_total	equ	word ptr 8h	; total number of sectors on disk
+BPB_med_desc	equ	byte ptr 0ah	; media descriptor
+BPB_sect_fat	equ	word ptr 0bh	; number of sectors per fat
+
+
+; These are the values of the Command byte for the RPH.
+C_Init		equ	0
+C_media_chk	equ	1
+C_build_BPB	equ	2
+C_IOCTL_in	equ	3
+C_input		equ	4
+C_read		equ	4
+C_NonD_in	equ	5
+C_in_stat	equ	6
+C_in_flush	equ	7
+C_output	equ	9
+C_write		equ	9
+C_out_status	equ	10
+C_out_flush	equ	11
+C_IOCTL_out	equ	12
+
+
+Plen_init	equ	22
+Plen_read	equ	22
+Plen_write	equ	22
+
+;	bit definitions for the RPH status word
+S_Error 	equ	08000h		;error occurred
+S_Busy		equ	0200h		;device is busy
+S_Done		equ	0100h		;operation is complete
+S_Any_Error	equ	0Fh		;mask for all error bits
+S_General_Failure equ	0Ch		;largest defined error value
+
+char		equ	byte ptr 0
+
+PFCB_STRNG	equ	word ptr 0
+PFCB_FCB	equ	word ptr 2
+
+BCB_LR		equ	word ptr 0
+BCB_buffoff	equ	word ptr 10
+
+LIST
+                                                                                                                                           
