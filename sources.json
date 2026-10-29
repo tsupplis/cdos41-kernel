@@ -2099,7 +2099,11 @@
     {
       "path": "kernel/con/black.a86",
       "origin": "41SRC_02.IMG.DIR/BLACK.A86",
-      "sha256": "dfe07ef63cf0a06b582193fc1238d7c8a7ccf30f02621729597a4127d4e10edf"
+      "sha256": "ae2f8d2b8e5367891174a0cf3866646aad4054ebf7f8aac527c1ed87272f0760",
+      "original_sha256": "dfe07ef63cf0a06b582193fc1238d7c8a7ccf30f02621729597a4127d4e10edf",
+      "modifications": [
+        "Correct copydir attribute boundary from five filename bits to f1-f4; prevent FAT lowercase-name case flags from becoming FCB interface flags and invalidating CLOSE checksums."
+      ]
     },
     {
       "path": "kernel/con/modfunc.def",

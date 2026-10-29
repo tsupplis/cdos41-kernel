@@ -241,6 +241,7 @@ system and the live regression checks.
 | `make check-type` | OEM/rebuilt TYPE comparison, DOS/CP/M EOF, passwords and paging |
 | `make check-set` | OEM/rebuilt SET comparison, persisted attributes, passwords and timestamp settings |
 | `make check-show` | OEM/rebuilt SHOW comparison, media guards, capacity/free space, users and labels |
+| `make check-fat-batch` | FAT-hosted BAT/CMD loading, case flags, EOF forms and buffer refills |
 | `make check-sdir` | OEM/rebuilt SDIR comparison on CP/M/FAT12, directory markers/counts, options and paging |
 | `make check-redirection` | PUT capture/append, GET/RDR input, copied bytes and return to shell |
 | `make check-aliases` | TMP/BATCH DEL execution, argument preservation and common PAUSE text |

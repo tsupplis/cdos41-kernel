@@ -110,3 +110,7 @@ check-batch-live: all
 .PHONY: check-help-live
 check-help-live: all
 	python3 tools/help_live_check.py
+
+.PHONY: check-fat-batch
+check-fat-batch: all
+	python3 tools/fat_batch_check.py

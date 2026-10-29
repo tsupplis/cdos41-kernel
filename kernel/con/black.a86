@@ -443,7 +443,8 @@ cpd2:
 	jae cpd8			;{
 	xor al,al			;   atts = 0;
 	cmp bl,4			;   if (i < 4)
-	ja cpd3				;     att = (dirp->datts2 << i) & 0x80;
+	jae cpd3			;     f1-f4 only; f5-f8 are interface flags
+					;     att = (dirp->datts2 << i) & 0x80;
 	mov al,datts2[si]
 	mov cl,bl
 	shl al,cl

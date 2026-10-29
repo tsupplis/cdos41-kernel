@@ -239,3 +239,19 @@ RSPs, using original 4.1 documentation plus reviewed local/import behavior.
 Unavailable old CCP/M topics are removed; every packaged HELP.HLP is rebuilt.
 DREDIX's HELP.EDX/LSN.EDX live beside its sources and remain on its image.
 The LETTER.TXT sample is removed from base and distribution inputs.
+
+## FAT files: FCB attribute boundary
+
+In `kernel/con/black.a86`, `copydir` used `JA` after comparing the filename
+index with 4, so it copied five attribute bits instead of the documented
+four. FAT short-name case flag bit 3 (used by mtools for lowercase names)
+therefore became FCB f5', an interface flag. CLOSE strips interface flags
+before validating the checksum, producing a Close Checksum Error even for
+an unchanged file. Change the branch to `JAE`, matching the reverse attribute
+conversion and keeping f5'-f8' out of stored filename attributes. This is a
+one-byte opcode change, with no code-size or address changes; checksum
+validation remains enabled.
+
+`make check-fat-batch` runs twelve disposable FAT cases across case flags
+00/08/10/18, CR/LF or Ctrl-Z EOF, record padding and multiple buffer reads.
+Each script also runs a FAT-hosted ERA.CMD and preserves an unrelated file.
