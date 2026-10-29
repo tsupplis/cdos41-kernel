@@ -1,0 +1,822 @@
+$title('Concurrent CP/M System Loader Generation')
+genldr:
+do;
+
+/*
+  Copyright (C) 1983,1984
+  Digital Research, Inc.
+  P.O. Box 579
+  Pacific Grove, CA 93950
+*/
+
+/*
+    Revised:
+      03 October 83  by Bruce Skidmore
+      16 February 84 by GLP
+*/
+
+  declare true literally '0FFH';
+  declare false literally '0';
+  declare forever literally 'while true';
+  declare boolean literally 'byte';
+  declare cr literally '0dh';
+  declare lf literally '0ah';
+  declare tab literally '09h';
+  declare esc literally '1bh';
+  declare bs literally '08h';
+  declare bios$data$off literally '0180h';
+
+  declare reset label external;
+
+  declare fcb (1) byte external;
+  declare fcb16 (1) byte external;
+  declare tbuff (1) byte external;
+  declare maxb address external;
+
+  declare bios$fcb (36) byte public initial (
+    0,'LBIOS3  ','SYS',0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
+
+  declare bdos$fcb (36) byte public initial (
+    0,'LBDOS3  ','SYS',0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
+
+  declare FCBout (36) byte public initial (
+    0,'CPMLDR  ','SYS',0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
+
+/*------------------------------------------------------------------------
+  External Messages
+------------------------------------------------------------------------*/
+  declare
+        msg9120(16) byte external,
+        msg9125 byte external,
+        msg9135 byte external,
+        msg9140 byte external,
+        msg9145 byte external,
+        msg9155 byte external,
+        msg9160 byte external,
+        msg9190 byte external,
+        msg9195 byte external,
+        msg9250 byte external,
+        msg9255 byte external,
+        msg9485 byte external,
+        msg9490 byte external,
+        msg9495 byte external,
+        msg9500 byte external,
+        msg9505 byte external;
+
+  declare sctbfr (1) structure (
+    record (128) byte) public at (.memory);
+
+  declare fcb$msg (13) byte public initial ('        .   $');
+
+  declare display boolean public;
+
+  declare dma address public;
+
+  declare osbase address public; 
+
+  declare buff$base address public;
+
+  mon1:
+    procedure (func,info) external;
+      declare func byte;
+      declare info address;
+    end mon1;
+
+  mon2:
+    procedure (func,info) byte external;
+      declare func byte;
+      declare info address;
+    end mon2;
+
+/*
+     B D O S    P r o c e d u r e   &   F u n c t i o n    C a l l s
+*/
+
+  system$reset:
+    procedure public;
+      call mon1 (0,0);
+    end system$reset;
+
+  write$console:
+    procedure (char) public;
+      declare char byte;
+      if display then
+        call mon1 (2,char);
+    end write$console;
+
+  print$buf:
+    procedure (buffer$address) public;
+      declare buffer$address address;
+      if display then
+        call mon1 (9,buffer$address);
+    end print$buf;
+
+  crlf:
+    procedure public;
+      call write$console (cr);
+      call write$console (lf);
+    end crlf;
+
+  error:
+    procedure(term$code,err$type,err$msg$adr) public;
+      declare (term$code,err$type) byte;
+      declare err$msg$adr address;
+      declare (i,temp) byte;
+
+      temp = display;
+      display = true;
+      call crlf;
+      call print$buf (.msg9125);
+      call print$buf (err$msg$adr);
+      if err$type = 1 then
+        call print$buf(.fcb$msg);
+      if term$code then
+        call system$reset;
+      call crlf;
+      display = temp;
+
+   end error;
+
+  open$file:
+    procedure (fcb$address) byte public;
+      declare fcb$address address;
+      declare fcb based fcb$address (1) byte;
+      fcb(12),      /* ex = 0 */
+      fcb(32) = 0;  /* cr = 0 */
+      return mon2 (15,fcb$address);
+    end open$file;
+
+  close$file:
+    procedure (fcb$address) public;
+      declare fcb$address address;
+      call mon1 (16,fcb$address);
+    end close$file;
+
+  delete$file:
+    procedure (fcb$address) public;
+      declare fcb$address address;
+      call mon1 (19,fcb$address);
+    end delete$file;
+
+  read$record:
+    procedure (fcb$address) public;
+      declare fcb$address address;
+      if mon2 (20,fcb$address) <> 0 then
+      do;
+        call error(true,1,.msg9135);
+      end;
+    end read$record;
+
+  write$record:
+    procedure (fcb$address) public;
+      declare fcb$address address;
+      if mon2 (21,fcb$address) <> 0 then
+      do;
+        call error(true,1,.msg9140);
+      end;
+    end write$record;
+
+  create$file:
+    procedure (fcb$address) public;
+      declare fcb$address address;
+      declare fcb based fcb$address (1) byte;
+      if mon2 (22,fcb$address) = 255 then
+      do;
+        call error(true,0,.msg9145);
+      end;
+      fcb(32) = 0;  /* set cr = 0 */
+    end create$file;
+
+  set$DMA$address:
+    procedure (DMA$address) public;
+      declare DMA$address address;
+      call mon1 (26,DMA$address);
+    end set$DMA$address;
+
+  read$random$record:
+    procedure (fcb$address) public;
+      declare fcb$address address;
+      if mon2 (33,fcb$address) <> 0 then
+      do;
+        call error(true,1,.msg9135);
+      end;
+    end read$random$record;
+
+  write$random$record:
+    procedure (fcb$address) public;
+      declare fcb$address address;
+      if mon2 (34,fcb$address) <> 0 then
+      do;
+        call error(true,1,.msg9140);
+      end;
+    end write$random$record;
+
+  set$random$record:
+    procedure (fcb$address) public;
+      declare fcb$address address;
+      call mon1 (36,fcb$address);
+    end set$random$record;
+
+  setbuf:
+    procedure external;
+    end setbuf;
+
+
+/*
+    D a t a    S t r u c t u r e s
+*/
+  
+  declare data$base address public;
+  declare data$end address public;
+  declare act$data$end address public;
+  declare act$buf$end address public;
+
+  declare bdos$atts(4) address public;
+  declare bios$atts(4) address public;
+  declare (sys$clen,sys$cbase,sys$dlen,sys$dbase) address public;
+  declare (dblk$last,dblk$next) address public;
+
+  declare add$buf$adr address public;
+  declare add$buf based add$buf$adr structure (
+    base        address,
+    len         address);
+
+  declare drvtbl$adr address public;
+  declare drvtbl based drvtbl$adr (16) address;
+
+  declare dph$adr address public;
+  declare dph based dph$adr structure (
+    xlt         address,
+    scratch1    address,
+    scratch2    byte,
+    mf          byte,
+    scratch3    address,
+    dpb         address,
+    csv         address,
+    alv         address,
+    dirbcb      address,
+    dtabcb      address,
+    hash        address,
+    init        address,
+    login       address,
+    read        address,
+    write       address,
+    unit        byte,
+    chnnl       byte,
+    fcnt        byte);
+
+  declare dpb$adr address public;
+  declare dpb based dpb$adr structure (
+    spt         address,
+    bsh         byte,
+    blm         byte,
+    exm         byte,
+    dsm         address,
+    drm         address,
+    al0         byte,
+    al1         byte,
+    cks         address,
+    off         address,
+    psh         byte,
+    phm         byte);
+
+  declare header$adr address;
+  declare header$rec based header$adr structure (
+    gtype       byte,
+    len        address,
+    base       address,
+    min        address,
+    max        address);
+
+  declare base$pg$adr address public;
+  declare base$pg based base$pg$adr structure(
+    clenw       address,
+    clenb       byte,
+    cbase       address,
+    m80         byte,
+    dlenw       address,
+    dlenb       byte,
+    dbase       address,
+    res1        byte,
+    elenw       address,
+    elenb       byte,
+    ebase       address,
+    res2        byte,
+    slenw       address,
+    slenb       byte,
+    sbase       address,
+    res3        byte);
+
+  declare temp$fcb$adr address public;
+  declare temp$fcb based temp$fcb$adr structure(
+    drv         byte,
+    name(8)     byte,
+    type(3)     byte,
+    ex          byte,
+    s1          byte,
+    s2          byte,
+    rc          byte,
+    dm(16)      byte,
+    cur$rec     byte,
+    rr          address,
+    r2          byte);
+
+/*
+      L o c a l    P r o c e d u r e s
+*/
+
+  movef:
+    procedure (count,source$adr,dest$adr) public;
+      declare count address;
+      declare (source$adr,dest$adr) address;
+
+      if count = 0
+      then return;
+      else call move (count,source$adr,dest$adr);
+
+    end movef;
+
+  upper:
+    procedure(b) byte public;
+      declare b byte;
+  
+      if b < ' ' then return cr; /* all non-graphics */
+      /* translate alpha to upper case */
+      if b >= msg9155 and b <= msg9160 then
+        b = b and 101$1111b; /* upper case */
+      return b;
+    end upper;
+
+  dsply$hex:
+    procedure (val) public;
+      declare val byte;
+      call write$console (msg9120(shr (val,4)));
+      call write$console (msg9120(val and 0fh));
+    end dsply$hex;
+
+  dsply$hex$adr:
+    procedure (val) public;
+      declare val address;
+      call dsply$hex (high (val));
+      call dsply$hex (low (val));
+      call write$console (msg9195);
+    end dsply$hex$adr;
+
+  get$param:
+    procedure (val$adr) public;
+      declare (val$adr) address;
+      declare word$val based val$adr address;
+      declare base byte;
+      declare (char) byte;
+      declare (lbindx) byte;
+
+      lbindx = 0;
+      word$val = 0;
+      base = 16;
+      do while (char := upper(tbuff(lbindx:=lbindx+1))) <> cr;
+        if char = msg9190 then
+        do;
+          base = 10;
+        end;
+        else
+        do;
+          char = char - '0';
+          if (base = 16) and (char > 9) then
+          do;
+            if char > 16
+            then char = char - 7;
+            else char = 255;
+          end;
+          if char < base then
+          do;
+            word$val = word$val*base + char;
+          end;
+          else
+          do;
+            call error (true,0,.msg9250);
+          end;
+        end;
+      end;
+    end get$param;
+
+  get$atts:
+    procedure (fcb$adr,atts$adr);
+      declare fcb$adr address;
+      declare atts$adr address;
+      declare atts based atts$adr (4) address;
+      declare i byte;
+
+      call movef(8,fcb$adr+1,.fcb$msg);
+      call movef(3,fcb$adr+9,.fcb$msg+9);
+
+      if openfile(fcb$adr) = 0ffh then
+         call error(true,1,.msg9255);
+
+      header$adr = .sctbfr(0);
+      call set$DMA$address(header$adr);
+
+      call read$record(fcb$adr);
+
+      do i = 0 to 3;
+        atts(i) = 0;
+      end;
+
+      do i = 0 to 3;
+        if (header$rec.gtype <> 0) and (header$rec.gtype < 5) then
+          atts(header$rec.gtype-1) = header$rec.len;
+        header$adr = header$adr + 9;
+      end;
+       
+  end get$atts;
+
+  buf$seg$blk:
+    procedure(space,fcb$adr) public;
+      declare space address;
+      declare fcb$adr address;
+      declare i byte;
+
+      if (dma+space) > (buff$base+1000H) then
+      do;
+        call movef(8,.FCBout+1,.fcb$msg);
+        call movef(3,.FCBout+9,.fcb$msg+9);
+
+        do i = 0 to 30;
+          call set$DMA$address(buff$base + (128 * i));
+          call write$record(.FCBout);
+        end;
+        call movef(double(128),buff$base+0f80h,buff$base);
+        dma = dma - 0f80H;
+        call set$DMA$address(dma);
+
+        call movef(8,fcb$adr+1,.fcb$msg);
+        call movef(3,fcb$adr+9,.fcb$msg+9);
+
+      end;
+    end buf$seg$blk;
+
+
+  read$write$seg:
+    procedure (fcb$adr,seg$len) public;
+      declare fcb$adr address;
+      declare seg$len address;
+      declare seg$rec$len address;
+      declare i address;
+
+      call movef(8,fcb$adr+1,.fcb$msg);
+      call movef(3,fcb$adr+9,.fcb$msg+9);
+
+      if seg$len = 0 then return;
+      seg$rec$len = (seg$len-1) / 8;      /* convert para length to records */
+
+      call set$DMA$address(dma);
+      do i = 0 to seg$rec$len;
+        call buf$seg$blk(double(128),fcb$adr);
+        call read$record(fcb$adr);
+        call set$DMA$address(dma := dma + 128);
+      end;
+       
+  end read$write$seg;
+
+  read$seg:
+    procedure (fcb$adr,seg$len) public;
+      declare fcb$adr address;
+      declare seg$len address;
+      declare seg$rec$len address;
+      declare i address;
+
+      call movef(8,fcb$adr+1,.fcb$msg);
+      call movef(3,fcb$adr+9,.fcb$msg+9);
+
+      if seg$len = 0 then return;
+      seg$rec$len = (seg$len-1) / 8;      /* convert para length to records */
+
+      call set$DMA$address(dma);
+      do i = 0 to seg$rec$len;
+        call read$record(fcb$adr);
+        call set$DMA$address(dma := dma + 128);
+      end;
+       
+  end read$seg;
+
+  write$seg:
+    procedure (fcb$adr,seg$len) public;
+      declare fcb$adr address;
+      declare seg$len address;
+      declare seg$rec$len address;
+      declare i address;
+
+      call movef(8,fcb$adr+1,.fcb$msg);
+      call movef(3,fcb$adr+9,.fcb$msg+9);
+
+      if seg$len = 0 then return;
+      seg$rec$len = (seg$len-1) / 8;      /* convert para length to records */
+
+      call set$DMA$address(dma);
+      do i = 0 to seg$rec$len;
+        call write$record(fcb$adr);
+        call set$DMA$address(dma := dma + 128);
+      end;
+       
+  end write$seg;
+
+  setup$sysdat:
+    procedure public;
+      declare sysdat$adr address;
+      declare sysdat based sysdat$adr structure(
+        iosentry$off    address,
+        iosentry$seg    address,
+        iosinit$off     address,
+        iosinit$seg     address,
+        ldrentry$off    address,
+        ldrentry$seg    address);
+
+      sysdat$adr = data$base;     /* Point to SYSTEM Data Area */
+
+        /* Setup the pointer to the BIOS entry point */
+      sysdat.iosentry$off = 3;          /* Should be 3 */
+      sysdat.iosentry$seg = sys$cbase + bdos$atts(0);  /* BIOS code segment */
+
+        /* Setup the pointer to the BIOS init point */
+      sysdat.iosinit$off = 0;          /* Should be 0 but the Linker adds 5 */
+      sysdat.iosinit$seg = sys$cbase + bdos$atts(0);  /* BIOS code segment */
+
+        /* Setup the Loader entry point */
+      sysdat.ldrentry$off = 6;
+      sysdat.ldrentry$seg = sys$cbase + bdos$atts(0);
+
+     return;
+    end setup$sysdat;
+
+  set$value:
+    procedure (seg,byteoff,value) public;
+      declare (seg,value) address;
+      declare byteoff byte;
+      declare setword$adr address;
+      declare setword based setword$adr address;
+
+      if temp$fcb.rr <> seg/8 then
+      do;
+        temp$fcb.rr = seg/8;
+        temp$fcb.r2 = 0;
+        call read$random$record(temp$fcb$adr);
+      end;
+      setword$adr = buff$base + ((seg and 7)*16) + byteoff;
+      setword = value;
+      call write$random$record(temp$fcb$adr);
+
+    end set$value;
+
+  fixup$segs:
+    procedure public;
+
+      call set$DMA$address(buff$base);
+      temp$fcb$adr = .FCBout;
+      temp$fcb.rr = 0FFFFh;
+      temp$fcb.r2 = 0FFh;
+
+      call set$value(8,6,sys$dbase);
+      call set$value(bdos$atts(0)+8,9,sys$dbase);
+
+      return;
+    end fixup$segs;
+
+
+  initialization:
+    procedure public;
+      declare (first,next,bracket) byte;
+
+      first = 1;
+      next = 1;
+      bracket = false;
+      if tbuff(0) <> 0 then
+      do;
+        do while(next <= tbuff(0)+1);
+          if (tbuff(next) = ' ') or (tbuff(next) = tab) or (tbuff(next) = msg9485)
+              or (tbuff(next) = msg9490) then
+          do;
+            if tbuff(next) = msg9485 then
+              bracket = true;
+            tbuff(next) = 0;
+          end;
+          else
+          do;
+            tbuff(first) = tbuff(next);
+            first = first + 1;
+          end;
+          next = next + 1;
+        end;
+        tbuff(0) = first - 2;
+
+        if bracket = true then
+        do;
+          call get$param(.osbase);
+        end;
+      end;
+      else
+      do;
+        call error(true,0,.msg9495);
+      end;
+
+    end initialization;
+
+  setup$sys$file:
+    procedure public;
+      declare i byte;
+
+      call movef(8,.FCBout+1,.fcb$msg);
+      call movef(3,.FCBout+9,.fcb$msg+9);
+
+      call delete$file (.FCBout);
+
+      call create$file (.FCBout);
+
+      call movef(8,.FCBout+1,.fcb$msg);
+      call movef(3,.FCBout+9,.fcb$msg+9);
+
+      dma = .sctbfr(0);
+      buff$base = dma;
+
+      do i = 0 to 127;
+        sctbfr(0).record(i) = 0;
+      end;
+
+      call set$DMA$address (dma);
+      call write$record (.FCBout);
+    end setup$sys$file;
+
+  read$write$code:
+    procedure public;
+      declare i byte;
+      declare flush$cnt address;
+
+      dma = buff$base;
+      call read$write$seg(.bdos$fcb,bdos$atts(0));
+
+      dblk$last = (7 - ((bdos$atts(0)-1) and 7)) * 16;
+      dma = dma - dblk$last;
+      call read$write$seg(.bios$fcb,bios$atts(0));
+
+      dblk$last = (7 - ((bios$atts(0)-1) and 7)) * 16;
+
+      call movef(8,.FCBout+1,.fcb$msg);
+      call movef(3,.FCBout+9,.fcb$msg+9);
+
+      dma = dma - dblk$last;
+      flush$cnt = (dma-buff$base+127)/128 - 1;
+      dma = buff$base;
+      call set$DMA$address(dma);
+      do i = 0 to flush$cnt;
+        call write$record(.FCBout);
+        call set$DMA$address(dma:=dma + 128);
+      end;
+
+      call set$random$record(.bdos$fcb);
+      call set$random$record(.bios$fcb);
+      call set$random$record(.FCBout);
+      temp$fcb$adr = .FCBout;
+      temp$fcb.rr = temp$fcb.rr - 1;
+      temp$fcb$adr = .bdos$fcb;
+      temp$fcb.rr = temp$fcb.rr - 1;
+      temp$fcb$adr = .bios$fcb;
+      temp$fcb.rr = temp$fcb.rr - 1;
+
+      /* the following adjustments are to take care */
+      /* of BIOS data ORG'ed at BIOS$DATA$OFF.      */
+
+      temp$fcb.rr = temp$fcb.rr + bios$data$off/128;
+      bios$atts(0) = bios$atts(0) + bios$data$off/16;
+      bios$atts(1) = bios$atts(1) - bios$data$off/16;
+
+    end read$write$code;
+
+
+  read$data:
+    procedure public;
+
+      dma = buff$base + 128;
+      call set$DMA$address(dma);
+      call read$random$record(.FCBout);
+
+      call set$DMA$address(buff$base);
+      call read$random$record(.bdos$fcb);
+      call read$record(.bdos$fcb);
+      dblk$next = (7 - ((bdos$atts(0)-1) and 7)) * 16;
+      dblk$last = (7 - ((sys$clen-1) and 7)) * 16;
+      call movef(dblk$next,(buff$base+128-dblk$next),(dma+128-dblk$last));
+      dma = dma + (128 - dblk$last) + dblk$next;
+      call read$seg(.bdos$fcb,bdos$atts(1) - (dblk$next/16));
+      dma = dma - (7 - ((bdos$atts(1)-(dblk$next/16)-1) and 7)) * 16;
+
+      call set$DMA$address(buff$base);
+      call read$random$record(.bios$fcb);
+      call read$record(.bios$fcb);
+      dblk$next = (7 - ((bios$atts(0) - 1) and 7)) * 16;
+      dma = dma + bios$data$off - (bdos$atts(1)*16);
+      call movef(dblk$next,(buff$base+128-dblk$next),dma);
+      dma = dma + dblk$next;
+      call read$seg(.bios$fcb,bios$atts(1) - (dblk$next/16));
+
+    end read$data;
+
+  write$bdos$bios$data:
+    procedure public;
+
+      dma = buff$base;
+      call write$seg(.FCBout,(bios$data$off/16)+bios$atts(1)+dblk$last/16);
+
+    end write$bdos$bios$data;
+
+  clean$up:
+    procedure public;
+
+      header$adr = .sctbfr(0);
+      call set$DMA$address(header$adr);
+      FCBout(33), FCBout(34), FCBout(35) = 0;
+      call read$random$record(.FCBout);
+
+      header$rec.gtype = 1;
+      header$rec.len = sys$clen + sys$dlen;
+      header$rec.base = sys$cbase;
+      header$rec.min = sys$clen + sys$dlen;
+
+      header$adr = header$adr + 9;
+      header$rec.base = sys$dbase;
+
+      call write$random$record(.FCBout);
+
+      call close$file(.FCBout);
+      call close$file(.bios$fcb);
+      call close$file(.bdos$fcb);
+
+    end clean$up;
+
+  print$epilog:
+    procedure public;
+      display = true;
+      call print$buf (.msg9500);
+    end print$epilog;
+
+plm: 
+  procedure public;
+
+/*
+     G E N C P M    M a i n    P r o g r a m
+*/
+
+  call initialization;
+
+  call get$atts(.bdos$fcb,.bdos$atts);
+  call get$atts(.bios$fcb,.bios$atts);
+
+  sys$clen = bdos$atts(0) + bios$atts(0);
+  sys$cbase = osbase;
+  sys$dlen = bios$atts(1);
+  sys$dbase = sys$clen + osbase;
+
+  call setup$sys$file;                /* Take care of creating the      */
+                                      /* system file.                   */
+
+  call read$write$code;               /* Read the system code segments  */
+                                      /* and concatenate them.          */
+  call read$data;                     /* Read the system data segments  */
+                                      /* and concat. them.              */
+  dblk$last = 128 - dblk$last;
+  dma = buff$base + 128;
+
+  buff$base = .sctbfr(0);
+  call movef(dblk$last+(bios$atts(1)*16)+bios$data$off,dma,buff$base);
+  data$base = buff$base + dblk$last;
+  data$end = data$base + (bios$atts(1)*16)+bios$data$off;
+  drvtbl$adr = data$base + bios$data$off; /* position the DRVTBL array */
+  if drvtbl(0) = 0 then
+    call error(true,0,.msg9505);
+
+  sys$dbase = sys$clen + osbase;
+  act$data$end = data$end - data$base;
+
+  call setbuf;                            /* Set up all buffers */
+
+  bios$atts(1) = shr((data$end-data$base-bios$data$off+15),4);
+  sys$dlen = act$buf$end - sys$dbase;
+
+  call setup$sysdat;                      /* Setup the system data.         */
+
+  call write$bdos$bios$data;              /* Write the combined and updated */
+                                          /* data to the SYS file.          */
+
+  call fixup$segs;                        /* Fixup the segment values       */
+                                          /* that were not known on the 1st */
+                                          /* pass.                          */
+
+  call clean$up;                          /* Fix up the SYS file header and */
+                                          /* close the file.                */
+
+  call print$epilog;
+  
+ end plm;
+end genldr;
+EOF
+

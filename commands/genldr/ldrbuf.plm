@@ -1,0 +1,200 @@
+$title ('GENLDR - Buffer allocation module')
+setup$buffers:
+do;
+
+/*
+  Copyright (C) 1982,1983,1984
+  Digital Research
+  P.O. Box 579
+  Pacific Grove, CA 93950
+*/
+
+/*
+    Revised:
+      03 October 83  by Bruce Skidmore
+*/
+
+  declare true literally '0FFH';
+  declare false literally '0';
+  declare forever literally 'while true';
+  declare boolean literally 'byte';
+  declare cr literally '0dh';
+  declare lf literally '0ah';
+  declare bcbsize literally '10h';
+  declare bcbhsize literally '4';
+
+/*
+    D a t a    S t r u c t u r e s
+*/
+
+  declare osbase address external;
+  declare sys$dbase address external;
+  declare sys$dlen address external;
+  declare data$base address external;
+  declare data$end address external;
+  declare act$data$end address external;
+  declare act$buf$end address external;    /* paragraph value */
+
+  declare drvtbl$adr address external;
+  declare drvtbl based drvtbl$adr (16) address;
+
+  declare dph$adr address external;
+  declare dph based dph$adr structure (
+    xlt         address,
+    scratch1    address,
+    scratch2    byte,
+    mf          byte,
+    scratch3    address,
+    dpb         address,
+    csv         address,
+    alv         address,
+    dirbcb      address,
+    dtabcb      address,
+    hash        address,
+    unit        byte,
+    type        byte,
+    init        address,
+    login       address,
+    read        address,
+    write       address);
+
+  declare dpb$adr address external;
+  declare dpb based dpb$adr structure (
+    spt         address,
+    bsh         byte,
+    blm         byte,
+    exm         byte,
+    dsm         address,
+    drm         address,
+    al0         byte,
+    al1         byte,
+    cks         address,
+    off         address,
+    psh         byte,
+    phm         byte);
+
+  declare bcb$end address public;
+  declare bcb$header based bcb$end structure(
+    link        address,
+    bufmax      byte);
+
+  declare bcb$adr address public;
+  declare bcb based bcb$adr structure (
+    drv         byte,
+    rec(3)      byte,
+    wflg        byte,
+    zero        byte,
+    track       address,
+    sector      address,
+    bufoff      address,
+    link        address,
+    resv        address);
+
+  declare act$bcb$end address public;
+
+  declare rec$size address public;
+
+/*
+      L o c a l    P r o c e d u r e s
+*/
+
+  zero$buf:
+    procedure public;
+      declare w$index address;
+      declare mem$ptr address;
+      declare bcb$buf$byte based mem$ptr byte;
+
+      mem$ptr = data$end; /* Zero memory where BCB's will be created */
+      do w$index = 0 to 255;
+        bcb$buf$byte = 0;
+        mem$ptr = mem$ptr + 1;
+      end;
+    end zero$buf;   
+
+      /* Setup Allocation Vectors and Checksum vectors as requested */
+  setup$alv$csv:
+    procedure public;
+
+      if dph.csv = 0ffffh then         /* Setup Checksum vector */
+      do;
+        dph.csv = 0;
+      end;
+      if dph.alv = 0ffffh then         /* Setup Allocation vector */
+      do;
+        dph.alv = 0;
+      end;
+    end setup$alv$csv;
+
+  setup$dirbufs:  /* Setup Directory buffers and BCB's */
+    procedure public;
+
+      if dph.dirbcb = 0ffffH then
+      do;
+        dph.dirbcb = act$bcb$end;        /* Point dph to bcb header */
+        act$bcb$end = act$bcb$end + bcbhsize;/* increment past bcb header */
+        bcb$header.link = act$bcb$end;
+        bcb$header.bufmax = 0ffh;
+        bcb$end = bcb$end + bcbhsize;
+        bcb$adr = bcb$end;
+        bcb$end = bcb$end + bcbsize;
+        act$bcb$end = act$bcb$end + bcbsize;
+        bcb.drv = 0ffh;
+        bcb.bufoff = act$data$end;
+        bcb.link = 0;
+        act$data$end = act$data$end + rec$size;
+      end;
+    end setup$dirbufs;
+
+  setup$databufs:  /* Setup Data buffers and BCB's */
+    procedure public;
+
+      if dph.dtabcb = 0ffffH then
+      do;
+        dph.dtabcb = act$bcb$end;        /* Point dph to bcb header */
+        act$bcb$end = act$bcb$end + bcbhsize;/* increment past bcb header */
+        bcb$header.link = act$bcb$end;
+        bcb$header.bufmax = 0ffh;
+        bcb$end = bcb$end + bcbhsize;
+        bcb$adr = bcb$end;
+        bcb$end = bcb$end + bcbsize;
+        act$bcb$end = act$bcb$end + bcbsize;
+        bcb.drv = 0ffh;
+        bcb.bufoff = act$buf$end;
+        bcb.link = 0;
+        act$buf$end = act$buf$end + rec$size/16;
+      end;
+    end setup$databufs;
+
+
+setbuf:
+  procedure public;
+
+    act$data$end = (act$data$end+1) and 0FFFEH;/* make even */
+
+    if drvtbl(0) = 0 then        /* one entry required */
+      return;
+
+    call zero$buf;
+
+    dph$adr = drvtbl(0) + data$base;
+    dpb$adr = dph.dpb + data$base;
+    rec$size = shl(double(128),dpb.psh);
+
+    bcb$end = data$end;   /* Maintain a ptr. to the current end of BCB's */
+    act$bcb$end = act$data$end;/* BCB table base in gen'ed system */
+    act$data$end = act$bcb$end + (bcbhsize+bcbsize)*2;
+
+    call setup$alv$csv;   /* Setup Allocation and Checksum Vectors */
+    call setup$dirbufs;   /* Setup Directory buffers and BCB's */
+    act$buf$end = sys$dbase + shr(act$data$end+15,4);
+    call setup$databufs;  /* Setup Data buffers and BCB's */
+
+    data$end = bcb$end;
+    if dph.hash = 0ffffh then
+    dph.hash = 0;  /* Indicate no hash table for this drive */
+
+  end setbuf;
+
+end setup$buffers;
+EOF
+

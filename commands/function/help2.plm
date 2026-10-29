@@ -1,0 +1,973 @@
+$title ('Help Utility Version 1.1')
+$compact
+help:
+do;
+
+/*
+  Copyright (C) 1983
+  Digital Research
+  P.O. 579
+  Pacific Grove, CA 93950
+  
+  Revised:
+    30 May 84  Gordon R. Edmonds:  Adapt for use as a subroutine
+    13 Feb 83  whf: fix paging bug
+    28 Jan 83  by Bill Fitler: add in Bruce's changes to date
+    07 Oct 82  by Bruce Skidmore
+*/
+
+
+declare plmstart label public;
+
+/**********************************************
+         Interface Procedures
+**********************************************/
+  mon1:
+    procedure (func,info) external;
+      declare func byte;
+      declare info address;
+    end mon1;
+
+  mon2:
+    procedure (func,info) byte external;
+      declare func byte;
+      declare info address;
+    end mon2;
+
+  mon3:
+    procedure (func,info) address external;
+      declare func byte;
+      declare info address;
+    end mon3;
+
+  switch: procedure external;
+  end switch;
+
+  terminate:
+    procedure external;
+  end terminate;
+
+
+/**********************************************
+          Global Variables
+**********************************************/
+
+  declare (list$mode,nopage$mode,create$mode,extract$mode,page$mode) byte;
+  declare (offset,eod) byte;
+
+  declare fcb (13) byte external;
+  declare fcb2 (36) byte;
+      
+  declare tbuff  (128) byte external;
+  declare control$z literally '1AH';
+  declare cr literally '0DH';
+  declare lf literally '0AH';
+  declare tab literally '09H';
+  declare slash literally '''/''';
+  declare true literally '0FFH';
+  declare false literally '00H';
+
+  declare (cnt,index) byte;
+  declare try byte;
+  declare old$level address;
+  declare current$page address;
+  declare page$size     literally '1024';    /* defines for size of */
+  declare page$div$16   literally '64';      /* index paging buffer */
+  declare sub(12) byte;
+  declare com(11) structure(
+     name(15) byte);
+
+  declare sysbuff(page$div$16) structure(
+     subject(12) byte,
+     record address,
+     rec$offset byte,
+     level byte);
+
+ declare name(12) byte;
+ declare newlevel byte;
+ declare level byte;
+ declare gindex address;
+ declare tcnt byte;
+ declare version address;
+ declare page$len byte;
+ declare clear$screen (26) byte initial (1bh,'E$');
+
+  /**************************************
+   *                                    *
+   *       B D O S   Externals          *
+   *                                    *
+   **************************************/
+
+  read$console:
+    procedure byte;
+      return mon2 (1,0);
+    end read$console;
+
+  write$console:
+    procedure (char);
+      declare char byte;
+      call mon1 (2,char);
+    end write$console;
+
+  print$console$buf:
+    procedure (buff$adr);
+      declare buff$adr address;
+      call mon1 (9,buff$adr);
+    end print$console$buf;
+
+  read$console$buff:
+    procedure (buff$adr);
+      declare buff$adr address;
+      call mon1(10,buff$adr);
+    end read$console$buff;
+
+  direct$con$io:
+    procedure(func) byte;
+      declare func byte;
+        return mon2(6,func);
+    end direct$con$io;
+
+  get$version:
+    procedure  address;
+      return mon3(12,0);
+    end get$version;
+
+  delete$file:
+    procedure (fcb$address);
+      declare fcb$address address;
+      call mon1(19,fcb$address);
+    end delete$file;
+
+  open$file:
+    procedure (fcb$address) byte;
+      declare fcb$address address;
+      declare fcb based fcb$address (1) byte;
+      fcb(12) = 0; /* EX = 0 */
+      fcb(32) = 0; /* CR = 0 */
+      return mon2 (15,fcb$address);
+    end open$file;
+
+  close$file:
+    procedure (fcb$address) byte;
+      declare fcb$address address;
+      return mon2 (16,fcb$address);
+    end close$file;
+
+  read$record:
+    procedure (fcb$address) byte;
+      declare fcb$address address;
+      return mon2 (20,fcb$address);
+    end read$record;
+
+  write$record:
+    procedure (fcb$address) byte;
+      declare fcb$address address;
+      return mon2(21,fcb$address);
+    end write$record;
+
+  make$file:
+    procedure (fcb$address) byte;
+      declare fcb$address address;
+      declare fcb based fcb$address (1) byte;
+      fcb(12) = 0; /* EX = 0 */
+      fcb(32) = 0; /* CR = 0 */
+      return mon2(22,fcb$address);
+    end make$file;
+
+  read$rand:
+    procedure (fcb$address) byte;
+      declare fcb$address address;
+      return mon2(33,fcb$address);
+    end read$rand;
+
+  set$dma:
+    procedure (dma$address);
+      declare dma$address address;
+      call mon1(26,dma$address);
+    end set$dma;
+
+  set$rand$rec:
+    procedure (fcb$address);
+      declare fcb$address address;
+      call mon1(36,fcb$address);
+    end set$rand$rec;
+
+  set$user:
+    procedure (usernum);
+      declare usernum byte;
+      call mon1(32,usernum);
+    end set$user;
+
+  declare cmdrv byte external;          /* declared in assembler interface */
+  get$sysdrive:
+    procedure byte;
+      if (high(get$version) and 0FDH) <> 14H then       /* CCP/M-86 ? */
+        return 0;               /* no: sysdrive defaults to A */
+      return cmdrv;             /* yes: sysdrive is drive we loaded from */
+    end get$sysdrive;
+
+
+/*********************************************
+            Error Procedure
+
+      Displays error messages and
+      terminates if required.
+*********************************************/
+error:
+  procedure(term$code,err$msg$adr);
+    declare term$code byte;
+    declare err$msg$adr address;
+
+    call print$console$buf(.(cr,lf,'ERROR:  $'));
+    call print$console$buf(err$msg$adr);
+    call print$console$buf(.(cr,lf,'$'));
+    if term$code then
+      call terminate;
+  end error;
+
+/*********************************************
+            Move Procedure
+
+      Moves specified number of bytes
+      from the Source address to the
+      Destination address.
+*********************************************/
+movef:
+  procedure (mvcnt,source$addr,dest$addr);
+     declare (source$addr,dest$addr) address;
+     declare mvcnt byte;
+     call move(mvcnt,source$addr,dest$addr);
+     return;
+  end movef;
+
+/*********************************************
+            Compare Function
+
+      Compares 12 byte strings
+
+      Results:  0 - string1 = string2
+                1 - string1 < string2
+                2 - string1 > string2
+*********************************************/
+compare:
+  procedure(str1$addr,str2$addr) byte;
+     declare (str1$addr,str2$addr) address;
+     declare string1 based str1$addr (12) byte;
+     declare string2 based str2$addr (12) byte;
+     declare (result,i) byte;
+     result,
+     i = 0;
+     do while ((i < 12) and (string1(i) <> ' '));
+        if string1(i) <> string2(i) then
+        do;
+          if string1(i) < string2(i) then
+          do;
+             result = 1;
+          end;
+          else
+          do;
+             result = 2;
+          end;
+          i = 11;
+        end;
+        i = i + 1;
+     end;
+     return result;
+  end compare;
+
+/*********************************************
+         Paging Procedure
+
+    Gets new page of index if needed.
+*********************************************/
+move$index: procedure(index$add,offset);
+  declare (index$add,offset)      address,
+          index based index$add   address,
+          (recs$per$page,i,j,rrn) byte;
+
+get$page: procedure;
+
+declare i               byte;
+
+  do i = 0 to recs$per$page - 1;
+    call set$dma(.sysbuff(i*128/16).subject);
+    fcb(33) = rrn;
+    fcb(34),fcb(35) = 0;
+    if read$rand(.fcb) <> 0 then do;
+       offset = closefile(.fcb);
+       call error(true,.('Reading file HELP.HLP.$'));
+    end;
+    rrn = rrn + 1;
+  end;
+  call set$dma(.tbuff);
+
+end get$page;
+
+
+recs$per$page = page$size/128;
+if offset = 8000h then do;
+  current$page = 0;
+  rrn = 0;
+  index = 0;
+  call get$page;
+end;
+else do;
+  if offset > 8000h then do;     /* if index less than 0 */
+    offset = -(offset);          /* abs of index */
+    do j = 1 to offset;
+      index = index - 1;
+      if index > 8000h then do;         /* if index < 0 */
+         rrn = (current$page * recs$per$page) - recs$per$page;
+         call get$page;
+         index = index + (page$size/16);
+         current$page = current$page - 1;
+      end;
+    end;
+  end;
+  else do;
+    if offset > 0 then 
+    do j = 1 to offset;
+      index = index + 1;
+      if index >((page$size/16)-1) then do;
+         rrn = (current$page * recs$per$page) + recs$per$page;
+         call get$page;
+         index = index - (page$size/16);
+         current$page = current$page + 1;
+      end;
+    end;
+  end;
+end;
+end move$index;
+        
+/*********************************************
+         Increment Procedure
+
+    Increments through a record.
+*********************************************/
+inc:
+  procedure (inci) byte;
+    declare inci byte;
+      inci = inci + 1;
+      if inci > 127 then
+      do;
+         if read$record(.fcb) = 0 then
+         do;
+            inci = 0;
+         end;
+         else
+         do;
+            eod = true;
+            inci = 0;
+         end;
+      end;
+      return inci;
+  end inc;
+
+/**************************************
+        Page$check Procedure
+
+    Halts display after page$len lines
+**************************************/
+page$check:
+  procedure(line$cnt$addr) byte;
+     declare line$cnt$addr address;
+     declare line$cnt based line$cnt$addr byte;
+     declare quit byte;
+     quit = 0;
+     if (not nopage$mode) and (page$mode) then
+     do;
+        if (line$cnt:=line$cnt+1) > page$len then
+        do;
+           call print$console$buf(.(cr,lf,'Press RETURN to continue $'));
+           line$cnt = 0;
+           do while (line$cnt = 0);
+              line$cnt = direct$con$io(0FDH);
+           end;
+           call print$console$buf(.(cr,'                             ',
+                                                                  cr,'$'));
+           if line$cnt = 3 /* control c */ then
+           do;
+              line$cnt = close$file(.fcb);
+              call terminate;
+           end;
+           else
+           do;
+              if line$cnt <> cr then
+              do;
+                 quit = true;
+              end;
+              line$cnt = 0;
+           end;
+        end;
+        else
+        do;
+           call write$console(lf);
+        end;
+    end;
+    else
+    do;
+       line$cnt = 0;
+       call write$console(lf);
+    end;
+    return quit;
+ end page$check;
+
+/*******************************************
+             Init Procedure
+
+       Reads the index into memory
+*******************************************/
+init:
+  procedure;
+     declare (i,j) address;
+     i = 8000h;
+     call move$index(.j,i);
+  end init;
+/*******************************************
+            Parse Procedure
+
+      Parses the command tail
+*******************************************/
+parse:
+  procedure byte;
+    declare (index,begin,cnt,i,j,stop,bracket) byte;
+    index = 0;
+    if tbuff(0) <> 0 then
+    do;
+       do index = 1 to tbuff(0);
+          if tbuff(index) = tab then tbuff(index) = ' ';
+          else if tbuff(index) = ',' then tbuff(index) = ' ';
+       end;
+       index = 1;
+       do while(index < tbuff(0)) and (tbuff(index) = ' ');
+         index = index + 1;
+       end;
+       if tbuff(index) = '.' then
+         do;
+           begin = level;
+           tbuff(index) = ' ';
+         end;
+       else
+         begin = 0;
+       do index = begin to 10;
+          call movef(15,.('             ',cr,'$'),.com(index).name);
+       end;
+       index = begin;
+       cnt = 1;
+       stop,
+       bracket = 0;
+       do while (tbuff(cnt) <> 0) and (not stop);
+          if (tbuff(cnt) <> 20H) then
+          do;
+             i = 0;
+             do while (((tbuff(cnt) <> 20H) and (tbuff(cnt) <> '[')) and
+                        (tbuff(cnt) <> 0)) and ((i < 12) and (index < 11));
+                if (tbuff(cnt) > 60H) and (tbuff(cnt) < 7BH) then
+                do;
+                   com(index).name(i) = tbuff(cnt) - 20H;
+                end;
+                else
+                do;
+                   com(index).name(i) = tbuff(cnt);
+                end;
+                cnt = cnt + 1;
+                i = i + 1;
+             end;
+             index = index + 1;
+             if (bracket or (index > 10)) then
+             do;
+                stop = true;
+             end;
+             else
+             if tbuff(cnt) = '[' then
+             do;
+                if com(index-1).name(0) = ' ' then index = index - 1;
+                com(index).name(0) = '[';
+                cnt = cnt + 1;
+                index = index + 1;
+                bracket = true;
+             end;
+          end;
+          else
+          do;
+             cnt = cnt + 1;
+          end;
+       end;
+    end;
+    list$mode,
+    nopage$mode,
+    create$mode,
+    extract$mode = false;
+    if index > 0 then
+    do;
+       i = 0;
+       do while (i < 10);
+          if com(i).name(0) = '[' then
+          do;
+             if (com(i+1).name(0) = 'C') then
+             do;
+                create$mode = true;
+                index = index - 2;
+             end; 
+             else if (com(i+1).name(0) = 'E') then
+                  do;
+                     extract$mode = true;
+                     index = index - 2;
+                  end;
+                  else if (com(i+1).name(0) = 'N') then
+                       do;
+                          nopage$mode =true;
+                          index = index - 2;
+                       end;
+                       else if (com(i+1).name(0) = 'L') then
+                            do;
+                               list$mode = true;
+                               nopage$mode = true;
+                               index = index - 2;
+                            end;
+                            else if (com(i+1).name(0) <> ' ') then
+                                 do;
+                                   index = index - 2;
+                                 end;
+                                 else
+                                     do;
+                                       index = index - 1;
+                                     end;
+             i = 10;
+          end;
+          i = i + 1;
+       end;
+    end;
+    return index;
+  end parse;
+
+/***********************************************
+          Display$ind Procedure
+
+      Displays the avialable topics
+***********************************************/
+display$ind:
+  procedure;
+    declare (disp$level,i,j,eod,written) byte;
+    declare (offset,index,k,save$index,count) address;
+    declare name (14) byte;
+     offset,
+     written,
+     eod = 0;
+     save$index = 1;
+     disp$level = level + 1;
+     if disp$level < 10 then
+     do;
+        if level = 0 then
+        do;
+           offset = 0;
+        end;
+        else
+        do;
+           offset = gindex;
+        end;
+        count = 0;
+     end;
+     else
+     do;
+        eod = true;
+     end;
+     k = offset - index;
+     call move$index(.index,k);
+
+     offset = 0;
+     do while (not eod);
+          if sysbuff(index).subject(0) = '$' then
+          do;
+             eod = true;
+          end;
+          do;
+             if (sysbuff(index).level = disp$level) then
+             do;
+                if not written then
+                do;
+                   written = true;
+                   i = page$check(.tcnt);
+                   if disp$level = 1 then
+                   do;
+                      if (not eod) then
+                      do;
+                        call print$console$buf(.(cr,'Topics available:$'));
+                        call move$index(.index,8000h);
+                      end;
+                   end;
+                   else
+                   do;
+                      if disp$level > 2 then
+                      do;
+                        save$index = index;
+                        call move$index(.index,0ffffh);
+                        do while sysbuff(index).level = sysbuff(index-1).level;
+                           call move$index(.index,0ffffh);
+                        end;
+                        call move$index(.index,0ffffh);
+                        save$index = save$index - index;                      
+                      end;
+                      if (disp$level > 2) or (not eod) then
+                      do;
+                        call print$console$buf(.(cr,'For more information, ',
+                             'type a period and one of the following ',
+                                                'subtopics:$'));
+                      end;
+                   end;
+                   i = page$check(.tcnt);
+                   call print$console$buf(.(cr,'$'));
+                end;
+                if (count mod 6) = 0 then 
+                do;
+                   i = page$check(.tcnt);
+                   call write$console(cr);
+                end;
+                do i = 0 to 13;
+                   name(i) = ' ';
+                end;
+                name(13) = '$';
+                call movef(12,.sysbuff(index).subject,.name);
+                call print$console$buf(.name);
+                count = count + 1;
+             end;
+             else
+             do;
+                if sysbuff(index).level < disp$level then eod = true;
+             end;
+             call move$index(.index,save$index);
+             save$index = 1;
+          end;
+    end;
+    if written then
+      do;
+         i = page$check(.tcnt);
+         call print$console$buf(.(cr,lf,'$'));
+      end;
+    call set$dma(.tbuff);
+ end display$ind;
+
+/*********************************************
+         Search$file Procedure
+
+     Searches the index table for the key
+*********************************************/
+search$file:
+  procedure byte;
+    declare (i,eod, error, cnt, found, saved, save$byte, save$level) byte;
+    declare index address;
+
+    found,
+    eod,
+    error,
+    saved = 0;
+    index = 0;
+    call init;
+    cnt = 0ffh;
+
+    if (try = 1) then do;
+
+        i = 10;
+        do while com(i).name(0) = ' ';
+           i = i - 1;
+        end;
+ 
+        newlevel = i - 2;
+        cnt = compare(.com(i).name,.com(newlevel).name);
+        save$byte = com(newlevel+1).name(0);
+    end;
+
+    if (cnt = 0) or (try = 0) then do;
+      if try = 1 then com(newlevel+1).name(0) = ' ';
+      do while(not eod) and (not error);
+            if sysbuff(index).subject(0) <> '$' then
+            do;
+               if sysbuff(index).level = level + 1 then
+               do;
+                  cnt = compare(.com(level).name,.sysbuff(index).subject);  
+                  if cnt = 0 then
+                  do;
+                     call movef(12,.sysbuff(index).subject,.com(level).name);
+                     level = level + 1;
+                     if (not saved) then
+                     do;
+                        save$level = level;
+                        saved = true;
+                     end;
+                     if ((level > 8) or (com(level).name(0) = ' '))
+                                     or (com(level).name(0) = '[') then
+                     do;
+                        found = true;
+                        eod = true;
+                     end;
+                     else
+                     do;
+                        call move$index(.index,1);
+                        found = 0;
+                     end;
+                  end;
+                  else
+                  do;  
+                     call move$index(.index,1);
+                  end;
+               end;
+               else
+               do;
+                  if saved then
+                  do;
+                     if save$level < sysbuff(index).level then
+                     do;
+                        call move$index(.index,1);
+                     end;
+                     else
+                     do;
+                         error = true;
+                     end;
+                  end;
+                  else
+                  do;
+                     call move$index(.index,1);
+                  end;
+               end;
+            end;
+            else
+            do;
+               error = true;
+            end;
+      end;
+      if found then
+      do;
+         gindex = index + 1;
+         call movef(1,.sysbuff(index).record,.fcb(33));
+         call movef(1,.sysbuff(index).record+1,.fcb(34));  
+         fcb(35) = 0;
+         offset = sysbuff(index).rec$offset;
+         level = sysbuff(index).level;
+      end;
+      if try = 1 then com(new$level+1).name(0) = save$byte;
+   end;
+   else error = 0ffh;
+  return error;
+ end search$file;
+
+/**************************************
+        Token Display Procedure
+
+      Displays the Parsed Tokens
+**************************************/
+display$tokens:
+  procedure (no$tokens);
+    declare (token$cnt1, token$cnt2, no$tokens) byte;
+    token$cnt1 = 0;
+    do while (token$cnt1 < no$tokens) and (not eod);
+       eod = page$check(.tcnt);
+       if (not eod) then
+       do;
+          do token$cnt2 = 0 to token$cnt1;
+             call print$console$buf(.('  $'));
+          end;
+          call print$console$buf(.com(token$cnt1).name);
+          token$cnt1 = token$cnt1 + 1;
+       end;
+    end;
+  end display$tokens;
+
+/**************************************
+           Print Procedure
+
+       Displays the Help text
+**************************************/
+print:
+  procedure;
+    declare (i,ii,char,eod2) byte;
+    declare temp(3) byte;
+    call write$console(cr);
+    call display$tokens(level);
+    if (not eod) then eod = page$check(.tcnt);
+    if (not eod) then
+    do;
+       if read$rand(.fcb) <> 0 then
+       do;
+          offset =close$file(.fcb);
+          call error(true,.('Reading file HELP.HLP.$'));
+       end;
+       else
+       do;
+          eod2 = 0;
+          do while ((not eod2) and (not eod)) and (read$record (.fcb) = 0);
+             i = offset - 1;
+             do while (((i:=i+1) <= 127) and (not eod2));
+                if (char := tbuff(i)) = control$z then eod = true;
+                ii = 0;
+                do while((not eod2) and (not eod)) and
+                                        ((ii < 3) and (tbuff(i) = slash));
+                   ii = ii + 1;
+                   i = inc(i);
+                   temp(ii-1) = tbuff(i);
+                end;
+                if ii = 3 then eod2 = true; else temp(ii) = '$';
+                if ((not eod) and (not eod2)) then
+                do;
+                   if (char = lf) and (not nopage$mode) then
+                   do;
+                      eod = page$check(.tcnt);
+                   end;
+                   else
+                   do;
+                      call write$console (char);
+                   end;
+                   if ii > 0 then call print$console$buf(.temp);
+                   ii = 0;
+                end;
+             end;
+             offset = 0;
+          end;
+       end;
+    end;
+    eod = 0;
+  end print;
+
+/**************************************
+         Prompt Procedure
+
+  Prompts for input from the user
+***************************************/
+prompt:
+  procedure byte;
+    declare temp  byte;
+    call movef(1,.(128),.tbuff-1);
+    temp = page$check(.tcnt);
+    call print$console$buf(.(cr,'HELP (Enter topic, ESC to exit)> $'));
+    call read$console$buff(.tbuff-1);
+    tbuff(tbuff(0)+1) = 0;
+    tcnt = -1;
+    temp = parse;
+    if (temp <> 0) and (not list$mode)
+    then call print$console$buf(.clear$screen);
+    return temp;
+ end prompt;
+     
+
+/**************************************
+         Main Program
+**************************************/
+
+declare oret byte;
+
+declare last$dseg$byte byte
+  initial (0);
+
+plmstart:
+  do;
+    eod,
+    tcnt = 0;
+    call switch;
+    version = get$version;
+
+/******** CP/M 3
+    if (high(version) = 1) or (low(version) < 30h) then
+      do;
+        call error(true,.('Requires CP/M Version 3$'));
+      end;
+    page$len = mon2(49,.(1ch,0,));
+    if mon2(49,.(2ch,0)) = 0 then
+      page$mode = true;
+    else
+      page$mode = false;
+*********/
+
+    page$len = 22;
+    page$mode = true;
+
+    cnt = parse;
+    do;
+       call movef(13,.(0,'HELP ',0A0H,'  HLP',0),.fcb); /* open read/only */
+       oret = open$file (.fcb);
+       if oret = 0FFh then
+         do;
+           fcb(0) = get$sysdrive;
+           call set$user(0);            /* try user 0 */
+           oret = open$file (.fcb);     /* on system drive */
+         end;
+       if oret <> 0FFH then
+       do;
+         call init;
+         if (not list$mode) then
+           call print$console$buf(.clear$screen);
+         if cnt = 0 then
+         do;
+            level = 0;
+            call print$console$buf(.(cr,lf,'HELP UTILITY V2.0',cr,lf,lf,
+                                           'At "HELP (Enter topic, ESC to exit)> " enter ',
+                                           'topic {,subtopic}...',cr,lf,lf,
+                                           'EXAMPLE:  HELP (Enter topic, ESC to exit)> DIR EXAMPLES',
+                                            cr,lf,'$'));
+            tcnt = 2;
+            call display$ind;
+            cnt = prompt;     /* Prompt for user input */
+         end;
+         do while cnt <> 0;   /* If user didn't hit a return do */
+          level = 0;
+          if compare(.com(0).name,.('?           ')) = 0 then
+          do;
+            ; /* '?' Entered - skip searches, display index */
+          end;
+          else
+          do;
+          try = 0;
+          if search$file <> 0FFH then
+          do;
+               call print;
+               if compare(.com(0).name,.('HELP        ')) = 0 then
+                  level = 0;
+          end;
+          else
+          do;
+          try = 1;
+          level = 0;
+          if search$file <> 0FFH then
+          do;
+               call print;
+               if compare(.com(0).name,.('HELP        ')) = 0 then
+                  level = 0;
+          end;
+          else
+          do;
+             eod = page$check(.tcnt);
+             call write$console(cr);
+             if (not eod) then
+             do;
+                eod = page$check(.tcnt);
+                if (not eod) then
+                do;
+                   call print$console$buf(.('Topic:$'));
+                   eod = page$check(.tcnt);
+                   call write$console(cr);
+                   call display$tokens(cnt);
+                   eod = page$check(.tcnt);
+                   call write$console(cr);
+                   eod = page$check(.tcnt);
+                   call write$console(cr);
+                   call print$console$buf(.('Not found$'));
+                   eod = page$check(.tcnt);
+                   call write$console(cr);
+                end;
+             end;
+             level = 0;
+          end;
+          end;
+          end;
+          if (not eod) then call display$ind;
+          cnt = prompt;   /* Prompt for user input */
+       end;
+      offset = close$file(.fcb);
+   end;
+   else
+   do;
+      call error(false,.('No HELP.HLP file on the default drive.$'));
+   end;
+ end;
+ end;
+ call terminate; 
+end help;
+
