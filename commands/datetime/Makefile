@@ -43,3 +43,8 @@ time.exe: pctime.obj Makefile
 	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' time-link.log
 	@test -s $@
 	@test "$$(od -An -tx1 -N2 $@ | tr -d ' \n')" = 4d5a
+
+.PHONY: check-time
+check: check-time
+check-time: time.exe tests/timecheck.asm ../../tools/time_check.py
+	python3 ../../tools/time_check.py

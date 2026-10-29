@@ -108,39 +108,42 @@ set_time:
 set_done:
     ret
 
-; Format current time with the same right-aligned decimal helper as PCDATE.
+; Format four fixed-width pairs without writing outside time_string.
+; PCDATE's eight-column helper is unsuitable for these two-column fields.
 get_time:
+    mov separator1,':'
+    mov separator2,':'
+    mov separator3,'.'
     mov ah,2ch
     int 33
     mov hours,ch
     mov minutes,cl
     mov seconds,dh
-    mov al,dl
-    mov di,offset time_string+3
-    call asci
-    mov al,seconds
-    sub di,3
-    call asci
-    mov al,minutes
-    sub di,3
-    call asci
+    mov hundredths,dl
+    mov di,offset time_string
     mov al,hours
-    sub di,3
-    call asci
-    mov separator1,':'
-    mov separator2,':'
-    mov separator3,'.'
-    mov bx,offset time_string+1
-    mov ax,10
-zero_pad:
-    inc bx
-    dec ax
-    js format_done
-    cmp byte ptr [bx],' '
-    jnz zero_pad
-    mov byte ptr [bx],'0'
-    jmp zero_pad
-format_done:
+    call time_pair
+    inc di
+    mov al,minutes
+    call time_pair
+    inc di
+    mov al,seconds
+    call time_pair
+    inc di
+    mov al,hundredths
+    call time_pair
+    ret
+
+; AL = 0..99; write exactly two zero-padded digits at DS:DI.
+time_pair:
+    xor ah,ah
+    mov bl,10
+    div bl
+    add ax,3030h
+    mov [di],al
+    inc di
+    mov [di],ah
+    inc di
     ret
 
 clear_fields:

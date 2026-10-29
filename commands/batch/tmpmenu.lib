@@ -712,6 +712,14 @@ notbatch:   cmp cmdsent,FALSE   ! je noclearline
 		call crlf
 noclearline:
 
+IF BATCH
+; Read before displaying a prompt: Ctrl-Z/EOF must not echo an empty
+; command. sublin exits at EOF; its length includes the line terminator.
+	    push ds ! pop es
+	    call sublin
+	    cmp read_blen,1 ! jbe noclearline
+ENDIF
+
 					; set up and print user prompt
 					; get current default user # and disk
 					; this call should be made on every
@@ -2006,7 +2014,7 @@ rcln:
 
 IF BATCH
 
-	call	sublin			;get line from submit i/o buffer
+; The BATCH line was fetched before the prompt at noclearline.
 
 ENDIF
 

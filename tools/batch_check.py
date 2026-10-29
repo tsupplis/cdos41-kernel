@@ -44,6 +44,9 @@ run("cpmcp", "-f", "ccpm86-320", "b.logical", "message.bat", "0:message.bat")
 (F / "sentinel").write_bytes(b"KEEP\r\n\x1a")
 for n in ["drop.tst", "keep.tst"]:
     run("cpmcp", "-f", "ccpm86-320", "b.logical", "sentinel", "0:" + n)
+if cdos:
+    (F / "prompts.bat").write_bytes(b"CLS\r\nDIR B:KEEP.TST\r\nDIR B:KEEP.TST\r\n\r\n\x1a")
+    run("cpmcp", "-f", "ccpm86-320", "b.logical", "prompts.bat", "0:prompts.bat")
 run("python3", twist, "twist", "b.logical", "b.img")
 cfg = (
     (R / "media" / (stem + ".cfg"))
@@ -69,6 +72,11 @@ c += [
     'save "done.bin" bin b800:0000 fa0',
     "q",
 ]
+if cdos:
+    c.pop()  # Keep the emulator running for the two-DIR prompt regression.
+    for ch in "b:prompts.bat":
+        c += ["key " + keys.get(ch, ch), "c 200000"]
+    c += ["key Return", "c 10000000", 'save "prompts.bin" bin b800:0000 fa0', "q"]
 with (F / "pce.log").open("wb") as log:
     subprocess.run(
         ["pce-ibmpc", "-c", stem + ".cfg", "-t", "null", "-g", "vga"],
@@ -97,6 +105,11 @@ assert "User Number = 1" in s and "User Number = 0" in s, s
 assert "User numbers only" not in s, s
 s = screen("done")
 assert [x for x in s.splitlines() if x][-1] == "A>", s
+if cdos:
+    assert s.splitlines().count("A>") == 1, s
+    prompts = screen("prompts")
+    assert prompts.splitlines().count("A>") == 1, prompts
+    assert prompts.count("A>DIR B:KEEP.TST") == 2, prompts
 run("python3", twist, "untwist", "b.img", "final.logical")
 names = run("cpmls", "-f", "ccpm86-320", "final.logical").stdout.decode().lower()
 assert "keep.tst" in names, names

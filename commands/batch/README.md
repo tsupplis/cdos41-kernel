@@ -21,3 +21,6 @@ refills and execution of ERA.CMD from FAT. It checks deletion targets and an
 unrelated sentinel. The original close-checksum failure was a FAT-to-FCB
 attribute conversion bug in the kernel, corrected in `kernel/con/black.a86`;
 see the root patch notes.
+
+BATCH reads each line before echoing its prompt. Empty lines and the
+Ctrl-Z/end-of-file transition do not print extra drive prompts.
