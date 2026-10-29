@@ -7,8 +7,8 @@ INTEL_ASM86=intel_asm86
 DRC86=drccpm_cc
 DRCLINK86=drccpm_link
 
-TOOLS=date.exe
-OBJECTS=pcdate.obj
+TOOLS=date.exe time.exe
+OBJECTS=pcdate.obj pctime.obj
 
 .PHONY: all check clean
 .DELETE_ON_ERROR:
@@ -39,7 +39,7 @@ clean:
 	rm -f *.sys *.loc *.cmd *.obj *.h86 *.hex *.sym *.lin *.lst *.prn *.log
 	rm -f *.mp? *.lnk *.map *.exe *.com
 
-date.exe: $(OBJECTS) Makefile
+date.exe: pcdate.obj Makefile
 	@$(LINK86) 'date=pcdate[nop]' > date-link.log 2>&1; result=$$?; cat date-link.log; test $$result -eq 0
 	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' date-link.log
 	@test -s $@
@@ -50,3 +50,9 @@ date.exe: $(OBJECTS) Makefile
 check: check-date
 check-date: date.exe tests/datecheck.asm ../../tools/date_check.py
 	python3 ../../tools/date_check.py
+
+time.exe: pctime.obj Makefile
+	@$(LINK86) 'time=pctime[nop]' > time-link.log 2>&1; result=$$?; cat time-link.log; test $$result -eq 0
+	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' time-link.log
+	@test -s $@
+	@test "$$(od -An -tx1 -N2 $@ | tr -d ' \n')" = 4d5a

@@ -1,0 +1,360 @@
+title 'PC-DOS TIME UTILITY'
+;
+; Reconstructed from the CDOS 4.1 OEM TIME.EXE, using PCDATE.A86's
+; RASM86/LINK86 layout and shared parsing/decimal-formatting idioms.
+; Build: RASM86 pctime; LINK86 time=pctime[nop]
+;
+; Syntax: TIME [hours[:minutes[:seconds[.hundredths]]]]
+; Each field accepts one or two decimal digits. Leading spaces are allowed;
+; trailing text/spaces and missing fields after separators are rejected.
+; Omitted fields initially default to zero. DOS function 2Dh validates ranges.
+; With no tail, show HH:MM:SS.hh and prompt. Empty input leaves time unchanged.
+; Invalid input displays "Invalid time" and prompts again, without redisplaying
+; the current time. As in the original, retries retain parsed/omitted fields.
+; No byte identity is required; messages, calls and behavior are compared with
+; base/time.exe by check-time, without changing the host or guest clock.
+
+cseg
+start:
+    mov ax,dataseg
+    mov es,ax
+    mov es:prefix,ds                 ; PSP segment for historical far return
+    mov di,offset endtail
+    mov si,80h
+    movsb
+    mov di,offset buf
+    xor ch,ch
+    mov cl,es:endtail
+    repnz movsb
+    mov ds,ax
+    mov dl,0ffh
+    mov cl,45                       ; Concurrent BDOS: return disk errors
+    int 224
+
+    call clear_fields
+    mov bx,offset buf
+    cmp endtail,0
+    jz interactive
+    jmp parse_time
+
+; Clear only the interactive input on retry, preserving the original field state.
+time_error:
+    mov di,offset inbuffer
+    mov cx,10
+    mov al,0
+    rep stosb
+    call crlf
+    mov dx,offset error_message
+    call pmsg
+    call crlf
+    jmp prompt
+
+interactive:
+    call get_time
+    mov dx,offset current_message
+    call pmsg
+    mov dx,offset time_string
+    call pmsg
+    call crlf
+prompt:
+    mov dx,offset enter_message
+    call pmsg
+    call read_line
+    mov bx,offset inbuffer
+    call isend1
+    jnz parse_time
+    jmp ccpret
+
+; Optional suffixes terminate only at NUL; DOS validates even partial times.
+parse_time:
+    mov erroret,offset time_error
+    mov di,offset hours
+    call eatblanks
+    call process
+    call isend1
+    jz apply_time
+    call getcol
+    mov di,offset minutes
+    call process
+    call isend1
+    jz apply_time
+    call getcol
+    mov di,offset seconds
+    call process
+    call isend1
+    jz apply_time
+    call getper
+    mov di,offset hundredths
+    call process
+    call isend1
+    jz apply_time
+    jmp time_error
+apply_time:
+    call set_time
+    jmp ccpret
+
+; DOS returns FFh for an invalid range. Preserve the original retry path.
+set_time:
+    mov ah,2dh
+    mov ch,hours
+    mov cl,minutes
+    mov dh,seconds
+    mov dl,hundredths
+    int 33
+    cmp al,0ffh
+    jnz set_done
+    pop si
+    jmp time_error
+set_done:
+    ret
+
+; Format current time with the same right-aligned decimal helper as PCDATE.
+get_time:
+    mov ah,2ch
+    int 33
+    mov hours,ch
+    mov minutes,cl
+    mov seconds,dh
+    mov al,dl
+    mov di,offset time_string+3
+    call asci
+    mov al,seconds
+    sub di,3
+    call asci
+    mov al,minutes
+    sub di,3
+    call asci
+    mov al,hours
+    sub di,3
+    call asci
+    mov separator1,':'
+    mov separator2,':'
+    mov separator3,'.'
+    mov bx,offset time_string+1
+    mov ax,10
+zero_pad:
+    inc bx
+    dec ax
+    js format_done
+    cmp byte ptr [bx],' '
+    jnz zero_pad
+    mov byte ptr [bx],'0'
+    jmp zero_pad
+format_done:
+    ret
+
+clear_fields:
+    mov di,offset padding
+    mov ax,'  '
+    mov cx,6
+    rep stosw
+    mov hours,0
+    mov minutes,0
+    mov seconds,0
+    mov hundredths,0
+    ret
+
+; PCDATE's one/two-digit parser. Failed mandatory tokens unwind the helper's
+; return address and jump through erroret; optional second digits leave ZF clear.
+process:call	getnum
+	mov	byte ptr [di],al
+	call	gtnum2
+	jnz	nextnum
+	mov	dl,al
+	mov	al,byte ptr [di]
+	mov	cl,10
+	mul	cl
+	add	al,dl
+	mov	byte ptr [di],al
+nextnum:ret	
+
+
+
+getdsh:	cmp	byte ptr [bx],'-'
+	jz	getxit
+getsls: cmp	byte ptr [bx],'/'
+	jmp	getxit
+getcol:	mov	cl,':'
+	jmp	tryit
+getper:	mov	cl,'.'	
+	jmp	tryit
+getnum:	mov	al,byte ptr [bx]
+	mov	dl,al
+	sub	al,30h
+	call	isnum
+	jmp	getxit
+gtnum2:	mov	al,byte ptr [bx]
+	mov	dl,al
+	sub	al,30h
+	call	isnum
+	jnz	notnum
+	inc	bx
+	xor	si,si
+	ret
+tryit:	mov	al,byte ptr [bx]
+	cmp	cl,al
+getxit:	jz	numok2
+	pop 	si
+	jmp	erroret
+numok2:	inc	bx
+notnum:	ret	
+
+
+; Convert AL to decimal, using PCDATE's eight-column formatting helper below.
+asci:
+    xor ah,ah
+    xor cx,cx
+    call conv2asci
+    ret
+
+; Return ZF set for an ASCII decimal digit; AL already contains digit minus '0'.
+isnum:
+    xor si,si
+    cmp dl,'0'
+    jns digit_lower_ok
+    jmp not_digit
+digit_lower_ok:
+    cmp dl,'9'
+    ja not_digit
+    or si,si
+    ret
+not_digit:
+    dec si
+    ret
+
+eatblanks:
+    mov al,byte ptr [bx]
+    cmp al,' '
+    jnz blanks_done
+    inc bx
+    jmp eatblanks
+blanks_done:
+    ret
+isend1:
+    mov al,byte ptr [bx]
+    cmp al,0
+    ret
+
+; Print through DOS, so the utility follows the DOS personality's console path.
+crlf:
+    mov dl,13
+    mov ah,2
+    int 33
+    mov dl,10
+    mov ah,2
+    int 33
+    ret
+pmsg:
+    mov ah,9
+    int 33
+    ret
+read_line:
+    mov ah,10
+    mov dx,offset inmax
+    int 33
+    mov bx,offset inbuffer
+    add bl,inlen
+    adc bh,0
+    mov byte ptr [bx],0
+    ret
+
+; Shared decimal-conversion idiom retained from the original and PCDATE.
+conv2asci:
+	push	bx
+	push	di
+	mov	bx,9680h
+	mov	si,0098h
+	mov	dx,0
+go:	inc	dx
+	sub	ax,bx
+	sbb	cx,si
+	jns	go
+	add	ax,bx
+	adc	cx,si
+	dec	dx
+	call	printc
+	test	si,si
+	jz	nothy
+	cmp	si,0098h
+	jnz	not1
+	mov	si,000fh
+	mov	bx,4240h
+	jmp	go
+not1:	cmp	si,000fh
+	jnz	not2
+	mov	si,0001h
+	mov	bx,8680h
+	jmp	go
+not2:	xor	si,si
+	mov	bx,2710h
+	jmp	go
+nothy:	push	ax
+	mov	ax,bx
+	mov	bx,10
+	div	bx
+	mov	bx,ax
+	pop	ax
+	test	bx,bx
+	jz	donec
+	jmp	go
+donec:	pop	di
+	push	si
+	mov	si,di
+	add	si,7
+	cmp	byte ptr [si],' '
+	jnz	siok
+	mov	byte ptr [si],'0'
+siok:	pop	si
+	pop	bx
+	ret	
+
+
+printc:	test	dx,dx
+	jnz	digit
+	dec	di
+	cmp	byte ptr [di],' '
+	jz	supres
+	inc	di
+digit:	add	dx,'0'
+	mov	byte ptr [di],dl
+	xor	dx,dx
+	inc	di
+	ret
+supres:	inc	di
+	mov	byte ptr [di],' '
+	inc	di
+	ret
+
+
+ccpret:
+    jmpf dword ptr home
+
+stackseg sseg
+    rs 128
+stack_end rs 0
+
+dataseg dseg
+home            dw 0
+prefix          dw 0
+error_message   db 'Invalid time $'
+current_message db 'Current time is $'
+enter_message   db 'Enter new time: $'
+erroret         dw 0
+endtail         db 0
+padding         db ' '
+time_string     db '  '
+separator1      db ':'
+                db '  '
+separator2      db ':'
+                db '  '
+separator3      db '.'
+                db '  $'
+hours           db 0
+minutes         db 0
+seconds         db 0
+hundredths      db 0
+buf             rs 128
+inmax           db 127
+inlen           db 0
+inbuffer        rs 128
+end start

@@ -1,6 +1,6 @@
-# PUT / GET / RDR: Console I/O Redirection for Concurrent CP/M-86
+# PUT / GET / RDR: Console I/O Redirection for Concurrent DOS 4.1
 
-Bracket-style console redirection for native programs under Concurrent CP/M-86 3.1.
+Bracket-style console redirection for native programs under Concurrent DOS 4.1, imported from the CCP/M-86 project.
 
 | Command | Effect |
 | --- | --- |
@@ -18,10 +18,9 @@ A>RDR [KEYS.IN,PIP.LOG] PIP
 
 ## Scope and limits
 
-* **Works for native `.CMD` programs.** Verified in QEMU: overwrite, append, `E`/`EO`, multi-record capture, GET feeding PIP, RDR with an input file and an output log.
-* **DOS programs (`.COM`, `.EXE`) cannot be redirected.** They are launched by PC-MODE (`PCTMP`), not by `p_cli`, and `PCTMP` serves their `INT 21h` console calls itself. It reaches the kernel through a private copy of the `INT E0h` vector saved at its initialisation (`shared_bdos_vector`), so the hook installed here never sees them. `p_cli` also rejects explicit `.COM`/`.EXE` (`e_badftype`). Tested: `PUT [x] prog.exe` and `prog.com` fail with "CLI command execution failed".
-* **Shell built-ins are not redirected** (`DIR`, `TYPE`, `CLS` and the PCTMP built-ins `USER`, `PRINTER`, `DOSMEM`, `DOS8087`, `DOSUSPND`, `REM`, `SYS`, `PAUSE`). Use `SDIR.CMD`, `TYPE.CMD`, etc.
-* **RSPs** (such as `DIR`) are not captured. Checked in QEMU: `PUT [D.TXT] DIR B:*.CMD` showed the listing on the screen and left `D.TXT` empty. The cause has not been investigated.
+* **Works for native `.CMD` programs.** Verified on disposable PCE floppy images: multi-record output capture, append, GET feeding a PIP copy command, RDR feeding PIP and capturing its output, exact copied bytes and return to the shell.
+* **DOS programs (`.COM`, `.EXE`) are outside this interface.** BDOS 150 (`p_cli`) launches native CMD programs. The DOS personality uses a saved kernel entry (`BDOS_PTR` in MS1), bypassing the `INT E0h` hook installed here.
+* **Shell built-ins are outside this interface**, including DIR, CLS, USER and PAUSE. Run a native command such as `DIR.CMD`, `SDIR.CMD` or `TYPE.CMD` explicitly.
 * **Only the caller's virtual console is affected.** The hook filters on the console number of the running process; it does not track descendants by `p_parent`. Any process on that console is captured while the tool runs.
 
 ## How it works
@@ -37,12 +36,12 @@ Trapped calls, only when the running process's console is ours:
 | BDOS call | Redirected side |
 | --- | --- |
 | 2 Console Output, 6 Direct I/O (output), 9 Print String | output |
-| 1 Console Input, 6 Direct I/O (`DL`=FFh), 10 Read Buffer, 11 Console Status | input |
+| 1 Console Input, 6 Direct I/O (`DL`=FDh/FFh), 10 Read Buffer, 11 Console Status; 6 Direct Status (`DL`=FEh) | input |
 
 Details:
 
 * Output is written with random writes (BDOS 34) and a record counter. Screen echo calls BDOS 2 with `in_interceptor` set, so the hook does not capture its own echo.
-* Input is read in 128-byte records. At `1Ah` or end of file, `trap_readbuf` returns an empty line, which ends programs that quit on an empty line (PIP does). Any later input call goes to the keyboard. An input file should therefore contain everything the program needs, including its exit. Checked in QEMU: `GET [K.IN] PIP` with one copy line in `K.IN` ran the copy, then PIP exited at the end of the file.
+* Input is read in 128-byte records. At `1Ah` or end of file, `trap_readbuf` returns an empty line, which ends programs that quit on an empty line (PIP does). Any later input call goes to the keyboard. An input file should therefore contain everything the program needs, including its exit. The PCE regression supplies a PIP copy line followed by an empty line, then checks the destination bytes and return to the shell.
 * `p_cns` is at PD offset `20h` (see `kernel/con/pd.def`).
 
 ## Files
@@ -59,8 +58,14 @@ commands/putget/
 └── README.md
 ```
 
-The tools are shipped on `ccpmext.img` with DREDIX and PIP.
+The tools are shipped on the bootable `cdos86.img`, alongside PIP. Run `make check-redirection` at the project root for the disposable-floppy regression.
 
-## Possible future work
+## 4.1 adaptation
 
-Redirecting DOS programs would need a change in PC-MODE: a redirect record consulted by the console paths of `pctmp.a86` (`dos_raw_output`, `raw_console_input`, `dos_read_line`, `dos_poll_character`). Hooking `INT 21h` from the tools is a possible alternative, but PCTMP swaps the `INT 10h`..`INT 27h` vector region per console (`swap_child_vectors`), so it is untested whether such a hook would survive.
+The shared engine recognizes all three BDOS 6 input/status selectors: FDh
+(blocking input), FEh (status), and FFh (input if ready). The imported engine
+recognized only FFh; PIP uses FDh after checking console status, so GET would
+otherwise wait on the keyboard during a copy. Output handling remains unchanged.
+
+DOS redirection would require separate integration with the DOS personality's
+console and standard-handle paths.

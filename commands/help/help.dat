@@ -1565,8 +1565,13 @@
     [EXCLUDE]     Displays only files that do not match filespec.
     [FF]          Prints a Form Feed character at the start of each header.
     [FULL]        The default SDIR option.
+    [SHORT]       Displays names only, with a backslash for DOS directories.
+    [HELP]        Displays a compact summary of the supported options.
     [LENGTH=n]    Displays a new (Page) header every n lines.
     [MESSAGE]     Causes SDIR to display where it is searching for files.
+    [SORT]        Sorts names and types (the default).
+    [ATTRIBUTES]  Displays archive and user-defined attribute bits.
+    [DATE]        Displays timestamps where timestamp information exists.
     [NOSORT]      Displays files in the order that they are found on the disk.
     [PAGE]        Pauses after 23 screen rows, including headers and wraps.
     [NOPAGE]      Disables pauses (the default).
@@ -1574,11 +1579,15 @@
     [RW]          Displays Read/Write attribute files only.
     [SIZE]        Displays only file name and size.
     [SYS]         Displays SYStem attribute files only.
-    [DIR]         Displays DIRectory attribute files only.
+    [DIR]         Displays non-system files (not a subdirectory-only filter).
     [USER=n]      Displays files on user n only.
     [USER=all]    Displays files on all user numbers.
     [XFCB]        Displays only files with XFCBs or date stamping.
     [NONXFCB]     Displays only files without XFCBs or date stamping.
+
+    DOS subdirectories display <DIR> instead of a file size in FULL/SIZE;
+    SHORT/SIZE prefix directory names with a backslash. Directory counts
+    are separate from regular files. Hidden entries remain visible.
 
     [PAGE] uses the native PCTMP message: Press any key to continue...
     Press a key for the next page, or Ctrl-C to stop. [LENGTH=n] controls
@@ -2122,18 +2131,26 @@
 
     TYPE filespec
     TYPE filespec [PAGE]
+    TYPE filespec [PNN]
 
     Explanation:
 
     TYPE displays an ASCII text file up to its CP/M Ctrl-Z end marker.
-    Wildcards are not accepted. [PAGE] pauses after 23 screen rows,
+    CP/M files end at Ctrl-Z or a record boundary; DOS files also stop
+    at their exact byte length, avoiding final-record padding. A last
+    line does not need CR/LF. Wildcards are not accepted.
+    [PAGE] pauses after 23 screen rows,
     counting tabs and wrapped text. Paging is off by default.
 
     The prompt is the native PCTMP PAUSE message:
     Press any key to continue...
     Press a key for the next page, or Ctrl-C to stop. A short file or a
     file ending exactly at the page boundary needs no extra keypress.
-    The older P/PNN paging argument remains supported.
+    [PNN] selects a smaller page: NN must be two digits, 01 through 23.
+    Example: TYPE notes.txt [P10]. [PAGE] uses 23 physical rows.
+    Unbracketed P/PNN, [P], [P00] and [P24] are invalid.
+    A password can be supplied as filespec;password, or entered when
+    prompted. Password entry accepts Backspace, Ctrl-X and Ctrl-C.
 
     Entering ^P before TYPE echoes output to the printer until the next ^P.
 

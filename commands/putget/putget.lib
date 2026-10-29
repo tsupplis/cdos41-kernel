@@ -426,6 +426,10 @@ chk_rawcon:
     jne     chk_prtstr
     cmp     dl, 0ffh
     je      chk_rawcon_in
+    cmp     dl, 0fdh                    ; blocking direct input (CP/M 3/Concurrent)
+    je      chk_rawcon_in
+    cmp     dl, 0feh                    ; direct console status
+    je      chk_constat
     ; Raw output
     cmp     cs:redir_out_active, 0
     je      pass_kernel
