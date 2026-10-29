@@ -54,3 +54,13 @@ check-dist: dist
 .PHONY: check-redirection
 check-redirection: all
 	python3 tools/redirection_check.py
+
+.PHONY: check-sdir
+check-sdir: all
+	python3 tools/sdir_check.py
+
+.PHONY: check-type
+check-type: all
+	python3 tools/type_check.py
+	python3 tools/type_check.py --passwords
+	python3 tools/type_check.py --large

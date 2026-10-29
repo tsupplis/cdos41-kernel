@@ -29,7 +29,7 @@ MENU_COMMANDS = ../commands/dredix/dredix.cmd ../commands/copymenu/copymenu.cmd 
     ../base/menu.dat ../base/fdmenu.dat ../base/hdmenu.dat \
     ../base/national.msg ../base/index.dsp ../base/help.edx \
     ../base/lsn.edx ../base/keys.pfk ../base/carddeck.bat \
-    ../base/clear.bat ../base/student.bat \
+    ../base/clear.bat \
     ../base/letter.txt ../base/user.txt
 
 DOS_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
@@ -42,9 +42,9 @@ OEM1_COMMANDS = ../base/back.cmd ../base/rest.cmd ../base/brinst.cmd \
     ../base/fm.cfg ../base/spl.cmd
 
 OEM2_COMMANDS = ../commands/function/function.cmd ../commands/help/help.cmd ../base/diskstat.cmd \
-    ../base/n.cmd ../base/ns.cmd \
-    ../base/setport.cmd ../base/setup.cmd ../base/sid86.cmd \
-    ../base/stat.cmd ../base/stop.cmd ../base/hdmaint.cmd \
+    ../base/n.cmd \
+    ../base/setport.cmd ../base/setup.cmd \
+    ../base/stop.cmd ../base/hdmaint.cmd \
     ../base/hdmaint.doc ../base/help.hlp
 
 .PHONY: all check check-media check-pce test clean

@@ -56,7 +56,7 @@ Ctrl-U retains the historical #/newline echo; Ctrl-E continues on a new row.
 | Command | Effect |
 | --- | --- |
 | `CLS` | Clear the screen and home the cursor |
-| `TYPE filespec [PAGE]` | Display a text file with paging |
+| `TYPE filespec [PAGE]` / `[PNN]` | Page text; NN selects 01..23 rows |
 | `SDIR [PAGE]` | Page a detailed directory listing |
 | `DIR.CMD filespec [P]` | Page the standalone directory command |
 | `DIR filespec /P` | Page the shell's built-in directory listing |
@@ -145,55 +145,61 @@ Origin terminology follows [ccpm86-kernel](../ccpm86-kernel/README.md).
 **Original** identifies an OEM reference binary in `base/`; rebuilt commands
 are packaged wherever available. Imported source builds retain their existing
 patches; comparison with the corresponding 4.1 binaries continues incrementally.
+**Adapted for parity** identifies imports reviewed and adapted against 4.1
+behavior; intentional extensions are documented with each command.
+
+Compatibility details live with each tool: [SDIR](commands/sdir/README.md)
+covers DOS directories and options; [TYPE](commands/type/README.md) covers
+DOS EOF, passwords and bracketed paging.
 
 | Tool | Purpose | Binary (`base/`) | Source (`commands/`) |
 | --- | --- | --- | --- |
 | `asm80` | 8080 assembler | — | Translated using XLT86 from CP/M-80 2.2 and adapted |
 | `asm86` | 8086 assembler | — | Recompiled from CCP/M-86 3.1 and adapted |
-| `batch` | Run BAT command files | Original | Recompiled from CDOS 4.1 and adapted |
-| `chdir / mkdir / rmdir` | Change, create or remove directories | Original | Recompiled from CDOS 4.1; shared D.A86 implementation |
-| `chset` | Inspect or change CMD header flags | Original | Recompiled from CDOS 4.1 |
+| `batch` | Run BAT command files | — | Recompiled from CDOS 4.1 and adapted |
+| `chdir / mkdir / rmdir` | Change, create or remove directories | — | Recompiled from CDOS 4.1; shared D.A86 implementation |
+| `chset` | Inspect or change CMD header flags | — | Recompiled from CDOS 4.1 |
 | `cls` | Clear the terminal screen | — | New; TMP built-in; VT52 ESC-E |
-| `copy.exe` | Copy files | Original | Recompiled from CDOS 4.1 |
-| `copymenu` | Copy menu definitions | Original | Recompiled from CDOS 4.1 |
-| `date.cmd` | Display or set the date | — | Recompiled from CCP/M-86 3.1 and adapted, Y2K patched |
-| `date.exe` | Display or set the date through DOS | Original | Recompiled from CDOS 4.1 and adapted, short-year fix; commands/datetime |
+| `copy.exe` | Copy files | — | Recompiled from CDOS 4.1 |
+| `copymenu` | Copy menu definitions | — | Recompiled from CDOS 4.1 |
+| `date` | Display or set the date | — | Recompiled from CCP/M-86 3.1 and adapted, Y2K patched |
+| `date.exe` | Display or set the date through DOS | — | Recompiled from CDOS 4.1 and adapted, short-year fix; commands/datetime |
 | `dcomp / dcopy` | Compare or copy floppy diskettes | — | Ported from PC DOS 1.10; imported from CCP/M-86 |
-| `dir` | List directory contents | Original | Recompiled from CCP/M-86 3.1 and adapted; separate CDOS 4.1 TMP built-in |
-| `dredix` | Full-screen text editor | Original | Recompiled from CDOS 4.1 |
-| `dskmaint` | Format, verify and copy diskettes | Original | Recompiled from CDOS 4.1 |
-| `dsp` | Inspect print-spool information | Original | Recompiled from CDOS 4.1 |
-| `ed` | Line-oriented text editor | Original | Recompiled from CCP/M-86 3.1 and adapted |
-| `editmenu` | Edit menu definitions | Original | Recompiled from CDOS 4.1 |
-| `era / eraq` | Erase files, optionally with confirmation | Original | ERA recompiled from CCP/M-86 3.1 and adapted; ERAQ recompiled from CDOS 4.1 |
-| `erase.exe` | Erase files through DOS | Original | Recompiled from CDOS 4.1 |
-| `function` | Program function keys | Original | Recompiled from CDOS 4.1 |
+| `dir` | List directory contents | — | Recompiled from CCP/M-86 3.1 and adapted; separate CDOS 4.1 TMP built-in |
+| `dredix` | Full-screen text editor | — | Recompiled from CDOS 4.1 |
+| `dskmaint` | Format, verify and copy diskettes | — | Recompiled from CDOS 4.1 |
+| `dsp` | Inspect print-spool information | — | Recompiled from CDOS 4.1 |
+| `ed` | Line-oriented text editor | — | Recompiled from CCP/M-86 3.1 and adapted |
+| `editmenu` | Edit menu definitions | — | Recompiled from CDOS 4.1 |
+| `era / eraq` | Erase files, optionally with confirmation | ERA only | ERA recompiled from CCP/M-86 3.1 and adapted; ERAQ recompiled from CDOS 4.1 |
+| `erase.exe` | Erase files through DOS | — | Recompiled from CDOS 4.1 |
+| `function` | Program function keys | — | Recompiled from CDOS 4.1 |
 | `gencmd` | Convert H86 output into CMD executables | — | Recompiled from CCP/M-86 3.1 and adapted |
 | `get` | Feed console input from a text file | — | New; shared putget.lib engine, imported from the CCP/M project |
 | `genccpm` | Generate and configure the system image | — | Recompiled from CDOS 4.1 and adapted; flag-table fix |
 | `genldr` | Generate a system loader | — | Recompiled from CDOS 4.1; carried-over SCD2 startup |
 | `hdmaint` | Hard-disk maintenance | Original | 4.1 source present; build pending the missing flat LBDOS loader |
-| `help / help.hlp` | Browse indexed command help | Original | Recompiled from CDOS 4.1; help.dat imported from CCP/M-86 |
+| `help / help.hlp` | Browse indexed command help | HLP only | Recompiled from CDOS 4.1; help.dat imported from CCP/M-86 |
 | `hexcom` | Convert Intel HEX to COM binaries | — | HEXCOM 3.00-compatible C from [tpzasm](https://github.com/johnsonjh/tpzasm) |
-| `initdir` | Enable or remove directory date/time stamps | Original | Recompiled from CDOS 4.1 |
-| `loadccpm.com` | Load the system from DOS | Original | Recompiled from CDOS 4.1 |
-| `path.exe` | Display or set the DOS search path | Original | Recompiled from CDOS 4.1 |
-| `pip` | Copy and transfer files | Original | Recompiled from CDOS 4.1 and adapted; PIP4 build only |
+| `initdir` | Enable or remove directory date/time stamps | — | Recompiled from CDOS 4.1 |
+| `loadccpm.com` | Load the system from DOS | — | Recompiled from CDOS 4.1 |
+| `path.exe` | Display or set the DOS search path | — | Recompiled from CDOS 4.1 |
+| `pip` | Copy and transfer files | — | Recompiled from CDOS 4.1 and adapted |
 | `print` | Print files using Concurrent printer services | — | Recompiled from CCP/M-86 3.1 |
-| `printmgr` | Manage print spooling | Original | Recompiled from CDOS 4.1 |
+| `printmgr` | Manage print spooling | — | Recompiled from CDOS 4.1 |
 | `put` | Capture console output into a file | — | New; shared putget.lib engine, imported from the CCP/M project |
 | `rdr` | Redirect console input and output together | — | New; shared putget.lib engine, imported from the CCP/M project |
 | `redos.com` | Return from Concurrent to DOS | Original | —; original OEM binary retained, implementation source missing |
 | `ren` | Rename files | Original | Recompiled from CCP/M-86 3.1 and adapted |
-| `sdir` | Detailed, sorted directory listing | Original | Recompiled from CCP/M-86 3.1 and adapted, Y2K/DPB/tail/paging fixes |
+| `sdir.cmd` | Detailed, sorted directory listing | Original | Recompiled from CCP/M-86 3.1 and adapted for parity |
 | `set` | Set file and drive attributes | Original | Recompiled from CCP/M-86 3.1 and adapted |
 | `setup` | Customize system hardware settings | Original | —; original OEM binary retained |
 | `show` | Display disk space and drive information | Original | Recompiled from CCP/M-86 3.1 and adapted, Y2K patched |
-| `submit` | Run SUB command files | Original | Recompiled from CCP/M-86 3.1 and adapted |
-| `sysdisk` | Display or change the system search path | Original | Recompiled from CDOS 4.1; SD-mode D.A86 wrapper |
+| `submit` | Run SUB command files | — | Recompiled from CCP/M-86 3.1 and adapted |
+| `sysdisk` | Display or change the system search path | — | Recompiled from CDOS 4.1; SD-mode D.A86 wrapper |
 | `systat` | Inspect processes and system resources | Original | Recompiled from CCP/M-86 3.1 and adapted |
-| `time.exe` | Display or set the time through DOS | Original | —; original OEM binary retained, source build planned for commands/datetime |
-| `type` | Display a text file | Original | Recompiled from CCP/M-86 3.1 and adapted; optional paging |
+| `time.exe` | Display or set the time through DOS | Original | Reverse Engineered from CDOS 4.1 |
+| `type.cmd` | Display a text file | Original (3.2) | Recompiled from CCP/M-86 3.1 and adapted for parity |
 | `window` | Control console windows from commands | Original | C rewrite; shared modules in commands/window |
 | `wmenu` | Interactive console-window manager | Original | C rewrite; shared modules in commands/window |
 
@@ -202,14 +208,27 @@ ERAQ versions have the same query/delete logic; ERA adopts the 4.1 entry-name
 convention. [ERA/ERAQ notes](commands/era/README.md).
 
 WINDOW and WMENU share the C implementation carried over from CCP/M.
+The redundant `base/ed.cmd`, `base/submit.cmd` and `base/dir.cmd` references
+were removed. ED and SUBMIT match archived pre-4.1 Concurrent distributions;
+DIR has the same instruction flow as a rebuild of the CCP/M 3.1 source,
+with different linked data/stack addresses. Media uses their maintained local
+source builds; the current DIR also includes optional paging. DIR.CMD remains
+separate from the native 4.1 shell's built-in DIR.
+
+Original program copies rebuilt from local CDOS 4.1 sources have also been
+removed from `base/`; media uses the corresponding `commands/` outputs.
+HDMAINT is the exception while its loader work remains pending. Original help
+data and references for commands still undergoing review remain available.
+Removed-binary hashes and replacement paths are recorded in `sources.json`.
+
 PRINT is rebuilt from its original C sources and historical module list;
 its recipe validates compiler/linker diagnostics and the resulting CMD.
 [WINDOW/WMENU notes](commands/window/README.md) · [PRINT notes](commands/print/README.md).
 
 ### Original OEM utilities
 
-The OEM disks also preserve BACK, REST, BRINST, FM, SPL, DISKSTAT, N, NS,
-SETPORT, SID86, STAT and STOP, with their support data. REN.EXE is retained
+The OEM disks also preserve BACK, REST, BRINST, FM, SPL, DISKSTAT, N,
+SETPORT and STOP, with their support data. REN.EXE is retained
 for the shell's RENAME alias. These remain **Original** binaries while the
 corresponding source work is considered individually.
 [Complete disk contents](media/README.md) · [Source map](SOURCE-MAP.md).
@@ -221,7 +240,8 @@ DOS DATE.EXE has the same short-year pivot as native DATE.CMD: 00–77 maps to
 2000–2077 and 78–99 to 1978–1999, subject to DOS calendar validation.
 The regression runs 54 command-line/interactive cases without changing a clock.
 Native DATE.CMD is in `commands/date`; DOS DATE.EXE and its tests are in
-`commands/datetime`, alongside the location reserved for a later TIME.EXE build.
+`commands/datetime`. TIME.EXE has been reconstructed as `pctime.a86`; its
+behavioral verification and replacement of the packaged OEM binary are pending.
 
 ## Kernel and RSP patches
 
@@ -249,6 +269,9 @@ system and the live regression checks.
 | `make` | Commands, kernel/RSPs, boot sources and seven images |
 | `make check` | Command headers, DATE parser, system layout, cursor, boot track and every packaged file/size |
 | `make check-pce` | Boot, console switching, line editing/recall, DIR, PIP, CLS, USER and SYSDISK |
+| `make check-type` | OEM/rebuilt TYPE comparison, DOS/CP/M EOF, passwords and paging |
+| `make check-sdir` | OEM/rebuilt SDIR comparison on CP/M/FAT12, directory markers/counts, options and paging |
+| `make check-redirection` | PUT capture/append, GET/RDR input, copied bytes and return to shell |
 | `make check-aliases` | TMP/BATCH DEL execution, argument preservation and common PAUSE text |
 | `make test` | Launch PCE with system/tools disks on A:/B: |
 | `make dist` | Root-level disk images and disks.zip |
