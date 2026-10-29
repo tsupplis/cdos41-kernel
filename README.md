@@ -2,7 +2,7 @@
 
 **Early work in progress — boots from floppy images.**
 
-This project preserves Digital Research's Concurrent DOS 4.1 multitasking OS,
+This project preserves Digital Research's Concurrent DOS 4.1 (CCP/M-86 follow up) multitasking OS,
 including PC-MODE, as a usable, rebuildable system for running and exploring
 classic 16-bit software. Runnable disks, development tools and patch notes
 accompany the sources, with CP/M-Plus-style usability improvements.
@@ -28,11 +28,12 @@ The current version includes:
 - Left/Right, Home/End, Delete and Up during buffered console input.
 - Ctrl+Alt+1–4 to select consoles; Ctrl+Alt+Tab to cycle through them.
 - Ctrl+Alt+Esc opens an installed WMENU; Ctrl+keypad-Plus remains available.
-- Optional paging for TYPE, SDIR and DIR.CMD, alongside the built-in DIR's `/P` / `[P]`.
+- Optional paging for TYPE, SDIR and DIR (.CMD/RSP), alongside the built-in DIR's `/P` / `[P]`.
 - CP/M-Plus-style console redirection through PUT, GET and RDR for native commands.
 - A built-in CLS command and a common `Press any key to continue...` prompt.
 - DEL mapped to native ERA.CMD in both the shell and BATCH.
 - Case-insensitive FAT short names, without interpreting modern case flags as CP/M compatibility attributes.
+- Support for DOS Environment Variable Setting (SETENV)
 
 ## Command line conveniences
 
@@ -193,11 +194,11 @@ Compatibility details live with each tool.
 | `rdr` | Redirect console input and output together | — | New; shared putget.lib engine, imported from the CCP/M project |
 | `redos.com` | Return from Concurrent to DOS | Original | —; original OEM binary retained, implementation source missing |
 | `ren` | Rename files | Original | Recompiled from CCP/M-86 3.1 and adapted for parity |
-| `ren.exe` | Rename files through DOS | — | Reverse Engineered from CDOS 4.1 (byte-identical) |
+| `ren.exe` | Rename files through DOS | — | Reverse Engineered from CDOS 4.1 |
 | `sdir` | Detailed, sorted directory listing | Original | Recompiled from CCP/M-86 3.1 and adapted for parity |
 | `set` | Set file and drive attributes | Original | Recompiled from CCP/M-86 3.1 and adapted for parity |
 | `setenv.exe` | Display and edit the 1 KB per-console DOS environment | — | New implementation for CDOS 4.1 |
-| `setport` | Configure serial ports and protocols | Original | Reverse Engineered from CDOS 4.1; 39 documented equivalent encodings |
+| `setport` | Configure serial ports and protocols | Original | Reverse Engineered from CDOS 4.1; |
 | `setup` | Customize system hardware settings | Original | —; original OEM binary retained |
 | `show` | Display disk space and drive information | Original (3.3) | Recompiled from CCP/M-86 3.1 and adapted for parity |
 | `submit` | Run SUB command files | — | Recompiled from CCP/M-86 3.1 and adapted |
@@ -210,7 +211,7 @@ Compatibility details live with each tool.
 
 ## Y2K utilities
 
-The native DATE, SDIR and SHOW imports retain the CCP/M project's date fixes.
+The native DATE(.CMD/.EXE), SDIR and SHOW imports retain the CCP/M project's date fixes.
 DOS DATE.EXE has the same short-year pivot as native DATE.CMD: 00–77 maps to
 2000–2077 and 78–99 to 1978–1999, subject to DOS calendar validation.
 The regression runs 54 command-line/interactive cases without changing a clock.
