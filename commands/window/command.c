@@ -42,13 +42,13 @@ static number(s) char *s;
 }
 static help()
 {
-    message("Valid window commands are:\r\n  WINDOW VIEW\r\n  WINDOW TOP N=<0-3>\r\n  WINDOW FULL N=<0-3>\r\n");
-    message("  WINDOW WRITE N=<0-3> Type=<Window, Console, or Setup>,File=<filename>\r\n");
-    message("  WINDOW CHANGE N=<0-3> PRow=<1-24>,PCol=<1-80>\r\n");
-    message("  WINDOW CHANGE N=<0-3> NRows=<1-24>,NCols=<1-80>\r\n");
-    message("  WINDOW CHANGE N=<0-3> VRow=<1-24>,VCol=<1-80>\r\n");
-    message("  WINDOW CHANGE N=<0-3> Tracking=<No or Row>,Display=<B&W or Color>\r\n");
-    message("  WINDOW CHANGE N=<0-3> FGColor=<color>,BGColor=<color>\r\nAbbreviations are allowed.\r\n");
+    message("Valid window commands are:\r\n  WINDOW VIEW\r\n  WINDOW TOP N=<1-4>\r\n  WINDOW FULL N=<1-4>\r\n");
+    message("  WINDOW WRITE N=<1-4> Type=<Window, Console, or Setup>,File=<filename>\r\n");
+    message("  WINDOW CHANGE N=<1-4> PRow=<1-24>,PCol=<1-80>\r\n");
+    message("  WINDOW CHANGE N=<1-4> NRows=<1-24>,NCols=<1-80>\r\n");
+    message("  WINDOW CHANGE N=<1-4> VRow=<1-24>,VCol=<1-80>\r\n");
+    message("  WINDOW CHANGE N=<1-4> Tracking=<No or Row>,Display=<B&W or Color>\r\n");
+    message("  WINDOW CHANGE N=<1-4> FGColor=<color>,BGColor=<color>\r\nAbbreviations are allowed.\r\n");
     return 0;
 }
 static error(s) char *s; { message(s); message("\r\n"); return 0; }
@@ -86,8 +86,8 @@ w_command(tail) char *tail;
         values[k]=v;
     }
     if(cmd==0) { w_view(); return 1; }
-    n=values[0];
-    if(!seen[0] || !w_read(n,&w)) return error("Sub-command requires NUMBER=<0-3>");
+    n=values[0]-WINDOW_FIRST;
+    if(!seen[0] || !w_read(n,&w)) return error("Sub-command requires NUMBER=<1-4>");
     if(cmd==1) { w_top(n); return 1; }
     if(cmd==2) { w_full(n); return 1; }
     if(cmd==3) {

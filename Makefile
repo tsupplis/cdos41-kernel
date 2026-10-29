@@ -71,3 +71,9 @@ check-show: all
 	python3 tools/show_check.py --no-label
 	python3 tools/show_check.py --create
 	python3 tools/show_check.py --access
+
+.PHONY: check-set
+check-set: all
+	python3 tools/set_check.py
+	python3 tools/set_check.py --stamps
+	python3 tools/set_check.py --passwords

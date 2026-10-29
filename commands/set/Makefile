@@ -26,6 +26,8 @@ set.cmd: set.h86
 	$(GENCMD) $< 'data[b$(GENCMD_BASE) m$(GENCMD_MIN) xfff]'
 	cmdinfo $@
 
+set.obj: copyrt.lit vaxcmd.lit vermpm.lit proces.lit uda.lit
+
 set.loc: set.obj scd.obj
 	$(INTEL_LINK86) scd.obj, $(basename $@).obj to $(basename $@).lnk
 	$(INTEL_LOC86) $(basename $@).lnk 'od(sm(code,dats,data,stack,const))' \

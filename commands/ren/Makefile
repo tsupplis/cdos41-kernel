@@ -26,6 +26,8 @@ ren.cmd: ren.h86
 	$(GENCMD) $< 'data[b$(GENCMD_BASE) m$(GENCMD_MIN) xfff]'
 	cmdinfo $@
 
+ren.obj: $(wildcard *.lit)
+
 ren.loc: ren.obj scd.obj
 	$(INTEL_LINK86) scd.obj, $(basename $@).obj to $(basename $@).lnk
 	$(INTEL_LOC86) $(basename $@).lnk 'od(sm(code,dats,data,stack,const))' \

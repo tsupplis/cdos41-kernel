@@ -227,3 +227,9 @@ SHOW is recompiled from CCP/M-86 3.1 and adapted for parity: DOS-media guards,
 implicit drive selection and dispatch follow that binary. See the tool README
 and make check-show for the capacity/user/label/date comparisons. Its source
 SHOW 2.1 identifier remains a cosmetic difference in invalid-option output.
+
+## SET parity review
+
+`commands/set` retains the CCP/M-86 3.1 PL/M source lineage (SET 2.1),
+adapted against OEM SET 3.1 for CP/M-only label/XFCB operations on DOS media.
+The build is SET 3.1N. See `commands/set/README.md` and `make check-set`.

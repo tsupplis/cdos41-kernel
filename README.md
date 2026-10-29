@@ -148,10 +148,7 @@ patches; comparison with the corresponding 4.1 binaries continues incrementally.
 **Adapted for parity** identifies imports reviewed and adapted against 4.1
 behavior; intentional extensions are documented with each command.
 
-Compatibility details live with each tool: [SDIR](commands/sdir/README.md)
-covers DOS directories and options; [TYPE](commands/type/README.md) covers
-DOS EOF, passwords and bracketed paging; [SHOW](commands/show/README.md)
-covers disk/user/label reporting and DOS-media restrictions.
+Compatibility details live with each tool.
 
 | Tool | Purpose | Binary (`base/`) | Source (`commands/`) |
 | --- | --- | --- | --- |
@@ -192,47 +189,17 @@ covers disk/user/label reporting and DOS-media restrictions.
 | `rdr` | Redirect console input and output together | — | New; shared putget.lib engine, imported from the CCP/M project |
 | `redos.com` | Return from Concurrent to DOS | Original | —; original OEM binary retained, implementation source missing |
 | `ren` | Rename files | Original | Recompiled from CCP/M-86 3.1 and adapted |
-| `sdir.cmd` | Detailed, sorted directory listing | Original | Recompiled from CCP/M-86 3.1 and adapted for parity |
-| `set` | Set file and drive attributes | Original | Recompiled from CCP/M-86 3.1 and adapted |
+| `sdir` | Detailed, sorted directory listing | Original | Recompiled from CCP/M-86 3.1 and adapted for parity |
+| `set` | Set file and drive attributes | Original | Recompiled from CCP/M-86 3.1 and adapted for parity |
 | `setup` | Customize system hardware settings | Original | —; original OEM binary retained |
 | `show.cmd` | Display disk space and drive information | Original (3.3) | Recompiled from CCP/M-86 3.1 and adapted for parity |
 | `submit` | Run SUB command files | — | Recompiled from CCP/M-86 3.1 and adapted |
 | `sysdisk` | Display or change the system search path | — | Recompiled from CDOS 4.1; SD-mode D.A86 wrapper |
 | `systat` | Inspect processes and system resources | Original | Recompiled from CCP/M-86 3.1 and adapted |
 | `time.exe` | Display or set the time through DOS | Original | Reverse Engineered from CDOS 4.1 |
-| `type.cmd` | Display a text file | Original (3.2) | Recompiled from CCP/M-86 3.1 and adapted for parity |
+| `type.cmd` | Display a text file | Original | Recompiled from CCP/M-86 3.1 and adapted for parity |
 | `window` | Control console windows from commands | Original | C rewrite; shared modules in commands/window |
 | `wmenu` | Interactive console-window manager | Original | C rewrite; shared modules in commands/window |
-
-ERA and ERAQ share `commands/era`, using the 4.1 startup and includes. The two
-ERAQ versions have the same query/delete logic; ERA adopts the 4.1 entry-name
-convention. [ERA/ERAQ notes](commands/era/README.md).
-
-WINDOW and WMENU share the C implementation carried over from CCP/M.
-The redundant `base/ed.cmd`, `base/submit.cmd` and `base/dir.cmd` references
-were removed. ED and SUBMIT match archived pre-4.1 Concurrent distributions;
-DIR has the same instruction flow as a rebuild of the CCP/M 3.1 source,
-with different linked data/stack addresses. Media uses their maintained local
-source builds; the current DIR also includes optional paging. DIR.CMD remains
-separate from the native 4.1 shell's built-in DIR.
-
-Original program copies rebuilt from local CDOS 4.1 sources have also been
-removed from `base/`; media uses the corresponding `commands/` outputs.
-HDMAINT is the exception while its loader work remains pending. Original help
-data and references for commands still undergoing review remain available.
-Removed-binary hashes and replacement paths are recorded in `sources.json`.
-
-PRINT is rebuilt from its original C sources and historical module list;
-its recipe validates compiler/linker diagnostics and the resulting CMD.
-[WINDOW/WMENU notes](commands/window/README.md) · [PRINT notes](commands/print/README.md).
-
-### Original OEM utilities
-
-The OEM disks also preserve BACK, REST, BRINST, FM, SPL, DISKSTAT, N,
-SETPORT and STOP, with their support data. REN.EXE is retained
-for the shell's RENAME alias. These remain **Original** binaries while the
-corresponding source work is considered individually.
-[Complete disk contents](media/README.md) · [Source map](source-map.md).
 
 ## Y2K utilities
 
@@ -271,6 +238,7 @@ system and the live regression checks.
 | `make check` | Command headers, DATE parser, system layout, cursor, boot track and every packaged file/size |
 | `make check-pce` | Boot, console switching, line editing/recall, DIR, PIP, CLS, USER and SYSDISK |
 | `make check-type` | OEM/rebuilt TYPE comparison, DOS/CP/M EOF, passwords and paging |
+| `make check-set` | OEM/rebuilt SET comparison, persisted attributes, passwords and timestamp settings |
 | `make check-show` | OEM/rebuilt SHOW comparison, media guards, capacity/free space, users and labels |
 | `make check-sdir` | OEM/rebuilt SDIR comparison on CP/M/FAT12, directory markers/counts, options and paging |
 | `make check-redirection` | PUT capture/append, GET/RDR input, copied bytes and return to shell |

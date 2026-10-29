@@ -1609,13 +1609,17 @@
   protect  the  label.  To  enable  time  stamping  of  files,  you
   must  first  run INITDIR to format the disk directory.
 
+  Labels, password protection and timestamp settings require CP/M
+  media. File and drive attributes also work on DOS media through
+  the kernel's attribute mapping.
+
   ///2Label
 
   Syntax:
 
           SET {d:} [NAME=labelname.typ]
           SET [PASSWORD=password]
-          SET [PASSWORD=<cr>
+          SET [PASSWORD=,PROTECT=OFF]
 
 
   Examples:
@@ -1628,15 +1632,16 @@
 
        Assigns SECRET to the  disk  label.
 
-  A>SET [PASSWORD=<cr>
+  A>SET [PASSWORD=,PROTECT=OFF]
 
-       Nullifies the existing password.
+       Removes the label password and disables drive protection.
 
   ///2Passwords
 
           SET [PROTECT=ON]
           SET [PROTECT=OFF]
           SET filespec [PASSWORD=password]
+          SET filespec [PASSWORD=,PROTECT=NONE]
           SET filespec [PROTECT=READ]
           SET filespec [PROTECT=WRITE]
           SET filespec [PROTECT=DELETE]
@@ -1804,15 +1809,16 @@
     ///2OPTIONS
     Options:
 
+    [ARCHIVE=ON|OFF]      Set or clear the archive attribute.
+    [F1=ON|OFF] ... [F4=ON|OFF]   Set or clear CP/M file flags.
     [ACCESS=ON|OFF]       Turn access time stamps on/off.
     [CREATE=ON|OFF]       Turn creation time stamps on/off.
     [DEFAULT=password]    Specify a default password.
     [DIR]                 Set file DIRectory attribute.
     [HELP]                Display a list of examples.
-    [MAKE=ON|OFF]         Turn automatic creation of XFCBs on/off.
     [NAME=lablname.typ]   Specify directory label name.
     [PASSWORD=password]   Specify file or directory label password.
-    [PROTECTION=READ|WRITE|EDIT|NONE]   Set level of password protection.
+    [PROTECTION=READ|WRITE|DELETE|NONE]   Set level of password protection.
     [RO]                  Set file or drive to Read-Only.
     [RW]                  Set file or drive to Read/Write.
     [SYS]                 Set file SYStem attribute.

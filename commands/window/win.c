@@ -82,9 +82,9 @@ w_view()
     message("------ ---- ---- ----- ----- ---- ---- -------- ------- ------- -------\r\n");
     for(n=0;n<w_status(1);++n) {
         w_read(n,&w);
-        format(line,"%4d %5d %4d %4d %5d %5d %4d %8s %7s %7s %7s\r\n",n,
+        format(line,"  %d     %02d   %02d   %02d    %02d    %02d   %02d     %s    %s  %s   %s\r\n",n+WINDOW_FIRST,
           w.prow,w.pcol,w.nrows,w.ncols,w.vrow,w.vcol,
-          w.tracking?"ROW":"NO",w.display?"COLOR":"B&W",
+          w.tracking?"Row":"No",w.display?"Color":"B&W",
           colors[w.foreground],colors[w.background]);
         message(line);
     }
@@ -140,7 +140,7 @@ w_write(n,type,name) int n,type; char *name;
     used=failed=0;
     if(type==2) {
         format(line,"window ch n=%d pr=%d,pc=%d,nr=%d,nc=%d,vr=%d,vc=%d,tr=%s,d=%s,fg=%s,bg=%s\r\n",
-          n,w.prow,w.pcol,w.nrows,w.ncols,w.vrow,w.vcol,
+          n+WINDOW_FIRST,w.prow,w.pcol,w.nrows,w.ncols,w.vrow,w.vcol,
           w.tracking?"row":"no",w.display?"color":"b&w",
           colors[w.foreground],colors[w.background]);
         text(line);

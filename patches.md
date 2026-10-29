@@ -180,7 +180,7 @@ case-insensitivity, EOF boundaries and rejection of the removed syntax.
 
 The imported CCP/M source now matches SHOW 3.3's rejection of USERS/LABEL
 on DOS media, its implicit SPACE drive limit (A:..M:), and option dispatch:
-OPEN is invalid; all L-prefixes select LABEL, including LOCKED. The private
+OPEN is invalid and the supported options follow the OEM dispatch. The private
 media probe restores the caller's DMA offset. Creation stamping
 is read from label bit 10h instead of an uninitialized local variable.
 
@@ -189,3 +189,13 @@ rebuilt commands on disposable CP/M/FAT12 images and independently checks
 free space, capacities, users, label timestamps and media guards. Detailed
 coverage and the retained source version identifier are documented in
 commands/show/README.md.
+
+## SET: CDOS media guards and help parity
+
+`commands/set/set.plm` matches OEM SET 3.1's CP/M-media checks before
+label access and label/XFCB writes. Private search storage and DMA restoration
+prevent DOS pseudo-labels being mistaken for CP/M label/password records.
+SET 3.1N retains the imported parser, attribute, protection and timestamp
+logic. HELP removes unsupported MAKE/EDIT and documents ARCHIVE/F1-F4.
+`make check-set` compares OEM/rebuilt execution on disposable CP/M/FAT disks,
+including persisted attributes, interactive passwords and timestamp settings.

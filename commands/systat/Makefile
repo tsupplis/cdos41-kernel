@@ -19,12 +19,14 @@ GENCMD_BASE = $(shell awk '/DATS +DATA/{s=$$1; $(PARA)}' systat.mp2)
 GENCMD_MEM  = $(shell awk '/MEMORY +MEMORY/{s=$$1; $(PARA)}' systat.mp2)
 GENCMD_MIN  = $(shell printf '%x' $$((0x$(GENCMD_MEM)-0x$(GENCMD_BASE))))
 
-systat.cmd: systat.h86
+systat.cmd: systat.h86 Makefile
 	@test -n "$(GENCMD_BASE)" -a -n "$(GENCMD_MEM)" || \
 	  { echo "systat: cannot derive DATS/MEMORY from systat.mp2"; exit 1; }
 	# $(GENCMD) $< 'data[b1000]'
-	$(GENCMD) $< 'data[b$(GENCMD_BASE) m$(GENCMD_MIN) xfff]'
+	$(GENCMD) $< 'data[b$(GENCMD_BASE) m$(GENCMD_MIN)]'
 	cmdinfo $@
+
+systat.obj: $(wildcard *.lit) scomon.plm
 
 systat.loc: systat.obj scd.obj
 	$(INTEL_LINK86) scd.obj, $(basename $@).obj to $(basename $@).lnk

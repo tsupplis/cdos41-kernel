@@ -10,10 +10,9 @@ The original binary is used as a regression oracle, not as a build input.
 
 `SHOW {d:}{option}` accepts SPACE, DRIVE/DRIVES, USERS, LABEL and HELP.
 Options can be combined; bracketed forms such as `SHOW [SPACE]` are accepted.
-The historical parser dispatches on the first letter. Any L-prefixed token
-therefore selects LABEL, including LOCKED; this does not implement a locked
-record report. OPEN is rejected, matching 3.3, rather than printing the old
-source's placeholder message.
+The historical parser dispatches by option prefix. Only the supported
+commands below are documented. OPEN is rejected, matching 3.3, rather than
+printing the old source's placeholder message.
 
 | Option | Meaning |
 | --- | --- |
@@ -34,8 +33,7 @@ selected drive remains available to the original dispatch rules.
   (20h at byte 0, 80h at byte 15). The previous DMA offset is restored.
   This prevents DOS directory entries being interpreted as CP/M users/labels.
 - Implicit SPACE output matches 3.3's A:..M: drive limit.
-- OPEN's inactive placeholder is removed; all L-prefixed tokens follow the
-  OEM LABEL dispatch. No new OPEN/LOCKED reporting feature is claimed.
+- Inactive option placeholders are removed; dispatch matches the OEM command.
 - The creation-stamping flag comes from label bit 10h, matching 3.3,
   rather than an uninitialized local variable. Access stamping uses bit 40h.
 
@@ -49,7 +47,8 @@ handles labels dated 2000 and 2026 in the regression fixtures.
 `make check-show` runs the OEM and rebuilt commands under PCE on disposable
 CP/M/FAT12 images. It checks option/default/bracketed/multiple-command forms,
 DOS rejection for USERS/LABEL, explicit/default drive selection, CP/M user
-counts, label presence/absence, create/access stamping and dates across 2000. CP/M free space is
+counts, label presence/absence, create/access stamping and dates across 2000.
+CP/M free space is
 calculated independently from allocation entries; FAT free space is calculated
 from FAT12 entries. Captures create one-cluster logs, which are accounted for
 rather than treated as a reporting difference. Drive capacities and ordinary

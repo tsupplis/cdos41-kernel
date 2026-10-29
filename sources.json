@@ -5036,7 +5036,7 @@
     {
       "path": "commands/show/show.plm",
       "origin": "ccpm86-kernel/commands/show/show.plm",
-      "sha256": "ced984162a2dc37a285a5479edd473993b16f3b121f564a4519a2c56717ac649",
+      "sha256": "738bf9c0f65970fb69b510116cb39971dac52760921babad9a9454eba817c5a7",
       "original_sha256": "00adb564a465acefeca278b73e856d8e709aabbb3d0d857a7aca04d0035b8a28",
       "modifications": "Adapted for SHOW 3.3 parity: DOS media guards, implicit drive range, option dispatch and deterministic label flags. See commands/show/README.md."
     },
@@ -5212,7 +5212,9 @@
     {
       "path": "commands/set/Makefile",
       "origin": "ccpm86-kernel/commands/set/Makefile",
-      "sha256": "ce879f47b53841b050020a3dfaf2083081d1a549bc5cf3dc5abadf15efee51a0"
+      "sha256": "16eb02b05f235be191d01ef7be15aa2a312c116a95079986c43dbb76dabedc27",
+      "original_sha256": "ce879f47b53841b050020a3dfaf2083081d1a549bc5cf3dc5abadf15efee51a0",
+      "modifications": "Adapted for SET 3.1 parity: CP/M-only label/XFCB media guards, SET 3.1N identifier and literal dependencies; see commands/set/README.md."
     },
     {
       "path": "commands/set/copyrt.lit",
@@ -5232,7 +5234,9 @@
     {
       "path": "commands/set/set.plm",
       "origin": "ccpm86-kernel/commands/set/set.plm",
-      "sha256": "60cc64d60b7cd2130c9b7e44cae0e635d4df1e4d59a15231b82d4edbf60f33c1"
+      "sha256": "2235eaa98e50756253025550ee39436790d750a24966fec02d0740340284bb53",
+      "original_sha256": "60cc64d60b7cd2130c9b7e44cae0e635d4df1e4d59a15231b82d4edbf60f33c1",
+      "modifications": "Adapted for SET 3.1 parity: CP/M-only label/XFCB media guards, SET 3.1N identifier and literal dependencies; see commands/set/README.md."
     },
     {
       "path": "commands/set/uda.lit",
@@ -5420,7 +5424,7 @@
     {
       "path": "commands/help/help.dat",
       "origin": "ccpm86-kernel/commands/help/help.dat",
-      "sha256": "14a56665de87578d35b9d5efc11d01db224cbdc224ec25dfafec073fecd94c67",
+      "sha256": "19e448a6665be03cecbca913803a3d70f606108e0aeaf990745e58fa901b947f",
       "original_sha256": "be082138ed971b145f4e44678fb8add340002dbdb86a4bbfd640859428cb61c7",
       "modifications": "Document SDIR/TYPE/SHOW compatibility and current options."
     },
