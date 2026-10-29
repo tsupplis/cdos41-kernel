@@ -94,6 +94,7 @@ INIT:
 	call	hd_init			; get hard disk partitions
 	call	trim_memory		; fix up the partition list
 	call	do_aux_ports		; serial port int init
+	call	rtc_start		; import BIOS RTC before replacing vectors
 	call	do_interrupts		; do all of the int stuff
 	call	sign_on			; print signon message
 	call	enable_ints		; interrupts back on
@@ -178,43 +179,8 @@ do_at_time:						;*
 	inc	si			; for the second drive
 	call	set_286_drive		;   do the same
 
-	mov	al,0
-	call	read_286_cmos		; get seconds
-	mov	tod_sec,al
-	mov	al,2
-	call	read_286_cmos		; get minutes
-	mov	tod_min,al
-	mov	al,4
-	call	read_286_cmos		; get hours
-	mov	tod_hour,al
-
-	mov	al,7
-	call	read_286_bcd		; get binary date
-	mov	tod_day,ax		; initial set
-	mov	al,8
-	call	read_286_bcd		; get binary month
-	mov	ch,0			; assume march-dec
-	cmp	al,3			; and if true
-	jae	check_286_leap		;   skip
-
-	mov	ch,1			; jan-feb leap correct
-check_286_leap:
-	dec ax ! shl ax,1		; zero base and word index
-	xchg	ax,bx
-	mov	ax,month_length[bx]	; days in prior months
-	add	tod_day,ax		; add days up to now
-
-	mov	al,9
-	call	read_286_bcd		; get binary year
-	sub	al,78			; cpm base year
-	push	ax
-	  mov dx,365 ! mul dx		; convert to days
-	  add tod_day,ax		; here's the biggie
-	pop	ax
-	add	al,2			; 78 -> 80
-	sub	al,ch			; dec if jan or feb
-	shr ax,1 ! shr ax,1		; every 4 years
-	add	tod_day,ax		;   gives us a day
+; RTC date/time is imported through INT 1Ah by rtc_start, on AT and XT alike.
+; Keep CMOS drive detection above; do not decode a two-digit CMOS year here.
 
 check_286_done:
 	ret

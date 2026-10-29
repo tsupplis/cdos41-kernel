@@ -16,6 +16,9 @@ The build uses `cpm86_asm86`, `cpm86_gencmd`, `cmdinfo` and Python 3, with
 only local project inputs. Every one of the 2,950 loaded instructions is
 written as assembly. Data directives contain copyrights, strings, tables,
 workspace and padding only. Indirect menu/token handlers have labels too.
+Code branches and DATA records use semantic names; `check.py` rejects the
+former anonymous address-derived labels. String literals retain complete
+text, including the three-character function-key legends.
 
 The rebuilt command is **not strictly byte-identical**: ASM86 chooses 39
 semantically identical, same-length encodings in the embedded HELP module.
@@ -138,3 +141,23 @@ individually. Source comments mark every occurrence.
 | 17D2h | `mov bx,ax` | `89C3` | `8BD8` |
 | 17F1h | `mov bx,ax` | `89C3` | `8BD8` |
 | 185Bh | `mov bx,ax` | `89C3` | `8BD8` |
+
+## Source organization
+
+The source follows execution from startup and OS/console checks through
+UART detection, format packing, command-tail token dispatch, configuration
+menus, input/output protocol updates, and the display primitives. The
+embedded HELP section then documents its BDOS wrappers, screen save/restore,
+index lookup, topic parsing/listing, paging and local line editor. Shared
+entries and indirect callbacks have names describing their role.
+
+DATA uses explicit length words, quoted text, symbolic handler/string
+pointers and typed workspace fields. Comments before DATA define the menu,
+positioned-string, key-box and nine-byte command-token records. EQU aliases
+identify mutable characters within strings without duplicating storage.
+The loader base page and private stacks are distinguished from XIOS offsets.
+
+The final annotation pass changes labels, comments and data presentation;
+it does not change the instruction stream or the accepted 39 encoding
+exceptions. Both sources are checked independently. `setporg.a86` remains
+the frozen reference after this completed annotation pass.

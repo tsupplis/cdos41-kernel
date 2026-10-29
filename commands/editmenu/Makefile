@@ -1,6 +1,7 @@
 # EDITMENU — DR C / RASM86 build.
 # all builds local outputs; check validates them; clean removes generated files.
 
+CMDINFO=cmdinfo
 RASM86=pcdev_rasm86
 DRC86=drccpm_cc
 DRCLINK86=drccpm_link
@@ -13,7 +14,7 @@ OBJECTS=fdraw.obj iosubs.obj medattr.obj medfld.obj medmain.obj medscr.obj medsc
 
 all: $(TOOLS)
 check: all
-	@set -e; for f in $(TOOLS); do cmdinfo $$f; done
+	@set -e; for f in $(TOOLS); do $(CMDINFO) $$f; done
 
 LOCAL_INCLUDES=$(wildcard *.a86 *.lib *.equ *.dat *.def *.h *.dcl)
 $(OBJECTS): $(LOCAL_INCLUDES) Makefile
@@ -37,7 +38,7 @@ editmenu.cmd: $(OBJECTS) Makefile editmenu.inp
 	@$(DRCLINK86) 'editmenu[input]' > editmenu-link.log 2>&1; result=$$?; cat editmenu-link.log; test $$result -eq 0
 	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' editmenu-link.log
 	@test -s $@
-	cmdinfo $@
+	$(CMDINFO) $@
 
 # Preserve C symbol spelling, as requested by the original $nc option.
 menuio.obj: menuio.a86 Makefile

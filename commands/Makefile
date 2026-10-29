@@ -5,7 +5,7 @@ SUBDIRS=genccpm pip asm86 gencmd submit batch chdir \
     genldr loadccpm copy datetime erase path \
     asm80 era ren systat window date sdir show hexcom print set type dir ed disk putget setport
 
-CMDS=genccpm/genccpm.cmd asm86/asm86.cmd gencmd/gencmd.cmd submit/submit.cmd batch/batch.cmd \
+CMDS=genccpm/genccpm.cmd asm86/asm86.cmd ddt86/ddt86.cmd gencmd/gencmd.cmd submit/submit.cmd batch/batch.cmd \
     chdir/chdir.cmd mkdir/mkdir.cmd rmdir/rmdir.cmd sysdisk/sysdisk.cmd chset/chset.cmd \
     initdir/initdir.cmd era/eraq.cmd help/help.cmd function/function.cmd dredix/dredix.cmd \
     copymenu/copymenu.cmd editmenu/editmenu.cmd printmgr/printmgr.cmd dsp/dsp.cmd dskmaint/dskmaint.cmd \

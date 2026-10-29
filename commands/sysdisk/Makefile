@@ -1,6 +1,7 @@
 # SYSDISK — RASM86 build.
 # all builds local outputs; check validates them; clean removes generated files.
 
+CMDINFO=cmdinfo
 RASM86=pcdev_rasm86
 LINK86=pcdev_linkcmd
 
@@ -16,7 +17,7 @@ sysdisk.cmd: $(OBJECTS) Makefile
 	@$(LINK86) 'sysdisk=sysdisk,path,derror' > sysdisk-link.log 2>&1; result=$$?; cat sysdisk-link.log; test $$result -eq 0
 	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' sysdisk-link.log
 	@test -s $@
-	cmdinfo $@
+	$(CMDINFO) $@
 
 sysdisk.obj: sysdisk.a86 d.a86 Makefile
 path.obj: path.a86 Makefile
@@ -28,7 +29,7 @@ derror.obj: derror.a86 Makefile
 	@grep -qiE 'Number of errors: +0\.' $*.log
 
 check: all
-	cmdinfo $(TOOLS)
+	$(CMDINFO) $(TOOLS)
 
 # Remove generated outputs only; preserve sources and reference files.
 clean:

@@ -6,7 +6,6 @@ RASM86=pcdev_rasm86
 LINK86=drccpm_link
 TOOLS=window.cmd wmenu.cmd
 SHARED=start.obj command.obj win.obj format.obj xios.obj
-OBJECTS=$(SHARED) window.obj wmenu.obj
 
 .PHONY: all check clean
 .DELETE_ON_ERROR:
@@ -27,7 +26,7 @@ wmenu.cmd: wmenu.obj $(SHARED) Makefile
 
 # Compile C modules with local declarations.
 %.obj: %.c win.h Makefile
-	@$(DRC86) -o$@ $< > $*.log 2>&1; cat $*.log
+	@$(DRC86) -o$@ $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
 	@! grep -iE "error|unable to open" $*.log
 
 xios.obj: xios.a86 Makefile

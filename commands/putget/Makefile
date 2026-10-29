@@ -1,6 +1,7 @@
 # PUTGET — ASM86 build.
 # all builds local outputs; check validates them; clean removes generated files.
 
+CMDINFO=cmdinfo
 ASM86=cpm86_asm86
 GENCMD=cpm86_gencmd
 
@@ -13,7 +14,7 @@ all: $(TOOLS)
 
 %.cmd: %.h86 Makefile
 	$(GENCMD) $<
-	cmdinfo $@
+	$(CMDINFO) $@
 
 # Assemble absolute groups for GENCMD.
 %.h86: %.a86 putget.def putget.lib Makefile
@@ -25,4 +26,4 @@ clean:
 
 # Validate the structure of each rebuilt command/component.
 check: all
-	@set -e; for f in $(TOOLS); do cmdinfo $$f; done
+	@set -e; for f in $(TOOLS); do $(CMDINFO) $$f; done

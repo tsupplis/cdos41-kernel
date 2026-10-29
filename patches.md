@@ -255,3 +255,62 @@ validation remains enabled.
 `make check-fat-batch` runs twelve disposable FAT cases across case flags
 00/08/10/18, CR/LF or Ctrl-Z EOF, record padding and multiple buffer reads.
 Each script also runs a FAT-hosted ERA.CMD and preserves an unrelated file.
+
+## FAT names: case-insensitive matching and modern case metadata
+
+`kernel/con/black.a86` now compares ASCII letters in FAT short names without
+case and returns uppercase names through the CP/M FCB interface. Exact names
+and `?` wildcards share this path, including OPEN, CLOSE, ERA and RENAME.
+Only a-z are folded: punctuation remains distinct. Existing directory name
+bytes are not rewritten merely by reading or searching them.
+
+FAT directory byte 12 bits 3/4 are modern lowercase-name/extension flags.
+The extension flag previously appeared as CP/M F4. Copying a CMD to CP/M
+could persist that accidental attribute; launching it then enabled F4's
+FCB compatibility modes, including F2 partial closes. PIP accumulated open
+entries and eventually reported OPEN FILE LIMIT EXCEEDED.
+
+FAT now exports/writes only the nonconflicting legacy F1-F3 bits. F4 is not
+recognized or set on FAT; SET preserves both case flags. F1-F4 on genuine
+CP/M media retain their existing semantics. This deliberately replaces the
+old FAT F4 interpretation, which cannot be distinguished from the modern
+lowercase-extension flag. It extends the earlier FCB attribute-boundary fix.
+
+For CMD files already copied to CP/M with accidental F4, clear that stored
+attribute once, for example `SET D:PIP.CMD [F4=OFF]`, or copy the file again
+under the corrected kernel. Do not indiscriminately clear genuine legacy
+compatibility attributes on unrelated programs.
+
+`make check-fat-case` uses disposable CP/M/FAT images. It exercises 40 files
+with physical uppercase/lowercase names and NT flags 00/08/10/18, runs PIP
+from FAT and after import to CP/M, compares copied contents, checks exact
+and wildcard ERA and punctuation sentinels, and verifies CP/M F4 remains
+available while FAT case flags survive SET. The user's 117-file hard-disk
+transfer is also checked separately on a disposable copy.
+
+## XIOS: BIOS INT 1Ah RTC, following CCP/M
+
+`kernel/con/xrtc.lib` is copied unchanged from the maintained CCP/M project,
+with no sibling build dependency. Startup reads BIOS date/time/date (AH=04h,
+02h, 04h) before replacing vectors, validates BCD/calendar/time values, and
+retries a date rollover at most three times. Valid values initialize the
+software clock; missing or unsupported services leave its defaults intact.
+The conversion uses CP/M day 1 = 1978-01-01, the 16-bit day range, and full
+Gregorian century rules.
+
+XIOS slot 25 and the BDOS 104 hook follow the CCP/M implementation. Successful
+DOS INT 21h date/time setters also call the same XIOS entry because CDOS's
+PC-MODE updates TOD directly. Write-back uses AH=05h/03h and preserves the
+BIOS daylight-saving flag; failed writes do not discard the software clock.
+BIOS calls occur at initialization or in process context, never in IRQ0.
+
+The old AT-only direct-CMOS clock import, including its two-digit-year
+arithmetic, is replaced. AT recognition and CMOS floppy-drive detection stay
+in place. The alternate OEM XIOS under `kernel/xios` remains separate; this
+patch applies to the default SQUID XIOS used by the distribution images.
+
+`make check-rtc` executes the actual built XIOS code with a synthetic INT 1Ah
+handler: valid dates, 2000/2100 century boundaries, range/BCD rejection,
+absent and unsupported services, stable/unstable rollover reads, write-back
+and date-write failure, and preserved startup registers/flags. No real clock
+is changed. The check is also included in `make check`.

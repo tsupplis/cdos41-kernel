@@ -6716,6 +6716,7 @@ m2b_set_date:
 	jc m2b_set_date_error
 	    les bx,TOD_PTR
 	    mov es:[bx],cx
+	    call persist_rtc		; same XIOS write-back as BDOS 104
 	    mov ret_al,0
 	    ret
 
@@ -6800,8 +6801,18 @@ m2d_set_time:
 	    mov es:.2[bx],ch
 	    mov es:.3[bx],cl
 	    mov es:.4[bx],dh
+	    call persist_rtc		; retain seconds set through DOS
 	    mov ret_al,0
 	    ret
+
+; Persist successful DOS date/time changes through the shared XIOS RTC hook.
+; backdoor supplies SYSDAT and restores DS/ES; preserve dispatcher scratch AX/BX.
+persist_rtc:
+	push ax ! push bx
+	mov ax,25
+	call backdoor
+	pop bx ! pop ax
+	ret
 
 m2b_set_time_error:
 	mov ret_al,0FFh

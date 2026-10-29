@@ -1,6 +1,7 @@
 # BATCH — RASM86 build.
 # all builds local outputs; check validates them; clean removes generated files.
 
+CMDINFO=cmdinfo
 RASM86=pcdev_rasm86
 LINK86=pcdev_linkcmd
 
@@ -12,7 +13,7 @@ OBJECTS=batch.obj
 
 all: $(TOOLS)
 check: all
-	@set -e; for f in $(TOOLS); do cmdinfo $$f; done
+	@set -e; for f in $(TOOLS); do $(CMDINFO) $$f; done
 
 LOCAL_INCLUDES=$(wildcard *.a86 *.lib *.equ *.dat *.def *.h *.dcl)
 $(OBJECTS): $(LOCAL_INCLUDES) Makefile
@@ -31,4 +32,4 @@ batch.cmd: $(OBJECTS) Makefile
 	@$(LINK86) 'batch[dat[max[0]]]' > batch-link.log 2>&1; result=$$?; cat batch-link.log; test $$result -eq 0
 	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' batch-link.log
 	@test -s $@
-	cmdinfo $@
+	$(CMDINFO) $@

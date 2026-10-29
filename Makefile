@@ -4,7 +4,7 @@
 DISKSZIP=disks.zip
 DIST_DISKS=cdos86.img cdostools.img cdosmaint.img cdosmenu.img cdosdos.img cdosoem1.img cdosoem2.img
 
-.PHONY: all commands kernel boot media check check-pce test clean xios-alt check-aliases dist check-dist check-redirection check-sdir check-type check-show check-set check-wmenu check-era check-ren check-systat check-window check-help check-dir-options check-batch-live check-help-live check-fat-batch
+.PHONY: all commands kernel boot media check check-pce test clean xios-alt check-aliases dist check-dist check-redirection check-sdir check-type check-show check-set check-wmenu check-era check-ren check-systat check-window check-help check-dir-options check-batch-live check-help-live check-fat-batch check-fat-case check-rtc
 .DELETE_ON_ERROR:
 
 all: media
@@ -27,7 +27,7 @@ check: all
 	@set -e; for f in kernel/con/*.con kernel/rsp?/*.rsp; do cmdinfo $$f; done
 	$(MAKE) -C commands check
 	$(MAKE) -C kernel/sysgen check
-	$(MAKE) -C kernel/con check-cursor
+	$(MAKE) -C kernel/con check-cursor check-rtc
 	$(MAKE) -C boot check
 	$(MAKE) -C media check
 
@@ -114,3 +114,10 @@ check-help-live: all
 
 check-fat-batch: all
 	python3 tools/fat_batch_check.py
+
+# Mixed-case FAT names, modern case flags, PIP open-list lifetime and ERA.
+check-fat-case: all
+	python3 tools/fat_case_check.py
+
+check-rtc: kernel
+	$(MAKE) -C kernel/con check-rtc

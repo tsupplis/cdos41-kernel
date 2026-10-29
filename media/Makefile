@@ -17,9 +17,9 @@ SYSTEM_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ..
     ../commands/putget/put.cmd ../commands/putget/get.cmd ../commands/putget/rdr.cmd
 
 TOOLS_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
-    ../commands/asm80/asm80.cmd ../commands/asm86/asm86.cmd ../commands/gencmd/gencmd.cmd \
+    ../commands/asm80/asm80.cmd ../commands/asm86/asm86.cmd ../commands/ddt86/ddt86.cmd ../commands/gencmd/gencmd.cmd \
     ../commands/genccpm/genccpm.cmd ../commands/hexcom/hexcom.cmd ../commands/help/help.cmd \
-    ../commands/help/help.hlp ../commands/print/print.cmd ../commands/systat/systat.cmd \
+    ../commands/help/help.hlp ../commands/systat/systat.cmd \
     ../commands/chset/chset.cmd ../commands/genldr/genldr.cmd ../commands/loadccpm/loadccpm.com \
     ../commands/window/window.cmd ../commands/window/wmenu.cmd
 
@@ -27,7 +27,7 @@ MAINT_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ../
     ../commands/dskmaint/dskmaint.cmd ../commands/disk/dcopy.cmd ../commands/disk/dcomp.cmd \
     ../commands/initdir/initdir.cmd
 
-MENU_COMMANDS = ../commands/dredix/dredix.cmd ../commands/copymenu/copymenu.cmd ../commands/editmenu/editmenu.cmd \
+MENU_COMMANDS = ../commands/print/print.cmd ../commands/dredix/dredix.cmd ../commands/copymenu/copymenu.cmd ../commands/editmenu/editmenu.cmd \
     ../commands/printmgr/printmgr.cmd ../commands/dsp/dsp.cmd ../base/term.dat \
     ../base/menu.dat ../base/fdmenu.dat ../base/hdmenu.dat \
     ../base/national.msg ../base/index.dsp ../commands/dredix/help.edx \

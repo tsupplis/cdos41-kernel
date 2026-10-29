@@ -2,6 +2,7 @@
 # all builds local outputs; check validates them; clean removes generated files.
 # Full build is pending: the 4.1 archive lacks flat LBDOS.H86.
 
+CMDINFO=cmdinfo
 ASM86=cpm86_asm86
 GENCMD=cpm86_gencmd
 RASM86=pcdev_rasm86
@@ -16,7 +17,7 @@ IMAGES=pcboot1.h86 cpmboot2.h86 cpmboot3.h86 hsetup.h86 label.h86 pcboot2.h86 pc
 
 all: $(TOOLS)
 check: all
-	@set -e; for f in $(TOOLS); do cmdinfo $$f; done
+	@set -e; for f in $(TOOLS); do $(CMDINFO) $$f; done
 
 LOCAL_INCLUDES=$(wildcard *.a86 *.lib *.equ *.dat *.def *.h *.dcl)
 $(OBJECTS): $(LOCAL_INCLUDES) Makefile
@@ -47,9 +48,9 @@ hdmaint.cmd:
 
 h70.cmd: h70.h86 Makefile
 	$(GENCMD) $< 'data[m800]' 'extra[m800]'
-	cmdinfo $@
+	$(CMDINFO) $@
 
 lbdos3.cmd: lbdos3.obj Makefile
 	@$(LINK86) 'lbdos3=lbdos3[data[ori[0],max[0]]]' > lbdos3-link.log 2>&1; result=$$?; cat lbdos3-link.log; test $$result -eq 0
 	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' lbdos3-link.log
-	cmdinfo $@
+	$(CMDINFO) $@

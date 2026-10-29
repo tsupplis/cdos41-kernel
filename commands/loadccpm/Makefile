@@ -1,12 +1,10 @@
-# LOADCCPM — RASM86 / ASM86 build.
+# LOADCCPM — ASM86 Intel HEX, then headerless GENCMD COM packaging.
 # all builds local outputs; check validates them; clean removes generated files.
 
 ASM86=cpm86_asm86
 GENCMD=cpm86_gencmd
-RASM86=pcdev_rasm86
 
 TOOLS=loadccpm.com
-OBJECTS=
 
 .PHONY: all check clean
 .DELETE_ON_ERROR:
@@ -14,14 +12,6 @@ OBJECTS=
 all: $(TOOLS)
 check: all
 	@set -e; for f in $(TOOLS); do test -s $$f; done
-
-LOCAL_INCLUDES=$(wildcard *.a86 *.lib *.equ *.dat *.def *.h *.dcl)
-$(OBJECTS): $(LOCAL_INCLUDES) Makefile
-
-# Assemble relocatable objects; retain the module-specific linker layout.
-%.obj: %.a86 Makefile $(wildcard *.lib *.equ *.def *.inc)
-	@$(RASM86) $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
-	@grep -qiE 'Number of errors: +0\.' $*.log
 
 # Remove generated outputs only; preserve sources and reference files.
 clean:

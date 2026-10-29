@@ -1,6 +1,7 @@
 # GENLDR — Intel PL/M-86 / RASM86 build.
 # all builds local outputs; check validates them; clean removes generated files.
 
+CMDINFO=cmdinfo
 RASM86=pcdev_rasm86
 LINK86=pcdev_linkcmd
 INTEL_PLM86=intel_plm86
@@ -13,7 +14,7 @@ OBJECTS=scd2.obj genldr.obj ldrbuf.obj genmsg.obj
 
 all: $(TOOLS)
 check: all
-	@set -e; for f in $(TOOLS); do cmdinfo $$f; done
+	@set -e; for f in $(TOOLS); do $(CMDINFO) $$f; done
 
 LOCAL_INCLUDES=$(wildcard *.a86 *.lib *.equ *.dat *.def *.h *.dcl)
 $(OBJECTS): $(LOCAL_INCLUDES) Makefile
@@ -24,7 +25,7 @@ $(OBJECTS): $(LOCAL_INCLUDES) Makefile
 	@grep -qiE 'Number of errors: +0\.' $*.log
 
 # Compile PL/M sources; declarations and Makefile changes trigger recompilation.
-%.obj: %.plm Makefile $(wildcard *.lit *.ext)
+%.obj: %.plm Makefile $(wildcard *.lit *.def *.equ *.lib *.h *.dcl *.inc *.ext)
 	@$(INTEL_PLM86) $< debug 'optimize(3)' xref > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
 	@grep -qiE '(^|[[:space:],])0 ERRORS' $*.log
 
@@ -36,4 +37,4 @@ clean:
 genldr.cmd: $(OBJECTS) Makefile
 	@$(LINK86) 'genldr=scd2,genldr,ldrbuf,genmsg[dat[ori[0],add[400],max[0]]]' > genldr-link.log 2>&1; result=$$?; cat genldr-link.log; test $$result -eq 0
 	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' genldr-link.log
-	cmdinfo $@
+	$(CMDINFO) $@

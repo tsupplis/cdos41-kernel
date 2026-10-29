@@ -23,6 +23,7 @@ status](source-map.md) and `sources.json` record the origins and source hashes.
 
 The current version includes:
 
+- BIOS INT 1Ah RTC startup and native/DOS date-time write-back, with software-clock fallback.
 - CP/M-Plus-style command-line cursor movement, insertion, deletion and recall.
 - Left/Right, Home/End, Delete and Up during buffered console input.
 - Ctrl+Alt+1–4 to select consoles; Ctrl+Alt+Tab to cycle through them.
@@ -31,6 +32,7 @@ The current version includes:
 - CP/M-Plus-style console redirection through PUT, GET and RDR for native commands.
 - A built-in CLS command and a common `Press any key to continue...` prompt.
 - DEL mapped to native ERA.CMD in both the shell and BATCH.
+- Case-insensitive FAT short names, without interpreting modern case flags as CP/M compatibility attributes.
 
 ## Command line conveniences
 
@@ -104,9 +106,9 @@ mechanism. [PUT/GET/RDR notes](commands/putget/README.md).
 | Image | Bootable | Contents |
 | --- | --- | --- |
 | `cdos86.img` | Yes | Kernel, core file commands, ED, DATE, SDIR, SET, SHOW, SUBMIT, BATCH, SYSDISK, ERA/ERAQ, PUT/GET/RDR, PIP and shell alias targets |
-| `cdostools.img` | No | ASM80/ASM86, GENCMD, GENCCPM, HEXCOM, HELP, PRINT, SYSTAT, CHSET, GENLDR, LOADCCPM, WINDOW/WMENU and core commands |
+| `cdostools.img` | No | ASM80/ASM86, DDT86, GENCMD, GENCCPM, HEXCOM, HELP, SYSTAT, CHSET, GENLDR, LOADCCPM, WINDOW/WMENU and core commands |
 | `cdosmaint.img` | Yes | Kernel, DSKMAINT, DCOPY, DCOMP, INITDIR, BATCH, SYSDISK, ERA and PIP |
-| `cdosmenu.img` | No | DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP, menu/terminal data, BAT examples and PIP |
+| `cdosmenu.img` | No | PRINT, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP, menu/terminal data, BAT examples and PIP |
 | `cdosdos.img` | No | COPY.EXE, DATE.EXE, ERASE.EXE, PATH.EXE, original TIME.EXE, REN.EXE and REDOS.COM, core commands and PIP |
 | `cdosoem1.img` | No | Original backup/file-manager tools, their support files and PIP |
 | `cdosoem2.img` | No | FUNCTION, HELP, rebuilt SETPORT, original SETUP and HDMAINT, HDMAINT manual, original 4.1 help text and PIP |
@@ -164,6 +166,7 @@ Compatibility details live with each tool.
 | `date` | Display or set the date | — | Recompiled from CCP/M-86 3.1 and adapted, Y2K patched |
 | `date.exe` | Display or set the date through DOS | — | Recompiled from CDOS 4.1 and adapted, short-year fix; commands/datetime |
 | `dcomp / dcopy` | Compare or copy floppy diskettes | — | Ported from PC DOS 1.10; imported from CCP/M-86 |
+| `ddt86` | 8086 interactive debugger | — | Recompiled from CCP/M-86 3.1 |
 | `dir` | List directory contents | — | Recompiled from CCP/M-86 3.1 and adapted; separate CDOS 4.1 TMP built-in |
 | `dredix` | Full-screen text editor | — | Recompiled from CDOS 4.1 |
 | `dskmaint` | Format, verify and copy diskettes | — | Recompiled from CDOS 4.1 |
@@ -242,6 +245,8 @@ system and the live regression checks.
 | `make check-type` | OEM/rebuilt TYPE comparison, DOS/CP/M EOF, passwords and paging |
 | `make check-set` | OEM/rebuilt SET comparison, persisted attributes, passwords and timestamp settings |
 | `make check-show` | OEM/rebuilt SHOW comparison, media guards, capacity/free space, users and labels |
+| `make check-rtc` | Built-XIOS BIOS RTC, calendar bounds, fallback and write-back checks |
+| `make check-fat-case` | FAT case-insensitive names, PIP copy/import, ERA and CP/M F4 preservation |
 | `make check-fat-batch` | FAT-hosted BAT/CMD loading, case flags, EOF forms and buffer refills |
 | `make check-sdir` | OEM/rebuilt SDIR comparison on CP/M/FAT12, directory markers/counts, options and paging |
 | `make check-redirection` | PUT capture/append, GET/RDR input, copied bytes and return to shell |

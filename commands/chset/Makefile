@@ -1,6 +1,7 @@
 # CHSET — DR C / RASM86 build.
 # all builds local outputs; check validates them; clean removes generated files.
 
+CMDINFO=cmdinfo
 RASM86=pcdev_rasm86
 DRC86=drccpm_cc
 DRCLINK86=drccpm_link
@@ -13,7 +14,7 @@ OBJECTS=main.obj chset.obj function.obj cpmif.obj
 
 all: $(TOOLS)
 check: all
-	@set -e; for f in $(TOOLS); do cmdinfo $$f; done
+	@set -e; for f in $(TOOLS); do $(CMDINFO) $$f; done
 
 LOCAL_INCLUDES=$(wildcard *.a86 *.lib *.equ *.dat *.def *.h *.dcl)
 $(OBJECTS): $(LOCAL_INCLUDES) Makefile
@@ -37,4 +38,4 @@ chset.cmd: $(OBJECTS) Makefile
 	@$(DRCLINK86) 'chset[map]=main,chset,function,cpmif' > chset-link.log 2>&1; result=$$?; cat chset-link.log; test $$result -eq 0
 	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' chset-link.log
 	@test -s $@
-	cmdinfo $@
+	$(CMDINFO) $@

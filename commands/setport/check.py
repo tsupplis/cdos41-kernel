@@ -53,6 +53,8 @@ def check_source(path):
     allowed = {'copyright', 'utility_alignment', 'help_copyright', 'code_padding'}
     for number, raw in enumerate(path.read_text().splitlines(), 1):
         line = raw.split(';', 1)[0].strip().lower()
+        if re.search(r'\b(?:loc|field|item|record|data)_[0-9a-f]{4}\b', line):
+            raise ValueError(f'{path}:{number}: anonymous address-derived label')
         if not line:
             continue
         if line == 'cseg':

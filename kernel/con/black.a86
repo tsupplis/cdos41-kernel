@@ -442,8 +442,9 @@ cpd2:
 	cmp bl,11			;for (i = 0; i < 11; i++)
 	jae cpd8			;{
 	xor al,al			;   atts = 0;
-	cmp bl,4			;   if (i < 4)
-	jae cpd3			;     f1-f4 only; f5-f8 are interface flags
+	cmp bl,3			;   Export legacy f1-f3 only on FAT.
+	jae cpd3			;     Byte 12 bits 3/4 are NT case flags,
+					;     not CP/M f5/f4 compatibility flags.
 					;     att = (dirp->datts2 << i) & 0x80;
 	mov al,datts2[si]
 	mov cl,bl
@@ -472,6 +473,12 @@ cpd6:
 cpd7:
 	mov dl,dname[si+bx]		;   fcbp->fname[i] = (dirp->dname[i]
 	and dl,07fh			;          & 0x7f) | att;
+	cmp dl,'a'			; Return canonical uppercase short names.
+	jb cpd_name_ready
+	cmp dl,'z'
+	ja cpd_name_ready
+	sub dl,20h
+cpd_name_ready:
 	or dl,al
 	mov es:fname[di+bx],dl
 	inc bx
@@ -840,14 +847,17 @@ match:					;BOOLEAN match()
 	mov cx,11			;i = 11;
 mat1:					;do
 					;{
-	mov al,[si]			;  if ((*p ^ *q) & 0x7f &&
-	xor al,[bx]			
-	test al,7fh			
-	jz mat2				
-	mov al,[si]			;      (*p ^ '?') & 0x7f)
-	xor al,'?'			  
-	test al,7fh			
-	jz mat2				
+	mov al,[si]			; Compare ASCII letters without case.
+	and al,7fh			; Ignore FCB attribute bits as before.
+	call fat_upper
+	mov ah,al
+	mov al,[bx]
+	and al,7fh
+	call fat_upper
+	cmp al,ah
+	jz mat2
+	cmp ah,'?'			; Preserve the single-character wildcard.
+	jz mat2
 	xor al,al			;     return(FALSE);
 	pop cx
 	ret
@@ -858,6 +868,17 @@ mat2:
 	or al,1
 	pop cx
 	ret				;return(TRUE);
+
+; Fold only ASCII a-z. Punctuation and other bytes retain their identity.
+; AL is the character; all other registers are preserved.
+fat_upper:
+	cmp al,'a'
+	jb fat_upper_done
+	cmp al,'z'
+	ja fat_upper_done
+	sub al,20h
+fat_upper_done:
+	ret
 
 lshiftl:
 ;	Entry:	DX,AX = long value to shift left
@@ -1788,7 +1809,7 @@ set3:					;for (i = 0; i < 11; i++)
 	jae set10
 	mov ah,info_fcb+fname[bx]	;  set = infop->fname[i] & 0x80;
 	and ah,080h			
-	cmp bl,4			;  if (i < 4)
+	cmp bl,3			;  Write f1-f3 only; preserve FAT case bits.
 	jae set4			;  {
 	lea di,datts2[si]		;    p = &dirp->datts2;
 	mov al,080h			;    mask = 0x80 >> i;

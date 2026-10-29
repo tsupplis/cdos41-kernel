@@ -47,7 +47,7 @@ initialize:
 	call	locate_system
 	call	detect_ports
 	or	al,al
-	jz	loc_00be
+	jz	no_ports_installed
 	cmp	byte ptr command_tail,0h
 	jz	interactive_main
 	jmp	parse_command_tail
@@ -67,24 +67,24 @@ interactive_main:
 	call	build_main_choices
 	mov	si,offset main_menu
 	call	draw_menu_and_read
-	jmps	loc_009e
-loc_0092:
+	jmps	dispatch_main_choice
+main_menu_again:
 	mov	bx,0h
 	call	select_menu_footer
 	mov	si,offset main_menu
 	call	read_menu_choice
-loc_009e:
+dispatch_main_choice:
 	xor	bh,bh
 	shl	bl,1
 	call	word ptr main_dispatch[bx]
-	jmps	loc_0092
+	jmps	main_menu_again
 
 ; -----------------------------------------------------------------------------
 ; Main-menu exit callback: restore the display and terminate.
 ; -----------------------------------------------------------------------------
 menu_exit:
-	jmps	loc_00aa
-loc_00aa:
+	jmps	clear_and_exit
+clear_and_exit:
 	call	clear_screen
 
 ; -----------------------------------------------------------------------------
@@ -97,25 +97,25 @@ terminate:
 	push	si
 	call	clear_screen
 	pop	si
-loc_00b9:
+print_error_and_exit:
 	call	print_length_string
 	jmps	terminate
-loc_00be:
+no_ports_installed:
 	mov	si,offset no_ports_error
-	jmps	loc_00b9
+	jmps	print_error_and_exit
 
 ; -----------------------------------------------------------------------------
 ; Add a protocol entry for each installed UART, followed by Escape.
 ; Update both the display pointers and the indirect function-key dispatch table.
 ; -----------------------------------------------------------------------------
 build_main_choices:
-	mov	bx,557h
+	mov	bx,offset main_protocol_dispatch
 	mov	dx,offset main_port_0_record
 	mov	al,0bfh
-	mov	di,4eeh
+	mov	di,offset main_protocol_text
 	mov	si,offset main_protocol_keys
 	cmp	byte ptr port_0_present,0h
-	jz	loc_00ef
+	jz	add_port_one_choice
 	mov	word ptr [bx],4e6h
 	mov	word ptr [di],dx
 	inc	word ptr main_text_count
@@ -124,9 +124,9 @@ build_main_choices:
 	add	di,2h
 	inc	si
 	add	bx,2h
-loc_00ef:
+add_port_one_choice:
 	cmp	byte ptr port_1_present,0h
-	jz	loc_010f
+	jz	add_escape_choice
 	add	al,2h
 	mov	dx,offset main_port_1_record
 	mov	word ptr [bx],4d4h
@@ -136,7 +136,7 @@ loc_00ef:
 	mov	byte ptr [si],al
 	add	bx,2h
 	inc	si
-loc_010f:
+add_escape_choice:
 	mov	word ptr [bx],0a8h
 	inc	byte ptr main_key_count
 	mov	byte ptr [si],1bh
@@ -151,16 +151,16 @@ check_version:
 	int	0e0h
 	and	ah,0fh
 	cmp	ah,4h
-	jz	loc_012d
+	jz	check_cdos_release
 	cmp	ah,6h
-	jnz	loc_0138
-loc_012d:
+	jnz	version_rejected
+check_cdos_release:
 	mov	cx,0a3h
 	int	0e0h
 	cmp	ax,1441h
-	jnz	loc_0138
+	jnz	version_rejected
 	ret
-loc_0138:
+version_rejected:
 	mov	dx,offset version_error
 	mov	cx,9h
 	int	0e0h
@@ -176,9 +176,9 @@ check_console:
 	mov	cl,99h
 	int	0e0h
 	cmp	al,3h
-	jg	loc_014f
+	jg	serial_menu_rejected
 	ret
-loc_014f:
+serial_menu_rejected:
 	mov	dx,offset terminal_error
 	mov	cl,9h
 	int	0e0h
@@ -205,15 +205,15 @@ configure_ports:
 	mov	bx,word ptr 2h[bx]
 	push	bx
 	call	read_menu_choice
-loc_0182:
+configuration_key_loop:
 	cmp	al,1bh
-	jz	loc_0190
+	jz	apply_menu_settings
 	call	advance_setting
 	pop	si
 	push	si
 	call	read_allowed_key
-	jmps	loc_0182
-loc_0190:
+	jmps	configuration_key_loop
+apply_menu_settings:
 	pop	bx
 	call	program_ports
 	ret
@@ -231,9 +231,9 @@ advance_setting:
 	mov	al,byte ptr [bx+si]
 	inc	al
 	cmp	al,byte ptr 1h[bx+si]
-	jng	loc_01ad
+	jng	store_advanced_setting
 	xor	al,al
-loc_01ad:
+store_advanced_setting:
 	mov	byte ptr [bx+si],al
 	xor	ah,ah
 	xor	dx,dx
@@ -257,23 +257,23 @@ loc_01ad:
 ; -----------------------------------------------------------------------------
 read_port_settings:
 	cmp	byte ptr port_0_present,0ffh
-	jnz	loc_01e8
+	jnz	read_port_one_settings
 	mov	dx,3f0h
 	call	read_uart
 	mov	byte ptr port_0_packed,al
-	mov	di,offset port_0_display
+	mov	di,offset port_0_baud_key_description
 	mov	bx,offset port_0_settings
 	call	unpack_serial
-loc_01e8:
+read_port_one_settings:
 	cmp	byte ptr port_1_present,0ffh
-	jnz	loc_0201
+	jnz	port_settings_loaded
 	mov	dx,2f0h
 	call	read_uart
 	mov	byte ptr port_1_packed,al
-	mov	di,offset port_1_display
+	mov	di,offset port_1_baud_key_description
 	mov	bx,offset port_1_settings
 	call	unpack_serial
-loc_0201:
+port_settings_loaded:
 	ret
 
 ; -----------------------------------------------------------------------------
@@ -281,19 +281,19 @@ loc_0201:
 ; -----------------------------------------------------------------------------
 program_ports:
 	cmp	byte ptr port_0_present,0ffh
-	jnz	loc_0215
+	jnz	program_port_one
 	mov	si,offset port_0_settings
 	call	pack_serial
 	mov	dx,3f0h
 	call	program_uart
-loc_0215:
+program_port_one:
 	cmp	byte ptr port_1_present,0ffh
-	jnz	loc_0228
+	jnz	ports_programmed
 	mov	si,offset port_1_settings
 	call	pack_serial
 	mov	dx,2f0h
 	call	program_uart
-loc_0228:
+ports_programmed:
 	ret
 
 ; -----------------------------------------------------------------------------
@@ -328,12 +328,12 @@ build_port_menu:
 	mov	es,ax
 	mov	di,offset config_field_pointers
 	cmp	byte ptr port_0_present,0ffh
-	jz	loc_025f
-	mov	bx,offset config_keys
-	jmps	loc_028e
-loc_025f:
-	mov	word ptr .716h,726h
-	mov	word ptr .718h,748h
+	jz	add_port_zero_fields
+	mov	bx,offset config_key_slots
+	jmps	add_port_one_fields
+add_port_zero_fields:
+	mov	word ptr config_port_0_label,726h
+	mov	word ptr config_port_0_serial_label,748h
 	mov	ax,4h
 	add	word ptr config_field_count,ax
 	mov	si,offset port_0_field_pointers
@@ -343,30 +343,30 @@ loc_025f:
 	mov	cx,5h
 	mov	byte ptr config_key_count,cl
 	mov	bx,di
-	mov	si,offset item_08b3
-	mov	di,offset config_keys
+	mov	si,offset port_0_key_template
+	mov	di,offset config_key_slots
 	rep	movsb
 	xchg	bx,di
-loc_028e:
+add_port_one_fields:
 	cmp	byte ptr port_1_present,0ffh
-	jnz	loc_02d0
-	mov	word ptr .71ah,737h
-	mov	word ptr .71ch,75dh
+	jnz	port_menu_complete
+	mov	word ptr config_port_1_label,737h
+	mov	word ptr config_port_1_serial_label,75dh
 	mov	ax,4h
 	add	word ptr config_field_count,ax
 	mov	cx,ax
-	mov	si,offset item_0803
+	mov	si,offset port_1_field_pointers
 	rep	movsw
 	xchg	bx,di
 	mov	cx,5h
 	add	byte ptr config_key_count,cl
-	mov	si,offset item_08b8
+	mov	si,offset port_1_key_template
 	rep	movsb
 	cmp	byte ptr port_0_present,0ffh
-	jz	loc_02d0
+	jz	port_menu_complete
 	mov	word ptr selected_display,849h
 	mov	word ptr selected_settings,0a2ah
-loc_02d0:
+port_menu_complete:
 	pop	es
 	ret
 
@@ -379,18 +379,18 @@ detect_ports:
 	mov	dl,0fah
 	in	al,dx
 	test	al,0f8h
-	jnz	loc_02e5
+	jnz	probe_port_one
 	mov	byte ptr port_0_present,0ffh
 	inc	byte ptr ports_found
-loc_02e5:
+probe_port_one:
 	mov	dx,2f0h
 	mov	dl,0fah
 	in	al,dx
 	test	al,0f8h
-	jnz	loc_02f8
+	jnz	return_port_count
 	mov	byte ptr port_1_present,0ffh
 	inc	byte ptr ports_found
-loc_02f8:
+return_port_count:
 	mov	al,byte ptr ports_found
 	ret
 
@@ -451,13 +451,13 @@ unpack_serial:
 	mov	cl,5h
 	shr	al,cl
 	call	store_selection
-	mov	si,offset baud_tokens
+	mov	si,offset token_110
 	call	copy_setting_text
 	pop	ax
 	push	ax
 	and	al,3h
 	call	store_selection
-	mov	si,offset word_length_tokens
+	mov	si,offset token_5
 	call	copy_setting_text
 	pop	ax
 	push	ax
@@ -465,14 +465,14 @@ unpack_serial:
 	mov	cl,3h
 	shr	al,cl
 	call	store_selection
-	mov	si,offset parity_tokens
+	mov	si,offset token_none
 	call	copy_setting_text
 	pop	ax
 	and	al,4h
 	mov	cl,2h
 	shr	al,cl
 	call	store_selection
-	mov	si,offset stop_tokens
+	mov	si,offset token_1
 	call	copy_setting_text
 	pop	es
 	ret
@@ -541,63 +541,63 @@ parse_command_tail:
 	mov	al,byte ptr command_tail
 	mov	byte ptr tail_remaining,al
 	mov	si,81h
-loc_03c7:
+skip_tail_spaces:
 	cmp	byte ptr tail_remaining,0h
-	jz	loc_0434
+	jz	apply_tail_settings
 	mov	al,byte ptr [si]
 	cmp	al,20h
-	ja	loc_03db
+	ja	begin_token_search
 	inc	si
 	dec	byte ptr tail_remaining
-	jmps	loc_03c7
-loc_03db:
+	jmps	skip_tail_spaces
+begin_token_search:
 	mov	word ptr token_scan,8bdh
 	mov	word ptr token_start,si
-loc_03e5:
+next_token_candidate:
 	mov	si,word ptr token_scan
 	add	word ptr token_scan,9h
 	lodsw
 	or	ax,ax
-	jnz	loc_03f6
+	jnz	prepare_token_compare
 	jmp	invalid_tail
-loc_03f6:
+prepare_token_compare:
 	mov	cx,ax
-loc_03f8:
+skip_token_padding:
 	lodsb
 	dec	cx
 	cmp	al,20h
-	jz	loc_03f8
+	jz	skip_token_padding
 	dec	si
 	inc	cx
 	mov	di,si
 	mov	si,word ptr token_start
 	mov	al,byte ptr tail_remaining
 	mov	byte ptr token_remaining,al
-loc_040c:
+compare_token_characters:
 	cmp	byte ptr token_remaining,0h
-	jz	loc_03e5
+	jz	next_token_candidate
 	cmpsb
-	jnz	loc_03e5
+	jnz	next_token_candidate
 	dec	byte ptr token_remaining
 	dec	cx
-	jnz	loc_040c
+	jnz	compare_token_characters
 	cmp	byte ptr token_remaining,0h
-	jz	loc_0429
+	jz	token_matched
 	cmp	byte ptr [si],20h
-	jnz	loc_03e5
-loc_0429:
+	jnz	next_token_candidate
+token_matched:
 	mov	al,byte ptr token_remaining
 	mov	byte ptr tail_remaining,al
 	call	apply_token
-	jmps	loc_03c7
-loc_0434:
+	jmps	skip_tail_spaces
+apply_tail_settings:
 	mov	al,byte ptr port_0_packed
 	mov	dx,3f0h
 	cmp	byte ptr selected_port,0h
-	jz	loc_0447
+	jz	write_selected_uart
 	mov	al,byte ptr port_1_packed
 	mov	dx,2f0h
-loc_0447:
+write_selected_uart:
 	call	program_uart
 	jmp	terminate
 
@@ -610,14 +610,14 @@ apply_token:
 	mov	si,di
 	mov	bx,offset port_0_packed
 	cmp	byte ptr selected_port,0h
-	jz	loc_045d
+	jz	dispatch_token_handler
 	mov	bx,offset port_1_packed
-loc_045d:
+dispatch_token_handler:
 	mov	dl,byte ptr selected_port
 	lodsw
 	mov	cx,ax
 	lodsb
-	call	cx
+	call	cx		; Token table supplies handler CX and argument AL.
 	pop	si
 	ret
 
@@ -629,9 +629,9 @@ select_port:
 	xor	ah,ah
 	add	si,ax
 	cmp	byte ptr [si],0h
-	jnz	loc_0478
-	jmp	loc_00be
-loc_0478:
+	jnz	remember_selected_port
+	jmp	no_ports_installed
+remember_selected_port:
 	mov	byte ptr selected_port,al
 	ret
 
@@ -683,9 +683,9 @@ invalid_tail:
 	call	print_length_string
 	pop	cx
 	sub	cl,byte ptr tail_remaining
-	jcxz	loc_04b2
+	jcxz	print_tail_error_details
 	call	print_spaces
-loc_04b2:
+print_tail_error_details:
 	mov	si,offset tail_error_marker
 	call	print_length_string
 	mov	si,offset invalid_token_message
@@ -742,15 +742,15 @@ protocol_menu:
 	mov	bx,word ptr 2h[bx]
 	push	bx
 	call	read_menu_choice
-loc_0518:
+protocol_key_loop:
 	cmp	al,1bh
-	jz	loc_0526
+	jz	apply_protocol_settings
 	call	toggle_protocol
 	pop	si
 	push	si
 	call	read_allowed_key
-	jmps	loc_0518
-loc_0526:
+	jmps	protocol_key_loop
+apply_protocol_settings:
 	pop	bx
 	call	write_protocols
 	ret
@@ -764,19 +764,19 @@ toggle_protocol:
 	mov	al,bl
 	and	al,1h
 	mov	si,offset input_protocols
-	jz	loc_0539
+	jz	select_protocol_byte
 	mov	si,offset output_protocols
-loc_0539:
+select_protocol_byte:
 	add	si,word ptr protocol_port
 	mov	al,byte ptr [si]
 	mov	cl,3h
 	cmp	bl,4h
-	jnl	loc_054f
+	jnl	flip_protocol_bit
 	dec	cl
 	cmp	bl,2h
-	jnl	loc_054f
+	jnl	flip_protocol_bit
 	dec	cl
-loc_054f:
+flip_protocol_bit:
 	clc
 	rcr	al,cl
 	cmc
@@ -796,7 +796,7 @@ redraw_protocol_field:
 	mov	ax,0bh
 	xor	bh,bh
 	mul	bx
-	mov	si,offset protocol_display
+	mov	si,offset protocol_input_dtr_key_position
 	add	si,ax
 	lodsw
 	push	si
@@ -813,12 +813,12 @@ format_protocol_flags:
 	mov	si,offset input_protocols
 	add	si,word ptr protocol_port
 	mov	al,byte ptr [si]
-	mov	di,offset protocol_input_value
+	mov	di,offset protocol_input_dtr_key_description_pointer
 	call	protocol_on_off
 	mov	si,offset output_protocols
 	add	si,word ptr protocol_port
 	mov	al,byte ptr [si]
-	mov	di,offset protocol_output_value
+	mov	di,offset protocol_output_dtr_key_description_pointer
 	call	protocol_on_off
 	ret
 
@@ -827,15 +827,15 @@ format_protocol_flags:
 ; -----------------------------------------------------------------------------
 protocol_on_off:
 	mov	cx,3h
-loc_059c:
+next_protocol_bit:
 	rcr	al,1
 	mov	bx,offset protocol_on
-	jc	loc_05a6
+	jc	store_on_off_pointer
 	mov	bx,offset protocol_off
-loc_05a6:
+store_on_off_pointer:
 	mov	word ptr [di],bx
 	add	di,16h
-	loop	loc_059c
+	loop	next_protocol_bit
 	ret
 
 ; -----------------------------------------------------------------------------
@@ -853,12 +853,12 @@ read_protocols:
 	mov	ds,word ptr system_segment
 	mov	cx,4h
 	mov	di,offset input_protocols
-loc_05c6:
+read_protocol_byte:
 	mov	si,word ptr [bx]
 	movsb
 	inc	bx
 	inc	bx
-	loop	loc_05c6
+	loop	read_protocol_byte
 	pop	ds
 	pop	es
 	ret
@@ -874,12 +874,12 @@ write_protocols:
 	mov	es,word ptr system_segment
 	mov	cx,4h
 	mov	si,offset input_protocols
-loc_05e4:
+write_protocol_byte:
 	mov	di,es:word ptr [bx]
 	movsb
 	inc	bx
 	inc	bx
-	loop	loc_05e4
+	loop	write_protocol_byte
 	pop	es
 	ret
 
@@ -892,7 +892,7 @@ call_xios:
 	push	es
 	mov	ds,word ptr system_segment
 	mov	es,word ptr xios_segment
-	callf	dword ptr field_0028
+	callf	dword ptr .28h
 	pop	es
 	pop	ds
 	ret
@@ -935,7 +935,7 @@ set_protocol_mask:
 draw_frame:
 	mov	al,0c4h
 	mov	cx,4eh
-	mov	di,offset border_fill
+	mov	di,offset border_horizontal_text
 	rep	stosb
 	mov	si,offset top_border
 	mov	bx,0h
@@ -966,14 +966,14 @@ draw_vertical_border:
 	mov	word ptr screen_position,ax
 	call	position_cursor
 	mov	cx,16h
-loc_066f:
+vertical_border_row:
 	push	cx
 	mov	dl,0b3h
 	mov	cl,2h
 	call	bdos
 	call	next_screen_row
 	pop	cx
-	loop	loc_066f
+	loop	vertical_border_row
 	ret
 
 ; -----------------------------------------------------------------------------
@@ -1001,23 +1001,23 @@ draw_menu_and_read:
 render_sections:
 	mov	word ptr last_section,bx
 	xor	bx,bx
-loc_0699:
+next_menu_section:
 	lodsw
 	or	ax,ax
-	jz	loc_06a7
+	jz	advance_menu_section
 	push	si
 	push	bx
 	mov	si,ax
 	call	render_records
 	pop	bx
 	pop	si
-loc_06a7:
+advance_menu_section:
 	cmp	bx,word ptr last_section
-	jz	loc_06b1
+	jz	menu_sections_complete
 	inc	bx
 	inc	bx
-	jmps	loc_0699
-loc_06b1:
+	jmps	next_menu_section
+menu_sections_complete:
 	ret
 
 ; -----------------------------------------------------------------------------
@@ -1026,7 +1026,7 @@ loc_06b1:
 render_records:
 	lodsw
 	mov	cx,ax
-loc_06b5:
+next_display_record:
 	push	cx
 	push	bx
 	lodsw
@@ -1036,7 +1036,7 @@ loc_06b5:
 	pop	si
 	pop	bx
 	pop	cx
-	loop	loc_06b5
+	loop	next_display_record
 	ret
 
 ; -----------------------------------------------------------------------------
@@ -1051,7 +1051,7 @@ draw_key_record:
 	call	draw_key_box
 	lodsw
 	mov	cx,ax
-	jcxz	loc_06f0
+	jcxz	key_record_complete
 	lodsw
 	mov	word ptr screen_position,ax
 	push	si
@@ -1059,7 +1059,7 @@ draw_key_record:
 	call	position_cursor
 	pop	cx
 	pop	si
-loc_06e1:
+next_key_description:
 	push	cx
 	lodsw
 	mov	si,ax
@@ -1068,8 +1068,8 @@ loc_06e1:
 	call	next_screen_row
 	pop	si
 	pop	cx
-	loop	loc_06e1
-loc_06f0:
+	loop	next_key_description
+key_record_complete:
 	ret
 
 ; -----------------------------------------------------------------------------
@@ -1124,25 +1124,25 @@ read_allowed_key:
 	lodsb
 	mov	word ptr allowed_key_count,ax
 	xchg	si,di
-loc_073e:
+wait_allowed_key:
 	push	di
 	push	di
 	call	read_key
 	cmp	al,0bbh
-	jnz	loc_0751
+	jnz	match_allowed_key
 	call	context_help
-	jz	loc_0751
+	jz	match_allowed_key
 	pop	di
 	pop	di
-	jmp	loc_073e
-loc_0751:
+	jmp	wait_allowed_key
+match_allowed_key:
 	mov	byte ptr key_value,al
 	mov	cx,word ptr allowed_key_count
 	pop	di
-	jcxz	loc_075f
+	jcxz	return_key_choice
 	repne	scasb
-	jnz	loc_0770
-loc_075f:
+	jnz	reject_key_choice
+return_key_choice:
 	pop	di
 	mov	ax,word ptr allowed_key_count
 	sub	ax,cx
@@ -1151,10 +1151,10 @@ loc_075f:
 	mov	bl,al
 	mov	al,byte ptr key_value
 	ret
-loc_0770:
+reject_key_choice:
 	call	bell
 	pop	di
-	jmps	loc_073e
+	jmps	wait_allowed_key
 
 ; -----------------------------------------------------------------------------
 ; Set the context-help topic and redraw the footer only when its type changes.
@@ -1162,10 +1162,10 @@ loc_0770:
 select_help_footer:
 	mov	word ptr current_help_topic,dx
 	cmp	bx,word ptr help_footer_type
-	jz	loc_0798
+	jz	footer_unchanged
 	mov	word ptr help_footer_type,bx
 	mov	si,offset help_footer_tables
-loc_0787:
+render_footer_table:
 	xor	dx,dx
 	mov	ax,4h
 	mul	bx
@@ -1174,7 +1174,7 @@ loc_0787:
 	mov	bx,word ptr [si]
 	mov	si,ax
 	call	render_records
-loc_0798:
+footer_unchanged:
 	ret
 
 ; -----------------------------------------------------------------------------
@@ -1182,10 +1182,10 @@ loc_0798:
 ; -----------------------------------------------------------------------------
 select_menu_footer:
 	cmp	bx,word ptr menu_footer_type
-	jz	loc_0798
+	jz	footer_unchanged
 	mov	word ptr menu_footer_type,bx
 	mov	si,offset menu_footer_tables
-	jmp	loc_0787
+	jmp	render_footer_table
 
 ; -----------------------------------------------------------------------------
 ; Clear the 17 interior menu rows without disturbing the frame.
@@ -1197,13 +1197,13 @@ clear_menu_body:
 	mov	word ptr screen_position,ax
 	call	position_cursor
 	pop	cx
-loc_07b7:
+clear_menu_row:
 	push	cx
 	mov	si,offset blank_menu_row
 	call	print_length_string
 	call	next_screen_row
 	pop	cx
-	loop	loc_07b7
+	loop	clear_menu_row
 	ret
 
 ; -----------------------------------------------------------------------------
@@ -1275,16 +1275,16 @@ format_decimal:
 	dec	di
 	add	di,cx
 	mov	bx,0ah
-loc_080d:
+decimal_digit_loop:
 	sub	dx,dx
 	div	bx
 	add	dl,30h
 	mov	byte ptr [di],dl
 	dec	di
 	test	ax,ax
-	jz	loc_081d
-	loop	loc_080d
-loc_081d:
+	jz	decimal_complete
+	loop	decimal_digit_loop
+decimal_complete:
 	ret
 
 ; -----------------------------------------------------------------------------
@@ -1294,14 +1294,14 @@ check_abort_key:
 	mov	cl,0bh
 	call	bdos
 	or	al,al
-	jz	loc_0831
+	jz	no_abort_pending
 	call	read_key
 	cmp	al,3h
-	jz	loc_0830
+	jz	return_abort_test
 	cmp	al,1bh
-loc_0830:
+return_abort_test:
 	ret
-loc_0831:
+no_abort_pending:
 	inc	al
 	ret
 
@@ -1311,12 +1311,12 @@ loc_0831:
 ; -----------------------------------------------------------------------------
 context_help:
 	cmp	word ptr help_footer_type,0h
-	jz	loc_0840
+	jz	display_context_help
 	push	ax
 	xor	ax,ax
 	pop	ax
 	ret
-loc_0840:
+display_context_help:
 	call	release_screen_once
 	mov	dx,word ptr current_help_topic
 	call	invoke_help
@@ -1334,9 +1334,9 @@ position_cursor:
 	mov	word ptr [si],ax
 	mov	si,offset cursor_sequence
 	jmp	print_length_string
-	mov	si,offset item_11a2
+	mov	si,offset cursor_enable_sequence
 	jmp	print_length_string
-	mov	si,offset item_11a6
+	mov	si,offset cursor_disable_sequence
 	jmp	print_length_string
 
 ; -----------------------------------------------------------------------------
@@ -1409,12 +1409,12 @@ try_console_flag:
 	mov	ds,word ptr system_segment
 	cli
 	cmp	word ptr 0eh[bx],0h
-	jz	loc_08d1
+	jz	claim_console_flag
 	xor	ax,ax
-	jmps	loc_08d6
-loc_08d1:
+	jmps	restore_console_interrupts
+claim_console_flag:
 	or	word ptr 0eh[bx],8h
-loc_08d6:
+restore_console_interrupts:
 	sti
 	pop	ds
 	ret
@@ -1436,14 +1436,14 @@ clear_console_flag:
 open_screen_mutex:
 	push	ds
 	mov	ds,word ptr system_segment
-	mov	ax,word ptr field_0088
+	mov	ax,word ptr .88h
 	or	ax,ax
 	pop	ds
-	jnz	loc_0910
+	jnz	screen_mutex_unavailable
 	mov	cl,87h
 	mov	dx,offset screen_queue
 	call	bdos
-loc_08fe:
+acquire_screen_mutex:
 	mov	cl,89h
 	mov	dx,offset screen_queue
 	call	bdos
@@ -1451,7 +1451,7 @@ loc_08fe:
 	inc	al
 	mov	byte ptr screen_released,0h
 	ret
-loc_0910:
+screen_mutex_unavailable:
 	xor	ax,ax
 	ret
 
@@ -1469,10 +1469,10 @@ release_screen_mutex:
 ; -----------------------------------------------------------------------------
 release_screen_once:
 	cmp	byte ptr screen_released,0h
-	jnz	loc_092b
+	jnz	screen_already_released
 	call	release_screen_mutex
 	mov	byte ptr screen_released,1h
-loc_092b:
+screen_already_released:
 	ret
 
 ; -----------------------------------------------------------------------------
@@ -1480,7 +1480,7 @@ loc_092b:
 ; -----------------------------------------------------------------------------
 reacquire_screen:
 	cmp	byte ptr screen_released,1h
-	jz	loc_08fe
+	jz	acquire_screen_mutex
 	ret
 
 ; -----------------------------------------------------------------------------
@@ -1592,7 +1592,7 @@ restore_help_screen:
 ; -----------------------------------------------------------------------------
 open_help_mutex:
 	mov	cl,87h
-loc_0a09:
+help_queue_operation:
 	call	set_queue_flag
 	mov	dx,offset help_screen_queue
 	call	help_wrapper_bdos
@@ -1604,14 +1604,14 @@ loc_0a09:
 ; -----------------------------------------------------------------------------
 acquire_help_mutex:
 	mov	cl,89h
-	jmps	loc_0a09
+	jmps	help_queue_operation
 
 ; -----------------------------------------------------------------------------
 ; Release the console screen queue using BDOS 139.
 ; -----------------------------------------------------------------------------
 release_help_mutex:
 	mov	cl,8bh
-	jmps	loc_0a09
+	jmps	help_queue_operation
 
 ; -----------------------------------------------------------------------------
 ; Read the saved window cursor and apply it with XIOS function 20.
@@ -1663,11 +1663,11 @@ copy_help_screen:
 	mov	ds,ax
 	mov	es,bx
 	cmp	es:byte ptr .11f3h,0h
-	jz	loc_0a82
+	jz	copy_screen_words
 	mov	ds,bx
 	mov	es,ax
 	xchg	di,si
-loc_0a82:
+copy_screen_words:
 	cld
 	rep	movsw
 	mov	ds,bx
@@ -1679,7 +1679,7 @@ loc_0a82:
 ; -----------------------------------------------------------------------------
 blank_help_screen:
 	mov	cx,word ptr help_screen_words
-	mov	ax,720h
+	mov	ax,offset config_word_pointer
 	mov	dx,es
 	mov	es,word ptr help_video_segment
 	xor	di,di
@@ -1729,7 +1729,7 @@ help_wrapper_xios:
 	push	es
 	mov	es,word ptr help_xios_segment
 	mov	ds,word ptr wrapper_system_segment
-	callf	dword ptr field_0028
+	callf	dword ptr .28h
 	pop	es
 	pop	ds
 	ret
@@ -1746,7 +1746,7 @@ help_stub:
 	mov	cx,1h
 	int	0e0h
 	ret
-utility_alignment	db	0,0,0,0,0,0
+utility_alignment	db	0h,0h,0h,0h,0h,0h
 
 ; -----------------------------------------------------------------------------
 ; Embedded HELP V2.0 entry: skip its copyright and save the caller context.
@@ -1790,10 +1790,10 @@ help_save_context:
 	mov	ax,0h
 	mov	ds,ax
 	mov	bx,offset help_input_buffer
-loc_0b67:
+measure_help_topic:
 	inc	bx
 	cmp	byte ptr [bx],0h
-	jnz	loc_0b67
+	jnz	measure_help_topic
 	sub	bx,offset help_input_text
 	mov	byte ptr help_input_buffer,bl
 	mov	word ptr help_caller_ss,ss
@@ -1833,13 +1833,13 @@ help_bdos:
 	add	bp,2h
 	mov	cx,word ptr 0h[bp]
 	cmp	cl,0ah
-	jnz	loc_0bb2
+	jnz	help_bdos_interrupt
 	call	help_line_editor
-	jmps	loc_0bb4
+	jmps	save_help_bdos_results
 	nop
-loc_0bb2:
+help_bdos_interrupt:
 	int	0e0h
-loc_0bb4:
+save_help_bdos_results:
 	mov	word ptr help_saved_ax,ax
 	mov	word ptr help_saved_bx,bx
 	mov	word ptr help_saved_cx,cx
@@ -1889,97 +1889,97 @@ help_main:
 	mov	byte ptr help_token_count,al
 	mov	al,0dh
 	push	ax
-	mov	ax,345h
+	mov	ax,offset help_filename
 	push	ax
-	mov	ax,182h
+	mov	ax,offset help_fcb
 	push	ax
 	call	help_move
-	mov	ax,182h
+	mov	ax,offset help_fcb
 	push	ax
 	call	help_open_file
 	mov	byte ptr help_open_status,al
 	cmp	byte ptr help_open_status,0ffh
-	jnz	loc_0c36
+	jnz	test_help_open_result
 	call	help_system_drive
 	mov	byte ptr help_fcb,al
 	mov	al,0h
 	push	ax
 	call	help_set_user
-	mov	ax,182h
+	mov	ax,offset help_fcb
 	push	ax
 	call	help_open_file
 	mov	byte ptr help_open_status,al
-loc_0c36:
+test_help_open_result:
 	cmp	byte ptr help_open_status,0ffh
-	jnz	loc_0c40
-	jmp	loc_0d76
-loc_0c40:
+	jnz	initialize_help_index
+	jmp	report_missing_help_file
+initialize_help_index:
 	call	help_reset_index
 	mov	al,byte ptr help_list_mode
 	not	al
 	rcr	al,1
-	jnc	loc_0c53
-	mov	ax,270bh
+	jnc	test_initial_help_topic
+	mov	ax,offset help_clear_screen
 	push	ax
 	call	help_print_string
-loc_0c53:
+test_initial_help_topic:
 	cmp	byte ptr help_token_count,0h
-	jnz	loc_0c74
+	jnz	test_help_token_count
 	mov	byte ptr help_level,0h
-	mov	ax,352h
+	mov	ax,offset help_intro
 	push	ax
 	call	help_print_string
 	mov	byte ptr help_line_count,2h
-loc_0c6b:
+display_available_topics:
 	call	help_display_index
-loc_0c6e:
+prompt_for_help_topic:
 	call	help_prompt
 	mov	byte ptr help_token_count,al
-loc_0c74:
+test_help_token_count:
 	mov	al,0h
 	cmp	byte ptr help_token_count,al
-	jnz	loc_0c7f
-	jmp	loc_0d6a
-loc_0c7f:
+	jnz	test_help_question_mark
+	jmp	close_help_and_return
+test_help_question_mark:
 	mov	byte ptr help_level,al
-	mov	cx,2656h
+	mov	cx,offset help_topic_tokens
 	push	cx
-	mov	cx,3e6h
+	mov	cx,offset help_question_token
 	push	cx
 	call	help_compare
 	cmp	al,0h
-	jnz	loc_0c94
-	jmp	loc_0d5b
-loc_0c94:
+	jnz	search_exact_help_topic
+	jmp	choose_help_next_action
+search_exact_help_topic:
 	mov	byte ptr help_search_level,0h
 	call	help_search
 	cmp	al,0ffh
-	jz	loc_0cac
+	jz	search_parent_help_topic
 	call	help_print_topic
-	mov	ax,2656h
+	mov	ax,offset help_topic_tokens
 	push	ax
-	mov	ax,3f2h
-	jmps	loc_0cc7
-loc_0cac:
+	mov	ax,offset help_command_token
+	jmps	compare_help_keyword
+search_parent_help_topic:
 	mov	byte ptr help_search_level,1h
 	mov	byte ptr help_level,0h
 	call	help_search
 	cmp	al,0ffh
-	jz	loc_0cd5
+	jz	report_missing_help_topic
 	call	help_print_topic
-	mov	ax,2656h
+	mov	ax,offset help_topic_tokens
 	push	ax
-	mov	ax,3feh
-loc_0cc7:
+	mov	ax,offset help_intro_token
+compare_help_keyword:
 	push	ax
 	call	help_compare
 	cmp	al,0h
-	jz	loc_0cd2
-	jmp	loc_0d5b
-loc_0cd2:
-	jmp	loc_0d56
-loc_0cd5:
-	mov	ax,2709h
+	jz	help_topic_displayed
+	jmp	choose_help_next_action
+help_topic_displayed:
+	jmp	reset_help_level
+report_missing_help_topic:
+	mov	ax,offset help_line_count
 	push	ax
 	call	help_page_check
 	mov	byte ptr help_end_of_data,al
@@ -1989,19 +1989,19 @@ loc_0cd5:
 	mov	al,byte ptr help_end_of_data
 	not	al
 	rcr	al,1
-	jnc	loc_0d56
-	mov	ax,2709h
+	jnc	reset_help_level
+	mov	ax,offset help_line_count
 	push	ax
 	call	help_page_check
 	mov	byte ptr help_end_of_data,al
 	mov	al,byte ptr help_end_of_data
 	not	al
 	rcr	al,1
-	jnc	loc_0d56
-	mov	ax,40ah
+	jnc	reset_help_level
+	mov	ax,offset help_topic_heading
 	push	ax
 	call	help_print_string
-	mov	ax,2709h
+	mov	ax,offset help_line_count
 	push	ax
 	call	help_page_check
 	mov	byte ptr help_end_of_data,al
@@ -2010,53 +2010,53 @@ loc_0cd5:
 	call	help_write_console
 	push	word ptr help_token_count
 	call	help_display_tokens
-	mov	ax,2709h
+	mov	ax,offset help_line_count
 	push	ax
 	call	help_page_check
 	mov	byte ptr help_end_of_data,al
 	mov	al,0dh
 	push	ax
 	call	help_write_console
-	mov	ax,2709h
+	mov	ax,offset help_line_count
 	push	ax
 	call	help_page_check
 	mov	byte ptr help_end_of_data,al
 	mov	al,0dh
 	push	ax
 	call	help_write_console
-	mov	ax,411h
+	mov	ax,offset help_not_found
 	push	ax
 	call	help_print_string
-	mov	ax,2709h
+	mov	ax,offset help_line_count
 	push	ax
 	call	help_page_check
 	mov	byte ptr help_end_of_data,al
 	mov	al,0dh
 	push	ax
 	call	help_write_console
-loc_0d56:
+reset_help_level:
 	mov	byte ptr help_level,0h
-loc_0d5b:
+choose_help_next_action:
 	mov	al,byte ptr help_end_of_data
 	not	al
 	rcr	al,1
-	jnc	loc_0d67
-	jmp	loc_0c6b
-loc_0d67:
-	jmp	loc_0c6e
-loc_0d6a:
-	mov	ax,182h
+	jnc	return_to_help_prompt
+	jmp	display_available_topics
+return_to_help_prompt:
+	jmp	prompt_for_help_topic
+close_help_and_return:
+	mov	ax,offset help_fcb
 	push	ax
 	call	help_close_file
 	mov	byte ptr help_file_status,al
-	jmps	loc_0d80
-loc_0d76:
+	jmps	finish_help_session
+report_missing_help_file:
 	mov	al,0h
 	push	ax
-	mov	ax,41bh
+	mov	ax,offset help_file_missing
 	push	ax
 	call	help_error
-loc_0d80:
+finish_help_session:
 	call	help_return
 	sti
 	hlt
@@ -2293,11 +2293,11 @@ help_system_drive:
 	mov	al,ah	; 0EA4h: original 88E0, ASM86 8AC4 (same instruction/length)
 	and	al,0fdh
 	cmp	al,14h
-	jz	loc_0eb0
+	jz	return_help_system_drive
 	mov	al,0h
 	pop	bp
 	ret
-loc_0eb0:
+return_help_system_drive:
 	mov	al,byte ptr help_system_disk
 	pop	bp
 	ret
@@ -2309,19 +2309,19 @@ loc_0eb0:
 help_error:
 	push	bp
 	mov	bp,sp
-	mov	ax,236h
+	mov	ax,offset help_error_prefix
 	push	ax
 	call	help_print_string
 	push	word ptr 4h[bp]
 	call	help_print_string
-	mov	ax,241h
+	mov	ax,offset help_newline
 	push	ax
 	call	help_print_string
 	mov	al,byte ptr 6h[bp]
 	rcr	al,1
-	jnc	loc_0ed6
+	jnc	help_error_return
 	call	help_return
-loc_0ed6:
+help_error_return:
 	pop	bp
 	ret	word ptr 4h
 
@@ -2351,13 +2351,13 @@ help_compare:
 	mov	bp,sp
 	mov	byte ptr help_compare_result,0h
 	mov	byte ptr help_compare_index,0h
-loc_0efe:
+compare_topic_character:
 	mov	al,byte ptr help_compare_index
 	cmp	al,0ch
 	mov	al,0ffh
-	jc	loc_0f08
+	jc	load_topic_character
 	inc	ax
-loc_0f08:
+load_topic_character:
 	mov	cl,byte ptr help_compare_index
 	mov	ch,0h
 	mov	si,cx	; 0F0Eh: original 89CE, ASM86 8BF1 (same instruction/length)
@@ -2366,28 +2366,28 @@ loc_0f08:
 	push	ax
 	cmp	dl,20h
 	mov	al,0ffh
-	jnz	loc_0f1e
+	jnz	test_topic_compare_limit
 	inc	ax
-loc_0f1e:
+test_topic_compare_limit:
 	pop	cx
 	and	al,cl
 	rcr	al,1
-	jnc	loc_0f47
+	jnc	return_topic_comparison
 	mov	bx,word ptr 4h[bp]
 	cmp	dl,byte ptr [bx+si]
-	jz	loc_0f41
+	jz	advance_topic_character
 	cmp	dl,byte ptr [bx+si]
-	jnc	loc_0f37
+	jnc	topic_compares_greater
 	mov	byte ptr help_compare_result,1h
-	jmps	loc_0f3c
-loc_0f37:
+	jmps	finish_topic_difference
+topic_compares_greater:
 	mov	byte ptr help_compare_result,2h
-loc_0f3c:
+finish_topic_difference:
 	mov	byte ptr help_compare_index,0bh
-loc_0f41:
+advance_topic_character:
 	inc	byte ptr help_compare_index
-	jmps	loc_0efe
-loc_0f47:
+	jmps	compare_topic_character
+return_topic_comparison:
 	mov	al,byte ptr help_compare_result
 	pop	bp
 	ret	word ptr 4h
@@ -2405,7 +2405,7 @@ help_step_index:
 	mov	bp,sp
 	mov	byte ptr help_records_per_block,8h
 	cmp	word ptr help_index_step,8000h
-	jnz	loc_0f7c
+	jnz	test_index_direction
 	mov	ax,0h
 	mov	word ptr help_index_block,ax
 	mov	byte ptr help_record_number,al
@@ -2414,22 +2414,22 @@ help_step_index:
 	call	help_load_index_block
 	pop	bp
 	ret
-loc_0f7c:
+test_index_direction:
 	cmp	word ptr help_index_step,8000h
-	jna	loc_0fcc
+	jna	test_forward_index_step
 	neg	word ptr help_index_step
 	mov	byte ptr help_step_count,1h
-loc_0f8d:
+previous_index_entry:
 	mov	al,byte ptr help_step_count
 	mov	ah,0h
 	cmp	ax,word ptr help_index_step
-	ja	loc_1015
+	ja	index_step_complete
 	mov	bx,word ptr help_index_pointer
 	mov	ax,word ptr [bx]
 	dec	ax
 	mov	word ptr [bx],ax
 	cmp	ax,8000h
-	jna	loc_0fc4
+	jna	count_backward_step
 	mov	ax,word ptr help_index_block
 	mov	cl,byte ptr help_records_per_block
 	mov	ch,0h
@@ -2440,26 +2440,26 @@ loc_0f8d:
 	mov	bx,word ptr help_index_pointer
 	add	word ptr [bx],40h
 	dec	word ptr help_index_block
-loc_0fc4:
+count_backward_step:
 	inc	byte ptr help_step_count
-	jnz	loc_0f8d
+	jnz	previous_index_entry
 	pop	bp
 	ret
-loc_0fcc:
+test_forward_index_step:
 	cmp	word ptr help_index_step,0h
-	jna	loc_1015
+	jna	index_step_complete
 	mov	byte ptr help_step_count,1h
-loc_0fd8:
+next_index_entry:
 	mov	al,byte ptr help_step_count
 	mov	ah,0h
 	cmp	ax,word ptr help_index_step
-	ja	loc_1015
+	ja	index_step_complete
 	mov	bx,word ptr help_index_pointer
 	mov	ax,word ptr [bx]
 	inc	ax
 	mov	word ptr [bx],ax
 	cmp	ax,3fh	; 0FECh: original 83F83F, ASM86 3D3F00 (same instruction/length)
-	jna	loc_100f
+	jna	count_forward_step
 	mov	ax,word ptr help_index_block
 	mov	cl,byte ptr help_records_per_block
 	mov	ch,0h
@@ -2470,10 +2470,10 @@ loc_0fd8:
 	mov	bx,word ptr help_index_pointer
 	sub	word ptr [bx],40h
 	inc	word ptr help_index_block
-loc_100f:
+count_forward_step:
 	inc	byte ptr help_step_count
-	jnz	loc_0fd8
-loc_1015:
+	jnz	next_index_entry
+index_step_complete:
 	pop	bp
 	ret
 
@@ -2485,11 +2485,11 @@ help_load_index_block:
 	push	bp
 	mov	bp,sp
 	mov	byte ptr help_record_index,0h
-loc_101f:
+load_index_record:
 	mov	al,byte ptr help_records_per_block
 	dec	al
 	cmp	byte ptr help_record_index,al
-	ja	loc_107d
+	ja	restore_help_dma
 	mov	al,byte ptr help_record_index
 	mov	cl,80h
 	mul	cl
@@ -2504,29 +2504,29 @@ loc_101f:
 	mov	al,byte ptr help_record_number
 	mov	byte ptr help_random_record,al
 	mov	al,0h
-	mov	byte ptr field_01a4,al
-	mov	byte ptr field_01a5,al
-	mov	cx,182h
+	mov	byte ptr help_random_record_middle,al
+	mov	byte ptr help_random_record_high,al
+	mov	cx,offset help_fcb
 	push	cx
 	call	help_read_random
 	cmp	al,0h
-	jz	loc_1073
-	mov	ax,182h
+	jz	advance_index_record
+	mov	ax,offset help_fcb
 	push	ax
 	call	help_close_file
 	mov	ah,0h
 	mov	word ptr help_index_step,ax
 	mov	al,0ffh
 	push	ax
-	mov	ax,244h
+	mov	ax,offset help_read_error
 	push	ax
 	call	help_error
-loc_1073:
+advance_index_record:
 	inc	byte ptr help_record_number
 	inc	byte ptr help_record_index
-	jnz	loc_101f
-loc_107d:
-	mov	ax,1a6h
+	jnz	load_index_record
+restore_help_dma:
+	mov	ax,offset help_input_buffer
 	push	ax
 	call	help_set_dma
 	pop	bp
@@ -2543,16 +2543,16 @@ help_next_byte:
 	inc	al
 	mov	byte ptr 4h[bp],al
 	cmp	al,7fh
-	jna	loc_10a9
-	mov	ax,182h
+	jna	return_help_byte_index
+	mov	ax,offset help_fcb
 	push	ax
 	call	help_read_record
 	cmp	al,0h
-	jz	loc_10a5
+	jz	reset_help_byte_index
 	mov	byte ptr help_end_of_data,0ffh
-loc_10a5:
+reset_help_byte_index:
 	mov	byte ptr 4h[bp],0h
-loc_10a9:
+return_help_byte_index:
 	mov	al,byte ptr 4h[bp]
 	pop	bp
 	ret	word ptr 2h
@@ -2570,59 +2570,59 @@ help_page_check:
 	not	al
 	and	al,byte ptr help_page_mode
 	rcr	al,1
-	jnc	loc_112b
+	jnc	paging_disabled
 	mov	bx,word ptr 4h[bp]
 	mov	al,byte ptr [bx]
 	inc	al
 	mov	byte ptr [bx],al
 	cmp	al,byte ptr help_page_length
-	jna	loc_1131
-	mov	ax,25bh
+	jna	output_page_linefeed
+	mov	ax,offset help_continue_prompt
 	push	ax
 	call	help_print_string
 	mov	bx,word ptr 4h[bp]
 	mov	byte ptr [bx],0h
-loc_10e1:
+wait_page_response:
 	mov	bx,word ptr 4h[bp]
 	cmp	byte ptr [bx],0h
-	jnz	loc_10f6
+	jnz	erase_page_prompt
 	mov	al,0fdh
 	push	ax
 	call	help_direct_console
 	mov	bx,word ptr 4h[bp]
 	mov	byte ptr [bx],al
-	jmps	loc_10e1
-loc_10f6:
-	mov	ax,277h
+	jmps	wait_page_response
+erase_page_prompt:
+	mov	ax,offset help_erase_prompt
 	push	ax
 	call	help_print_string
 	mov	bx,word ptr 4h[bp]
 	cmp	byte ptr [bx],3h
-	jnz	loc_1116
-	mov	ax,182h
+	jnz	test_page_return_key
+	mov	ax,offset help_fcb
 	push	ax
 	call	help_close_file
 	mov	bx,word ptr 4h[bp]
 	mov	byte ptr [bx],al
 	call	help_return
-	jmps	loc_1137
-loc_1116:
+	jmps	return_page_stop_flag
+test_page_return_key:
 	mov	bx,word ptr 4h[bp]
 	cmp	byte ptr [bx],0dh
-	jz	loc_1123
+	jz	reset_page_line_count
 	mov	byte ptr help_page_stop,0ffh
-loc_1123:
+reset_page_line_count:
 	mov	bx,word ptr 4h[bp]
 	mov	byte ptr [bx],0h
-	jmps	loc_1137
-loc_112b:
+	jmps	return_page_stop_flag
+paging_disabled:
 	mov	bx,word ptr 4h[bp]
 	mov	byte ptr [bx],0h
-loc_1131:
+output_page_linefeed:
 	mov	al,0ah
 	push	ax
 	call	help_write_console
-loc_1137:
+return_page_stop_flag:
 	mov	al,byte ptr help_page_stop
 	pop	bp
 	ret	word ptr 2h
@@ -2634,7 +2634,7 @@ help_reset_index:
 	push	bp
 	mov	bp,sp
 	mov	word ptr help_global_index,8000h
-	mov	ax,260eh
+	mov	ax,offset help_index_position
 	push	ax
 	mov	ax,8000h
 	push	ax
@@ -2651,70 +2651,70 @@ help_parse:
 	mov	bp,sp
 	mov	byte ptr help_parse_index,0h
 	cmp	byte ptr help_input_buffer,0h
-	jnz	loc_1166
-	jmp	loc_1343
-loc_1166:
+	jnz	begin_separator_normalization
+	jmp	initialize_help_options
+begin_separator_normalization:
 	mov	byte ptr help_parse_index,1h
-loc_116b:
+normalize_next_separator:
 	mov	al,byte ptr help_parse_index
 	cmp	al,byte ptr help_input_buffer
-	ja	loc_1197
+	ja	begin_leading_space_scan
 	mov	ah,0h
 	mov	bx,ax	; 1176h: original 89C3, ASM86 8BD8 (same instruction/length)
 	cmp	byte ptr help_input_buffer[bx],9h
-	jz	loc_118c
+	jz	replace_separator_with_space
 	mov	bl,byte ptr help_parse_index
 	mov	bh,0h
 	cmp	byte ptr help_input_buffer[bx],2ch
-	jnz	loc_1191
-loc_118c:
+	jnz	advance_separator_scan
+replace_separator_with_space:
 	mov	byte ptr help_input_buffer[bx],20h
-loc_1191:
+advance_separator_scan:
 	inc	byte ptr help_parse_index
-	jnz	loc_116b
-loc_1197:
+	jnz	normalize_next_separator
+begin_leading_space_scan:
 	mov	byte ptr help_parse_index,1h
-loc_119c:
+test_leading_space_limit:
 	mov	al,byte ptr help_parse_index
 	cmp	al,byte ptr help_input_buffer
 	mov	al,0ffh
-	jc	loc_11a8
+	jc	test_leading_space_character
 	inc	ax
-loc_11a8:
+test_leading_space_character:
 	mov	bl,byte ptr help_parse_index
 	mov	bh,0h
 	push	ax
 	cmp	byte ptr help_input_buffer[bx],20h
 	mov	al,0ffh
-	jz	loc_11b9
+	jz	combine_leading_space_tests
 	inc	ax
-loc_11b9:
+combine_leading_space_tests:
 	pop	cx
 	and	al,cl
 	rcr	al,1
-	jnc	loc_11c6
+	jnc	test_relative_topic_prefix
 	inc	byte ptr help_parse_index
-	jmps	loc_119c
-loc_11c6:
+	jmps	test_leading_space_limit
+test_relative_topic_prefix:
 	mov	bl,byte ptr help_parse_index
 	mov	bh,0h
 	cmp	byte ptr help_input_buffer[bx],2eh
-	jnz	loc_11e0
+	jnz	reset_topic_path_level
 	mov	al,byte ptr help_level
 	mov	byte ptr help_parse_level,al
 	mov	byte ptr help_input_buffer[bx],20h
-	jmps	loc_11e5
-loc_11e0:
+	jmps	prepare_topic_slots
+reset_topic_path_level:
 	mov	byte ptr help_parse_level,0h
-loc_11e5:
+prepare_topic_slots:
 	mov	al,byte ptr help_parse_level
 	mov	byte ptr help_parse_index,al
-loc_11eb:
+clear_next_topic_slot:
 	cmp	byte ptr help_parse_index,0ah
-	ja	loc_1210
+	ja	begin_help_token_scan
 	mov	al,0fh
 	push	ax
-	mov	cx,297h
+	mov	cx,offset help_blank_topic
 	push	cx
 	mov	cx,ax	; 11F9h: original 89C1, ASM86 8BC8 (same instruction/length)
 	mov	al,byte ptr help_parse_index
@@ -2724,212 +2724,212 @@ loc_11eb:
 	push	ax
 	call	help_move
 	inc	byte ptr help_parse_index
-	jnz	loc_11eb
-loc_1210:
+	jnz	clear_next_topic_slot
+begin_help_token_scan:
 	mov	al,byte ptr help_parse_level
 	mov	byte ptr help_parse_index,al
-	mov	byte ptr field_272f,1h
-	mov	byte ptr field_2732,0h
-	mov	byte ptr field_2733,0h
-loc_1225:
-	mov	bl,byte ptr field_272f
+	mov	byte ptr help_input_index,1h
+	mov	byte ptr help_parse_done,0h
+	mov	byte ptr help_option_seen,0h
+test_help_input_end:
+	mov	bl,byte ptr help_input_index
 	mov	bh,0h
 	cmp	byte ptr help_input_buffer[bx],0h
 	mov	al,0ffh
-	jnz	loc_1235
+	jnz	test_help_parse_stop
 	inc	ax
-loc_1235:
-	mov	cl,byte ptr field_2732
+test_help_parse_stop:
+	mov	cl,byte ptr help_parse_done
 	not	cl
 	and	al,cl
 	rcr	al,1
-	jc	loc_1244
-	jmp	loc_1343
-loc_1244:
+	jc	test_help_token_space
+	jmp	initialize_help_options
+test_help_token_space:
 	cmp	byte ptr help_input_buffer[bx],20h
-	jnz	loc_124e
-	jmp	loc_133c
-loc_124e:
-	mov	byte ptr field_2730,0h
-loc_1253:
-	mov	bl,byte ptr field_272f
+	jnz	begin_help_token
+	jmp	advance_help_input_index
+begin_help_token:
+	mov	byte ptr help_token_character_index,0h
+read_help_token_character:
+	mov	bl,byte ptr help_input_index
 	mov	bh,0h
 	mov	al,byte ptr help_input_buffer[bx]
 	push	ax
 	cmp	al,20h
 	mov	al,0ffh
-	jnz	loc_1265
+	jnz	test_open_option_bracket
 	inc	ax
-loc_1265:
+test_open_option_bracket:
 	pop	cx
 	push	ax
 	cmp	cl,5bh
 	mov	al,0ffh
-	jnz	loc_126f
+	jnz	test_close_option_bracket
 	inc	ax
-loc_126f:
+test_close_option_bracket:
 	pop	dx
 	and	al,dl
 	push	ax
 	cmp	cl,0h
 	mov	al,0ffh
-	jnz	loc_127b
+	jnz	test_help_token_width
 	inc	ax
-loc_127b:
+test_help_token_width:
 	pop	dx
 	and	al,dl
 	push	ax
-	cmp	byte ptr field_2730,0ch
+	cmp	byte ptr help_token_character_index,0ch
 	mov	al,0ffh
-	jc	loc_1289
+	jc	test_help_token_capacity
 	inc	ax
-loc_1289:
+test_help_token_capacity:
 	push	ax
 	cmp	byte ptr help_parse_index,0bh
 	mov	al,0ffh
-	jc	loc_1294
+	jc	combine_help_token_tests
 	inc	ax
-loc_1294:
+combine_help_token_tests:
 	pop	dx
 	and	al,dl
 	pop	dx
 	and	al,dl
 	rcr	al,1
-	jnc	loc_12de
+	jnc	advance_help_token_slot
 	cmp	cl,60h
-	jna	loc_12b4
+	jna	compute_help_token_address
 	cmp	cl,7bh
-	jnc	loc_12b4
+	jnc	compute_help_token_address
 	sub	cl,20h
 	mov	al,byte ptr help_parse_index
 	mov	dl,0fh
 	mul	dl
-	jmps	loc_12c5
-loc_12b4:
+	jmps	store_help_token_character
+compute_help_token_address:
 	mov	al,byte ptr help_parse_index
 	mov	cl,0fh
 	mul	cl
-	mov	bl,byte ptr field_272f
+	mov	bl,byte ptr help_input_index
 	mov	bh,0h
 	mov	cl,byte ptr help_input_buffer[bx]
-loc_12c5:
-	mov	dl,byte ptr field_2730
+store_help_token_character:
+	mov	dl,byte ptr help_token_character_index
 	mov	bx,ax	; 12C9h: original 89C3, ASM86 8BD8 (same instruction/length)
 	mov	dh,0h
 	mov	si,dx	; 12CDh: original 89D6, ASM86 8BF2 (same instruction/length)
 	mov	byte ptr help_topic_tokens[bx+si],cl
-	inc	byte ptr field_272f
-	inc	byte ptr field_2730
-	jmp	loc_1253
-loc_12de:
+	inc	byte ptr help_input_index
+	inc	byte ptr help_token_character_index
+	jmp	read_help_token_character
+advance_help_token_slot:
 	mov	al,byte ptr help_parse_index
 	inc	al
 	mov	byte ptr help_parse_index,al
 	cmp	al,0ah
-	ja	loc_12f1
-	mov	al,byte ptr field_2733
+	ja	stop_help_token_scan
+	mov	al,byte ptr help_option_seen
 	rcr	al,1
-	jnc	loc_12f8
-loc_12f1:
-	mov	byte ptr field_2732,0ffh
-	jmps	loc_1340
-loc_12f8:
-	mov	bl,byte ptr field_272f
+	jnc	test_help_option_bracket
+stop_help_token_scan:
+	mov	byte ptr help_parse_done,0ffh
+	jmps	repeat_help_input_scan
+test_help_option_bracket:
+	mov	bl,byte ptr help_input_index
 	mov	bh,0h
 	cmp	byte ptr help_input_buffer[bx],5bh
-	jnz	loc_1340
+	jnz	repeat_help_input_scan
 	mov	al,byte ptr help_parse_index
 	dec	al
 	mov	cl,0fh
 	mul	cl
 	mov	bx,ax	; 130Eh: original 89C3, ASM86 8BD8 (same instruction/length)
 	cmp	byte ptr help_topic_tokens[bx],20h
-	jnz	loc_131f
+	jnz	store_help_option_token
 	mov	al,byte ptr help_parse_index
 	dec	al
 	mov	byte ptr help_parse_index,al
-loc_131f:
+store_help_option_token:
 	mov	al,byte ptr help_parse_index
 	mov	cl,0fh
 	mul	cl
 	mov	bx,ax	; 1326h: original 89C3, ASM86 8BD8 (same instruction/length)
 	mov	byte ptr help_topic_tokens[bx],5bh
-	inc	byte ptr field_272f
+	inc	byte ptr help_input_index
 	inc	byte ptr help_parse_index
-	mov	byte ptr field_2733,0ffh
-	jmps	loc_1340
-loc_133c:
-	inc	byte ptr field_272f
-loc_1340:
-	jmp	loc_1225
-loc_1343:
+	mov	byte ptr help_option_seen,0ffh
+	jmps	repeat_help_input_scan
+advance_help_input_index:
+	inc	byte ptr help_input_index
+repeat_help_input_scan:
+	jmp	test_help_input_end
+initialize_help_options:
 	mov	al,0h
 	mov	byte ptr help_list_mode,al
 	mov	byte ptr help_no_page_mode,al
-	mov	byte ptr field_261e,al
-	mov	byte ptr field_261f,al
+	mov	byte ptr help_create_mode,al
+	mov	byte ptr help_extract_mode,al
 	cmp	byte ptr help_parse_index,al
-	ja	loc_135a
-	jmp	loc_13ea
-loc_135a:
-	mov	byte ptr field_2730,al
-loc_135d:
-	mov	al,byte ptr field_2730
+	ja	begin_help_option_scan
+	jmp	return_help_token_count
+begin_help_option_scan:
+	mov	byte ptr help_token_character_index,al
+next_help_option_slot:
+	mov	al,byte ptr help_token_character_index
 	cmp	al,0ah
-	jc	loc_1367
-	jmp	loc_13ea
-loc_1367:
+	jc	test_help_option_marker
+	jmp	return_help_token_count
+test_help_option_marker:
 	mov	cl,0fh
 	mul	cl
 	mov	bx,ax	; 136Bh: original 89C3, ASM86 8BD8 (same instruction/length)
 	cmp	byte ptr help_topic_tokens[bx],5bh
-	jnz	loc_13e3
+	jnz	advance_help_option_slot
 	cmp	byte ptr 2665h[bx],43h
-	jnz	loc_1382
-	mov	byte ptr field_261e,0ffh
-	jmps	loc_1397
-loc_1382:
-	mov	al,byte ptr field_2730
+	jnz	test_help_list_option
+	mov	byte ptr help_create_mode,0ffh
+	jmps	remove_help_option_tokens
+test_help_list_option:
+	mov	al,byte ptr help_token_character_index
 	mov	cl,0fh
 	mul	cl
 	mov	bx,ax	; 1389h: original 89C3, ASM86 8BD8 (same instruction/length)
 	cmp	byte ptr 2665h[bx],45h
-	jnz	loc_139e
-	mov	byte ptr field_261f,0ffh
-loc_1397:
+	jnz	test_help_no_page_option
+	mov	byte ptr help_extract_mode,0ffh
+remove_help_option_tokens:
 	sub	byte ptr help_parse_index,2h
-	jmps	loc_13de
-loc_139e:
-	mov	al,byte ptr field_2730
+	jmps	finish_help_option_scan
+test_help_no_page_option:
+	mov	al,byte ptr help_token_character_index
 	mov	cl,0fh
 	mul	cl
 	mov	bx,ax	; 13A5h: original 89C3, ASM86 8BD8 (same instruction/length)
 	cmp	byte ptr 2665h[bx],4eh
-	jz	loc_13c3
-	mov	al,byte ptr field_2730
+	jz	enable_help_no_page
+	mov	al,byte ptr help_token_character_index
 	mov	cl,0fh
 	mul	cl
 	mov	bx,ax	; 13B5h: original 89C3, ASM86 8BD8 (same instruction/length)
 	cmp	byte ptr 2665h[bx],4ch
-	jnz	loc_13ca
+	jnz	test_help_create_option
 	mov	byte ptr help_list_mode,0ffh
-loc_13c3:
+enable_help_no_page:
 	mov	byte ptr help_no_page_mode,0ffh
-	jmps	loc_1397
-loc_13ca:
-	mov	al,byte ptr field_2730
+	jmps	remove_help_option_tokens
+test_help_create_option:
+	mov	al,byte ptr help_token_character_index
 	mov	cl,0fh
 	mul	cl
 	mov	bx,ax	; 13D1h: original 89C3, ASM86 8BD8 (same instruction/length)
 	cmp	byte ptr 2665h[bx],20h
-	jnz	loc_1397
+	jnz	remove_help_option_tokens
 	dec	byte ptr help_parse_index
-loc_13de:
-	mov	byte ptr field_2730,0ah
-loc_13e3:
-	inc	byte ptr field_2730
-	jmp	loc_135d
-loc_13ea:
+finish_help_option_scan:
+	mov	byte ptr help_token_character_index,0ah
+advance_help_option_slot:
+	inc	byte ptr help_token_character_index
+	jmp	next_help_option_slot
+return_help_token_count:
 	mov	al,byte ptr help_parse_index
 	pop	bp
 	ret
@@ -2942,206 +2942,206 @@ help_display_index:
 	push	bp
 	mov	bp,sp
 	mov	ax,0h
-	mov	word ptr field_2610,ax
-	mov	byte ptr field_2738,al
-	mov	byte ptr field_2737,al
-	mov	word ptr field_2616,1h
+	mov	word ptr help_listing_position,ax
+	mov	byte ptr help_listing_heading_shown,al
+	mov	byte ptr help_listing_top_level,al
+	mov	word ptr help_listing_stride,1h
 	mov	al,byte ptr help_level
 	inc	al
-	mov	byte ptr field_2734,al
+	mov	byte ptr help_listing_level,al
 	cmp	al,0ah
-	jnc	loc_142d
+	jnc	mark_top_level_listing
 	cmp	byte ptr help_level,0h
-	jnz	loc_141f
-	mov	word ptr field_2610,0h
-	jmps	loc_1425
-loc_141f:
-	mov	ax,word ptr field_2604
-	mov	word ptr field_2610,ax
-loc_1425:
-	mov	word ptr field_2618,0h
-	jmps	loc_1432
-loc_142d:
-	mov	byte ptr field_2737,0ffh
-loc_1432:
-	mov	ax,word ptr field_2610
-	sub	ax,word ptr field_2612
-	mov	word ptr field_2614,ax
-	mov	cx,2612h
+	jnz	use_saved_index_position
+	mov	word ptr help_listing_position,0h
+	jmps	reset_displayed_topic_count
+use_saved_index_position:
+	mov	ax,word ptr help_saved_index
+	mov	word ptr help_listing_position,ax
+reset_displayed_topic_count:
+	mov	word ptr help_displayed_topics,0h
+	jmps	calculate_index_display_step
+mark_top_level_listing:
+	mov	byte ptr help_listing_top_level,0ffh
+calculate_index_display_step:
+	mov	ax,word ptr help_listing_position
+	sub	ax,word ptr help_listing_cursor
+	mov	word ptr help_listing_delta,ax
+	mov	cx,offset help_listing_cursor
 	push	cx
 	push	ax
 	call	help_step_index
-	mov	word ptr field_2610,0h
-loc_144a:
-	mov	al,byte ptr field_2737
+	mov	word ptr help_listing_position,0h
+test_top_level_listing:
+	mov	al,byte ptr help_listing_top_level
 	not	al
 	rcr	al,1
-	jc	loc_1456
-	jmp	loc_15c4
-loc_1456:
-	mov	ax,word ptr field_2612
+	jc	load_index_entry_level
+	jmp	finish_topic_listing
+load_index_entry_level:
+	mov	ax,word ptr help_listing_cursor
 	mov	cx,10h
 	mul	cx
 	mov	bx,ax	; 145Eh: original 89C3, ASM86 8BD8 (same instruction/length)
 	cmp	byte ptr help_index_cache[bx],24h
-	jnz	loc_146c
-	mov	byte ptr field_2737,0ffh
-loc_146c:
-	mov	ax,word ptr field_2612
+	jnz	load_index_entry_name
+	mov	byte ptr help_listing_top_level,0ffh
+load_index_entry_name:
+	mov	ax,word ptr help_listing_cursor
 	mov	cx,10h
 	mul	cx
 	mov	bx,ax	; 1474h: original 89C3, ASM86 8BD8 (same instruction/length)
 	mov	al,byte ptr 2213h[bx]
-	cmp	al,byte ptr field_2734
-	jz	loc_1483
-	jmp	loc_1597
-loc_1483:
-	mov	al,byte ptr field_2738
+	cmp	al,byte ptr help_listing_level
+	jz	test_subtopic_heading_printed
+	jmp	load_next_index_level
+test_subtopic_heading_printed:
+	mov	al,byte ptr help_listing_heading_shown
 	not	al
 	rcr	al,1
-	jc	loc_148f
-	jmp	loc_1530
-loc_148f:
-	mov	byte ptr field_2738,0ffh
-	mov	ax,2709h
+	jc	print_topics_heading
+	jmp	test_topic_column_boundary
+print_topics_heading:
+	mov	byte ptr help_listing_heading_shown,0ffh
+	mov	ax,offset help_line_count
 	push	ax
 	call	help_page_check
-	mov	byte ptr field_2735,al
-	cmp	byte ptr field_2734,1h
-	jnz	loc_14c2
-	mov	al,byte ptr field_2737
+	mov	byte ptr help_listing_character,al
+	cmp	byte ptr help_listing_level,1h
+	jnz	test_index_scan_direction
+	mov	al,byte ptr help_listing_top_level
 	not	al
 	rcr	al,1
-	jnc	loc_151f
-	mov	ax,2a6h
+	jnc	begin_index_display_page
+	mov	ax,offset help_topics_heading
 	push	ax
 	call	help_print_string
-	mov	ax,2612h
+	mov	ax,offset help_listing_cursor
 	push	ax
 	mov	ax,8000h
 	push	ax
 	call	help_step_index
-	jmps	loc_151f
-loc_14c2:
-	cmp	byte ptr field_2734,2h
-	jna	loc_1508
-	mov	ax,word ptr field_2612
-	mov	word ptr field_2616,ax
-loc_14cf:
-	mov	ax,2612h
+	jmps	begin_index_display_page
+test_index_scan_direction:
+	cmp	byte ptr help_listing_level,2h
+	jna	test_subtopic_heading_needed
+	mov	ax,word ptr help_listing_cursor
+	mov	word ptr help_listing_stride,ax
+scan_previous_index_entry:
+	mov	ax,offset help_listing_cursor
 	push	ax
 	mov	ax,0ffffh
 	push	ax
 	call	help_step_index
-	mov	ax,word ptr field_2612
+	mov	ax,word ptr help_listing_cursor
 	mov	cx,10h
 	mul	cx
 	push	ax
-	mov	ax,word ptr field_2612
+	mov	ax,word ptr help_listing_cursor
 	dec	ax
 	mul	cx
 	pop	bx
 	mov	cl,byte ptr 2213h[bx]
 	mov	bx,ax	; 14EEh: original 89C3, ASM86 8BD8 (same instruction/length)
 	cmp	cl,byte ptr 2213h[bx]
-	jz	loc_14cf
-	mov	ax,2612h
+	jz	scan_previous_index_entry
+	mov	ax,offset help_listing_cursor
 	push	ax
 	mov	ax,0ffffh
 	push	ax
 	call	help_step_index
-	mov	ax,word ptr field_2612
-	sub	word ptr field_2616,ax
-loc_1508:
-	cmp	byte ptr field_2734,2h
-	ja	loc_1518
-	mov	al,byte ptr field_2737
+	mov	ax,word ptr help_listing_cursor
+	sub	word ptr help_listing_stride,ax
+test_subtopic_heading_needed:
+	cmp	byte ptr help_listing_level,2h
+	ja	print_subtopics_heading
+	mov	al,byte ptr help_listing_top_level
 	not	al
 	rcr	al,1
-	jnc	loc_151f
-loc_1518:
-	mov	ax,2b9h
+	jnc	begin_index_display_page
+print_subtopics_heading:
+	mov	ax,offset help_subtopics_heading
 	push	ax
 	call	help_print_string
-loc_151f:
-	mov	ax,2709h
+begin_index_display_page:
+	mov	ax,offset help_line_count
 	push	ax
 	call	help_page_check
-	mov	byte ptr field_2735,al
-	mov	ax,302h
+	mov	byte ptr help_listing_character,al
+	mov	ax,offset help_heading_newline
 	push	ax
 	call	help_print_string
-loc_1530:
-	mov	ax,word ptr field_2618
+test_topic_column_boundary:
+	mov	ax,word ptr help_displayed_topics
 	mov	cx,6h
 	xor	dx,dx	; 1536h: original 31D2, ASM86 33D2 (same instruction/length)
 	div	cx
 	cmp	dx,0h
-	jnz	loc_154f
-	mov	ax,2709h
+	jnz	prepare_topic_output_buffer
+	mov	ax,offset help_line_count
 	push	ax
 	call	help_page_check
-	mov	byte ptr field_2735,al
+	mov	byte ptr help_listing_character,al
 	mov	al,0dh
 	push	ax
 	call	help_write_console
-loc_154f:
-	mov	byte ptr field_2735,0h
-loc_1554:
-	cmp	byte ptr field_2735,0dh
-	ja	loc_156c
-	mov	bl,byte ptr field_2735
+prepare_topic_output_buffer:
+	mov	byte ptr help_listing_character,0h
+clear_topic_output_byte:
+	cmp	byte ptr help_listing_character,0dh
+	ja	terminate_topic_output_buffer
+	mov	bl,byte ptr help_listing_character
 	mov	bh,0h
-	mov	byte ptr 2739h[bx],20h
-	inc	byte ptr field_2735
-	jnz	loc_1554
-loc_156c:
-	mov	byte ptr field_2746,24h
+	mov	byte ptr help_listing_text[bx],20h
+	inc	byte ptr help_listing_character
+	jnz	clear_topic_output_byte
+terminate_topic_output_buffer:
+	mov	byte ptr help_listing_terminator,24h
 	mov	al,0ch
 	push	ax
-	mov	ax,word ptr field_2612
+	mov	ax,word ptr help_listing_cursor
 	mov	cx,10h
 	mul	cx
 	mov	bx,ax	; 157Ch: original 89C3, ASM86 8BD8 (same instruction/length)
 	lea	ax,word ptr help_index_cache[bx]
 	push	ax
-	mov	ax,2739h
+	mov	ax,offset help_listing_text
 	push	ax
 	call	help_move
-	mov	ax,2739h
+	mov	ax,offset help_listing_text
 	push	ax
 	call	help_print_string
-	inc	word ptr field_2618
-	jmps	loc_15b0
-loc_1597:
-	mov	ax,word ptr field_2612
+	inc	word ptr help_displayed_topics
+	jmps	advance_display_index
+load_next_index_level:
+	mov	ax,word ptr help_listing_cursor
 	mov	cx,10h
 	mul	cx
 	mov	bx,ax	; 159Fh: original 89C3, ASM86 8BD8 (same instruction/length)
 	mov	al,byte ptr 2213h[bx]
-	cmp	al,byte ptr field_2734
-	jnc	loc_15b0
-	mov	byte ptr field_2737,0ffh
-loc_15b0:
-	mov	ax,2612h
+	cmp	al,byte ptr help_listing_level
+	jnc	advance_display_index
+	mov	byte ptr help_listing_top_level,0ffh
+advance_display_index:
+	mov	ax,offset help_listing_cursor
 	push	ax
-	push	word ptr field_2616
+	push	word ptr help_listing_stride
 	call	help_step_index
-	mov	word ptr field_2616,1h
-	jmp	loc_144a
-loc_15c4:
-	mov	al,byte ptr field_2738
+	mov	word ptr help_listing_stride,1h
+	jmp	test_top_level_listing
+finish_topic_listing:
+	mov	al,byte ptr help_listing_heading_shown
 	rcr	al,1
-	jnc	loc_15dc
-	mov	ax,2709h
+	jnc	restore_index_display_dma
+	mov	ax,offset help_line_count
 	push	ax
 	call	help_page_check
-	mov	byte ptr field_2735,al
+	mov	byte ptr help_listing_character,al
 	mov	ax,304h
 	push	ax
 	call	help_print_string
-loc_15dc:
-	mov	ax,1a6h
+restore_index_display_dma:
+	mov	ax,offset help_input_buffer
 	push	ax
 	call	help_set_dma
 	pop	bp
@@ -3155,87 +3155,87 @@ help_search:
 	push	bp
 	mov	bp,sp
 	mov	al,0h
-	mov	byte ptr field_274b,al
-	mov	byte ptr field_2748,al
-	mov	byte ptr field_2749,al
-	mov	byte ptr field_274c,al
+	mov	byte ptr help_search_matched,al
+	mov	byte ptr help_search_done,al
+	mov	byte ptr help_search_failed,al
+	mov	byte ptr help_search_passed_name,al
 	mov	ah,0h
-	mov	word ptr field_261a,ax
+	mov	word ptr help_search_cursor,ax
 	call	help_reset_index
-	mov	byte ptr field_274a,0ffh
+	mov	byte ptr help_search_restart,0ffh
 	cmp	byte ptr help_search_level,1h
-	jnz	loc_165d
-	mov	byte ptr field_2747,0ah
-loc_160f:
-	mov	al,byte ptr field_2747
+	jnz	test_parent_search_restart
+	mov	byte ptr help_last_token,0ah
+find_last_topic_token:
+	mov	al,byte ptr help_last_token
 	mov	cl,0fh
 	mul	cl
 	mov	bx,ax	; 1616h: original 89C3, ASM86 8BD8 (same instruction/length)
 	cmp	byte ptr help_topic_tokens[bx],20h
-	jnz	loc_1625
-	dec	byte ptr field_2747
-	jmps	loc_160f
-loc_1625:
-	mov	al,byte ptr field_2747
+	jnz	prepare_parent_topic_search
+	dec	byte ptr help_last_token
+	jmps	find_last_topic_token
+prepare_parent_topic_search:
+	mov	al,byte ptr help_last_token
 	sub	al,2h
-	mov	byte ptr field_2707,al
-	mov	al,byte ptr field_2747
+	mov	byte ptr help_parent_level,al
+	mov	al,byte ptr help_last_token
 	mov	cl,0fh
 	mul	cl
 	mov	bx,ax	; 1634h: original 89C3, ASM86 8BD8 (same instruction/length)
 	lea	ax,word ptr help_topic_tokens[bx]
 	push	ax
-	mov	al,byte ptr field_2707
+	mov	al,byte ptr help_parent_level
 	mul	cl
 	mov	bx,ax	; 1640h: original 89C3, ASM86 8BD8 (same instruction/length)
 	lea	ax,word ptr help_topic_tokens[bx]
 	push	ax
 	call	help_compare
-	mov	byte ptr field_274a,al
-	mov	al,byte ptr field_2707
+	mov	byte ptr help_search_restart,al
+	mov	al,byte ptr help_parent_level
 	mov	cl,0fh
 	mul	cl
 	mov	bx,ax	; 1654h: original 89C3, ASM86 8BD8 (same instruction/length)
 	mov	al,byte ptr 2665h[bx]
-	mov	byte ptr field_274d,al
-loc_165d:
-	cmp	byte ptr field_274a,0h
-	jz	loc_166e
+	mov	byte ptr help_parent_token_saved,al
+test_parent_search_restart:
+	cmp	byte ptr help_search_restart,0h
+	jz	select_parent_topic_level
 	cmp	byte ptr help_search_level,0h
-	jz	loc_166e
-	jmp	loc_17fd
-loc_166e:
+	jz	select_parent_topic_level
+	jmp	topic_search_failed
+select_parent_topic_level:
 	cmp	byte ptr help_search_level,1h
-	jnz	loc_1683
-	mov	al,byte ptr field_2707
+	jnz	test_search_completion
+	mov	al,byte ptr help_parent_level
 	mov	cl,0fh
 	mul	cl
 	mov	bx,ax	; 167Ch: original 89C3, ASM86 8BD8 (same instruction/length)
 	mov	byte ptr 2665h[bx],20h
-loc_1683:
-	mov	al,byte ptr field_2748
+test_search_completion:
+	mov	al,byte ptr help_search_done
 	not	al
-	mov	cl,byte ptr field_2749
+	mov	cl,byte ptr help_search_failed
 	not	cl
 	and	al,cl
 	rcr	al,1
-	jc	loc_1697
-	jmp	loc_1784
-loc_1697:
-	mov	ax,word ptr field_261a
+	jc	load_search_index_entry
+	jmp	load_matched_topic_position
+load_search_index_entry:
+	mov	ax,word ptr help_search_cursor
 	mov	cx,10h
 	mul	cx
 	mov	bx,ax	; 169Fh: original 89C3, ASM86 8BD8 (same instruction/length)
 	cmp	byte ptr help_index_cache[bx],24h
-	jnz	loc_16ab
-	jmp	loc_176f
-loc_16ab:
+	jnz	test_search_child_level
+	jmp	mark_search_not_found
+test_search_child_level:
 	mov	al,byte ptr help_level
 	inc	al
 	cmp	byte ptr 2213h[bx],al
-	jz	loc_16b9
-	jmp	loc_1754
-loc_16b9:
+	jz	compute_search_token_offset
+	jmp	test_search_order_result
+compute_search_token_offset:
 	mov	al,byte ptr help_level
 	mov	dl,0fh
 	mul	dl
@@ -3245,14 +3245,14 @@ loc_16b9:
 	lea	ax,word ptr help_index_cache[bx]
 	push	ax
 	call	help_compare
-	mov	byte ptr field_274a,al
-	cmp	byte ptr field_274a,0h
-	jz	loc_16dc
-	jmp	loc_1776
-loc_16dc:
+	mov	byte ptr help_search_restart,al
+	cmp	byte ptr help_search_restart,0h
+	jz	compare_search_topic
+	jmp	advance_search_index
+compare_search_topic:
 	mov	al,0ch
 	push	ax
-	mov	ax,word ptr field_261a
+	mov	ax,word ptr help_search_cursor
 	mov	cx,10h
 	mul	cx
 	mov	bx,ax	; 16E7h: original 89C3, ASM86 8BD8 (same instruction/length)
@@ -3268,90 +3268,90 @@ loc_16dc:
 	mov	al,byte ptr help_level
 	inc	al
 	mov	byte ptr help_level,al
-	mov	al,byte ptr field_274c
+	mov	al,byte ptr help_search_passed_name
 	not	al
 	rcr	al,1
-	jnc	loc_171b
+	jnc	test_search_depth_limit
 	mov	al,byte ptr help_level
-	mov	byte ptr field_274e,al
-	mov	byte ptr field_274c,0ffh
-loc_171b:
+	mov	byte ptr help_compare_byte,al
+	mov	byte ptr help_search_passed_name,0ffh
+test_search_depth_limit:
 	mov	al,byte ptr help_level
 	cmp	al,8h
-	ja	loc_1736
+	ja	mark_search_match
 	mov	cl,0fh
 	mul	cl
 	mov	bx,ax	; 1726h: original 89C3, ASM86 8BD8 (same instruction/length)
 	cmp	byte ptr help_topic_tokens[bx],20h
-	jz	loc_1736
+	jz	mark_search_match
 	cmp	byte ptr help_topic_tokens[bx],5bh
-	jnz	loc_1742
-loc_1736:
-	mov	byte ptr field_274b,0ffh
-	mov	byte ptr field_2748,0ffh
-	jmps	loc_1781
-loc_1742:
-	mov	ax,261ah
+	jnz	skip_search_subtree
+mark_search_match:
+	mov	byte ptr help_search_matched,0ffh
+	mov	byte ptr help_search_done,0ffh
+	jmps	repeat_topic_search
+skip_search_subtree:
+	mov	ax,offset help_search_cursor
 	push	ax
 	mov	ax,1h
 	push	ax
 	call	help_step_index
-	mov	byte ptr field_274b,0h
-	jmps	loc_1781
-loc_1754:
-	mov	al,byte ptr field_274c
+	mov	byte ptr help_search_matched,0h
+	jmps	repeat_topic_search
+test_search_order_result:
+	mov	al,byte ptr help_search_passed_name
 	rcr	al,1
-	jnc	loc_1776
-	mov	ax,word ptr field_261a
+	jnc	advance_search_index
+	mov	ax,word ptr help_search_cursor
 	mov	cx,10h
 	mul	cx
 	mov	bx,ax	; 1763h: original 89C3, ASM86 8BD8 (same instruction/length)
-	mov	cl,byte ptr field_274e
+	mov	cl,byte ptr help_compare_byte
 	cmp	cl,byte ptr 2213h[bx]
-	jc	loc_1776
-loc_176f:
-	mov	byte ptr field_2749,0ffh
-	jmps	loc_1781
-loc_1776:
-	mov	ax,261ah
+	jc	advance_search_index
+mark_search_not_found:
+	mov	byte ptr help_search_failed,0ffh
+	jmps	repeat_topic_search
+advance_search_index:
+	mov	ax,offset help_search_cursor
 	push	ax
 	mov	ax,1h
 	push	ax
 	call	help_step_index
-loc_1781:
-	jmp	loc_1683
-loc_1784:
-	mov	al,byte ptr field_274b
+repeat_topic_search:
+	jmp	test_search_completion
+load_matched_topic_position:
+	mov	al,byte ptr help_search_matched
 	rcr	al,1
-	jnc	loc_17e3
-	mov	ax,word ptr field_261a
+	jnc	restore_parent_topic_token
+	mov	ax,word ptr help_search_cursor
 	inc	ax
-	mov	word ptr field_2604,ax
+	mov	word ptr help_saved_index,ax
 	mov	al,1h
 	push	ax
-	mov	ax,word ptr field_261a
+	mov	ax,word ptr help_search_cursor
 	mov	cx,10h
 	mul	cx
 	mov	bx,ax	; 179Dh: original 89C3, ASM86 8BD8 (same instruction/length)
 	lea	ax,word ptr 2210h[bx]
 	push	ax
-	mov	ax,1a3h
+	mov	ax,offset help_random_record
 	push	ax
 	call	help_move
 	mov	al,1h
 	push	ax
-	mov	ax,word ptr field_261a
+	mov	ax,word ptr help_search_cursor
 	mov	cx,10h
 	mul	cx
 	mov	bx,ax	; 17B6h: original 89C3, ASM86 8BD8 (same instruction/length)
 	lea	ax,word ptr 2210h[bx]
 	inc	ax
 	push	ax
-	mov	ax,1a4h
+	mov	ax,offset help_random_record_middle
 	push	ax
 	call	help_move
-	mov	byte ptr field_01a5,0h
-	mov	ax,word ptr field_261a
+	mov	byte ptr help_random_record_high,0h
+	mov	ax,word ptr help_search_cursor
 	mov	cx,10h
 	mul	cx
 	mov	bx,ax	; 17D2h: original 89C3, ASM86 8BD8 (same instruction/length)
@@ -3359,20 +3359,20 @@ loc_1784:
 	mov	byte ptr help_file_status,cl
 	mov	al,byte ptr 2213h[bx]
 	mov	byte ptr help_level,al
-loc_17e3:
+restore_parent_topic_token:
 	cmp	byte ptr help_search_level,1h
-	jnz	loc_1802
-	mov	al,byte ptr field_2707
+	jnz	return_topic_search_result
+	mov	al,byte ptr help_parent_level
 	mov	cl,0fh
 	mul	cl
 	mov	bx,ax	; 17F1h: original 89C3, ASM86 8BD8 (same instruction/length)
-	mov	cl,byte ptr field_274d
+	mov	cl,byte ptr help_parent_token_saved
 	mov	byte ptr 2665h[bx],cl
-	jmps	loc_1802
-loc_17fd:
-	mov	byte ptr field_2749,0ffh
-loc_1802:
-	mov	al,byte ptr field_2749
+	jmps	return_topic_search_result
+topic_search_failed:
+	mov	byte ptr help_search_failed,0ffh
+return_topic_search_result:
+	mov	al,byte ptr help_search_failed
 	pop	bp
 	ret
 
@@ -3382,48 +3382,48 @@ loc_1802:
 help_display_tokens:
 	push	bp
 	mov	bp,sp
-	mov	byte ptr field_274f,0h
-loc_180f:
-	mov	al,byte ptr field_274f
+	mov	byte ptr help_token_display_index,0h
+test_display_token_limit:
+	mov	al,byte ptr help_token_display_index
 	cmp	al,byte ptr 4h[bp]
 	mov	al,0ffh
-	jc	loc_181a
+	jc	test_token_display_abort
 	inc	ax
-loc_181a:
+test_token_display_abort:
 	mov	cl,byte ptr help_end_of_data
 	not	cl
 	and	al,cl
 	rcr	al,1
-	jnc	loc_186b
-	mov	ax,2709h
+	jnc	token_display_complete
+	mov	ax,offset help_line_count
 	push	ax
 	call	help_page_check
 	mov	byte ptr help_end_of_data,al
 	mov	al,byte ptr help_end_of_data
 	not	al
 	rcr	al,1
-	jnc	loc_180f
-	mov	byte ptr field_2750,0h
-loc_183e:
-	mov	al,byte ptr field_2750
-	cmp	al,byte ptr field_274f
-	ja	loc_1854
-	mov	ax,307h
+	jnc	test_display_token_limit
+	mov	byte ptr help_token_indent,0h
+indent_topic_token:
+	mov	al,byte ptr help_token_indent
+	cmp	al,byte ptr help_token_display_index
+	ja	print_topic_token
+	mov	ax,offset help_indent_string
 	push	ax
 	call	help_print_string
-	inc	byte ptr field_2750
-	jnz	loc_183e
-loc_1854:
-	mov	al,byte ptr field_274f
+	inc	byte ptr help_token_indent
+	jnz	indent_topic_token
+print_topic_token:
+	mov	al,byte ptr help_token_display_index
 	mov	cl,0fh
 	mul	cl
 	mov	bx,ax	; 185Bh: original 89C3, ASM86 8BD8 (same instruction/length)
 	lea	ax,word ptr help_topic_tokens[bx]
 	push	ax
 	call	help_print_string
-	inc	byte ptr field_274f
-	jmps	loc_180f
-loc_186b:
+	inc	byte ptr help_token_display_index
+	jmps	test_display_token_limit
+token_display_complete:
 	pop	bp
 	ret	word ptr 2h
 
@@ -3442,167 +3442,167 @@ help_print_topic:
 	mov	al,byte ptr help_end_of_data
 	not	al
 	rcr	al,1
-	jnc	loc_1892
-	mov	ax,2709h
+	jnc	read_first_topic_record
+	mov	ax,offset help_line_count
 	push	ax
 	call	help_page_check
 	mov	byte ptr help_end_of_data,al
-loc_1892:
+read_first_topic_record:
 	mov	al,byte ptr help_end_of_data
 	not	al
 	rcr	al,1
-	jnc	loc_18ba
-	mov	ax,182h
+	jnc	topic_read_failed
+	mov	ax,offset help_fcb
 	push	ax
 	call	help_read_random
 	cmp	al,0h
-	jz	loc_18c1
-	mov	ax,182h
+	jz	initialize_topic_text_scan
+	mov	ax,offset help_fcb
 	push	ax
 	call	help_close_file
 	mov	byte ptr help_file_status,al
 	mov	al,0ffh
 	push	ax
-	mov	ax,30ah
+	mov	ax,offset help_topic_read_error
 	push	ax
 	call	help_error
-loc_18ba:
+topic_read_failed:
 	mov	byte ptr help_end_of_data,0h
 	pop	bp
 	ret
-loc_18c1:
-	mov	byte ptr field_2754,0h
-loc_18c6:
-	mov	cl,byte ptr field_2754
+initialize_topic_text_scan:
+	mov	byte ptr help_topic_finished,0h
+test_topic_text_end:
+	mov	cl,byte ptr help_topic_finished
 	not	cl
 	mov	al,byte ptr help_end_of_data
 	not	al
 	and	al,cl
 	push	ax
-	mov	cx,182h
+	mov	cx,offset help_fcb
 	push	cx
 	call	help_read_record
 	cmp	al,0h
 	mov	al,0ffh
-	jz	loc_18e2
+	jz	test_topic_record_limit
 	inc	ax
-loc_18e2:
+test_topic_record_limit:
 	pop	cx
 	and	al,cl
 	rcr	al,1
-	jnc	loc_18ba
+	jnc	topic_read_failed
 	mov	al,byte ptr help_file_status
 	dec	al
-	mov	byte ptr field_2751,al
-loc_18f1:
-	mov	al,byte ptr field_2751
+	mov	byte ptr help_text_index,al
+advance_topic_text_byte:
+	mov	al,byte ptr help_text_index
 	inc	al
-	mov	byte ptr field_2751,al
+	mov	byte ptr help_text_index,al
 	cmp	al,7fh
 	mov	al,0ffh
-	jna	loc_1900
+	jna	test_topic_delimiter_state
 	inc	ax
-loc_1900:
-	mov	cl,byte ptr field_2754
+test_topic_delimiter_state:
+	mov	cl,byte ptr help_topic_finished
 	not	cl
 	and	al,cl
 	rcr	al,1
-	jc	loc_190f
-	jmp	loc_19e5
-loc_190f:
-	mov	bl,byte ptr field_2751
+	jc	load_topic_text_character
+	jmp	begin_next_topic_record
+load_topic_text_character:
+	mov	bl,byte ptr help_text_index
 	mov	bh,0h
 	mov	al,byte ptr help_input_buffer[bx]
-	mov	byte ptr field_2753,al
+	mov	byte ptr help_text_character,al
 	cmp	al,1ah
-	jnz	loc_1925
+	jnz	begin_topic_delimiter_scan
 	mov	byte ptr help_end_of_data,0ffh
-loc_1925:
-	mov	byte ptr field_2752,0h
-loc_192a:
-	mov	al,byte ptr field_2754
+begin_topic_delimiter_scan:
+	mov	byte ptr help_delimiter_count,0h
+test_delimiter_scan_end:
+	mov	al,byte ptr help_topic_finished
 	not	al
 	mov	cl,byte ptr help_end_of_data
 	not	cl
 	and	al,cl
 	push	ax
-	cmp	byte ptr field_2752,3h
+	cmp	byte ptr help_delimiter_count,3h
 	mov	al,0ffh
-	jc	loc_1942
+	jc	test_delimiter_character
 	inc	ax
-loc_1942:
-	mov	bl,byte ptr field_2751
+test_delimiter_character:
+	mov	bl,byte ptr help_text_index
 	mov	bh,0h
 	push	ax
 	cmp	byte ptr help_input_buffer[bx],2fh
 	mov	al,0ffh
-	jz	loc_1953
+	jz	combine_delimiter_tests
 	inc	ax
-loc_1953:
+combine_delimiter_tests:
 	pop	cx
 	and	al,cl
 	pop	cx
 	and	al,cl
 	rcr	al,1
-	jnc	loc_1982
-	inc	byte ptr field_2752
+	jnc	test_complete_topic_delimiter
+	inc	byte ptr help_delimiter_count
 	push	bx
 	call	help_next_byte
-	mov	byte ptr field_2751,al
-	mov	bl,byte ptr field_2752
+	mov	byte ptr help_text_index,al
+	mov	bl,byte ptr help_delimiter_count
 	dec	bl
 	mov	bh,0h
 	push	bx
-	mov	bl,byte ptr field_2751
+	mov	bl,byte ptr help_text_index
 	mov	bh,0h
 	mov	al,byte ptr help_input_buffer[bx]
 	pop	bx
-	mov	byte ptr 2755h[bx],al
-	jmps	loc_192a
-loc_1982:
-	cmp	byte ptr field_2752,3h
-	jnz	loc_1990
-	mov	byte ptr field_2754,0ffh
-	jmps	loc_199b
-loc_1990:
-	mov	bl,byte ptr field_2752
+	mov	byte ptr help_delimiter_buffer[bx],al
+	jmps	test_delimiter_scan_end
+test_complete_topic_delimiter:
+	cmp	byte ptr help_delimiter_count,3h
+	jnz	terminate_delimiter_buffer
+	mov	byte ptr help_topic_finished,0ffh
+	jmps	test_topic_output_enabled
+terminate_delimiter_buffer:
+	mov	bl,byte ptr help_delimiter_count
 	mov	bh,0h
-	mov	byte ptr 2755h[bx],24h
-loc_199b:
+	mov	byte ptr help_delimiter_buffer[bx],24h
+test_topic_output_enabled:
 	mov	al,byte ptr help_end_of_data
 	not	al
-	mov	cl,byte ptr field_2754
+	mov	cl,byte ptr help_topic_finished
 	not	cl
 	and	al,cl
 	rcr	al,1
-	jnc	loc_19e2
-	cmp	byte ptr field_2753,0ah
-	jnz	loc_19c8
+	jnc	continue_topic_text_scan
+	cmp	byte ptr help_text_character,0ah
+	jnz	output_pending_topic_character
 	mov	al,byte ptr help_no_page_mode
 	not	al
 	rcr	al,1
-	jnc	loc_19c8
-	mov	ax,2709h
+	jnc	output_pending_topic_character
+	mov	ax,offset help_line_count
 	push	ax
 	call	help_page_check
 	mov	byte ptr help_end_of_data,al
-	jmps	loc_19cf
-loc_19c8:
-	push	word ptr field_2753
+	jmps	output_partial_delimiter
+output_pending_topic_character:
+	push	word ptr help_text_character
 	call	help_write_console
-loc_19cf:
-	cmp	byte ptr field_2752,0h
-	jna	loc_19dd
-	mov	ax,2755h
+output_partial_delimiter:
+	cmp	byte ptr help_delimiter_count,0h
+	jna	reset_delimiter_count
+	mov	ax,offset help_delimiter_buffer
 	push	ax
 	call	help_print_string
-loc_19dd:
-	mov	byte ptr field_2752,0h
-loc_19e2:
-	jmp	loc_18f1
-loc_19e5:
+reset_delimiter_count:
+	mov	byte ptr help_delimiter_count,0h
+continue_topic_text_scan:
+	jmp	advance_topic_text_byte
+begin_next_topic_record:
 	mov	byte ptr help_file_status,0h
-	jmp	loc_18c6
+	jmp	test_topic_text_end
 
 ; -----------------------------------------------------------------------------
 ; Print the topic prompt, read a line, then pass it to the topic parser.
@@ -3612,20 +3612,20 @@ help_prompt:
 	mov	bp,sp
 	mov	al,1h
 	push	ax
-	mov	ax,321h
+	mov	ax,offset help_input_limit
 	push	ax
-	mov	ax,1a6h
+	mov	ax,offset help_input_buffer
 	dec	ax
 	push	ax
 	call	help_move
-	mov	ax,2709h
+	mov	ax,offset help_line_count
 	push	ax
 	call	help_page_check
-	mov	byte ptr field_2758,al
-	mov	ax,322h
+	mov	byte ptr help_prompt_tokens,al
+	mov	ax,offset help_topic_prompt
 	push	ax
 	call	help_print_string
-	mov	ax,1a6h
+	mov	ax,offset help_input_buffer
 	dec	ax
 	push	ax
 	call	help_read_line
@@ -3634,18 +3634,18 @@ help_prompt:
 	mov	byte ptr help_input_text[bx],0h
 	mov	byte ptr help_line_count,0ffh
 	call	help_parse
-	mov	byte ptr field_2758,al
-	cmp	byte ptr field_2758,0h
-	jz	loc_1a45
+	mov	byte ptr help_prompt_tokens,al
+	cmp	byte ptr help_prompt_tokens,0h
+	jz	return_prompt_token_count
 	mov	al,byte ptr help_list_mode
 	not	al
 	rcr	al,1
-	jnc	loc_1a45
-	mov	ax,270bh
+	jnc	return_prompt_token_count
+	mov	ax,offset help_clear_screen
 	push	ax
 	call	help_print_string
-loc_1a45:
-	mov	al,byte ptr field_2758
+return_prompt_token_count:
+	mov	al,byte ptr help_prompt_tokens
 	pop	bp
 	ret
 
@@ -3658,7 +3658,7 @@ help_line_editor:
 	mov	word ptr help_editor_es,es
 	mov	word ptr help_editor_buffer,dx
 	mov	word ptr help_editor_sp,sp
-loc_1a56:
+initialize_line_edit:
 	push	dx
 	push	es
 	mov	cl,9ah
@@ -3676,83 +3676,83 @@ loc_1a56:
 	inc	bx
 	push	bx
 	mov	ch,0h
-loc_1a7d:
+preserve_line_edit_state:
 	push	cx
 	push	bx
-loc_1a7f:
+read_line_edit_key:
 	call	help_get_key
 	pop	bx
 	pop	cx
 	cmp	al,0dh
-	jnz	loc_1a8b
-loc_1a88:
-	jmp	loc_1b50
-loc_1a8b:
+	jnz	test_linefeed_or_backspace
+accept_line_jump:
+	jmp	accept_input_line
+test_linefeed_or_backspace:
 	cmp	al,0ah
-	jz	loc_1a88
+	jz	accept_line_jump
 	cmp	al,8h
-	jnz	loc_1aa2
+	jnz	test_escape_key
 	or	ch,ch
-	jz	loc_1a7d
+	jz	preserve_line_edit_state
 	dec	ch
 	mov	al,byte ptr help_output_column
 	mov	byte ptr help_retype_width,al
-	jmp	loc_1af8
-loc_1aa2:
+	jmp	retype_input_line
+test_escape_key:
 	cmp	al,1bh
-	jnz	loc_1aa9
-	jmp	loc_1b62
-loc_1aa9:
+	jnz	test_delete_key
+	jmp	cancel_input_line
+test_delete_key:
 	cmp	al,7fh
-	jnz	loc_1aba
+	jnz	test_new_line_key
 	or	ch,ch
-	jz	loc_1a7d
+	jz	preserve_line_edit_state
 	mov	al,es:byte ptr [bx]
 	dec	ch
 	dec	bx
-	jmp	loc_1b44
-loc_1aba:
+	jmp	echo_input_character
+test_new_line_key:
 	cmp	al,5h
-	jnz	loc_1aca
+	jnz	test_clear_to_prompt_key
 	push	cx
 	push	bx
 	call	help_crlf
 	mov	byte ptr help_prompt_column,0h
-loc_1ac8:
-	jmps	loc_1a7f
-loc_1aca:
+continue_line_edit:
+	jmps	read_line_edit_key
+test_clear_to_prompt_key:
 	cmp	al,18h
-	jnz	loc_1ae1
+	jnz	test_kill_line_key
 	pop	bx
-loc_1acf:
+erase_back_to_prompt:
 	mov	al,byte ptr help_prompt_column
 	cmp	al,byte ptr help_output_column
-	jnc	loc_1ae9
+	jnc	restart_line_edit
 	dec	byte ptr help_output_column
 	call	help_erase_cell
-	jmps	loc_1acf
-loc_1ae1:
+	jmps	erase_back_to_prompt
+test_kill_line_key:
 	cmp	al,15h
-	jnz	loc_1af4
+	jnz	test_retype_line_key
 	call	help_retype_prefix
 	pop	bx
-loc_1ae9:
+restart_line_edit:
 	mov	sp,word ptr help_editor_sp
 	mov	dx,word ptr help_editor_buffer
-	jmp	loc_1a56
-loc_1af4:
+	jmp	initialize_line_edit
+test_retype_line_key:
 	cmp	al,12h
-	jnz	loc_1b2f
-loc_1af8:
+	jnz	test_abort_line_key
+retype_input_line:
 	push	cx
 	call	help_retype_prefix
 	pop	cx
 	pop	bx
 	push	bx
 	push	cx
-loc_1b00:
+retype_next_character:
 	or	ch,ch
-	jz	loc_1b14
+	jz	finish_line_retype
 	inc	bx
 	mov	cl,es:byte ptr [bx]
 	dec	ch
@@ -3761,42 +3761,42 @@ loc_1b00:
 	call	help_echo_char
 	pop	bx
 	pop	cx
-	jmp	loc_1b00
-loc_1b14:
+	jmp	retype_next_character
+finish_line_retype:
 	push	bx
 	mov	al,byte ptr help_retype_width
 	or	al,al
-	jz	loc_1b2c
+	jz	resume_after_retype
 	sub	al,byte ptr help_output_column
 	mov	byte ptr help_retype_width,al
-loc_1b23:
+erase_deleted_character_cells:
 	call	help_erase_cell
 	dec	byte ptr help_retype_width
-	jnz	loc_1b23
-loc_1b2c:
-	jmp	loc_1ac8
-loc_1b2f:
+	jnz	erase_deleted_character_cells
+resume_after_retype:
+	jmp	continue_line_edit
+test_abort_line_key:
 	cmp	al,3h
-	jnz	loc_1b3a
+	jnz	test_input_buffer_capacity
 	mov	ax,ds
 	mov	es,ax
-	jmp	loc_1b62
-loc_1b3a:
+	jmp	cancel_input_line
+test_input_buffer_capacity:
 	cmp	ch,cl
-	jnc	loc_1b4d
+	jnc	read_next_line_character
 	inc	bx
 	mov	es:byte ptr [bx],al
 	inc	ch
-loc_1b44:
+echo_input_character:
 	push	cx
 	push	bx
 	mov	cl,al
 	call	help_echo_char
 	pop	bx
 	pop	cx
-loc_1b4d:
-	jmp	loc_1a7d
-loc_1b50:
+read_next_line_character:
+	jmp	preserve_line_edit_state
+accept_input_line:
 	inc	bx
 	mov	es:byte ptr [bx],0dh
 	pop	bx
@@ -3804,7 +3804,7 @@ loc_1b50:
 	mov	es,word ptr help_editor_es
 	mov	cl,0dh
 	jmp	help_output_char
-loc_1b62:
+cancel_input_line:
 	mov	es,word ptr help_editor_es
 	mov	bx,word ptr help_editor_buffer
 	mov	byte ptr 1h[bx],0h
@@ -3817,14 +3817,14 @@ loc_1b62:
 help_key_pending:
 	mov	ax,word ptr help_pending_key
 	or	ax,ax
-	jnz	loc_1b85
+	jnz	return_key_status
 	push	cx
 	mov	dl,0feh
 	mov	cl,6h
 	call	help_editor_bdos
 	pop	cx
 	or	al,al
-loc_1b85:
+return_key_status:
 	ret
 
 ; -----------------------------------------------------------------------------
@@ -3844,26 +3844,26 @@ help_raw_output:
 help_get_key:
 	mov	ax,word ptr help_pending_key
 	or	ax,ax
-	jz	loc_1bb6
+	jz	read_fresh_help_key
 	cmp	byte ptr help_extended_key,0ffh
-	jz	loc_1ba8
+	jz	return_saved_scan_code
 	or	al,al
-	jnz	loc_1baa
+	jnz	clear_saved_key
 	mov	byte ptr help_extended_key,0ffh
 	ret
-loc_1ba8:
+return_saved_scan_code:
 	mov	al,ah
-loc_1baa:
+clear_saved_key:
 	mov	byte ptr help_extended_key,0h
 	mov	word ptr help_pending_key,0h
 	ret
-loc_1bb6:
+read_fresh_help_key:
 	call	help_wait_key
 	or	al,al
-	jnz	loc_1bc5
+	jnz	return_help_key
 	mov	byte ptr help_extended_key,0ffh
 	mov	word ptr help_pending_key,ax
-loc_1bc5:
+return_help_key:
 	ret
 
 ; -----------------------------------------------------------------------------
@@ -3871,15 +3871,15 @@ loc_1bc5:
 ; -----------------------------------------------------------------------------
 help_classify_char:
 	cmp	al,0dh
-	jz	loc_1bd8
+	jz	return_character_class
 	cmp	al,0ah
-	jz	loc_1bd8
+	jz	return_character_class
 	cmp	al,9h
-	jz	loc_1bd8
+	jz	return_character_class
 	cmp	al,8h
-	jz	loc_1bd8
+	jz	return_character_class
 	cmp	al,20h
-loc_1bd8:
+return_character_class:
 	ret
 
 ; -----------------------------------------------------------------------------
@@ -3888,29 +3888,29 @@ loc_1bd8:
 ; -----------------------------------------------------------------------------
 help_flow_control:
 	call	help_key_pending
-	jz	loc_1c0e
+	jz	flow_control_complete
 	call	help_get_key
 	cmp	al,3h
-	jnz	loc_1bee
+	jnz	test_output_pause
 	mov	word ptr help_pending_key,0h
-	jmp	loc_1b62
-loc_1bee:
+	jmp	cancel_input_line
+test_output_pause:
 	cmp	al,13h
-	jnz	loc_1c0f
-loc_1bf2:
+	jnz	save_pending_input_key
+wait_output_resume:
 	call	help_get_key
 	cmp	al,3h
-	jnz	loc_1c02
+	jnz	test_output_resume_key
 	mov	word ptr help_pending_key,0h
-	jmp	loc_1b62
-loc_1c02:
+	jmp	cancel_input_line
+test_output_resume_key:
 	cmp	al,11h
-	jnz	loc_1bf2
+	jnz	wait_output_resume
 	xor	ax,ax
 	mov	word ptr help_pending_key,0h
-loc_1c0e:
+flow_control_complete:
 	ret
-loc_1c0f:
+save_pending_input_key:
 	mov	word ptr help_pending_key,ax
 	mov	al,0ffh
 	ret
@@ -3920,28 +3920,28 @@ loc_1c0f:
 ; -----------------------------------------------------------------------------
 help_output_char:
 	test	byte ptr help_retype_width,0ffh
-	jnz	loc_1c22
+	jnz	update_output_column
 	call	help_flow_control
 	call	help_raw_output
-loc_1c22:
+update_output_column:
 	mov	al,cl
 	cmp	al,7fh
-	jz	loc_1c3e
+	jz	output_character_complete
 	inc	byte ptr help_output_column
 	cmp	al,20h
-	jnc	loc_1c3e
+	jnc	output_character_complete
 	dec	byte ptr help_output_column
-	jz	loc_1c3e
+	jz	output_character_complete
 	cmp	al,8h
-	jnz	loc_1c3f
+	jnz	test_output_linefeed
 	dec	byte ptr help_output_column
-loc_1c3e:
+output_character_complete:
 	ret
-loc_1c3f:
+test_output_linefeed:
 	cmp	al,0ah
-	jnz	loc_1c48
+	jnz	output_column_complete
 	mov	byte ptr help_output_column,0h
-loc_1c48:
+output_column_complete:
 	ret
 
 ; -----------------------------------------------------------------------------
@@ -3950,22 +3950,23 @@ loc_1c48:
 help_echo_char:
 	mov	al,cl
 	call	help_classify_char
-	jnc	loc_1c5a
+	jnc	test_tab_expansion
 	push	ax
 	mov	cl,5eh
 	call	help_output_char
 	pop	cx
 	or	cl,40h
-loc_1c5a:
+; Shared entry: CL contains a display character. Expand TAB, otherwise output it.
+test_tab_expansion:
 	cmp	cl,9h
 	jnz	help_output_char
-loc_1c5f:
+output_tab_space:
 	mov	cl,20h
 	call	help_output_char
 	mov	al,byte ptr help_output_column
 	and	al,7h
-	jnz	loc_1c5f
-loc_1c6b:
+	jnz	output_tab_space
+expanded_character_complete:
 	ret
 
 ; -----------------------------------------------------------------------------
@@ -3990,13 +3991,13 @@ help_retype_prefix:
 	mov	cl,23h
 	call	help_output_char
 	call	help_crlf
-loc_1c81:
+restore_prompt_indentation:
 	mov	al,byte ptr help_output_column
 	cmp	al,byte ptr help_prompt_column
-	jnc	loc_1c6b
+	jnc	expanded_character_complete
 	mov	cl,20h
 	call	help_output_char
-	jmps	loc_1c81
+	jmps	restore_prompt_indentation
 
 ; -----------------------------------------------------------------------------
 ; Print CR/LF through the tracked console-output routine.
@@ -4025,14 +4026,14 @@ help_print_stack_string:
 	mov	si,cx
 	lodsb
 	cmp	al,24h
-	jz	loc_1c6b
+	jz	expanded_character_complete
 	inc	cx
 	push	cx
 	mov	cl,al
 	push	ds
 	push	ss
 	pop	ds
-	call	loc_1c5a
+	call	test_tab_expansion
 	pop	ds
 	pop	cx
 	jmps	help_print_stack_string
@@ -4043,76 +4044,59 @@ help_print_stack_string:
 help_editor_bdos:
 	int	0e0h
 	ret
-code_padding	db	0,0,0
+code_padding	db	0h,0h,0h
 
+; -----------------------------------------------------------------------------
+; DATA record formats (all offsets are relative to DS):
+;   display string: length word, then exactly that many text bytes;
+;   positioned text: row, column, active/restored attributes, string pointer;
+;   key record: row, column, three legend characters, line-count word,
+;               description row/column, description-string pointer;
+;   menu: four pointers to plain, positioned, key-box and accepted-key lists;
+;   token: length word, four padded characters, handler word, argument byte.
+; Pointer lists and dispatch tables below use the corresponding symbolic names.
+; -----------------------------------------------------------------------------
 	dseg
 	org	0
-main_protocol_text	equ	4eeh
-main_protocol_dispatch	equ	557h
-config_port_0_label	equ	716h
-config_port_1_label	equ	718h
-field_071a	equ	71ah
-field_071c	equ	71ch
 
-; Loader base page. The word at 15h supplies the initial STACK segment.
-base_page	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0
-base_stack_segment	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0
-field_0028	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0
-command_tail	db	0,0,0,0,0,0,0,0
-field_0088	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0
+; Loader base-page bytes preceding the supplied stack segment.
+base_page	rb	15h	; zero-filled workspace
 
-; HELP private stack/workspace. HELP switches SS to DATA and SP to 180h.
-help_stack_space	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0
+; STACK segment supplied by the CMD loader.
+base_stack_segment	dw	0h
 
-; HELP drive, FCB, command buffer and saved caller/BDOS register state.
-help_system_disk	db	0
-help_fcb	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0
-help_random_record	db	0
-field_01a4	db	0
-field_01a5	db	0
-help_input_buffer	db	0
-help_input_text	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-help_system_segment	db	0,0
+; Remaining loader base-page fields, initially zero.
+base_page_reserved	rb	69h	; zero-filled workspace
+
+; Length of the command tail at 81h.
+command_tail	db	0h
+
+; CP/M command tail, supplied by the command processor.
+command_tail_text	rb	7fh	; zero-filled workspace
+
+; HELP switches SS to DATA and uses SP=180h for its private stack.
+help_stack_space	rb	80h	; zero-filled workspace
+help_stack_guard	db	0h
+help_system_disk	db	0h
+
+; Standard FCB through the current sequential-record byte.
+help_fcb	rb	21h	; zero-filled workspace
+help_random_record	db	0h
+help_random_record_middle	db	0h
+help_random_record_high	db	0h
+
+; Input length byte; also the normal DMA buffer.
+help_input_buffer	db	0h
+help_input_text	rb	7fh	; zero-filled workspace
+help_system_segment	dw	0h
 help_output_column	db	21h
-help_saved_ax	db	0,0
-help_saved_bx	db	0,0
-help_saved_cx	db	0,0
-help_saved_dx	db	0,0
-help_caller_sp	db	0,0
-help_caller_ss	db	0,0,0
-
-; Embedded HELP messages; these use dollar termination rather than word lengths.
+help_saved_ax	dw	0h
+help_saved_bx	dw	0h
+help_saved_cx	dw	0h
+help_saved_dx	dw	0h
+help_caller_sp	dw	0h
+help_caller_ss	dw	0h
+help_context_padding	db	0h
 help_error_prefix	db	0dh,0ah
 	db	'ERROR:  $'
 help_newline	db	0dh,0ah,24h
@@ -4121,329 +4105,739 @@ help_continue_prompt	db	0dh,0ah
 	db	'Press RETURN to continue $'
 help_erase_prompt	db	0dh
 	db	'                             '
-	db	0dh
-	db	'$             '
-	db	0dh,24h,0dh
+	db	0dh,24h
+help_blank_topic	db	'             '
+	db	0dh,24h
+help_topics_heading	db	0dh
 	db	'Topics available:$'
-	db	0dh
+help_subtopics_heading	db	0dh
 	db	'For more information, type a period and one of the following '
 	db	'subtopics:$'
-	db	0dh,24h,0dh,0ah
-	db	'$  $Reading file HELP.HLP.$'
-	db	80h,0dh
+
+; Retained workspace/alignment between records.
+help_heading_newline	db	0dh,24h,0dh
+help_short_newline	db	0ah,24h
+help_indent_string	db	20h,20h,24h
+help_topic_read_error	db	'Reading file HELP.HLP.$'
+
+; Maximum input size used by the local line editor.
+help_input_limit	db	80h
+help_topic_prompt	db	0dh
 	db	'HELP (Enter topic, ESC to exit)> $'
+
+; FCB prefix: drive, eight-character HELP name (attribute bit retained), HLP, extent.
 help_filename	db	0h
 	db	'HELP '
 	db	0a0h
 	db	'  HLP'
-	db	0h,0dh,0ah
+	db	0h
+help_intro	db	0dh,0ah
 	db	'HELP UTILITY V2.0'
 	db	0dh,0ah,0ah
 	db	'At "HELP (Enter topic, ESC to exit)> " enter topic {,subtopic}...'
 	db	0dh,0ah,0ah
 	db	'EXAMPLE:  HELP (Enter topic, ESC to exit)> DIR EXAMPLES'
-	db	0dh,0ah
-	db	'$?           HELP        HELP        Topic:$Not found$No HELP.HLP '
-	db	'file on the default drive.$'
+	db	0dh,0ah,24h
 
-; SETPORT diagnostics and menu data. Screen strings have a leading word length.
+; Space-padded topic comparison token.
+help_question_token	db	'?           '
+
+; Space-padded topic comparison token.
+help_command_token	db	'HELP        '
+
+; Space-padded topic comparison token.
+help_intro_token	db	'HELP        '
+help_topic_heading	db	'Topic:$'
+help_not_found	db	'Not found$'
+help_file_missing	db	'No HELP.HLP file on the default drive.$'
 terminal_error	db	0ah,0dh
-	db	'This program cannot be run from a menu from the Serial Terminal.$ '
-	db	'DATE OF LAST CHANGE 26 AUG 84   '
+	db	'This program cannot be run from a menu from the Serial Terminal.$'
 
-; Main menu: four section pointers, counted record lists, key list and dispatch.
-main_menu	dw	0000h,offset record_04ae,offset main_text_count,offset record_054c
-record_04ae	dw	0002h
-record_04b0	dw	offset record_04b4,offset record_04c5
-record_04b4	db	5h,23h,2h,2h,0bah,4h,9h,0h
-	db	'Main Menu'
-record_04c5	db	7h,19h,5h,6h,0cbh,4h,1dh,0h
-	db	'S E L E C T   F U N C T I O N'
-main_text_count	dw	0001h
-record_04ec	dw	offset record_04f2,0000h,0000h
-record_04f2	db	9h,1ah,46h,33h,20h,1h,0h,0ah,24h,13h,5h
-main_port_0_record	db	0ch,1ah,46h,35h,20h,1h,0h,0dh,24h,28h,5h
-main_port_1_record	db	0fh,1ah,46h,37h,20h,1h,0h,10h,24h,3ah,5h,13h
-	db	0h
-	db	' Port Configuration'
-	db	10h,0h
-	db	' Port 0 Protocol'
-	db	10h,0h
-	db	' Port 1 Protocol'
-record_054c	dw	0001h
-record_054e	dw	offset main_key_count
-main_key_count	db	1h,0bdh
-main_protocol_keys	db	0,0,0
+; Original source revision text, not executable code.
+main_revision	db	' DATE OF LAST CHANGE 26 AUG 84   '
 
-; Main key dispatch. Initialization adds installed protocol menus and Escape.
-main_dispatch	dw	offset configure_ports,0000h,0000h,0000h
+; Menu sections: plain, positioned, key-box, accepted-key lists.
+main_menu	dw	0
+main_menu_text	dw	offset main_titles
+main_menu_keys	dw	offset main_text_count
+main_menu_input	dw	offset main_input_list
+
+; Count followed by record pointers.
+main_titles	dw	2h
+main_titles_entry_1	dw	offset main_heading
+main_titles_entry_2	dw	offset main_select_heading
+
+; Cursor row, column (one-based).
+main_heading	db	5h,23h
+
+; Active and restored display attributes.
+main_heading_attributes	db	2h,2h
+main_heading_text_pointer	dw	offset main_heading_string
+
+; Length-prefixed display string.
+main_heading_string	dw	9h
+main_heading_string_text	db	'Main Menu'
+
+; Cursor row, column (one-based).
+main_select_heading	db	7h,19h
+
+; Active and restored display attributes.
+main_select_heading_attributes	db	5h,6h
+main_select_heading_text_pointer	dw	offset main_select_heading_string
+
+; Length-prefixed display string.
+main_select_heading_string	dw	1dh
+main_select_heading_string_text	db	'S E L E C T   F U N C T I O N'
+
+; Initially one configuration item; installed protocol menus are appended.
+main_text_count	dw	1h
+main_configuration_pointer	dw	offset main_configuration_key
+
+; Protocol item slots filled by build_main_choices.
+main_protocol_text	dw	0h
+main_protocol_text_second	dw	0h
+
+; Key-box row and column.
+main_configuration_key	db	9h,1ah
+
+; Three-character key legend.
+main_configuration_key_legend	db	'F3 '
+
+; Number of description lines.
+main_configuration_key_lines	dw	1h
+
+; Description row and column.
+main_configuration_key_position	db	0ah,24h
+main_configuration_key_description_pointer	dw	offset main_configuration_key_description
+
+; Key-box row and column.
+main_port_0_record	db	0ch,1ah
+
+; Three-character key legend.
+main_port_0_record_legend	db	'F5 '
+
+; Number of description lines.
+main_port_0_record_lines	dw	1h
+
+; Description row and column.
+main_port_0_record_position	db	0dh,24h
+main_port_0_record_description_pointer	dw	offset main_port_0_record_description
+
+; Key-box row and column.
+main_port_1_record	db	0fh,1ah
+
+; Three-character key legend.
+main_port_1_record_legend	db	'F7 '
+
+; Number of description lines.
+main_port_1_record_lines	dw	1h
+
+; Description row and column.
+main_port_1_record_position	db	10h,24h
+main_port_1_record_description_pointer	dw	offset main_port_1_record_description
+
+; Length-prefixed display string.
+main_configuration_key_description	dw	13h
+main_configuration_key_description_text	db	' Port Configuration'
+
+; Length-prefixed display string.
+main_port_0_record_description	dw	10h
+main_port_0_record_description_text	db	' Port 0 Protocol'
+
+; Length-prefixed display string.
+main_port_1_record_description	dw	10h
+main_port_1_record_description_text	db	' Port 1 Protocol'
+
+; Count followed by record pointers.
+main_input_list	dw	1h
+main_input_list_entry_1	dw	offset main_key_count
+
+; Number of valid keys.
+main_key_count	db	1h
+
+; Console function-key codes, followed by Escape when enabled.
+main_key_count_values	db	0bdh
+main_protocol_keys	db	0h,0h,0h
+main_dispatch	dw	offset configure_ports
+main_protocol_dispatch	dw	0
+main_protocol_dispatch_second	dw	0
+main_exit_dispatch	dw	0
 version_error	db	0dh,0ah
 	db	'This SETPORT requires Concurrent PC DOS 4.1'
 	db	0dh,0ah,24h
-title_record	db	2h,0ch,2h,2h,93h,5h,38h,0h
-	db	'Concurrent Serial Port Configuration Program Version 4.1'
-no_ports_error	db	2fh,0h,0dh,0ah
+
+; Cursor row, column (one-based).
+title_record	db	2h,0ch
+
+; Active and restored display attributes.
+title_record_attributes	db	2h,2h
+title_record_text_pointer	dw	offset title_record_string
+
+; Length-prefixed display string.
+title_record_string	dw	38h
+title_record_string_text	db	'Concurrent Serial Port Configuration Program Version 4.1'
+
+; Length-prefixed display string.
+no_ports_error	dw	2fh
+no_ports_error_text	db	0dh,0ah
 	db	'No Serial communications options installed.'
 	db	0dh,0ah
 main_help_topic	db	'SETPORT'
-	db	0
+	db	0h
 terminal_usage	db	0dh,0ah
 	db	'When running this program from a Serial Terminal you must specify the'
 	db	0dh,0ah
 	db	'configuration and protocol parameters in the command line.'
 	db	0dh,0ah
 	db	'Type SETPORT HELP for an example of how to use the command line'
-	db	0dh,0ah,24h,0h
+	db	0dh,0ah,24h
+
+; Original source revision text.
+config_revision	db	0h
 	db	' DATE OF LAST CHANGE 26 AUG 84   '
 config_help_topic	db	'SETPORT CONFIG'
-	db	0
-port_0_present	db	0
-port_1_present	db	0
-port_0_packed	db	0
-port_1_packed	db	0
-ports_found	db	0
-tail_remaining	db	0
-token_scan	db	0,0
-token_start	db	0,0
-token_remaining	db	0
-selected_port	db	0
+	db	0h
+port_0_present	db	0h
+port_1_present	db	0h
+port_0_packed	db	0h
+port_1_packed	db	0h
+ports_found	db	0h
+tail_remaining	db	0h
+token_scan	dw	0h
+token_start	dw	0h
+token_remaining	db	0h
+selected_port	db	0h
 
-; Serial configuration screen records and per-port display fields.
-config_menu	dw	0000h,offset record_0712,offset config_field_count,offset record_08a4
-record_0712	dw	0009h
-record_0714	dw	offset record_0772,offset record_079d,offset record_079d,offset record_079d,offset record_079d,offset record_07a6,offset record_07b7,offset record_07ca,offset record_07d8
-record_0726	db	6h,1ch,2h,2h,2ch,7h,9h,0h
-	db	'Printer 3'
-	db	6h,35h,2h,2h,3dh,7h,9h,0h
-	db	'Printer 4'
-	db	7h,1ah,2h,2h,4eh,7h,0dh,0h
-	db	'Serial Port 0'
-	db	7h,33h,2h,2h,63h,7h,0dh,0h
-	db	'Serial Port 1'
-record_0772	db	4h,16h,5h,6h,78h,7h,23h,0h
-	db	'Press function key to advance value'
-record_079d	db	5h,3h,2h,2h,0a3h,7h,1h,0h,20h
-record_07a6	db	9h,0bh,2h,2h,0ach,7h,9h,0h
-	db	'Baud rate'
-record_07b7	db	0ch,0bh,2h,2h,0bdh,7h,0bh,0h
-	db	'Word length'
-record_07ca	db	0fh,0bh,2h,2h,0d0h,7h,6h,0h
-	db	'Parity'
-record_07d8	db	12h,0bh,2h,2h,0deh,7h,9h,0h
-	db	'Stop bits'
-config_field_count	db	0,0
-config_field_pointers	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-port_0_field_pointers	db	0bh,8h,16h,8h,21h,8h,2ch,8h
-item_0803	db	42h,8h,4dh,8h,58h,8h,63h,8h,8h,1eh,46h,33h
-	db	20h,1h,0h
-record_0812	db	9h,29h,6eh,8h,0bh,1eh,46h,35h,20h,1h,0h,0ch
-	db	29h,74h,8h,0eh,1eh,46h,37h,20h,1h,0h,0fh,29h
-	db	7ah,8h,11h,1eh,46h,39h,20h,1h,0h,12h,29h,80h
-	db	8h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	8h
-	db	'7F4 '
-	db	1h,0h,9h,42h,8ch,8h,0bh
-	db	'7F6 '
-	db	1h,0h,0ch,42h,92h,8h,0eh
-	db	'7F8 '
-	db	1h,0h,0fh,42h,98h,8h,11h
-	db	'7F10'
-	db	1h,0h,12h,42h,9eh,8h
-port_0_display	db	4h,0h
-	db	'    '
-	db	4h,0h
-	db	'    '
-	db	4h,0h
-	db	'    '
-	db	4h,0h
-	db	'    '
-	db	0h,0h
-	db	'    '
-port_1_display	db	4h,0h
-	db	'    '
-	db	4h,0h
-	db	'    '
-	db	4h,0h
-	db	'    '
-	db	4h,0h
-	db	'    '
-record_08a4	db	1h,0h,0a8h,8h
-config_key_count	db	0
-config_keys	db	0,0,0,0,0,0,0,0,0,0
-item_08b3	db	0bdh,0bfh,0c1h,0c3h,1bh
-item_08b8	db	0beh,0c0h,0c2h,0c4h,1bh
+; Menu sections: plain, positioned, key-box, accepted-key lists.
+config_menu	dw	0
+config_menu_text	dw	offset config_titles
+config_menu_keys	dw	offset config_field_count
+config_menu_input	dw	offset config_input_list
 
-; Command tokens: word text length, four text bytes, handler word, argument byte.
-; The duplicate NONE entry is retained. A zero word terminates the table.
-tokens	dw	4
-	db	'  P3'
-	dw	offset select_port
-	db	00h
-record_08c6	dw	4
-	db	'  P4'
-	dw	offset select_port
-	db	01h
-baud_tokens	dw	4
-	db	' 110'
-	dw	offset set_baud
-	db	00h
-record_08d8	dw	4
-	db	' 150'
-	dw	offset set_baud
-	db	20h
-record_08e1	dw	4
-	db	' 300'
-	dw	offset set_baud
-	db	40h
-record_08ea	dw	4
-	db	' 600'
-	dw	offset set_baud
-	db	60h
-record_08f3	dw	4
-	db	'1200'
-	dw	offset set_baud
-	db	80h
-record_08fc	dw	4
-	db	'2400'
-	dw	offset set_baud
-	db	0a0h
-record_0905	dw	4
-	db	'4800'
-	dw	offset set_baud
-	db	0c0h
-record_090e	dw	4
-	db	'9600'
-	dw	offset set_baud
-	db	0e0h
-parity_tokens	dw	4
-	db	'NONE'
-	dw	offset set_parity
-	db	00h
-record_0920	dw	4
-	db	' ODD'
-	dw	offset set_parity
-	db	08h
-record_0929	dw	4
-	db	'NONE'
-	dw	offset set_parity
-	db	00h
-record_0932	dw	4
-	db	'EVEN'
-	dw	offset set_parity
-	db	18h
-stop_tokens	dw	4
-	db	'   1'
-	dw	offset set_stop_bits
-	db	00h
-record_0944	dw	4
-	db	'   2'
-	dw	offset set_stop_bits
-	db	04h
-word_length_tokens	dw	4
-	db	'   5'
-	dw	offset set_word_length
-	db	00h
-record_0956	dw	4
-	db	'   6'
-	dw	offset set_word_length
-	db	01h
-record_095f	dw	4
-	db	'   7'
-	dw	offset set_word_length
-	db	02h
-record_0968	dw	4
-	db	'   8'
-	dw	offset set_word_length
-	db	03h
-record_0971	dw	4
-	db	'HELP'
-	dw	offset command_help
-	db	00h
-record_097a	dw	4
-	db	'INNN'
-	dw	offset set_input_protocol
-	db	00h
-record_0983	dw	4
-	db	'IDNN'
-	dw	offset set_input_protocol
-	db	01h
-record_098c	dw	4
-	db	'INRN'
-	dw	offset set_input_protocol
-	db	02h
-record_0995	dw	4
-	db	'IDRN'
-	dw	offset set_input_protocol
-	db	03h
-record_099e	dw	4
-	db	'INNX'
-	dw	offset set_input_protocol
-	db	04h
-record_09a7	dw	4
-	db	'IDNX'
-	dw	offset set_input_protocol
-	db	05h
-record_09b0	dw	4
-	db	'INRX'
-	dw	offset set_input_protocol
-	db	06h
-record_09b9	dw	4
-	db	'IDRX'
-	dw	offset set_input_protocol
-	db	07h
-record_09c2	dw	4
-	db	'ONNN'
-	dw	offset set_output_protocol
-	db	00h
-record_09cb	dw	4
-	db	'ODNN'
-	dw	offset set_output_protocol
-	db	01h
-record_09d4	dw	4
-	db	'ONRN'
-	dw	offset set_output_protocol
-	db	02h
-record_09dd	dw	4
-	db	'ODRN'
-	dw	offset set_output_protocol
-	db	03h
-record_09e6	dw	4
-	db	'ONNX'
-	dw	offset set_output_protocol
-	db	04h
-record_09ef	dw	4
-	db	'ODNX'
-	dw	offset set_output_protocol
-	db	05h
-record_09f8	dw	4
-	db	'ONRX'
-	dw	offset set_output_protocol
-	db	06h
-record_0a01	dw	4
-	db	'ODRX'
-	dw	offset set_output_protocol
-	db	07h
-record_0a0a	dw	0000h
+; Nine positioned labels; port headings replace blank slots at startup.
+config_titles	dw	9h
+config_advance_pointer	dw	offset config_advance_heading
+config_port_0_label	dw	offset config_blank_heading
+config_port_0_serial_label	dw	offset config_blank_heading
+config_port_1_label	dw	offset config_blank_heading
+config_port_1_serial_label	dw	offset config_blank_heading
+config_baud_pointer	dw	offset config_baud_heading
+config_word_pointer	dw	offset config_word_heading
+config_parity_pointer	dw	offset config_parity_heading
+config_stop_pointer	dw	offset config_stop_heading
 
-; Per-field token pointers; each port has baud/word/parity/stop plus a spare slot.
-setting_token_pointers	dw	offset baud_tokens,offset word_length_tokens,offset parity_tokens,offset stop_tokens,0000h,offset baud_tokens,offset word_length_tokens,offset parity_tokens,offset stop_tokens
+; Cursor row, column (one-based).
+config_printer_3	db	6h,1ch
+
+; Active and restored display attributes.
+config_printer_3_attributes	db	2h,2h
+config_printer_3_text_pointer	dw	offset config_printer_3_string
+
+; Length-prefixed display string.
+config_printer_3_string	dw	9h
+config_printer_3_string_text	db	'Printer 3'
+
+; Cursor row, column (one-based).
+config_printer_4	db	6h,35h
+
+; Active and restored display attributes.
+config_printer_4_attributes	db	2h,2h
+config_printer_4_text_pointer	dw	offset config_printer_4_string
+
+; Length-prefixed display string.
+config_printer_4_string	dw	9h
+config_printer_4_string_text	db	'Printer 4'
+
+; Cursor row, column (one-based).
+config_serial_0	db	7h,1ah
+
+; Active and restored display attributes.
+config_serial_0_attributes	db	2h,2h
+config_serial_0_text_pointer	dw	offset config_serial_0_string
+
+; Length-prefixed display string.
+config_serial_0_string	dw	0dh
+config_serial_0_string_text	db	'Serial Port 0'
+
+; Cursor row, column (one-based).
+config_serial_1	db	7h,33h
+
+; Active and restored display attributes.
+config_serial_1_attributes	db	2h,2h
+config_serial_1_text_pointer	dw	offset config_serial_1_string
+
+; Length-prefixed display string.
+config_serial_1_string	dw	0dh
+config_serial_1_string_text	db	'Serial Port 1'
+
+; Cursor row, column (one-based).
+config_advance_heading	db	4h,16h
+
+; Active and restored display attributes.
+config_advance_heading_attributes	db	5h,6h
+config_advance_heading_text_pointer	dw	offset config_advance_heading_string
+
+; Length-prefixed display string.
+config_advance_heading_string	dw	23h
+config_advance_heading_string_text	db	'Press function key to advance value'
+
+; Cursor row, column (one-based).
+config_blank_heading	db	5h,3h
+
+; Active and restored display attributes.
+config_blank_heading_attributes	db	2h,2h
+config_blank_heading_text_pointer	dw	offset config_blank_heading_string
+
+; Length-prefixed display string.
+config_blank_heading_string	dw	1h
+config_blank_heading_string_text	db	20h
+
+; Cursor row, column (one-based).
+config_baud_heading	db	9h,0bh
+
+; Active and restored display attributes.
+config_baud_heading_attributes	db	2h,2h
+config_baud_heading_text_pointer	dw	offset config_baud_heading_string
+
+; Length-prefixed display string.
+config_baud_heading_string	dw	9h
+config_baud_heading_string_text	db	'Baud rate'
+
+; Cursor row, column (one-based).
+config_word_heading	db	0ch,0bh
+
+; Active and restored display attributes.
+config_word_heading_attributes	db	2h,2h
+config_word_heading_text_pointer	dw	offset config_word_heading_string
+
+; Length-prefixed display string.
+config_word_heading_string	dw	0bh
+config_word_heading_string_text	db	'Word length'
+
+; Cursor row, column (one-based).
+config_parity_heading	db	0fh,0bh
+
+; Active and restored display attributes.
+config_parity_heading_attributes	db	2h,2h
+config_parity_heading_text_pointer	dw	offset config_parity_heading_string
+
+; Length-prefixed display string.
+config_parity_heading_string	dw	6h
+config_parity_heading_string_text	db	'Parity'
+
+; Cursor row, column (one-based).
+config_stop_heading	db	12h,0bh
+
+; Active and restored display attributes.
+config_stop_heading_attributes	db	2h,2h
+config_stop_heading_text_pointer	dw	offset config_stop_heading_string
+
+; Length-prefixed display string.
+config_stop_heading_string	dw	9h
+config_stop_heading_string_text	db	'Stop bits'
+
+; Runtime count of displayed per-port setting boxes.
+config_field_count	dw	0h
+
+; Space for eight key-record pointers; populated for installed ports.
+config_field_pointers	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
+	db	0h,0h,0h,0h
+port_0_field_pointers	dw	offset port_0_baud_key
+port_0_field_pointers_2	dw	offset port_0_word_key
+port_0_field_pointers_3	dw	offset port_0_parity_key
+port_0_field_pointers_4	dw	offset port_0_stop_key
+port_1_field_pointers	dw	offset port_1_baud_key
+port_1_field_pointers_2	dw	offset port_1_word_key
+port_1_field_pointers_3	dw	offset port_1_parity_key
+port_1_field_pointers_4	dw	offset port_1_stop_key
+
+; Key-box row and column.
+port_0_baud_key	db	8h,1eh
+
+; Three-character key legend.
+port_0_baud_key_legend	db	'F3 '
+
+; Number of description lines.
+port_0_baud_key_lines	dw	1h
+
+; Description row and column.
+port_0_baud_key_position	db	9h,29h
+port_0_baud_key_description_pointer	dw	offset port_0_baud_key_description
+
+; Key-box row and column.
+port_0_word_key	db	0bh,1eh
+
+; Three-character key legend.
+port_0_word_key_legend	db	'F5 '
+
+; Number of description lines.
+port_0_word_key_lines	dw	1h
+
+; Description row and column.
+port_0_word_key_position	db	0ch,29h
+port_0_word_key_description_pointer	dw	offset port_0_word_key_description
+
+; Key-box row and column.
+port_0_parity_key	db	0eh,1eh
+
+; Three-character key legend.
+port_0_parity_key_legend	db	'F7 '
+
+; Number of description lines.
+port_0_parity_key_lines	dw	1h
+
+; Description row and column.
+port_0_parity_key_position	db	0fh,29h
+port_0_parity_key_description_pointer	dw	offset port_0_parity_key_description
+
+; Key-box row and column.
+port_0_stop_key	db	11h,1eh
+
+; Three-character key legend.
+port_0_stop_key_legend	db	'F9 '
+
+; Number of description lines.
+port_0_stop_key_lines	dw	1h
+
+; Description row and column.
+port_0_stop_key_position	db	12h,29h
+port_0_stop_key_description_pointer	dw	offset port_0_stop_key_description
+
+; Retained workspace/alignment between records.
+config_unused_key_record	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
+
+; Key-box row and column.
+port_1_baud_key	db	8h,37h
+
+; Three-character key legend.
+port_1_baud_key_legend	db	'F4 '
+
+; Number of description lines.
+port_1_baud_key_lines	dw	1h
+
+; Description row and column.
+port_1_baud_key_position	db	9h,42h
+port_1_baud_key_description_pointer	dw	offset port_1_baud_key_description
+
+; Key-box row and column.
+port_1_word_key	db	0bh,37h
+
+; Three-character key legend.
+port_1_word_key_legend	db	'F6 '
+
+; Number of description lines.
+port_1_word_key_lines	dw	1h
+
+; Description row and column.
+port_1_word_key_position	db	0ch,42h
+port_1_word_key_description_pointer	dw	offset port_1_word_key_description
+
+; Key-box row and column.
+port_1_parity_key	db	0eh,37h
+
+; Three-character key legend.
+port_1_parity_key_legend	db	'F8 '
+
+; Number of description lines.
+port_1_parity_key_lines	dw	1h
+
+; Description row and column.
+port_1_parity_key_position	db	0fh,42h
+port_1_parity_key_description_pointer	dw	offset port_1_parity_key_description
+
+; Key-box row and column.
+port_1_stop_key	db	11h,37h
+
+; Three-character key legend.
+port_1_stop_key_legend	db	'F10'
+
+; Number of description lines.
+port_1_stop_key_lines	dw	1h
+
+; Description row and column.
+port_1_stop_key_position	db	12h,42h
+port_1_stop_key_description_pointer	dw	offset port_1_stop_key_description
+
+; Length-prefixed display string.
+port_0_baud_key_description	dw	4h
+port_0_baud_key_description_text	db	'    '
+
+; Length-prefixed display string.
+port_0_word_key_description	dw	4h
+port_0_word_key_description_text	db	'    '
+
+; Length-prefixed display string.
+port_0_parity_key_description	dw	4h
+port_0_parity_key_description_text	db	'    '
+
+; Length-prefixed display string.
+port_0_stop_key_description	dw	4h
+port_0_stop_key_description_text	db	'    '
+
+; Retained workspace/alignment between records.
+port_0_unused_display	db	0h,0h
+	db	'    '
+
+; Length-prefixed display string.
+port_1_baud_key_description	dw	4h
+port_1_baud_key_description_text	db	'    '
+
+; Length-prefixed display string.
+port_1_word_key_description	dw	4h
+port_1_word_key_description_text	db	'    '
+
+; Length-prefixed display string.
+port_1_parity_key_description	dw	4h
+port_1_parity_key_description_text	db	'    '
+
+; Length-prefixed display string.
+port_1_stop_key_description	dw	4h
+port_1_stop_key_description_text	db	'    '
+
+; Count followed by record pointers.
+config_input_list	dw	1h
+config_input_list_entry_1	dw	offset config_key_count
+
+; Number of valid keys.
+config_key_count	db	0h
+config_key_slots	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
+port_0_key_template	db	0bdh,0bfh,0c1h,0c3h,1bh
+port_1_key_template	db	0beh,0c0h,0c2h,0c4h,1bh
+
+; Command token: length, four text bytes, handler, argument.
+token_p3	dw	4h
+token_p3_text	db	'  P3'
+token_p3_handler	dw	offset select_port
+token_p3_argument	db	0h
+token_p4	dw	4h
+token_p4_text	db	'  P4'
+token_p4_handler	dw	offset select_port
+token_p4_argument	db	1h
+token_110	dw	4h
+token_110_text	db	' 110'
+token_110_handler	dw	offset set_baud
+token_110_argument	db	0h
+token_150	dw	4h
+token_150_text	db	' 150'
+token_150_handler	dw	offset set_baud
+token_150_argument	db	20h
+token_300	dw	4h
+token_300_text	db	' 300'
+token_300_handler	dw	offset set_baud
+token_300_argument	db	40h
+token_600	dw	4h
+token_600_text	db	' 600'
+token_600_handler	dw	offset set_baud
+token_600_argument	db	60h
+token_1200	dw	4h
+token_1200_text	db	'1200'
+token_1200_handler	dw	offset set_baud
+token_1200_argument	db	80h
+token_2400	dw	4h
+token_2400_text	db	'2400'
+token_2400_handler	dw	offset set_baud
+token_2400_argument	db	0a0h
+token_4800	dw	4h
+token_4800_text	db	'4800'
+token_4800_handler	dw	offset set_baud
+token_4800_argument	db	0c0h
+token_9600	dw	4h
+token_9600_text	db	'9600'
+token_9600_handler	dw	offset set_baud
+token_9600_argument	db	0e0h
+token_none	dw	4h
+token_none_text	db	'NONE'
+token_none_handler	dw	offset set_parity
+token_none_argument	db	0h
+token_odd	dw	4h
+token_odd_text	db	' ODD'
+token_odd_handler	dw	offset set_parity
+token_odd_argument	db	8h
+token_none_duplicate	dw	4h
+token_none_duplicate_text	db	'NONE'
+token_none_duplicate_handler	dw	offset set_parity
+token_none_duplicate_argument	db	0h
+token_even	dw	4h
+token_even_text	db	'EVEN'
+token_even_handler	dw	offset set_parity
+token_even_argument	db	18h
+token_1	dw	4h
+token_1_text	db	'   1'
+token_1_handler	dw	offset set_stop_bits
+token_1_argument	db	0h
+token_2	dw	4h
+token_2_text	db	'   2'
+token_2_handler	dw	offset set_stop_bits
+token_2_argument	db	4h
+token_5	dw	4h
+token_5_text	db	'   5'
+token_5_handler	dw	offset set_word_length
+token_5_argument	db	0h
+token_6	dw	4h
+token_6_text	db	'   6'
+token_6_handler	dw	offset set_word_length
+token_6_argument	db	1h
+token_7	dw	4h
+token_7_text	db	'   7'
+token_7_handler	dw	offset set_word_length
+token_7_argument	db	2h
+token_8	dw	4h
+token_8_text	db	'   8'
+token_8_handler	dw	offset set_word_length
+token_8_argument	db	3h
+token_help	dw	4h
+token_help_text	db	'HELP'
+token_help_handler	dw	offset command_help
+token_help_argument	db	0h
+token_innn	dw	4h
+token_innn_text	db	'INNN'
+token_innn_handler	dw	offset set_input_protocol
+token_innn_argument	db	0h
+token_idnn	dw	4h
+token_idnn_text	db	'IDNN'
+token_idnn_handler	dw	offset set_input_protocol
+token_idnn_argument	db	1h
+token_inrn	dw	4h
+token_inrn_text	db	'INRN'
+token_inrn_handler	dw	offset set_input_protocol
+token_inrn_argument	db	2h
+token_idrn	dw	4h
+token_idrn_text	db	'IDRN'
+token_idrn_handler	dw	offset set_input_protocol
+token_idrn_argument	db	3h
+token_innx	dw	4h
+token_innx_text	db	'INNX'
+token_innx_handler	dw	offset set_input_protocol
+token_innx_argument	db	4h
+token_idnx	dw	4h
+token_idnx_text	db	'IDNX'
+token_idnx_handler	dw	offset set_input_protocol
+token_idnx_argument	db	5h
+token_inrx	dw	4h
+token_inrx_text	db	'INRX'
+token_inrx_handler	dw	offset set_input_protocol
+token_inrx_argument	db	6h
+token_idrx	dw	4h
+token_idrx_text	db	'IDRX'
+token_idrx_handler	dw	offset set_input_protocol
+token_idrx_argument	db	7h
+token_onnn	dw	4h
+token_onnn_text	db	'ONNN'
+token_onnn_handler	dw	offset set_output_protocol
+token_onnn_argument	db	0h
+token_odnn	dw	4h
+token_odnn_text	db	'ODNN'
+token_odnn_handler	dw	offset set_output_protocol
+token_odnn_argument	db	1h
+token_onrn	dw	4h
+token_onrn_text	db	'ONRN'
+token_onrn_handler	dw	offset set_output_protocol
+token_onrn_argument	db	2h
+token_odrn	dw	4h
+token_odrn_text	db	'ODRN'
+token_odrn_handler	dw	offset set_output_protocol
+token_odrn_argument	db	3h
+token_onnx	dw	4h
+token_onnx_text	db	'ONNX'
+token_onnx_handler	dw	offset set_output_protocol
+token_onnx_argument	db	4h
+token_odnx	dw	4h
+token_odnx_text	db	'ODNX'
+token_odnx_handler	dw	offset set_output_protocol
+token_odnx_argument	db	5h
+token_onrx	dw	4h
+token_onrx_text	db	'ONRX'
+token_onrx_handler	dw	offset set_output_protocol
+token_onrx_argument	db	6h
+token_odrx	dw	4h
+token_odrx_text	db	'ODRX'
+token_odrx_handler	dw	offset set_output_protocol
+token_odrx_argument	db	7h
+
+; Zero length terminates the token scan.
+token_table_end	dw	0h
+setting_token_pointers	dw	offset token_110
+setting_token_pointer_2	dw	offset token_5
+setting_token_pointer_3	dw	offset token_none
+setting_token_pointer_4	dw	offset token_1
+setting_token_pointer_5	dw	0
+setting_token_pointer_6	dw	offset token_110
+setting_token_pointer_7	dw	offset token_5
+setting_token_pointer_8	dw	offset token_none
+setting_token_pointer_9	dw	offset token_1
 selected_settings	dw	offset port_0_settings
 
-; Selection pairs: current index, maximum index. Defaults are filled from UARTs.
-port_0_settings	db	0h,7h,0h,3h,0h,3h,0h,1h,0h,0h
-port_1_settings	db	0h,7h,0h,3h,0h,3h,0h,1h,0h,0h
-selected_display	dw	offset record_0812
+; Current index, maximum index: baud.
+port_0_settings	db	0h,7h
 
-; UART divisor words for 110, 150, 300, 600, 1200, 2400, 4800 and 9600 baud.
-baud_divisors	dw	0417h,0300h,0180h,00c0h,0060h,0030h,0018h,000ch
-tail_error_marker	db	3h,0h,3fh,0dh,0ah
-tail_newline	db	2h,0h,0dh,0ah
-invalid_token_message	db	3dh,0h
-	db	'Question mark is under invalid identifier in command tail'
+; Current index, maximum index: word.
+port_0_settings_word	db	0h,3h
+
+; Current index, maximum index: parity.
+port_0_settings_parity	db	0h,3h
+
+; Current index, maximum index: stop.
+port_0_settings_stop	db	0h,1h
+
+; Current index, maximum index: spare.
+port_0_settings_spare	db	0h,0h
+
+; Current index, maximum index: baud.
+port_1_settings	db	0h,7h
+
+; Current index, maximum index: word.
+port_1_settings_word	db	0h,3h
+
+; Current index, maximum index: parity.
+port_1_settings_parity	db	0h,3h
+
+; Current index, maximum index: stop.
+port_1_settings_stop	db	0h,1h
+
+; Current index, maximum index: spare.
+port_1_settings_spare	db	0h,0h
+selected_display	dw	offset port_0_baud_key_position
+
+; 110 baud divisor.
+baud_divisors	dw	417h
+
+; 150 baud divisor.
+baud_divisor_150	dw	300h
+
+; 300 baud divisor.
+baud_divisor_300	dw	180h
+
+; 600 baud divisor.
+baud_divisor_600	dw	0c0h
+
+; 1200 baud divisor.
+baud_divisor_1200	dw	60h
+
+; 2400 baud divisor.
+baud_divisor_2400	dw	30h
+
+; 4800 baud divisor.
+baud_divisor_4800	dw	18h
+
+; 9600 baud divisor.
+baud_divisor_9600	dw	0ch
+
+; Length-prefixed display string.
+tail_error_marker	dw	3h
+tail_error_marker_text	db	3fh,0dh,0ah
+
+; Length-prefixed display string.
+tail_newline	dw	2h
+tail_newline_text	db	0dh,0ah
+
+; Length-prefixed display string.
+invalid_token_message	dw	3dh
+invalid_token_message_text	db	'Question mark is under invalid identifier in command tail'
 	db	0dh,0ah,0dh,0ah
 
-; Built-in command usage, including both direction-specific protocol masks.
-tail_usage	db	0d1h,2h,0dh,0ah
+; Length-prefixed display string.
+tail_usage	dw	2d1h
+tail_usage_text	db	0dh,0ah
 	db	'Absence of  command tail arguments invokes screen mode'
 	db	0dh,0ah
 	db	'If a command tail is present all arguments must be separated by '
@@ -4481,577 +4875,653 @@ tail_usage	db	0d1h,2h,0dh,0ah
 	db	0dh,0ah
 	db	'SETPORT P3 1200 7 ODD 2 INRX ODNX'
 	db	0dh,0ah,0dh,0ah,0dh,0ah
-space_buffer	db	0h,0h
-	db	'                                                                      '
+
+; Length set to position the command-tail error marker.
+space_buffer	dw	0h
+space_buffer_text	db	'                                                                      '
 	db	'                                                  '
-	db	0
+space_buffer_guard	db	0h
+protocol_port	dw	0h
 
-; Protocol menu state: selected port and four input/output bit masks.
-protocol_port	db	0,0
-input_protocols	db	0,0
-output_protocols	db	0,0
-protocol_menu_data	db	0h,0h,0eah,0dh,0fah,0dh,8h,0eh,7h,0h,0ch,0eh
-	db	21h,0eh,32h,0eh,48h,0eh,5fh,0eh,6eh,0eh,7dh,0eh
-	db	6h,0h,8dh,0eh,98h,0eh,0a3h,0eh,0aeh,0eh,0b9h,0eh
-	db	0c4h,0eh,1h,0h,0cfh,0eh,4h,22h,2h,2h,12h,0eh
-	db	0dh,0h
-	db	'Serial Port '
-protocol_serial_digit	db	20h,5h,24h,2h,2h,27h,0eh,9h,0h
-	db	'Printer '
-protocol_printer_digit	db	20h,7h,14h,2h,2h,38h,0eh,0eh,0h
-	db	'Input Protocol'
-	db	7h,32h,2h,2h,4eh,0eh,0fh,0h
-	db	'Output Protocol'
-	db	0ah,0ch,2h,2h,65h,0eh,7h,0h
-	db	'DTR/DSR'
-	db	0eh,0ch,2h,2h,74h,0eh,7h,0h
-	db	'RTS/CTS'
-	db	12h,0ch,2h,2h,83h,0eh,8h,0h
-	db	'XON/XOFF'
-	db	9h,19h,46h,33h,20h,1h,0h
-protocol_display	db	0ah,24h
-protocol_input_value	db	0h,0h,9h
-	db	'7F4 '
-	db	1h,0h,0ah,42h
-protocol_output_value	db	0h,0h,0dh,19h,46h,35h,20h,1h,0h,0eh,24h,0h
-	db	0h,0dh
-	db	'7F6 '
-	db	1h,0h,0eh,42h,0h,0h,11h,19h,46h,37h,20h,1h
-	db	0h,12h,24h,0h,0h,11h
-	db	'7F8 '
-	db	1h,0h,12h,42h,0h,0h,7h,0bdh,0beh,0bfh,0c0h,0c1h
-	db	0c2h,1bh
+; Input masks for ports 0 and 1.
+input_protocols	db	0h,0h
+
+; Output masks for ports 0 and 1.
+output_protocols	db	0h,0h
+
+; Menu sections: plain, positioned, key-box, accepted-key lists.
+protocol_menu_data	dw	0
+protocol_menu_data_text	dw	offset protocol_titles
+protocol_menu_data_keys	dw	offset protocol_fields
+protocol_menu_data_input	dw	offset protocol_input_list
+
+; Count followed by record pointers.
+protocol_titles	dw	7h
+protocol_titles_entry_1	dw	offset protocol_serial_heading
+protocol_titles_entry_2	dw	offset protocol_printer_heading
+protocol_titles_entry_3	dw	offset protocol_input_heading
+protocol_titles_entry_4	dw	offset protocol_output_heading
+protocol_titles_entry_5	dw	offset protocol_dtr_heading
+protocol_titles_entry_6	dw	offset protocol_rts_heading
+protocol_titles_entry_7	dw	offset protocol_xon_heading
+
+; Count followed by record pointers.
+protocol_fields	dw	6h
+protocol_fields_entry_1	dw	offset protocol_input_dtr_key
+protocol_fields_entry_2	dw	offset protocol_output_dtr_key
+protocol_fields_entry_3	dw	offset protocol_input_rts_key
+protocol_fields_entry_4	dw	offset protocol_output_rts_key
+protocol_fields_entry_5	dw	offset protocol_input_xon_key
+protocol_fields_entry_6	dw	offset protocol_output_xon_key
+
+; Count followed by record pointers.
+protocol_input_list	dw	1h
+protocol_input_list_entry_1	dw	offset protocol_key_count
+
+; Cursor row, column (one-based).
+protocol_serial_heading	db	4h,22h
+
+; Active and restored display attributes.
+protocol_serial_heading_attributes	db	2h,2h
+protocol_serial_heading_text_pointer	dw	offset protocol_serial_heading_string
+
+; Length-prefixed display string.
+protocol_serial_heading_string	dw	0dh
+protocol_serial_heading_string_text	db	'Serial Port  '
+
+; Cursor row, column (one-based).
+protocol_printer_heading	db	5h,24h
+
+; Active and restored display attributes.
+protocol_printer_heading_attributes	db	2h,2h
+protocol_printer_heading_text_pointer	dw	offset protocol_printer_heading_string
+
+; Length-prefixed display string.
+protocol_printer_heading_string	dw	9h
+protocol_printer_heading_string_text	db	'Printer  '
+
+; Cursor row, column (one-based).
+protocol_input_heading	db	7h,14h
+
+; Active and restored display attributes.
+protocol_input_heading_attributes	db	2h,2h
+protocol_input_heading_text_pointer	dw	offset protocol_input_heading_string
+
+; Length-prefixed display string.
+protocol_input_heading_string	dw	0eh
+protocol_input_heading_string_text	db	'Input Protocol'
+
+; Cursor row, column (one-based).
+protocol_output_heading	db	7h,32h
+
+; Active and restored display attributes.
+protocol_output_heading_attributes	db	2h,2h
+protocol_output_heading_text_pointer	dw	offset protocol_output_heading_string
+
+; Length-prefixed display string.
+protocol_output_heading_string	dw	0fh
+protocol_output_heading_string_text	db	'Output Protocol'
+
+; Cursor row, column (one-based).
+protocol_dtr_heading	db	0ah,0ch
+
+; Active and restored display attributes.
+protocol_dtr_heading_attributes	db	2h,2h
+protocol_dtr_heading_text_pointer	dw	offset protocol_dtr_heading_string
+
+; Length-prefixed display string.
+protocol_dtr_heading_string	dw	7h
+protocol_dtr_heading_string_text	db	'DTR/DSR'
+
+; Cursor row, column (one-based).
+protocol_rts_heading	db	0eh,0ch
+
+; Active and restored display attributes.
+protocol_rts_heading_attributes	db	2h,2h
+protocol_rts_heading_text_pointer	dw	offset protocol_rts_heading_string
+
+; Length-prefixed display string.
+protocol_rts_heading_string	dw	7h
+protocol_rts_heading_string_text	db	'RTS/CTS'
+
+; Cursor row, column (one-based).
+protocol_xon_heading	db	12h,0ch
+
+; Active and restored display attributes.
+protocol_xon_heading_attributes	db	2h,2h
+protocol_xon_heading_text_pointer	dw	offset protocol_xon_heading_string
+
+; Length-prefixed display string.
+protocol_xon_heading_string	dw	8h
+protocol_xon_heading_string_text	db	'XON/XOFF'
+
+; Key-box row and column.
+protocol_input_dtr_key	db	9h,19h
+
+; Three-character key legend.
+protocol_input_dtr_key_legend	db	'F3 '
+
+; Number of description lines.
+protocol_input_dtr_key_lines	dw	1h
+
+; Description row and column.
+protocol_input_dtr_key_position	db	0ah,24h
+
+; Filled with ON/OFF string pointer at runtime.
+protocol_input_dtr_key_description_pointer	dw	0h
+
+; Key-box row and column.
+protocol_output_dtr_key	db	9h,37h
+
+; Three-character key legend.
+protocol_output_dtr_key_legend	db	'F4 '
+
+; Number of description lines.
+protocol_output_dtr_key_lines	dw	1h
+
+; Description row and column.
+protocol_output_dtr_key_position	db	0ah,42h
+
+; Filled with ON/OFF string pointer at runtime.
+protocol_output_dtr_key_description_pointer	dw	0h
+
+; Key-box row and column.
+protocol_input_rts_key	db	0dh,19h
+
+; Three-character key legend.
+protocol_input_rts_key_legend	db	'F5 '
+
+; Number of description lines.
+protocol_input_rts_key_lines	dw	1h
+
+; Description row and column.
+protocol_input_rts_key_position	db	0eh,24h
+
+; Filled with ON/OFF string pointer at runtime.
+protocol_input_rts_key_description_pointer	dw	0h
+
+; Key-box row and column.
+protocol_output_rts_key	db	0dh,37h
+
+; Three-character key legend.
+protocol_output_rts_key_legend	db	'F6 '
+
+; Number of description lines.
+protocol_output_rts_key_lines	dw	1h
+
+; Description row and column.
+protocol_output_rts_key_position	db	0eh,42h
+
+; Filled with ON/OFF string pointer at runtime.
+protocol_output_rts_key_description_pointer	dw	0h
+
+; Key-box row and column.
+protocol_input_xon_key	db	11h,19h
+
+; Three-character key legend.
+protocol_input_xon_key_legend	db	'F7 '
+
+; Number of description lines.
+protocol_input_xon_key_lines	dw	1h
+
+; Description row and column.
+protocol_input_xon_key_position	db	12h,24h
+
+; Filled with ON/OFF string pointer at runtime.
+protocol_input_xon_key_description_pointer	dw	0h
+
+; Key-box row and column.
+protocol_output_xon_key	db	11h,37h
+
+; Three-character key legend.
+protocol_output_xon_key_legend	db	'F8 '
+
+; Number of description lines.
+protocol_output_xon_key_lines	dw	1h
+
+; Description row and column.
+protocol_output_xon_key_position	db	12h,42h
+
+; Filled with ON/OFF string pointer at runtime.
+protocol_output_xon_key_description_pointer	dw	0h
+
+; Number of valid keys.
+protocol_key_count	db	7h
+
+; Console function-key codes, followed by Escape when enabled.
+protocol_key_count_values	db	0bdh,0beh,0bfh,0c0h,0c1h,0c2h,1bh
 protocol_help_topic	db	'SETPORT PROTOCOL'
-	db	0
-protocol_on	db	3h,0h,4fh,4eh,20h
-protocol_off	db	3h,0h
-	db	'OFF DATE OF LAST CHANGE 26 AUG 84   '
-screen_position	db	0,0
-saved_attribute	db	0
-last_section	db	0,0
-key_index	db	0
-key_value	db	0
-allowed_key_count	db	0,0
+	db	0h
 
-; Menu section renderers: plain text, positioned text, key box, allowed keys.
-render_dispatch	dw	offset print_length_string,offset draw_text_record,offset draw_key_record,offset read_allowed_key
+; Length-prefixed display string.
+protocol_on	dw	3h
+protocol_on_text	db	4fh,4eh,20h
 
-; BDOS 111/112 parameter blocks: offset, segment, byte count.
-output_offset	db	0,0
-output_segment	db	0,0
-output_length	db	0,0
-input_offset	db	0,0,0,0
-input_length	db	0,0
+; Length-prefixed display string.
+protocol_off	dw	3h
+protocol_off_text	db	4fh,46h,46h
 
-; Shared screen frame, box, footer and terminal-control templates.
-top_border	db	3h,0h,40h,0fh,43h,0fh,93h,0fh
-bottom_border	db	3h,0h,96h,0fh,43h,0fh,99h,0fh,1h,0h,0dah,4eh
-	db	0
-border_fill	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
+; Original source revision text.
+screen_revision	db	' DATE OF LAST CHANGE 26 AUG 84   '
+screen_position	dw	0h
+saved_attribute	db	0h
+last_section	dw	0h
+key_index	db	0h
+key_value	db	0h
+allowed_key_count	dw	0h
+render_dispatch	dw	offset print_length_string
+render_positioned	dw	offset draw_text_record
+render_key_boxes	dw	offset draw_key_record
+render_input	dw	offset read_allowed_key
+
+; Console block: buffer offset, segment, byte count.
+output_offset	dw	0h
+output_segment	dw	0h
+output_length	dw	0h
+
+; Console block: buffer offset, segment, byte count.
+input_offset	dw	0h
+input_segment	dw	0h
+input_length	dw	0h
+
+; Count followed by record pointers.
+top_border	dw	3h
+top_border_entry_1	dw	offset border_top_left
+top_border_entry_2	dw	offset border_horizontal
+top_border_entry_3	dw	offset border_top_right
+
+; Count followed by record pointers.
+bottom_border	dw	3h
+bottom_border_entry_1	dw	offset border_bottom_left
+bottom_border_entry_2	dw	offset border_horizontal
+bottom_border_entry_3	dw	offset border_bottom_right
+
+; Length-prefixed display string.
+border_top_left	dw	1h
+border_top_left_text	db	0dah
+
+; Length-prefixed display string.
+border_horizontal	dw	4eh
+border_horizontal_text	rb	4eh	; zero-filled workspace
+
+; Length-prefixed display string.
+border_top_right	dw	1h
+border_top_right_text	db	0bfh
+
+; Length-prefixed display string.
+border_bottom_left	dw	1h
+border_bottom_left_text	db	0c0h
+
+; Length-prefixed display string.
+border_bottom_right	dw	1h
+border_bottom_right_text	db	0d9h
+
+; Cursor row, column (one-based).
+separator_record	db	3h,1h
+
+; Active and restored display attributes.
+separator_record_attributes	db	2h,2h
+separator_record_text_pointer	dw	offset separator_record_string
+
+; Length-prefixed display string.
+separator_record_string	dw	50h
+separator_record_string_text	db	0c6h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
 	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
 	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
 	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
 	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
 	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,1h,0h,0bfh,1h,0h,0c0h
-	db	1h,0h,0d9h
-separator_record	db	3h,1h,2h,2h,0a2h,0fh,50h,0h,0c6h
-separator_fill	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0b5h
-key_box_top	db	6h,0h,0dah,0c4h,0c4h,0c4h,0c4h,0bfh
-key_box_middle	db	0ah,0h,0b3h,20h
-key_box_legend	db	20h,20h,20h,0b3h,20h,2dh,2dh,10h
-key_box_bottom	db	6h,0h,0c0h,0c4h,0c4h,0c4h,0c4h,0d9h
-bell_string	db	1h,0h,7h
-blank_menu_row	db	49h,0h
-	db	'                                                                      '
+	db	0h,0h,0h,0h,0h,0h,0h,0b5h
+
+; Length-prefixed display string.
+key_box_top	dw	6h
+key_box_top_text	db	0dah,0c4h,0c4h,0c4h,0c4h,0bfh
+
+; Length-prefixed display string.
+key_box_middle	dw	0ah
+key_box_middle_text	db	0b3h
+	db	'    '
+	db	0b3h,20h,2dh,2dh,10h
+
+; Length-prefixed display string.
+key_box_bottom	dw	6h
+key_box_bottom_text	db	0c0h,0c4h,0c4h,0c4h,0c4h,0d9h
+
+; Length-prefixed display string.
+bell_string	dw	1h
+bell_string_text	db	7h
+
+; Length-prefixed display string.
+blank_menu_row	dw	49h
+blank_menu_row_text	db	'                                                                      '
 	db	'   '
-help_footer_type	db	0ffh,0ffh
-menu_footer_type	db	0ffh,0ffh
-help_footer_tables	db	76h,10h,4h,0h,8dh,10h,2h,0h
-menu_footer_tables	db	0b9h,10h,4h,0h,0bdh,10h,4h,0h,0c1h,10h,4h,0h
-	db	1h,0h,7ah,10h,15h,0ch,46h,31h,20h,1h,0h,16h
-	db	17h,85h,10h,6h,0h
-	db	' HELP '
-	db	3h,0h,95h,10h,9bh,10h,0a1h,10h,15h,0ch,2h,2h
-	db	0a7h,10h,16h,0ch,2h,2h,0a7h,10h,17h,0ch,2h,2h
-	db	0a7h,10h,10h,0h
-	db	'                '
-	db	1h,0h,0c5h,10h,1h,0h,0ebh,10h,1h,0h,11h,11h
-	db	15h
-	db	'(ESC'
-	db	1h,0h,16h,32h,0d0h,10h,19h,0h
-	db	' Exit this program       '
-	db	15h
-	db	'(ESC'
-	db	1h,0h,16h,32h,0f6h,10h,19h,0h
-	db	' Go back to previous menu'
-	db	15h
-	db	'(ESC'
-	db	1h,0h,16h,32h,1ch,11h,19h,0h
-	db	' Stop current operation  '
-current_help_topic	db	39h,11h
-	db	'HELP STRING NOT INITIALIZED'
-	db	0ah,0dh,24h,0h
-	db	' DATE OF LAST CHANGE 26 AUG 84   '
-cursor_sequence	db	4h,0h,1bh,59h
-cursor_coordinates	db	0,0
-initialize_sequence	db	8h,0h,1bh,77h,1bh,36h,1bh,66h,1bh,45h
-clear_sequence	db	0ch,0h,1bh,45h,1bh,71h,1bh,74h,1bh,37h,1bh,65h
-	db	1bh,76h
-attribute_codes	db	'sttpqru'
-attribute_sequence	db	2h,0h,1bh
-attribute_byte	db	20h
-item_11a2	db	2h,0h,1bh,65h
-item_11a6	db	2h,0h,1bh
-	db	'f DATE OF LAST CHANGE 26 AUG 84   '
+help_footer_type	dw	0ffffh
+menu_footer_type	dw	0ffffh
+help_footer_tables	dw	offset help_footer_keys
 
-; System/XIOS and screen-queue pointers filled at runtime.
-process_descriptor	db	0,0
-system_segment	db	0,0
-console_descriptor	db	0,0
-xios_segment	db	0,0
-console_number	db	0
+; Renderer-table byte offset: 2=positioned text, 4=key box.
+help_footer_tables_renderer	dw	4h
+help_footer_hidden	dw	offset help_footer_blank
+
+; Renderer-table byte offset: 2=positioned text, 4=key box.
+help_footer_hidden_renderer	dw	2h
+menu_footer_tables	dw	offset exit_footer
+
+; Renderer-table byte offset: 2=positioned text, 4=key box.
+menu_footer_tables_renderer	dw	4h
+menu_footer_return	dw	offset return_footer
+
+; Renderer-table byte offset: 2=positioned text, 4=key box.
+menu_footer_return_renderer	dw	4h
+menu_footer_stop	dw	offset stop_footer
+
+; Renderer-table byte offset: 2=positioned text, 4=key box.
+menu_footer_stop_renderer	dw	4h
+
+; Count followed by record pointers.
+help_footer_keys	dw	1h
+help_footer_keys_entry_1	dw	offset help_footer_key
+
+; Key-box row and column.
+help_footer_key	db	15h,0ch
+
+; Three-character key legend.
+help_footer_key_legend	db	'F1 '
+
+; Number of description lines.
+help_footer_key_lines	dw	1h
+
+; Description row and column.
+help_footer_key_position	db	16h,17h
+help_footer_key_description_pointer	dw	offset help_footer_key_description
+
+; Length-prefixed display string.
+help_footer_key_description	dw	6h
+help_footer_key_description_text	db	' HELP '
+
+; Count followed by record pointers.
+help_footer_blank	dw	3h
+help_footer_blank_entry_1	dw	offset help_blank_top
+help_footer_blank_entry_2	dw	offset help_blank_middle
+help_footer_blank_entry_3	dw	offset help_blank_bottom
+
+; Cursor row, column (one-based).
+help_blank_top	db	15h,0ch
+
+; Active and restored display attributes.
+help_blank_top_attributes	db	2h,2h
+help_blank_top_text_pointer	dw	offset help_blank_bottom_string
+
+; Cursor row, column (one-based).
+help_blank_middle	db	16h,0ch
+
+; Active and restored display attributes.
+help_blank_middle_attributes	db	2h,2h
+help_blank_middle_text_pointer	dw	offset help_blank_bottom_string
+
+; Cursor row, column (one-based).
+help_blank_bottom	db	17h,0ch
+
+; Active and restored display attributes.
+help_blank_bottom_attributes	db	2h,2h
+help_blank_bottom_text_pointer	dw	offset help_blank_bottom_string
+
+; Length-prefixed display string.
+help_blank_bottom_string	dw	10h
+help_blank_bottom_string_text	db	'                '
+
+; Count followed by record pointers.
+exit_footer	dw	1h
+exit_footer_entry_1	dw	offset exit_footer_key
+
+; Count followed by record pointers.
+return_footer	dw	1h
+return_footer_entry_1	dw	offset return_footer_key
+
+; Count followed by record pointers.
+stop_footer	dw	1h
+stop_footer_entry_1	dw	offset stop_footer_key
+
+; Key-box row and column.
+exit_footer_key	db	15h,28h
+
+; Three-character key legend.
+exit_footer_key_legend	db	'ESC'
+
+; Number of description lines.
+exit_footer_key_lines	dw	1h
+
+; Description row and column.
+exit_footer_key_position	db	16h,32h
+exit_footer_key_description_pointer	dw	offset exit_footer_key_description
+
+; Length-prefixed display string.
+exit_footer_key_description	dw	19h
+exit_footer_key_description_text	db	' Exit this program       '
+
+; Key-box row and column.
+return_footer_key	db	15h,28h
+
+; Three-character key legend.
+return_footer_key_legend	db	'ESC'
+
+; Number of description lines.
+return_footer_key_lines	dw	1h
+
+; Description row and column.
+return_footer_key_position	db	16h,32h
+return_footer_key_description_pointer	dw	offset return_footer_key_description
+
+; Length-prefixed display string.
+return_footer_key_description	dw	19h
+return_footer_key_description_text	db	' Go back to previous menu'
+
+; Key-box row and column.
+stop_footer_key	db	15h,28h
+
+; Three-character key legend.
+stop_footer_key_legend	db	'ESC'
+
+; Number of description lines.
+stop_footer_key_lines	dw	1h
+
+; Description row and column.
+stop_footer_key_position	db	16h,32h
+stop_footer_key_description_pointer	dw	offset stop_footer_key_description
+
+; Length-prefixed display string.
+stop_footer_key_description	dw	19h
+stop_footer_key_description_text	db	' Stop current operation  '
+current_help_topic	dw	offset uninitialized_help_topic
+uninitialized_help_topic	db	'HELP STRING NOT INITIALIZED'
+	db	0ah,0dh,24h,0h
+
+; Original source revision text.
+terminal_revision	db	' DATE OF LAST CHANGE 26 AUG 84   '
+
+; Length-prefixed display string.
+cursor_sequence	dw	4h
+cursor_sequence_text	db	1bh,59h,0h,0h
+
+; Length-prefixed display string.
+initialize_sequence	dw	8h
+initialize_sequence_text	db	1bh,77h,1bh,36h,1bh,66h,1bh,45h
+
+; Length-prefixed display string.
+clear_sequence	dw	0ch
+clear_sequence_text	db	1bh,45h,1bh,71h,1bh,74h,1bh,37h,1bh,65h,1bh,76h
+
+; Attribute index to terminal escape-letter mapping.
+attribute_codes	db	'sttpqru'
+
+; Length-prefixed display string.
+attribute_sequence	dw	2h
+attribute_sequence_text	db	1bh,20h
+
+; Length-prefixed display string.
+cursor_enable_sequence	dw	2h
+cursor_enable_sequence_text	db	1bh,65h
+
+; Length-prefixed display string.
+cursor_disable_sequence	dw	2h
+cursor_disable_sequence_text	db	1bh,66h
+
+; Original source revision text.
+system_revision	db	' DATE OF LAST CHANGE 26 AUG 84   '
+process_descriptor	dw	0h
+system_segment	dw	0h
+console_descriptor	dw	0h
+xios_segment	dw	0h
+console_number	db	0h
+
+; Screen mutex queue parameter block.
 screen_queue	db	0h,0h,0h,0h,0h,0h,0h,0h
 	db	'MXdisk  '
-screen_released	db	0ffh,0h
+screen_released	db	0ffh
+screen_queue_padding	db	0h
+help_console_number	db	0h
+help_xios_segment	dw	0h
+wrapper_system_segment	dw	0h
+help_process_descriptor	dw	0h
+help_dispatch	dw	offset initialize_help_wrapper
+help_window_descriptor	dw	0h
+help_video_segment	dw	0h
+help_restore_flag	db	0h
+help_screen_words	dw	0h
 
-; Embedded HELP screen-save wrapper state and saved console image.
-help_console_number	db	0
-help_xios_segment	db	0,0
-wrapper_system_segment	db	0,0
-help_process_descriptor	db	0,0
-help_dispatch	db	6bh,9h
-help_window_descriptor	db	0,0
-help_video_segment	db	0,0
-help_restore_flag	db	0
-help_screen_words	db	0,0
-help_screen_buffer	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+; Saved 80 x 25 character/attribute screen image (2000 words).
+help_screen_buffer	rb	0fa0h	; zero-filled workspace
 
-; HELP screen mutex queue parameter block and retained placeholder message.
+; HELP screen mutex descriptor; console digit filled at runtime.
 help_screen_queue	db	0h,0h,0h,0h,0h,0h,0a6h
-	db	'!VCMXQ'
-help_queue_console_digit	db	40h,20h,20h,0h,0h
+	db	'!VCMXQ@  '
+	db	0h,0h
 help_stub_message	db	0ah,0dh,0ah,0dh
 	db	'HELP FACILITY TAKES OVER AT THIS POINT.'
 	db	0ah,0dh
 	db	'PRESS ANY KEY TO GET BACK TO PROGRAM.'
 	db	0ah,0dh,24h
-help_console_descriptor	db	0,0,0,0,0
-help_index_block	db	0,0
+help_console_descriptor	dw	0h
+help_wrapper_padding	db	0h,0h,0h
+help_index_block	dw	0h
 
-; Eight-record HELP index cache (1024 bytes).
-help_index_cache	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+; Eight 128-byte HELP index records, 64 sixteen-byte entries.
+help_index_cache	rb	400h	; zero-filled workspace
+help_saved_index	dw	0h
+help_version	dw	0h
+help_index_step	dw	0h
+help_index_pointer	dw	0h
+help_global_index	dw	0h
+help_index_position	dw	0h
+help_listing_position	dw	0h
+help_listing_cursor	dw	0h
+help_listing_delta	dw	0h
+help_listing_stride	dw	0h
+help_displayed_topics	dw	0h
+help_search_cursor	dw	0h
+help_list_mode	db	0h
+help_no_page_mode	db	0h
+help_create_mode	db	0h
+help_extract_mode	db	0h
+help_page_mode	db	0h
+help_file_status	db	0h
+help_end_of_data	db	0h
 
-; Embedded HELP parser, index traversal and output state.
-field_2604	db	0,0
-help_version	db	0,0
-help_index_step	db	0,0
-help_index_pointer	db	0,0
-help_global_index	db	0,0
-help_index_position	db	0,0
-field_2610	db	0,0
-field_2612	db	0,0
-field_2614	db	0,0
-field_2616	db	0,0
-field_2618	db	0,0
-field_261a	db	0,0
-help_list_mode	db	0
-help_no_page_mode	db	0
-field_261e	db	0
-field_261f	db	0
-help_page_mode	db	0
-help_file_status	db	0
-help_end_of_data	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0
-help_token_count	db	0,0
-help_search_level	db	0,0,0,0,0,0,0,0,0,0,0,0,0
-help_topic_tokens	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	db	0
-field_2707	db	0
-help_level	db	0
-help_line_count	db	0
-help_page_length	db	0
+; Retained HELP utility secondary FCB workspace.
+help_secondary_fcb	rb	24h	; zero-filled workspace
+help_token_count	dw	0h
+help_search_level	db	0h
+
+; Space-padded subtopic name.
+help_subtopic_name	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
+
+; Eleven 15-byte topic slots (12-character name and three work bytes).
+help_topic_tokens	rb	0a5h	; zero-filled workspace
+
+; Temporary topic name.
+help_name_buffer	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
+help_parent_level	db	0h
+help_level	dw	0h
+help_page_length	db	0h
+
+; Console clear-screen string and associated buffer space.
 help_clear_screen	db	1bh,45h,24h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0
-help_compare_result	db	0
-help_compare_index	db	0
-help_records_per_block	db	0,0
-help_step_count	db	0
-help_record_number	db	0
-help_record_index	db	0
-help_page_stop	db	0
-help_parse_index	db	0
-help_parse_level	db	0
-field_272f	db	0
-field_2730	db	0,0
-field_2732	db	0
-field_2733	db	0
-field_2734	db	0
-field_2735	db	0,0
-field_2737	db	0
-field_2738	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0
-field_2746	db	0
-field_2747	db	0
-field_2748	db	0
-field_2749	db	0
-field_274a	db	0
-field_274b	db	0
-field_274c	db	0
-field_274d	db	0
-field_274e	db	0
-field_274f	db	0
-field_2750	db	0
-field_2751	db	0
-field_2752	db	0
-field_2753	db	0
-field_2754	db	0,0,0,0
-field_2758	db	0
-help_open_status	db	0,0,0
-help_printer_number	db	0h,0h,0dh,0ah
+	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
+	db	0h,0h
+help_compare_result	db	0h
+help_compare_index	db	0h
+help_records_per_block	dw	0h
+help_step_count	db	0h
+help_record_number	db	0h
+help_record_index	db	0h
+help_page_stop	db	0h
+help_parse_index	db	0h
+help_parse_level	db	0h
+help_input_index	db	0h
+help_token_character_index	dw	0h
+help_parse_done	db	0h
+help_option_seen	db	0h
+help_listing_level	db	0h
+help_listing_character	dw	0h
+help_listing_top_level	db	0h
+help_listing_heading_shown	db	0h
+
+; Topic name assembled for display; terminator follows.
+help_listing_text	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
+	db	0h
+help_listing_terminator	db	0h
+help_last_token	db	0h
+help_search_done	db	0h
+help_search_failed	db	0h
+help_search_restart	db	0h
+help_search_matched	db	0h
+help_search_passed_name	db	0h
+help_parent_token_saved	db	0h
+help_compare_byte	db	0h
+help_token_display_index	db	0h
+help_token_indent	db	0h
+help_text_index	db	0h
+help_delimiter_count	db	0h
+help_text_character	dw	0h
+
+; Up to three consecutive delimiter bytes.
+help_delimiter_buffer	db	0h,0h,0h
+help_prompt_tokens	db	0h
+help_open_status	dw	0h
+
+; Retained workspace/alignment between records.
+help_reserved_byte_4	db	0h
+help_printer_number	db	0h
+
+; Retained printer-status diagnostic.
+help_printer_busy	db	0h,0dh,0ah
 	db	'Printer Busy'
 	db	0dh,0ah,24h
+help_pending_key	dw	0h
+help_extended_key	db	0h
+help_retype_width	db	0h
 
-; Local HELP line editor: pending key, echo column and saved stack/buffer.
-help_pending_key	db	0,0
-help_extended_key	db	0
-help_retype_width	db	0,0
-help_prompt_column	db	0
-help_editor_sp	db	0,0
-help_editor_buffer	db	0,0
-help_editor_es	db	0,0,0,0,0,0,0
+; Retained workspace/alignment between records.
+help_edit_padding	db	0h
+help_prompt_column	db	0h
+help_editor_sp	dw	0h
+help_editor_buffer	dw	0h
+help_editor_es	dw	0h
+
+; Paragraph alignment at the end of DATA.
+data_padding	db	0h,0h,0h,0h,0h
+protocol_serial_digit	equ	protocol_serial_heading_string_text+0ch
+protocol_printer_digit	equ	protocol_printer_heading_string_text+8h
+separator_fill	equ	separator_record_string_text+1h
+key_box_legend	equ	key_box_middle_text+2h
+cursor_coordinates	equ	cursor_sequence_text+2h
+attribute_byte	equ	attribute_sequence_text+1h
+help_queue_console_digit	equ	help_screen_queue+0dh
+help_line_count	equ	help_level+1h
+help_topic_finished	equ	help_text_character+1h
 
 	sseg
 	org	0
-private_stack:
-	rb	12fh
+private_stack	rb	12fh
 	db	0
 	end

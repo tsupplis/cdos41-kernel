@@ -1,7 +1,7 @@
 # CON — RASM86 / ASM86 build.
 # all builds local outputs; check validates them; clean removes generated files.
 
-.PHONY: clean all check-cursor check
+.PHONY: clean all check-cursor check-rtc check
 .DELETE_ON_ERROR:
 
 all: sup.con rtm.con cio.con mem.con sysdat.con bdos.con xios.con
@@ -46,3 +46,7 @@ check-cursor: xios.con squid.h86
 # Validate the structure of each rebuilt command/component.
 check: all
 	@set -e; for f in sup.con rtm.con cio.con mem.con sysdat.con bdos.con xios.con; do cmdinfo $$f; done
+
+# Exercise actual assembled RTC code with synthetic INT 1Ah services.
+check-rtc: xios.con squid.h86
+	python3 ../../tools/rtc_check.py

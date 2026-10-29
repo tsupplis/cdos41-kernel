@@ -1,6 +1,7 @@
 # PRINTMGR — DR C / RASM86 build.
 # all builds local outputs; check validates them; clean removes generated files.
 
+CMDINFO=cmdinfo
 RASM86=pcdev_rasm86
 DRC86=drccpm_cc
 DRCLINK86=drccpm_link
@@ -13,7 +14,7 @@ OBJECTS=spool.obj spoolm.obj utlasm.obj sncheck.obj
 
 all: $(TOOLS)
 check: all
-	@set -e; for f in $(TOOLS); do cmdinfo $$f; done
+	@set -e; for f in $(TOOLS); do $(CMDINFO) $$f; done
 
 LOCAL_INCLUDES=$(wildcard *.a86 *.lib *.equ *.dat *.def *.h *.dcl)
 $(OBJECTS): $(LOCAL_INCLUDES) Makefile
@@ -37,4 +38,4 @@ printmgr.cmd: $(OBJECTS) Makefile
 	@$(DRCLINK86) 'printmgr=spool,spoolm,utlasm,sncheck' > printmgr-link.log 2>&1; result=$$?; cat printmgr-link.log; test $$result -eq 0
 	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' printmgr-link.log
 	@test -s $@
-	cmdinfo $@
+	$(CMDINFO) $@

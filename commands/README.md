@@ -23,3 +23,16 @@ Reconstructed commands keep a frozen original source and explicit comparison
 rules. SETPORT's README lists its 39 equivalent ASM86 encoding exceptions;
 its check permits no other byte differences. PRINT and WINDOW use wildcard
 object cleanup like the other tools.
+
+## Reference Makefiles
+
+SYSTAT, PIP, SUBMIT, REN, ED, ASM86, DDT86, ASM80, HEXCOM, GENCMD and
+DISK are the reference models for the corresponding toolchains. Their
+Makefiles are excluded from this CDOS cleanup; alignment across the CP/M,
+CCP/M and CDOS projects is a separate pass. The other command Makefiles
+follow their all/check/clean, declared-tool and local-prerequisite conventions
+without changing linker order or memory sizing.
+
+DDT86 is built locally from Concurrent CP/M-86 3.1 sources and distributed
+as DDT86.CMD on cdostools.img alongside ASM86. GENTAB.CMD is a build helper,
+not a separate development-disk payload.

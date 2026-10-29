@@ -1,6 +1,7 @@
 # PRINT — DR C / RASM86 build.
 # all builds local outputs; check validates them; clean removes generated files.
 
+CMDINFO=cmdinfo
 RASM86=pcdev_rasm86
 DRC86=drccpm_cc
 DRCLINK86=drccpm_link
@@ -15,11 +16,12 @@ HEADERS=portab.h cpmfunc.h utildef.h
 
 all: $(TOOLS)
 
+# sqlink.inp preserves the original module order; the linker supplies the C runtime.
 print.cmd: $(OBJECTS) sqlink.inp Makefile
 	@$(DRCLINK86) 'sqlink[input]' > print-link.log 2>&1; result=$$?; cat print-link.log; test $$result -eq 0
 	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' print-link.log
 	@test -s $@
-	cmdinfo $@
+	$(CMDINFO) $@
 
 cpmif.obj: cpmif.a86 Makefile
 	@$(RASM86) $< > cpmif.log 2>&1; result=$$?; cat cpmif.log; test $$result -eq 0
@@ -35,4 +37,4 @@ clean:
 	$(RM) *.cmd *.obj *.lst *.sym *.map *.log
 
 check: all
-	cmdinfo print.cmd
+	$(CMDINFO) print.cmd

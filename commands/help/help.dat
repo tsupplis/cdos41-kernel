@@ -1768,8 +1768,9 @@ SET {d:} [CREATE=ON|OFF,ACCESS=ON|OFF,UPDATE=ON|OFF]
 SET [HELP]
 
 File attributes work on CP/M and DOS media through BDOS. F1-F4 are CP/M
-file flags, not four additional FAT bits. CP/M ARCHIVE=ON means already
-archived and clears DOS's archive-needed bit; OFF sets that DOS bit.
+file flags. FAT supports legacy F1-F3 only: its lowercase-extension flag
+is not F4, and SET leaves FAT case flags unchanged. FAT short names match
+without case. CP/M ARCHIVE=ON clears DOS's archive-needed bit; OFF sets it.
 
 Labels, XFCB passwords and timestamp settings require CP/M media. Enable
 drive protection before assigning passwords or a default password:

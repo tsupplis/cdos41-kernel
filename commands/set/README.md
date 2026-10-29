@@ -83,3 +83,12 @@ network drives, disk-full/write failures or concurrent directory changes.
 The retained `base/set.cmd` remains the regression reference.
 
 OEM SET 3.1 SHA-256: `e4ec4cdefafe7cd1793c3bc2fbbe5429046e87df8fd53ca720d72c5633616123`.
+
+## FAT case metadata policy
+
+The maintained kernel treats FAT byte 12 bits 3/4 as lowercase-name and
+lowercase-extension flags. SET leaves those bits untouched: only legacy
+F1-F3 map to FAT, while F1-F4 remain available on CP/M disks. FAT F4 requests
+therefore have no effect. This intentional kernel change supersedes OEM
+behavior for the ambiguous FAT F4/case bit; see `../../patches.md` and
+`make check-fat-case` at the project root.

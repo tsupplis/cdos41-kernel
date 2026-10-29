@@ -1,6 +1,7 @@
 # DIR — Intel PL/M-86 / Intel ASM86 build.
 # all builds local outputs; check validates them; clean removes generated files.
 
+CMDINFO=cmdinfo
 INTEL_PLM86=intel_plm86
 INTEL_ASM86=intel_asm86
 INTEL_LOC86=intel_loc86
@@ -27,7 +28,7 @@ dir.cmd: dir.h86 Makefile
 	@test -n "$(GENCMD_BASE)" -a -n "$(GENCMD_MEM)" || \
 	  { echo "dir: cannot derive DATS/MEMORY from dir.mp2"; exit 1; }
 	$(GENCMD) $< 'data[b$(GENCMD_BASE) m$(GENCMD_MIN) xfff]'
-	cmdinfo $@
+	$(CMDINFO) $@
 
 dir.loc: dir.obj scd.obj Makefile
 	$(INTEL_LINK86) scd.obj, $(basename $@).obj to $(basename $@).lnk
@@ -44,7 +45,7 @@ dir.loc: dir.obj scd.obj Makefile
 	$(INTEL_ASM86) $<
 
 # Compile PL/M sources; declarations and Makefile changes trigger recompilation.
-%.obj: %.plm Makefile $(wildcard *.lit *.ext)
+%.obj: %.plm Makefile $(wildcard *.lit *.def *.equ *.lib *.h *.dcl *.inc *.ext)
 	$(INTEL_PLM86) $< debug 'optimize(3)' xref
 
 # Remove generated outputs only; preserve sources and reference files.
@@ -56,4 +57,4 @@ dir.obj: dirm.plm $(wildcard *.lit) Makefile
 
 # Validate the structure of each rebuilt command/component.
 check: all
-	@set -e; for f in $(TOOLS); do cmdinfo $$f; done
+	@set -e; for f in $(TOOLS); do $(CMDINFO) $$f; done
