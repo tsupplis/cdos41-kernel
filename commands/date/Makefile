@@ -44,3 +44,9 @@ date.exe: $(OBJECTS) Makefile
 	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' date-link.log
 	@test -s $@
 	@test "$$(od -An -tx1 -N2 $@ | tr -d ' \n')" = 4d5a
+
+# Exercise the linked DOS image with a synthetic clock interface.
+.PHONY: check-date
+check: check-date
+check-date: date.exe tests/datecheck.asm ../../tools/date_check.py
+	python3 ../../tools/date_check.py

@@ -21,5 +21,6 @@ check: all
 	@python3 -c "from pathlib import Path; files='$(DOS_EXES)'.split(); assert all(Path(f).read_bytes()[:2]==b'MZ' for f in files), 'Expected DOS EXE header'; assert Path('loadccpm/loadccpm.com').read_bytes()[0]==0xe9, 'Expected LOADCCPM entry JMP'"
 	$(MAKE) -C gencmd check
 	$(MAKE) -C dskmaint check-boot
+	$(MAKE) -C date check-date
 
 .PHONY: all check clean $(SUBDIRS)

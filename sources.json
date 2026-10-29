@@ -4031,7 +4031,11 @@
     {
       "path": "commands/date/pcdate.a86",
       "origin": "41SRC_08.IMG.DIR/PCDATE.A86",
-      "sha256": "b8f07e62515c0f6d67170404a4d48c6f6c33282ebc35b0ca8e220671bd9eb5b7"
+      "sha256": "4a363c680f10f0ff73c3fcc8f4d6c0bec2d628084d655181eb75515ae1b820d5",
+      "original_sha256": "b8f07e62515c0f6d67170404a4d48c6f6c33282ebc35b0ca8e220671bd9eb5b7",
+      "modifications": [
+        "Match DATE.CMD short-year pivot (00-77 => 2000-2077); preserve explicit 19xx/20xx years and reject incomplete years."
+      ]
     },
     {
       "path": "commands/erase/erase.bat",

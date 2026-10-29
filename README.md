@@ -22,8 +22,8 @@ INITDIR uses `drplicpm_pc`, `drpli_objfix` and `drplicpm_link`, following
 the CCP/M PL/I build recipe. Standard C headers/runtime come from the
 installed toolchain.
 
-Historical source bytes are preserved, including DOS line endings and EOF
-padding. Makefiles check assembler/compiler/linker diagnostics because some
+Historical source bytes retain DOS line endings and EOF padding. DATE.EXE
+has a documented short-year fix; its original and current hashes are recorded. Makefiles check assembler/compiler/linker diagnostics because some
 historical tools return success after an error. Included local sources are
 normal prerequisites. The PIP source and Makefile were copied unchanged from
 the ready 4.1-mode build; it produces `pip4.cmd` (and retains `pip3.cmd`).
@@ -70,7 +70,8 @@ The top-level build now includes these 27 command families:
 
 RMDIR and SYSDISK select the original ZD and SD modes of `D.A86`, using
 small new wrappers patterned on CHDIR/MKDIR. D.A86 is a shared module,
-not a standalone command. Historical 4.1 program sources remain unchanged.
+not a standalone command. Historical 4.1 program sources remain unchanged except for the documented
+DATE.EXE short-year correction.
 
 ASM86, GENCMD and SUBMIT use unchanged source/Makefile copies from the CCP/M
 project. GENLDR uses its missing SCD2 startup from the CCP/M 3.1 archive.
@@ -110,3 +111,19 @@ in `kernel/xios`, separate from the IBM SQUID profile. All its assembly
 modules compile, but the link currently requests `8087.SIM`, absent from the
 archive. The correct native-8087 assembler/linker profile must be established
 before enabling it. No 3.1 XIOS or binary has been substituted.
+
+## DATE.EXE year handling
+
+DATE.EXE now uses the native DATE.CMD short-year pivot: 00..77 means
+2000..2077 and 78..99 means 1978..1999. Explicit 19xx and 20xx input is
+retained; short 19/20 means 2019/2020, and incomplete three-digit years are
+rejected. DOS function 2Bh still validates the complete calendar date and
+supported range, so mapping 78/79 does not make 1978/1979 valid DOS dates.
+The original archived source/hash remains recorded in `sources.json`.
+
+`make -C commands/date check` executes 54 cases against the linked EXE
+with synthetic DOS/BDOS calls under emu2. Both command-tail and interactive
+paths are covered, including 00/77/78/99, 19/20, explicit four-digit years,
+2000-02-29 and malformed years. The harness captures function 2Bh rather
+than changing a clock. It rejects the original unmodified DATE.EXE at
+`1/2/00`. The top-level `make check` runs this regression check too.

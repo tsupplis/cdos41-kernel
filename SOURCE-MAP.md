@@ -106,3 +106,19 @@ its historical recipe needs, following the existing per-command layout.
 Build/header checks establish compilable local outputs, not OEM byte identity
 or runtime compatibility. GENCMD additionally passes its existing self-host
 and HELLOB reference checks; DSKMAINT checks its embedding operation.
+
+## DATE.EXE year handling
+
+DATE.EXE now uses the native DATE.CMD short-year pivot: 00..77 means
+2000..2077 and 78..99 means 1978..1999. Explicit 19xx and 20xx input is
+retained; short 19/20 means 2019/2020, and incomplete three-digit years are
+rejected. DOS function 2Bh still validates the complete calendar date and
+supported range, so mapping 78/79 does not make 1978/1979 valid DOS dates.
+The original archived source/hash remains recorded in `sources.json`.
+
+`make -C commands/date check` executes 54 cases against the linked EXE
+with synthetic DOS/BDOS calls under emu2. Both command-tail and interactive
+paths are covered, including 00/77/78/99, 19/20, explicit four-digit years,
+2000-02-29 and malformed years. The harness captures function 2Bh rather
+than changing a clock. It rejects the original unmodified DATE.EXE at
+`1/2/00`. The top-level `make check` runs this regression check too.

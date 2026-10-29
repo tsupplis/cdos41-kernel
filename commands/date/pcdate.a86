@@ -104,26 +104,42 @@ inline: call	eatblanks
 	mov	year,0
 	mov	di,offset year
 	call	process
+	; A complete short year uses the same 78 pivot as DATE.CMD:
+	; 00..77 => 2000..2077, 78..99 => 1978..1999.  Test the
+	; terminator first so 19 and 20 also work as short years.
+	call	isend1
+	jz	shortyr
+	; More digits require an explicit four-digit 19xx or 20xx year.
 	mov	full,2000
 	cmp	year,20
 	jz	fulyr
 	mov	full,1900
 	cmp	year,19
 	jz	fulyr
-	mov	ax,full
-	add	year,ax
-	call	isend1
-	jz	dat4
 	jmp	daterr
+shortyr:
+	mov	ax,1900
+	cmp	year,78
+	jae	addcentury
+	mov	ax,2000
+addcentury:
+	add	year,ax
 dat4:	call	setdate
 	jnz	dat5
 	jmp	daterr
 dat5:	call	crlf
 	jmp	ccpret
-fulyr:	mov	di,offset year
+fulyr:	; Require both remaining digits; do not accept a three-digit year.
+	mov	al,byte ptr 1[bx]
+	cmp	al,'0'
+	jb	badyear
+	cmp	al,'9'
+	ja	badyear
+	mov	di,offset year
 	call	process
 	call	isend1
 	jz	dat7
+badyear:
 	jmp	daterr
 dat7:	mov	ax,full
 	add	year,ax
