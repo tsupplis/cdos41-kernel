@@ -121,3 +121,7 @@ check-fat-case: all
 
 check-rtc: kernel
 	$(MAKE) -C kernel/con check-rtc
+
+.PHONY: check-setenv
+check-setenv: all
+	python3 tools/setenv_check.py

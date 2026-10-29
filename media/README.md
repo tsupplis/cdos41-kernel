@@ -8,11 +8,11 @@ disks contain CCPM.SYS and STARTUP.0; the remaining disks are data-only.
 
 | Image | Bootable | Contents |
 | --- | --- | --- |
-| cdos86.img | Yes | Kernel, native file commands/editor, DATE, SDIR, SET, SHOW, SUBMIT, BATCH, SYSDISK, ERA/ERAQ, PUT/GET/RDR; OEM REN.EXE and STOP.CMD for shell aliases. |
-| cdostools.img | No | ASM80/ASM86, GENCMD, GENCCPM, HEXCOM, HELP/HLP, PRINT, SYSTAT, CHSET, GENLDR, LOADCCPM, WINDOW/WMENU and core commands. |
+| cdos86.img | Yes | Kernel, native file commands/editor, DATE, SDIR, SET, SHOW, SUBMIT, BATCH, SYSDISK, ERA/ERAQ, PUT/GET/RDR; Rebuilt REN.EXE and STOP.CMD for shell aliases. |
+| cdostools.img | No | ASM80/ASM86, GENCMD, GENCCPM, HEXCOM, HELP/HLP, SYSTAT, CHSET, GENLDR, WINDOW/WMENU and core commands. |
 | cdosmaint.img | Yes | Kernel, DSKMAINT, DCOPY, DCOMP, INITDIR and core commands. |
-| cdosmenu.img | No | DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP, menu/terminal/message data, window BAT examples and sample text. |
-| cdosdos.img | No | Rebuilt COPY.EXE, DATE.EXE, ERASE.EXE, PATH.EXE; original TIME.EXE, REN.EXE and REDOS.COM; core commands. |
+| cdosmenu.img | No | PRINT, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP, menu/terminal/message data, window BAT examples and sample text. |
+| cdosdos.img | No | Rebuilt COPY.EXE, DATE.EXE, ERASE.EXE, PATH.EXE, TIME.EXE, REN.EXE and SETENV.EXE; LOADCCPM.COM, original REDOS.COM and core commands. |
 | cdosoem1.img | No | Original BACK, REST, BRINST, FM, SPL and backup/file-manager support files. |
 | cdosoem2.img | No | Rebuilt FUNCTION and HELP; original SETUP, SETPORT, DISKSTAT, N, STOP, HDMAINT, its manual and the original 4.1 HELP.HLP. |
 

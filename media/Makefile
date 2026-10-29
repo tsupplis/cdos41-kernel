@@ -13,14 +13,14 @@ SYSTEM_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ..
     ../commands/era/eraq.cmd ../commands/ren/ren.cmd ../commands/date/date.cmd \
     ../commands/sdir/sdir.cmd ../commands/show/show.cmd ../commands/set/set.cmd \
     ../commands/submit/submit.cmd ../commands/type/type.cmd ../commands/dir/dir.cmd \
-    ../commands/ed/ed.cmd ../base/ren.exe ../base/stop.cmd \
+    ../commands/ed/ed.cmd ../commands/rename/ren.exe ../base/stop.cmd \
     ../commands/putget/put.cmd ../commands/putget/get.cmd ../commands/putget/rdr.cmd
 
 TOOLS_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
     ../commands/asm80/asm80.cmd ../commands/asm86/asm86.cmd ../commands/ddt86/ddt86.cmd ../commands/gencmd/gencmd.cmd \
     ../commands/genccpm/genccpm.cmd ../commands/hexcom/hexcom.cmd ../commands/help/help.cmd \
     ../commands/help/help.hlp ../commands/systat/systat.cmd \
-    ../commands/chset/chset.cmd ../commands/genldr/genldr.cmd ../commands/loadccpm/loadccpm.com \
+    ../commands/chset/chset.cmd ../commands/genldr/genldr.cmd \
     ../commands/window/window.cmd ../commands/window/wmenu.cmd
 
 MAINT_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
@@ -35,9 +35,9 @@ MENU_COMMANDS = ../commands/print/print.cmd ../commands/dredix/dredix.cmd ../com
     ../base/clear.bat \
     ../base/user.txt
 
-DOS_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
+DOS_COMMANDS = ../commands/loadccpm/loadccpm.com ../commands/setenv/setenv.exe ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
     ../commands/copy/copy.exe ../commands/datetime/date.exe ../commands/erase/erase.exe \
-    ../commands/path/path.exe ../commands/datetime/time.exe ../base/ren.exe \
+    ../commands/path/path.exe ../commands/datetime/time.exe ../commands/rename/ren.exe \
     ../base/redos.com
 
 OEM1_COMMANDS = ../base/back.cmd ../base/rest.cmd ../base/brinst.cmd \

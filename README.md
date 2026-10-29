@@ -106,10 +106,10 @@ mechanism. [PUT/GET/RDR notes](commands/putget/README.md).
 | Image | Bootable | Contents |
 | --- | --- | --- |
 | `cdos86.img` | Yes | Kernel, core file commands, ED, DATE, SDIR, SET, SHOW, SUBMIT, BATCH, SYSDISK, ERA/ERAQ, PUT/GET/RDR, PIP and shell alias targets |
-| `cdostools.img` | No | ASM80/ASM86, DDT86, GENCMD, GENCCPM, HEXCOM, HELP, SYSTAT, CHSET, GENLDR, LOADCCPM, WINDOW/WMENU and core commands |
+| `cdostools.img` | No | ASM80/ASM86, DDT86, GENCMD, GENCCPM, HEXCOM, HELP, SYSTAT, CHSET, GENLDR, WINDOW/WMENU and core commands |
 | `cdosmaint.img` | Yes | Kernel, DSKMAINT, DCOPY, DCOMP, INITDIR, BATCH, SYSDISK, ERA and PIP |
 | `cdosmenu.img` | No | PRINT, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP, menu/terminal data, BAT examples and PIP |
-| `cdosdos.img` | No | COPY.EXE, DATE.EXE, ERASE.EXE, PATH.EXE, original TIME.EXE, REN.EXE and REDOS.COM, core commands and PIP |
+| `cdosdos.img` | No | COPY.EXE, DATE.EXE, ERASE.EXE, PATH.EXE, SETENV.EXE, LOADCCPM.COM, TIME.EXE, REN.EXE and REDOS.COM, core commands and PIP |
 | `cdosoem1.img` | No | Original backup/file-manager tools, their support files and PIP |
 | `cdosoem2.img` | No | FUNCTION, HELP, rebuilt SETPORT, original SETUP and HDMAINT, HDMAINT manual, original 4.1 help text and PIP |
 
@@ -193,8 +193,10 @@ Compatibility details live with each tool.
 | `rdr` | Redirect console input and output together | — | New; shared putget.lib engine, imported from the CCP/M project |
 | `redos.com` | Return from Concurrent to DOS | Original | —; original OEM binary retained, implementation source missing |
 | `ren` | Rename files | Original | Recompiled from CCP/M-86 3.1 and adapted for parity |
+| `ren.exe` | Rename files through DOS | — | Reverse Engineered from CDOS 4.1 (byte-identical) |
 | `sdir` | Detailed, sorted directory listing | Original | Recompiled from CCP/M-86 3.1 and adapted for parity |
 | `set` | Set file and drive attributes | Original | Recompiled from CCP/M-86 3.1 and adapted for parity |
+| `setenv.exe` | Display and edit the 1 KB per-console DOS environment | — | New implementation for CDOS 4.1 |
 | `setport` | Configure serial ports and protocols | Original | Reverse Engineered from CDOS 4.1; 39 documented equivalent encodings |
 | `setup` | Customize system hardware settings | Original | —; original OEM binary retained |
 | `show` | Display disk space and drive information | Original (3.3) | Recompiled from CCP/M-86 3.1 and adapted for parity |
@@ -244,6 +246,7 @@ system and the live regression checks.
 | `make check-pce` | Boot, console switching, line editing/recall, DIR, PIP, CLS, USER and SYSDISK |
 | `make check-type` | OEM/rebuilt TYPE comparison, DOS/CP/M EOF, passwords and paging |
 | `make check-set` | OEM/rebuilt SET comparison, persisted attributes, passwords and timestamp settings |
+| `make check-setenv` | DOS environment editing, mixed-case persistence, capacity and PATH interoperability |
 | `make check-show` | OEM/rebuilt SHOW comparison, media guards, capacity/free space, users and labels |
 | `make check-rtc` | Built-XIOS BIOS RTC, calendar bounds, fallback and write-back checks |
 | `make check-fat-case` | FAT case-insensitive names, PIP copy/import, ERA and CP/M F4 preservation |

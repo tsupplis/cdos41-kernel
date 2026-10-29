@@ -7524,7 +7524,7 @@ RLR		equ	word ptr .68H	;pointer to ready list root in sysdat
 
 eject
 
-env_size	equ	128			; DOS minimum guaranteed
+env_size	equ	1024			; Per-console DOS environment
 
 ;	PARAGRAPH BOUNDARY
 
