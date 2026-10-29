@@ -6,7 +6,7 @@ Original archive hashes remain in sources.json alongside modified hashes.
 
 ## DATE.EXE: short-year input
 
-`commands/date/pcdate.a86` uses the native DATE.CMD pivot: 00..77 means
+`commands/datetime/pcdate.a86` uses the native DATE.CMD pivot: 00..77 means
 2000..2077 and 78..99 means 1978..1999. Explicit 19xx/20xx is retained;
 short 19/20 means 2019/2020. Incomplete three-digit years are rejected.
 DOS validates calendar dates and its supported year range. The regression
@@ -95,3 +95,13 @@ full buffers, tabs, control-character widths, wrapping, per-console isolation,
 all four direct shortcuts, Tab wraparound, USER output, CLS and native
 SYSDISK query/[OFF]/[ON].
 No released media is modified by this automated boot test.
+
+## Command import organization
+
+DOS DATE.EXE and its existing short-year patch/tests moved to commands/datetime;
+native DATE.CMD is in commands/date. ERAQ moved unchanged into commands/era.
+ERA uses the same public-entry rename and 4.1 startup/includes as the local
+ERAQ; comparison of the two ERAQ versions found no algorithm changes.
+Other newly requested CCP/M command imports retain their source bytes and
+Makefiles. PIP3 was removed; PIP4 remains the distribution PIP. HELP.HLP is
+indexed from imported CCP/M text with the emulator reporting 4.1.

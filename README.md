@@ -27,8 +27,8 @@ installed toolchain.
 Historical source bytes retain DOS line endings and EOF padding. DATE.EXE
 has a documented short-year fix; its original and current hashes are recorded. Makefiles check assembler/compiler/linker diagnostics because some
 historical tools return success after an error. Included local sources are
-normal prerequisites. The PIP source and Makefile were copied unchanged from
-the ready 4.1-mode build; it produces `pip4.cmd` (and retains `pip3.cmd`).
+normal prerequisites. The PIP 4.1 implementation is retained, with a 4.1N banner; its Makefile builds only
+`pip4.cmd`. The unused PIP3 source, target and outputs were removed.
 The two license files are unchanged copies of the previous project's files.
 
 ## Verified components
@@ -69,14 +69,34 @@ The user reports the initial image booting; build/media checks pass.
 
 ## Enabled command builds
 
-The top-level build now includes these 27 command families:
+The top-level build includes the OEM 4.1 families and locally imported
+CCP/M command builds. Newly imported sources and Makefiles are unchanged unless
+noted below; every dependency is local.
 
-- Development and system generation: ASM86, GENCMD, SUBMIT, GENCCPM, GENLDR.
-- File and disk utilities: PIP (pip3/pip4), BATCH, CHDIR, MKDIR, RMDIR,
-  SYSDISK, CHSET, INITDIR, ERAQ, HELP, FUNCTION and DSKMAINT.
-- Editor and menus: DREDIX, COPYMENU and EDITMENU.
-- Printing: PRINTMGR and DSP.
-- DOS outputs: LOADCCPM.COM, COPY.EXE, DATE.EXE, ERASE.EXE and PATH.EXE.
+- Development: ASM80, ASM86, GENCMD, HEXCOM, SUBMIT, GENCCPM and GENLDR.
+- Native file/system tools: PIP 4.1, BATCH, CHDIR, MKDIR, RMDIR, SYSDISK,
+  CHSET, INITDIR, ERA/ERAQ, REN, SYSTAT, DATE, SDIR, SHOW, SET, TYPE, DIR,
+  ED, FUNCTION, DSKMAINT and DCOPY/DCOMP.
+- Editors/menus: DREDIX, COPYMENU, EDITMENU and WINDOW/WMENU.
+- Printing: PRINT, PRINTMGR and DSP.
+- DOS: LOADCCPM.COM, COPY.EXE, DATE.EXE, ERASE.EXE and PATH.EXE.
+
+`commands/date` builds native DATE.CMD. `commands/datetime` holds the existing
+DOS DATE.EXE build and its 54-case regression; TIME.EXE can be added there later.
+`commands/era` builds ERA and the unchanged 4.1 ERAQ together using SCD3 and the
+4.1 shared includes. ERA's only executable-source adaptation is the same public
+entry rename seen in the 4.1 ERAQ source; the ERAQ comparison found no algorithm
+changes. See commands/era/README.md for the comparison.
+
+ASM80, REN, SYSTAT, WINDOW/WMENU, native DATE, SDIR, SHOW, HEXCOM, PRINT,
+SET, TYPE, DIR, ED and DCOPY/DCOMP were imported unchanged from CCP/M, including
+their Makefiles; PRINT adds diagnostic/output checks to its recipe. Existing 4.1 CHSET and the existing SUBMIT copy are retained.
+The source-built HELP.HLP uses an unchanged copy of CCP/M HELP.DAT as its initial
+text, indexed by native 4.1 HELP.CMD. The indexer runs under EMU2_CPM_VER=4.1.
+Some inherited help topics describe CCP/M-specific features; 4.1 text review
+and comparison of imported commands with base binaries remain a later task.
+The initial media selection remains explicit; enabling a command build does
+not automatically add it to the two existing floppy images.
 
 RMDIR and SYSDISK select the original ZD and SD modes of `D.A86`, using
 small new wrappers patterned on CHDIR/MKDIR. D.A86 is a shared module,
@@ -99,8 +119,7 @@ Remaining command gaps:
 - HDMAINT is pending the missing flat LBDOS loader; no older loader is
   substituted. Its components can be built separately for investigation.
 - REDOS implementation source is missing.
-- HELP.CMD builds, but the 4.1 HELP.DAT text is absent, so HELP.HLP is not
-  generated. Menu utilities' serial-terminal mode needs separate TERM data.
+- Menu utilities' serial-terminal mode needs separate TERM data.
 
 ## Source catalog
 
@@ -132,7 +151,7 @@ rejected. DOS function 2Bh still validates the complete calendar date and
 supported range, so mapping 78/79 does not make 1978/1979 valid DOS dates.
 The original archived source/hash remains recorded in `sources.json`.
 
-`make -C commands/date check` executes 54 cases against the linked EXE
+`make -C commands/datetime check` executes 54 cases against the linked EXE
 with synthetic DOS/BDOS calls under emu2. Both command-tail and interactive
 paths are covered, including 00/77/78/99, 19/20, explicit four-digit years,
 2000-02-29 and malformed years. The harness captures function 2Bh rather

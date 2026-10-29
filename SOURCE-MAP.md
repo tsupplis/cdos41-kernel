@@ -36,8 +36,8 @@ DSKMAINT, HDMAINT, GENLDR and LOADCCPM on disks 08, 10 and 11.
 | `mkdir` | MKDIR/PATH/DERROR.A86 (11/07) | Verified build, enabled |
 | `dredix` | C editor modules + UTIL/WMCA/WWCALL, DREDIX.INP (08) | Verified build, enabled |
 | `dsp` | DSP/DSPM.C, UTLASM.A86 (09) | Verified build, enabled |
-| `eraq` | SCD3.A86 + ERAQ.PLM (09) | Verified build, enabled |
-| `help` | SCD3.A86 + HELP3.PLM (11/09) | Verified build, enabled; HELP.DAT absent, HELP.HLP not generated |
+| `era` | 4.1 ERAQ.PLM/SCD3 + adapted CCP/M ERA.PLM | ERA and ERAQ build together; old eraq directory consolidated |
+| `help` | SCD3.A86 + HELP3.PLM (11/09) | Verified build and HELP.HLP indexing; text starts from unchanged CCP/M HELP.DAT |
 | `function` | FUNC1/2/3, screen modules, HELP1/2, FUNC10 (09/10) | Verified build, enabled |
 | `dskmaint` | SQUIDDM1/2/3 + screen/help modules (08/09) | Verified build, enabled; DOSBOOT insertion checked |
 | `hdmaint` | H70.A86 and HD*.LIB, boot/load sectors (10/11) | Pending: flat LBDOS.H86 absent; no older loader substitution, by decision |
@@ -48,7 +48,8 @@ DSKMAINT, HDMAINT, GENLDR and LOADCCPM on disks 08, 10 and 11.
 | `copymenu` | CMED*.C + screen/window/attribute helpers (07/08/09) | Verified build, enabled |
 | `editmenu` | MED*.C + shared screen/window helpers (08/09) | Verified build, enabled |
 | `copy` | PCCOPY.A86, COPY.BAT (07) | Verified build, enabled; DOS .EXE output |
-| `date` | PCDATE.A86, DATE.BAT (08) | Verified build, enabled; DOS .EXE output |
+| `datetime` | PCDATE.A86, DATE.BAT (08) | Verified build, enabled; DOS DATE.EXE; TIME.EXE reserved for later |
+| `date` | Unchanged CCP/M DATE.PLM and source-build Makefile | Native DATE.CMD build |
 | `erase` | PCERASE/MEDIA.A86, ERASE.BAT (09) | Verified build, enabled; DOS .EXE output |
 | `path` | PATHX.A86, PATH.BAT (11) | Verified build, enabled; DOS .EXE output |
 | `d` | D.A86 + PATH/DERROR (07) | Shared implementation for CHDIR/MKDIR/RMDIR/SYSDISK; no D executable |
@@ -64,9 +65,13 @@ This archive does not supply the old native standalone ASM86, DDT86, GENCMD,
 ED, SDIR, SET, SHOW, SUBMIT, SYSTAT, TOD, TYPE, VCMODE, CONFIG, SETUP,
 WINDOW or WMENU source builds under those names. This is not proof that each
 is needed unchanged: some functionality belongs to the 4.1 TMP or new tools.
-ASM86, GENCMD and SUBMIT have been copied locally with their existing
-Makefiles. The remaining candidates still require individual review against
-the actual 4.1 interfaces and distribution requirements.
+ASM86, GENCMD and SUBMIT were already copied locally. ASM80, REN, SYSTAT,
+WINDOW/WMENU, DATE.CMD, SDIR, SHOW, HEXCOM, PRINT, SET, TYPE, DIR, ED and
+DCOPY/DCOMP are now imported with their Makefiles. PRINT adds build diagnostic
+and output checks; its C/assembly sources are unchanged. Existing 4.1
+CHSET is retained. ERA and ERAQ share a directory and the local 4.1 startup.
+HELP.DAT is copied unchanged from CCP/M as the baseline for a later 4.1 review.
+These imports establish local builds; alignment with base binaries is deferred.
 
 ## Headers and common code
 
@@ -116,7 +121,7 @@ rejected. DOS function 2Bh still validates the complete calendar date and
 supported range, so mapping 78/79 does not make 1978/1979 valid DOS dates.
 The original archived source/hash remains recorded in `sources.json`.
 
-`make -C commands/date check` executes 54 cases against the linked EXE
+`make -C commands/datetime check` executes 54 cases against the linked EXE
 with synthetic DOS/BDOS calls under emu2. Both command-tail and interactive
 paths are covered, including 00/77/78/99, 19/20, explicit four-digit years,
 2000-02-29 and malformed years. The harness captures function 2Bh rather
