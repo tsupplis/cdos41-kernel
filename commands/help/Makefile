@@ -8,11 +8,12 @@ DRC86=drccpm_cc
 DRCLINK86=drccpm_link
 
 TOOLS=help.cmd
+DATA=help.hlp
 OBJECTS=scd3.obj help3.obj
 
 .PHONY: all check clean
 .DELETE_ON_ERROR:
-all: $(TOOLS)
+all: $(TOOLS) $(DATA)
 check: all
 	@set -e; for f in $(TOOLS); do cmdinfo $$f; done
 
@@ -36,7 +37,7 @@ $(OBJECTS): $(LOCAL_INCLUDES) Makefile
 	@grep -qiE 'NUMBER OF ERRORS: +0' $*.log
 
 clean:
-	rm -f *.sys *.loc *.cmd *.obj *.h86 *.hex *.sym *.lin *.lst *.prn *.log
+	rm -f help.hlp *.sys *.loc *.cmd *.obj *.h86 *.hex *.sym *.lin *.lst *.prn *.log
 	rm -f *.mp? *.lnk *.map *.exe *.com
 
 help.cmd: $(OBJECTS) Makefile
@@ -44,3 +45,13 @@ help.cmd: $(OBJECTS) Makefile
 	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' help-link.log
 	@test -s $@
 	cmdinfo $@
+
+# Same native HELP [C] indexer and temporary-text workflow as CCP/M.
+help.hlp: help.cmd help.dat Makefile
+	@set -e; tmp=$$(mktemp -d); \
+	trap 'rm -rf "$$tmp"' EXIT HUP INT TERM; \
+	cp help.cmd help.dat "$$tmp/"; \
+	unix2dos "$$tmp/help.dat"; \
+	(cd "$$tmp" && EMU2_CPM_VER=4.1 emu2 help.cmd '[C]'); \
+	cp "$$tmp/help.hlp" $@
+	@test -s $@
