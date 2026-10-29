@@ -26,7 +26,8 @@ The current version includes:
 - CP/M-Plus-style command-line cursor movement, insertion, deletion and recall.
 - Left/Right, Home/End, Delete and Up during buffered console input.
 - Ctrl+Alt+1–4 to select consoles; Ctrl+Alt+Tab to cycle through them.
-- Optional paging for TYPE, SDIR and DIR.CMD, alongside the built-in DIR's `/P`.
+- Ctrl+Alt+Esc opens an installed WMENU; Ctrl+keypad-Plus remains available.
+- Optional paging for TYPE, SDIR and DIR.CMD, alongside the built-in DIR's `/P` / `[P]`.
 - CP/M-Plus-style console redirection through PUT, GET and RDR for native commands.
 - A built-in CLS command and a common `Press any key to continue...` prompt.
 - DEL mapped to native ERA.CMD in both the shell and BATCH.
@@ -177,7 +178,7 @@ Compatibility details live with each tool.
 | `genccpm` | Generate and configure the system image | — | Recompiled from CDOS 4.1 and adapted; flag-table fix |
 | `genldr` | Generate a system loader | — | Recompiled from CDOS 4.1; carried-over SCD2 startup |
 | `hdmaint` | Hard-disk maintenance | Original | 4.1 source present; build pending the missing flat LBDOS loader |
-| `help / help.hlp` | Browse indexed command help | HLP only | Recompiled from CDOS 4.1; help.dat imported from CCP/M-86 |
+| `help / help.hlp` | Browse indexed command help | HLP only | Recompiled from CDOS 4.1; help.dat reviewed against the 4.1 reference and maintained imports |
 | `hexcom` | Convert Intel HEX to COM binaries | — | HEXCOM 3.00-compatible C from [tpzasm](https://github.com/johnsonjh/tpzasm) |
 | `initdir` | Enable or remove directory date/time stamps | — | Recompiled from CDOS 4.1 |
 | `loadccpm.com` | Load the system from DOS | — | Recompiled from CDOS 4.1 |

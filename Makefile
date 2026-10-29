@@ -106,3 +106,7 @@ check-dir-options: all
 	python3 tools/dir_options_check.py
 check-batch-live: all
 	python3 tools/batch_check.py
+
+.PHONY: check-help-live
+check-help-live: all
+	python3 tools/help_live_check.py
