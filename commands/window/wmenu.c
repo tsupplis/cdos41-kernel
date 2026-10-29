@@ -13,7 +13,7 @@ static setline(s) char *s;
     for(i=0;i<80;++i) { status[2*i]=*s?*s++:' '; status[2*i+1]=7; }
 }
 static mark(p,n) int p,n;
-{ while(n-- && p<80) status[2*p+1]=0x70,++p; }
+{ while(n-- && p<80) { status[2*p+1]=0x70; ++p; } }
 static showline() { xcall(18,0,status,dataseg()); }
 static line(s) char *s; { setline(s); showline(); }
 static fields(s,a,b,c,d) char *s; int a,b,c,d;
@@ -70,7 +70,7 @@ static color(n) int n;
         fields(prompt,background?32:21,7,0,0);
         k=w_key(); if(k==13 || k==27) return;
         if(k==9 || k==0xff0d || k==0xff0e) { background=!background; continue; }
-        delta=(k==' ' || k==0xff0b)?1:k==0xff10?-1:0;
+        delta=(k==' ' || k==0xff10)?1:k==0xff0b?-1:0;
         if(delta) {
             if(background) w.background=(w.background+delta+8)%8;
             else w.foreground=(w.foreground+delta+8)%8;

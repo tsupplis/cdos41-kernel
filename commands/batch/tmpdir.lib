@@ -995,12 +995,45 @@ eatmor:
 	jz eat1			;recognizes and set flags for
 	cmp al,0			;any of the valid options of
 	jz eos			;dir.
+	cmp al,'['
+	je dir_bracket_options
 	cmp al,'/'
 	jnz fullup
 	call optnck
 	jmp eatmor
 fullup:
 	ret
+
+; Accept CP/M [S], [S and combined [S,P] alongside native /S /P.
+; A missing closing bracket is accepted only at the end of the command.
+dir_bracket_options:
+    inc bx
+ dir_bracket_next:
+    mov al,[bx]
+    or al,al ! jz dir_bracket_return
+    cmp al,']' ! je dir_bracket_close
+    cmp al,' ' ! je dir_bracket_skip
+    cmp al,TAB ! je dir_bracket_skip
+    cmp al,',' ! je dir_bracket_skip
+    cmp al,'L' ! je dir_bracket_flag
+    cmp al,'W' ! je dir_bracket_flag
+    cmp al,'P' ! je dir_bracket_flag
+    cmp al,'S' ! je dir_bracket_flag
+    mov ax,E_BADFNAME
+    call clierror
+    jmp ccpret
+ dir_bracket_flag:
+    dec bx                      ; optnck expects the prefix before the letter
+    call optnck
+    jmps dir_bracket_next
+ dir_bracket_skip:
+    inc bx
+    jmps dir_bracket_next
+ dir_bracket_close:
+    inc bx
+ dir_bracket_return:
+    jmp eatmor
+
 eat1:
 	inc bx
         jmp eatmor
@@ -1864,7 +1897,7 @@ hundreth	db	0
 
 sysdsk		db	10h
 
-sflag		db	FALSE			;wide   option for dir
+sflag		db	FALSE			;system-files-only option for DIR
 lflag		db	FALSE
 
 pflag		db	FALSE			;pause  option for dir

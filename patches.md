@@ -199,3 +199,26 @@ SET 3.1N retains the imported parser, attribute, protection and timestamp
 logic. HELP removes unsupported MAKE/EDIT and documents ARCHIVE/F1-F4.
 `make check-set` compares OEM/rebuilt execution on disposable CP/M/FAT disks,
 including persisted attributes, interactive passwords and timestamp settings.
+
+## XIOS: WMENU compact-keyboard shortcut
+
+Ctrl+Alt+Esc emits the existing window-manager wake event (7Dh), the same
+as Ctrl+keypad-Plus. The original binding remains available. No manager is
+loaded automatically; WMENU must already be installed. Console shortcuts
+Ctrl+Alt+1..4 and Ctrl+Alt+Tab retain their existing behavior.
+
+## SYSTAT: fixed data allocation
+
+SYSTAT uses its statically allocated data requirement, matching the OEM
+policy, rather than requesting up to 64 KiB of unnecessary DATA. The report
+logic and private structure offsets are unchanged. REN also retains its
+algorithm; both Makefiles now track included literals.
+
+## WINDOW/WMENU: native CDOS interface
+
+Public window numbers are 1..4, with zero-based XIOS indices confined to the
+support layer. SETUP exports all four windows; text snapshots trim trailing
+spaces. WMENU uses the native highlighted menu, arrow/Space navigation,
+live-edit commit on Esc/Return and native color-arrow direction. Its status
+buffer is passed as CX:DX offset:segment. These correct confirmed differences
+from the initial CCP/M-derived rewrite; original binaries remain as references.

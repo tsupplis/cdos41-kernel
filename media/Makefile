@@ -27,10 +27,10 @@ MAINT_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ../
 MENU_COMMANDS = ../commands/dredix/dredix.cmd ../commands/copymenu/copymenu.cmd ../commands/editmenu/editmenu.cmd \
     ../commands/printmgr/printmgr.cmd ../commands/dsp/dsp.cmd ../base/term.dat \
     ../base/menu.dat ../base/fdmenu.dat ../base/hdmenu.dat \
-    ../base/national.msg ../base/index.dsp ../base/help.edx \
-    ../base/lsn.edx ../base/keys.pfk ../base/carddeck.bat \
+    ../base/national.msg ../base/index.dsp ../commands/dredix/help.edx \
+    ../commands/dredix/lsn.edx ../base/keys.pfk ../base/carddeck.bat \
     ../base/clear.bat \
-    ../base/letter.txt ../base/user.txt
+    ../base/user.txt
 
 DOS_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
     ../commands/copy/copy.exe ../commands/datetime/date.exe ../commands/erase/erase.exe \

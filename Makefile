@@ -77,3 +77,24 @@ check-set: all
 	python3 tools/set_check.py
 	python3 tools/set_check.py --stamps
 	python3 tools/set_check.py --passwords
+
+.PHONY: check-wmenu
+check-wmenu: all
+	python3 tools/wmenu_check.py
+
+.PHONY: check-era
+check-era: all
+	python3 tools/import_check.py era
+
+.PHONY: check-ren
+check-ren: all
+	python3 tools/import_check.py ren
+
+.PHONY: check-systat
+check-systat: all
+	python3 tools/import_check.py systat
+
+.PHONY: check-window
+check-window: all
+	$(MAKE) -C commands/window check livetest.cmd
+	python3 tools/window_check.py

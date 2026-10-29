@@ -44,11 +44,10 @@ CP/M-86 3.1. It does not implement the older spooler's `PRINT OFF` interface.
 The programs share a purpose, but the code does not establish that this is
 an incremental revision of the CP/M-86 implementation.
 
-## Validation
+## Validation and CDOS origin
 
-The current DRC 1.11 / LINK86 2.02 tools compile and link all modules without
-undefined symbols. This is a source rebuild, not a byte-identical reconstruction
-of `../../base/print.cmd`: compiler/runtime and linked layout differ. The
-rebuilt CMD has 6,480 bytes of allocated CODE and 1,088 bytes of DATA; the
-shipped image has 6,752 and 928 respectively. Both request up to 64 KiB DATA.
-Printer operation still needs testing under Concurrent CP/M-86.
+PRINT is the CCP/M-86 3.1 import, rebuilt from its original C source/module
+list with compiler/linker diagnostics and CMD headers checked. It is not a
+CDOS command reconstruction and there is no CDOS PRINT binary to match.
+PRINTMGR is a different CDOS utility. The imported version guard accepts the
+4.1 BDOS revision; a CDOS smoke run completes a file-printing command.

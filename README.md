@@ -169,7 +169,7 @@ Compatibility details live with each tool.
 | `dsp` | Inspect print-spool information | — | Recompiled from CDOS 4.1 |
 | `ed` | Line-oriented text editor | — | Recompiled from CCP/M-86 3.1 and adapted |
 | `editmenu` | Edit menu definitions | — | Recompiled from CDOS 4.1 |
-| `era / eraq` | Erase files, optionally with confirmation | ERA only | ERA recompiled from CCP/M-86 3.1 and adapted; ERAQ recompiled from CDOS 4.1 |
+| `era / eraq` | Erase files, optionally with confirmation | ERA only | ERA recompiled from CCP/M-86 3.1 and adapted for parity; ERAQ recompiled from CDOS 4.1 |
 | `erase.exe` | Erase files through DOS | — | Recompiled from CDOS 4.1 |
 | `function` | Program function keys | — | Recompiled from CDOS 4.1 |
 | `gencmd` | Convert H86 output into CMD executables | — | Recompiled from CCP/M-86 3.1 and adapted |
@@ -188,18 +188,18 @@ Compatibility details live with each tool.
 | `put` | Capture console output into a file | — | New; shared putget.lib engine, imported from the CCP/M project |
 | `rdr` | Redirect console input and output together | — | New; shared putget.lib engine, imported from the CCP/M project |
 | `redos.com` | Return from Concurrent to DOS | Original | —; original OEM binary retained, implementation source missing |
-| `ren` | Rename files | Original | Recompiled from CCP/M-86 3.1 and adapted |
+| `ren` | Rename files | Original | Recompiled from CCP/M-86 3.1 and adapted for parity |
 | `sdir` | Detailed, sorted directory listing | Original | Recompiled from CCP/M-86 3.1 and adapted for parity |
 | `set` | Set file and drive attributes | Original | Recompiled from CCP/M-86 3.1 and adapted for parity |
 | `setup` | Customize system hardware settings | Original | —; original OEM binary retained |
 | `show.cmd` | Display disk space and drive information | Original (3.3) | Recompiled from CCP/M-86 3.1 and adapted for parity |
 | `submit` | Run SUB command files | — | Recompiled from CCP/M-86 3.1 and adapted |
 | `sysdisk` | Display or change the system search path | — | Recompiled from CDOS 4.1; SD-mode D.A86 wrapper |
-| `systat` | Inspect processes and system resources | Original | Recompiled from CCP/M-86 3.1 and adapted |
+| `systat` | Inspect processes and system resources | Original | Recompiled from CCP/M-86 3.1 and adapted for parity |
 | `time.exe` | Display or set the time through DOS | Original | Reverse Engineered from CDOS 4.1 |
 | `type.cmd` | Display a text file | Original | Recompiled from CCP/M-86 3.1 and adapted for parity |
-| `window` | Control console windows from commands | Original | C rewrite; shared modules in commands/window |
-| `wmenu` | Interactive console-window manager | Original | C rewrite; shared modules in commands/window |
+| `window` | Control console windows from commands | Original | C rewrite, adapted for parity; shared modules in commands/window |
+| `wmenu` | Interactive console-window manager | Original | C rewrite, adapted for parity; shared modules in commands/window |
 
 ## Y2K utilities
 

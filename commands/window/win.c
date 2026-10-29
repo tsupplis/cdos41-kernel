@@ -133,23 +133,31 @@ w_write(n,type,name) int n,type; char *name;
 {
     struct window w; int p,seg,r,c,row,col,nr,nc;
     char line[160];
+    int end;
     if(!filename(name)) { message("Filename requested is not an acceptable filename.\r\n"); return 0; }
     if(!w_read(n,&w)) return 0;
     bdos(19,fcb);
     if((bdos(22,fcb)&255)==255) return 0;
     used=failed=0;
     if(type==2) {
-        format(line,"window ch n=%d pr=%d,pc=%d,nr=%d,nc=%d,vr=%d,vc=%d,tr=%s,d=%s,fg=%s,bg=%s\r\n",
-          n+WINDOW_FIRST,w.prow,w.pcol,w.nrows,w.ncols,w.vrow,w.vcol,
-          w.tracking?"row":"no",w.display?"color":"b&w",
-          colors[w.foreground],colors[w.background]);
-        text(line);
+        /* OEM SETUP writes the complete PC-window configuration. */
+        for(n=0;n<w_status(1);++n) {
+            w_read(n,&w);
+            format(line,"window ch n=%d pr=%02d,pc=%02d,nr=%02d,nc=%02d,vr=%02d,vc=%02d,tr=%s,d=%s,fg=%s,bg=%s\r\n",
+              n+WINDOW_FIRST,w.prow,w.pcol,w.nrows,w.ncols,w.vrow,w.vcol,
+              w.tracking?"Row":"No",w.display?"Color":"B&W",
+              colors[w.foreground],colors[w.background]);
+            text(line);
+        }
     } else {
         p=xcall(16,0,0,n); seg=farword(xdata,p+22);
         row=type==0?w.vrow-1:0; col=type==0?w.vcol-1:0;
         nr=type==0?w.nrows:24; nc=type==0?w.ncols:80;
         for(r=0;r<nr;++r) {
-            for(c=0;c<nc;++c) out(farbyte(seg,2*((row+r)*80+col+c)));
+            /* Native text snapshots omit trailing spaces on each row. */
+            end=nc;
+            while(end && farbyte(seg,2*((row+r)*80+col+end-1))==' ') --end;
+            for(c=0;c<end;++c) out(farbyte(seg,2*((row+r)*80+col+c)));
             text("\r\n");
         }
     }

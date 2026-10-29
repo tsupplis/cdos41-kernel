@@ -233,3 +233,13 @@ SHOW 2.1 identifier remains a cosmetic difference in invalid-option output.
 `commands/set` retains the CCP/M-86 3.1 PL/M source lineage (SET 2.1),
 adapted against OEM SET 3.1 for CP/M-only label/XFCB operations on DOS media.
 The build is SET 3.1N. See `commands/set/README.md` and `make check-set`.
+
+## Completed remaining import assessment
+
+ERA needs no algorithm change: normalized executable source agrees with its
+CCP/M input and the ERAQ 3.1/4.1 comparison. REN's twelve command checks and
+SYSTAT's ten report/continuous-mode checks pass; SYSTAT now uses fixed DATA.
+WINDOW/WMENU require CDOS 1..4 numbering, native menu/status handling and
+export corrections, recorded in their tool README. PRINT remains the original
+CCP/M C import; there is no CDOS PRINT binary parity task. Native ERAQ is not
+an import and is unchanged.

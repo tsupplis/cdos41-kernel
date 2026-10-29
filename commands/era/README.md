@@ -14,4 +14,16 @@ the initial saved BDOS fields in this 4.1 kernel.
 
 ERAQ keeps per-file confirmation; ERA keeps its wildcard/all-files confirmation
 and existing error handling. No behavioral rewrite is inferred from the version
-number. Comparison with base binaries is a later task.
+number. The ERA import review is recorded below.
+
+## Import review
+
+ERA's executable source tokens match the CCP/M 3.1 source after entry-name,
+include-path, comment and whitespace normalization. Applying the same
+normalization to CCP/M ERAQ and CDOS ERAQ also finds no algorithm changes.
+The existing 4.1 startup/includes therefore complete ERA's alignment; no
+functional patch is needed. ERAQ remains the unchanged native CDOS source.
+
+The light ERA check also passed eight OEM/rebuilt command cases on disposable
+CP/M/FAT media, including wildcard deletion, passwords, retry, missing files
+and preservation of unrelated files. `make check-era` repeats these checks.

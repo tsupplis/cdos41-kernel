@@ -2379,7 +2379,8 @@
     Type WMENU and press Enter.   WMENU returns the message,  "Window
     Manager installed." You will notice that the letters "Win" appear
     on the  Concurrent CP/M status line.   With the window manager in
-    memory,  you can press Ctrl-keypad-Plus (+) to obtain WMENU's main menu.
+    memory,  you can press Ctrl-Alt-Esc to obtain WMENU's main menu.
+    Ctrl-keypad-Plus remains available as a compatibility shortcut.
     This menu offers you a choice from Place, Size, Scroll, Tracking,
     Display, Color, Write,  and Abort.  You can press Escape (Esc) to
     leave the main menu.
@@ -2434,7 +2435,7 @@
     your computer's memory.   After  pressing  Enter  from  the Abort
     submenu, you must reinvoke WMENU to load the window manager.
 
-    Remember that you can press Ctrl-keypad-Plus to obtain WMENU's main menu
+    Remember that you can press Ctrl-Alt-Esc to obtain WMENU's main menu
     even when you are in an application program.  Also you can switch
     virtual  consoles  when  you are in the  main  menu or while in a
     submenu.  This means that you could, for example, change the size

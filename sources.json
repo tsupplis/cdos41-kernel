@@ -2092,11 +2092,9 @@
     {
       "path": "kernel/con/xbegin.lib",
       "origin": "41SRC_05.IMG.DIR/XBEGIN.LIB",
-      "sha256": "f6e3b51186cb4aac17adb36f1a82d025c3ff3a0ba6ce94809e7a6cd6df821cd6",
+      "sha256": "83a41a3021d253df5c74cc1a312e6091a956b45ef48002d0a8ee452dc71f3014",
       "original_sha256": "52e2eab2f8f9dc3bfc8fbf37c7f99cdfefbe8af3f2796a3013d3a12d69df9e69",
-      "modifications": [
-        "Port Ctrl+Alt+1..4 and Ctrl+Alt+Tab through the existing PIN console-switch events, plus editor CCB flag equates."
-      ]
+      "modifications": "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md."
     },
     {
       "path": "kernel/con/black.a86",
@@ -4691,7 +4689,9 @@
     {
       "path": "commands/ren/Makefile",
       "origin": "ccpm86-kernel/commands/ren/Makefile",
-      "sha256": "a75ec37a9764f9cc12110dfd0d615892a729281f75a4ecd74c06dd893886a62e"
+      "sha256": "d8445e620ed7e776b59387938aa0cb7981107bcc5d656bbc14f0e4bcee1720e6",
+      "original_sha256": "a75ec37a9764f9cc12110dfd0d615892a729281f75a4ecd74c06dd893886a62e",
+      "modifications": "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md."
     },
     {
       "path": "commands/ren/copyrt.lit",
@@ -4731,7 +4731,9 @@
     {
       "path": "commands/systat/Makefile",
       "origin": "ccpm86-kernel/commands/systat/Makefile",
-      "sha256": "37e14c778dcf138771e2a75049884b4ecbf2d51dbb774d951529e50fd949ac2e"
+      "sha256": "54253dbea8ffeccaeff6cfc0323bbe2c25ccb7f6cf25527f9986289b1a250641",
+      "original_sha256": "37e14c778dcf138771e2a75049884b4ecbf2d51dbb774d951529e50fd949ac2e",
+      "modifications": "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md."
     },
     {
       "path": "commands/systat/copyrt.lit",
@@ -4811,27 +4813,37 @@
     {
       "path": "commands/window/README.md",
       "origin": "ccpm86-kernel/commands/window/README.md",
-      "sha256": "4114a28d7acc3baf467c380cd099a2271de5237bc69d9eefce281b9f65f8de44"
+      "sha256": "6a2587aff0d9bd432363403a782cebd708ca85d7572208c8961992b944bdc651",
+      "original_sha256": "4114a28d7acc3baf467c380cd099a2271de5237bc69d9eefce281b9f65f8de44",
+      "modifications": "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md."
     },
     {
       "path": "commands/window/command.c",
       "origin": "ccpm86-kernel/commands/window/command.c",
-      "sha256": "ca8424754254bee1249ce8a678e6d9f7254d464b61bcdffb74140844809d28f0"
+      "sha256": "c0cad7fe03b4870f52ed20107ff16fb4cfc2b943212fe14a08cee2ff958ce470",
+      "original_sha256": "ca8424754254bee1249ce8a678e6d9f7254d464b61bcdffb74140844809d28f0",
+      "modifications": "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md."
     },
     {
       "path": "commands/window/format.c",
       "origin": "ccpm86-kernel/commands/window/format.c",
-      "sha256": "d6dab3a98ef2ef17593001f70d49abcdfa0dcdc4f2ea6fc8f4907862e6c40d9b"
+      "sha256": "322f702101add6a940e62885b3e4a9561184620241d032927d118352221f5498",
+      "original_sha256": "d6dab3a98ef2ef17593001f70d49abcdfa0dcdc4f2ea6fc8f4907862e6c40d9b",
+      "modifications": "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md."
     },
     {
       "path": "commands/window/hostcheck.c",
       "origin": "ccpm86-kernel/commands/window/hostcheck.c",
-      "sha256": "076bfcbcc3466ea71acf0731922efdb34a96c891f864a940584aa08e6befd889"
+      "sha256": "af7166e594bc756b6bbb47432bc333e26b65a2339e839f13affe9f026a1752fd",
+      "original_sha256": "076bfcbcc3466ea71acf0731922efdb34a96c891f864a940584aa08e6befd889",
+      "modifications": "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md."
     },
     {
       "path": "commands/window/livetest.c",
       "origin": "ccpm86-kernel/commands/window/livetest.c",
-      "sha256": "327129b31301d10126802d857933da9d45f66b7a0f9d76f8e92def4871d8a7e7"
+      "sha256": "ed37eb0e62335b15b37bc8ebee1a28949c363ff0e0276d6bf8bc145cad413860",
+      "original_sha256": "327129b31301d10126802d857933da9d45f66b7a0f9d76f8e92def4871d8a7e7",
+      "modifications": "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md."
     },
     {
       "path": "commands/window/start.c",
@@ -4841,12 +4853,16 @@
     {
       "path": "commands/window/win.c",
       "origin": "ccpm86-kernel/commands/window/win.c",
-      "sha256": "ebec4c99073d9161c1ccaf4acf856079e08c9ce06caa2ff687e4b4ad8e015f1b"
+      "sha256": "556c064aff09599d22cc04f36448c74f36cb2799cd623d4ec1439c8b0c3418f2",
+      "original_sha256": "ebec4c99073d9161c1ccaf4acf856079e08c9ce06caa2ff687e4b4ad8e015f1b",
+      "modifications": "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md."
     },
     {
       "path": "commands/window/win.h",
       "origin": "ccpm86-kernel/commands/window/win.h",
-      "sha256": "0b8ccb22d5865dacf1f49ccbd93614aa819da2af5238eac27ece0b9bc4fbe97f"
+      "sha256": "6cc75b4df0aac4039676785873b8082efc5e1251ff61c85880492da9bedbfe6e",
+      "original_sha256": "0b8ccb22d5865dacf1f49ccbd93614aa819da2af5238eac27ece0b9bc4fbe97f",
+      "modifications": "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md."
     },
     {
       "path": "commands/window/window.c",
@@ -4856,7 +4872,9 @@
     {
       "path": "commands/window/wmenu.c",
       "origin": "ccpm86-kernel/commands/window/wmenu.c",
-      "sha256": "de5c621d0d3137725b270019e3eccaf1557943155130611f27242dae286a0a29"
+      "sha256": "44417590c7b1d8b5a3126692d3156e80b1f6d2abd83d932bc6b46ed8ca3ffef6",
+      "original_sha256": "de5c621d0d3137725b270019e3eccaf1557943155130611f27242dae286a0a29",
+      "modifications": "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md."
     },
     {
       "path": "commands/window/xios.a86",
@@ -5424,9 +5442,9 @@
     {
       "path": "commands/help/help.dat",
       "origin": "ccpm86-kernel/commands/help/help.dat",
-      "sha256": "19e448a6665be03cecbca913803a3d70f606108e0aeaf990745e58fa901b947f",
+      "sha256": "f4ec3b4b49b6f99e6c7f771d9a6e9e7fef8329903bdc8302f76f61da8d561dec",
       "original_sha256": "be082138ed971b145f4e44678fb8add340002dbdb86a4bbfd640859428cb61c7",
-      "modifications": "Document SDIR/TYPE/SHOW compatibility and current options."
+      "modifications": "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md."
     },
     {
       "path": "commands/print/sqlink.inp",
@@ -5632,6 +5650,18 @@
       "bytes": 2304,
       "replacement": "commands/sysdisk/sysdisk.cmd",
       "reason": "Superseded by the local CDOS 4.1 source build."
+    }
+  ],
+  "dredix_data": [
+    {
+      "path": "commands/dredix/help.edx",
+      "origin": "Original CDOS OEM DREDIX data, moved from base/help.edx",
+      "sha256": "03684aa51b8c72b9acffa88600462afd9d40d70caa13cdae9f7f3dfab41e3640"
+    },
+    {
+      "path": "commands/dredix/lsn.edx",
+      "origin": "Original CDOS OEM DREDIX data, moved from base/lsn.edx",
+      "sha256": "f2cd1a21f16da8dc06a69653580d484034f8ca094645906ed9c5965f4029f920"
     }
   ]
 }
