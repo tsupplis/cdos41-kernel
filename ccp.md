@@ -8,7 +8,7 @@ to BATCH.CMD; its separate TMP source copies implement the same rewrites.
 | --- | --- | --- |
 | `A:` ... `P:` | TMP | Select the default drive. |
 | `USER [0..15]` | TMP | Display or change the CP/M user number. |
-| `DIR [filespec]` | TMP | Built-in directory listing; `/L` long, `/W` wide, `/P` pause, `/S` system files only. |
+| `DIR [filespec]` | TMP | Built-in directory listing; `/L` long, `/W` wide, `/P` pause, `/S` system files only. Also accepts `[L]`, `[W]`, `[P]`, `[S]` and combined brackets; final `]` is optional. |
 | `CLS` | TMP, local addition | Clear the screen and home the cursor. |
 | `ORDER [CMD,COM,EXE,BAT]` | TMP | Display or set executable-extension search order. |
 | `COMSIZE [kilobytes]` | TMP | Display or set the DOS program memory size. |

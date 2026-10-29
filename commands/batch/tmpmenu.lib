@@ -1022,6 +1022,14 @@ rmenu_not_active2:
 ENDIF
 
 
+; Same CLS shell built-in as PCTMP, also usable from a BAT file.
+            mov di,offset clscmd
+            call parser
+            jnz batch_not_cls
+            mov dx,offset cls_sequence
+            call print_string
+            jmp nextcommand
+batch_not_cls:
 		    mov di,offset usercmd
 		    call parser
 		    jnz notuser
@@ -1046,8 +1054,6 @@ pruser:			mov dx,offset usermsg
 			call print_string
 			call getuser
 			mov dl,bl ! call prnum
-			mov dx,offset user_warning
-			call print_string
 			call crlf
 			jmp nextcommand
 

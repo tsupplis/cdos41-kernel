@@ -1,39 +1,74 @@
+///18087
+  Indicates  to  Concurrent that the next COM or EXE program  in  the  current
+  window makes use of an 8087 coprocessor.
 
+  Syntax:
+  8087
+  8087=ON|OFF
 
-///1ABORT
-    Syntax:
+  Explanation:
+  The  8087  command invokes the 8087 coprocessor used  exclusively  for  math
+  applications.   Most  commands and applications do not make use of the 8087.
+  The 8087 has two settings,  ON and OFF.  The default setting is OFF.  An  ON
+  setting  lasts  for  the current window only until  you  enter  an  8087=OFF
+  command or you turn off your computer.
 
-    ABORT programname
-    ABORT programname n
+  The  8087  command is only  necessary  for   DOS,  8087-dependent  programs.
+  CP/M  programs indicate in their command file header if they require an 8087
+  to run.   See the CHSET command description for more information on  running
+  8087-dependent CP/M programs.
 
-    ABORT immediately stops execution of  the  program  specified  by
-    programname.  If  you  want to abort a program running on another
-    console, include the  number  (n)  of  the  console  running  the
-    program.
+///1ACTIONKEYS
+During buffered command-line input:
+  Left / Ctrl-A       Move left
+  Right / Ctrl-F      Move right
+  Home / End          Beginning / end of line
+  Up / Ctrl-W         Recall the last line on empty input; otherwise End
+  Backspace / Rubout  Delete left
+  Delete / Ctrl-G     Delete at the cursor
+  Ctrl-K / Ctrl-X     Delete to end / beginning
+  Ctrl-B              Toggle Home/End
+  Ctrl-U              Cancel the line with the historical #/newline echo
+  Ctrl-R              Retype the line
+  Ctrl-E              Continue on another screen row
+  Return              Accept the complete buffer
 
-    Use CTRL-C to abort a program  running  on  the  current  virtual
-    console,  and  the  ABORT command for programs running on another
-    virtual console.  If you abort more than one program,  the  ABORT
-    commands are executed in the order given.
+Ctrl-Alt-1..4 selects PC consoles; Ctrl-Alt-Tab cycles them.
+After installing WMENU, Ctrl-Alt-Esc opens its menu.
+Ctrl-keypad-Plus remains an alternative WMENU shortcut.
+Ctrl-C cancels commands that enable the normal console-abort behavior.
+Individual applications can use their own key bindings.
 
-    ///2EXAMPLES
-    Examples:
+///1ADDMEM
+  Use  the  ADDMEM  command to increase the amount of memory  allocated  to  a
+  program with an EXE file extension.
 
-    In  the  following  example, the  ABORT command stops the program
-    TYPE which is displaying the contents of the file DOCUMENT.TXT on
-    the screen.  Assume that the TYPE command was issued from virtual
-    console 1, and is aborted from virtual console 3.  The drive and
-    user number do not affect the ABORT command.
+  Syntax:
+  ADDMEM
+  ADDMEM=n
 
-    A>TYPE DOCUMENT.TXT
+  Explanation:
+  ADDMEM  allocates  additional memory for the current window only.   If you
+  receive a "not enough memory" message when trying to load an .EXE file, use
+  ADDMEM before loading the program again.  If you do not know how much
+  memory to add, start with the default allocation (16K) and increase until the
+  program loads.  (For EXE programs  that always require an
+  extra allocation,  make a BATCH  file  that runs   ADDMEM  and  invokes  the
+  application.)   To  change the  default allocation, enter  ADDMEM
+  with  a  value of 0 to  999,  indicating  the  number   of  kilobytes
+  of additional memory necessary to run  the
+  program.   See the "Running Applications Under Concurrent PC DOS" supplement
+  for information on addmem requirements for many popular applications.
 
-    Dear Sir:
-    The company is pleased to inform you tha...
+  EXAMPLES:
+  ADDMEM<Enter>
+  ADDMEM=32<Enter>
 
-    <switch virtual console screen>
-
-    A>ABORT type 1
-    A>
+///1ASM80
+ASM80 is the translated CP/M-80 assembler used to build 8080 programs.
+It is a development tool, separate from the native 8086 ASM86 assembler.
+Its source/output conventions follow CP/M-80 ASM; HEXCOM converts Intel
+HEX output to a flat COM file.
 
 ///1asm86
     Syntax:
@@ -76,283 +111,262 @@
     F   format of hex file- .H86
     d = (D=Digital Research, I=Intel)
 
-///1BUFFERED
-    You can switch the current (foreground) virtual console into  the
-    background  by selecting a different virtual console for display.
-    If the switched-out virtual console  is  in  buffered  mode,  any
-    program output  to  that console is stored in a disk file.  Then,
-    when the background virtual console is again  switched  into  the
-    foreground,  any  output  stored  in the file is displayed on the
-    monitor.
+///1BACK
+  See the BACKREST command.
 
-    The other  virtual  console mode is dynamic mode.  When a console
-    is switched out and in dynamic mode,  output that scrolls off the
-    screen is  not saved.  Use the VCMODE command  to switch consoles
-    from one mode to the other.
+///1BACKREST
+  BACKREST consists of two separate commands,  BACK and REST.   A description
+  of BACK is presented first.
+
+  BACK  copies  one  or  more files from a hard disk  to  a  floppy  disk  for
+  archiving  purposes or to protect against hardware malfunction or accidental
+  erasure.
+
+  Syntax:
+  BACK
+  BACK FULL
+  BACK CONTROL=n
+  BACK REPORT
+
+  Explanation:
+  Use  the  BACK  options to specify how your hard disk files  are  copied  to
+  backup disks.
+
+  BACK  operates  according to parameters specified in  the  CONTROL.BR  file.
+  The  parameters in CONTROL.BR can be used as is or can be modified  to  suit
+  your  particular  needs--see  Appendix  C  in  the  User's  Guide  for  more
+  information.   BACK   directs   you   to insert a formatted  disk  into  the
+  destination  drive.   When a disk is full,   BACK displays its unique volume
+  number so that you can label  it  appropriately.   BACK asks for more backup
+  disks  as  it  requires them.    BACK backs up only new files or those which
+  have been modified since the last backup operation.
+
+  BACK  FULL  backs  up all hard disk files that  satisfy  the  parameters  in
+  CONTROL.BR.  Backup diskette numbering continues in sequence.
+
+  BACK  CONTROL=n takes its instructions from a specific control file  of  the
+  form  CONTROLn.BR.    The letter  n  indicates any character that  satisfies
+  Concurrent's  file-naming conventions.    All  files  and  backup disks used
+  with  BACK  CONTROL=n  are identified with n and the backup date.
+
+  BACK REPORT prints a report of backup operations.  Use this command to print
+  a record of previous backup operations.
+
+  The following is a description of REST.
+
+  REST restores a set of archived files from a floppy disk to a hard disk.
+
+  Syntax:
+  REST
+  REST CONTROL=n
+  REST REPORT
+
+  Explanation:
+  REST   restores   hard  disk  files according to  the  parameters   in   the
+  CONTROL.BR  file.   REST  displays the BackRest Restore Facility Menu  which
+  restores  bad  files  automatically and also prompts you for  the  drive  to
+  restore,  path name or user number that originally contained the files,  the
+  names of the files to restore, and the date the files were backed up.
+
+  REST  CONTROL=n  restores your hard disk files according to  the  parameters
+  in a specific BackRest control file of the form CONTROLn.BR.    The letter n
+  indicates    any   character   that   satisfies    Concurrent    file-naming
+  conventions.    Specific  CONTROL.BR   files  are  modified  copies  of  the
+  default   control   file.    A  specific  control  file  includes  an  extra
+  character in its filename.
+
+  REST REPORT prints a report of previous restore operations.
+
+///1BATCH
+filename.BAT {argument1} ... {argument9}
+Executes a text file of commands through BATCH.CMD. %1 through %9 are
+replaced with supplied arguments. BAT files can chain to another BAT file.
+
+BATCH shares DIR and other TMP built-ins, including CLS, USER, PRINTER,
+PAUSE and REM, and the CD/MD/RD, DEL/DELQ and RENAME aliases. DEL invokes
+native ERA.CMD. Ordinary program lines use the executable search order.
+This is not a full MS-DOS COMMAND.COM scripting language: IF, GOTO, FOR,
+ECHO and SHIFT are not implemented by this BATCH.
+
+Native command/substitution files for SUBMIT use the separate .SUB format.
+
+///1BRINST
+BRINST prepares CONTROL.BR for the BACK/REST backup utilities. Follow its
+prompts for source paths, backup choices and exceptions. BACK looks for
+CONTROL.BR on the current drive. See BACKREST for backup/restore commands.
+
+///1CD
+CD is a shell/BATCH alias for CHDIR.CMD. See CHDIR for syntax.
+
+///1CHDIR
+  CHDIR and its options provide access to subdirectories on DOS media.
+
+  Syntax:
+  CHDIR {d:}
+  CHDIR {d:} {\} {dirname} {\dirname...}
+  CHDIR fd:={d:} {\} {dirname} {\dirname...}
+
+  Explanation:
+  The  first  form  above displays the  sequence,  or  path,  of  hierarchical
+  subdirectories that leads to the current subdirectory.   Use the second form
+  to  make  the last subdirectory in the path the current  directory  for  the
+  current  drive  or the drive specified.   The third form is used  to  assign
+  floating  drive (fd:) name N or O to the subdirectory specified.   CHDIR can
+  be abbreviated to CD in the command line.
 
 ///1CHSET
-    Syntax:
+  Syntax:
+  CHSET [HELP]
+  CHSET {d:}filename{.CMD}
+  CHSET {d:}filename{.CMD} [field=setting{,field=setting,...}]
 
-    CHSET {d:}filename{.CMD}
-    CHSET {d:}filename{.CMD} [field=setting{,field=setting,...}]
-    CHSET [HELP]
+  Explanation:
+  CHSET is a command that allows you to make changes in the command header  of
+  a program file with a  .CMD file extension.  CHSET has three fields that you
+  can display or change.  The three fields and their possible settings are:
 
-    Explanation:
+  8087  - The  8087  field has three  possible  settings:   ON,  OFF,  or  OPT
+  (optional).    Specify  ON  for programs that require an 8087 processor   in
+  order  to run.   Choose OPT when you have a program that  can use an 8087 if
+  it  is  present in your system,  or emulate an  8087 if it is  not  present.
+  Specify OFF if you want to cancel a previous ON or OPT selection.
 
-    CHSET is a utility that allows you to make changes in the command
-    header  of a command file with a  .CMD filetype.  CHSET has three
-    fields that you can display or change, corresponding to the three
-    fields that CHSET modifies in a command header.  The three fields
-    and their possible settings are:
+  SHARED - The SHARED field has two settings,  ON or OFF.  Select ON when  you
+  want  to  modify  a  program's command header so that the  program  can  use
+  Concurrent's  shared code  capabilities.   Specify OFF if you want to cancel
+  a previous ON selection.
 
-    8087 - The  8087  field  has three possible settings, ON, OFF, or
-    OPT  (optional).   Specify  ON  for programs that require an 8087
-    processor  in  order  to run.  Choose OPT when you have a program
-    that  can use an 8087 if it is present in your system, or emulate
-    an  8087 if it is not present.  Specify OFF if you want to cancel
-    a previous ON or OPT selection.
+  SUSPEND - The SUSPEND field has two options, ON or OFF.  When you select ON,
+  CHSET  modifies a  program's command header so that Concurrent suspends that
+  program's operation when it occupies a switched-out window.   OFF cancels  a
+  previous ON selection.
 
-    SHARED - The SHARED field has two settings, ON or OFF.  Select ON
-    when  you  want  to modify a program's command header so that the
-    program  can  use  Concurrent  CP/M's  shared  code capabilities.
-    Specify OFF if you want to cancel a previous ON selection.
+  Changing Field Settings
+  You  can  change any or all of CHSET's fields in a single command line.   To
+  change   a  setting for a field or fields,  enter a CHSET command   with   a
+  filespec and the fields you want to change.  For example, if you type
 
-    SUSPEND - The SUSPEND field has two options, ON or OFF.  When you
-    select  ON,  CHSET  modifies  a  program's command header so that
-    Concurrent  CP/M  suspends  that   program's  operation  when  it
-    occupies a  switched-out virtual console.  OFF cancels a previous
-    ON selection.
+  B>chset calc.cmd [8087=opt,shared=on,suspend=on]
 
-    Changing Field Settings
+  CHSET  modifies  the command  header of the program contained  in  the  file
+  CALC.CMD.
 
-    You  can  change any or all of CHSET's fields in a single command
-    line.  To  change  a setting for a field or fields, enter a CHSET
-    command  with  a filespec and the fields you want to change.  For
-    example, if you type
+  Displaying Field Settings
+  When you enter a CHSET command with a filespec and no field settings,  CHSET
+  displays the settings for the specified file(s).  For example, if you type
 
-    B>chset calc.cmd [8087=opt,shared=on,suspend=on]
+  B>chset erase.cmd
 
-    CHSET  modifies  the command header of a program contained in the
-    file CALC.CMD.
+  CHSET responds with the following display:
 
-    Displaying Field Settings
+  B:ERASE   .CMD settings are [8087=OFF,SHARED=OFF,SUSPEND=OFF]
 
-    When  you  enter  a  CHSET  command  with a filespec and no field
-    settings,  CHSET  displays the settings for the specified file or
-    files.  For example, if you type
+  Modifying a command header is not a trivial matter.  While CHSET cannot harm
+  your .CMD files,  inappropriate use of it can cause your programs to  behave
+  in unpredictable ways.
 
-    B>chset erase.cmd
+  CHSET [HELP]
 
-    CHSET responds with the following display:
+  If you type HELP in  square  brackets following the CHSET command keyword in
+  a  command  line,  CHSET  responds  with  a display  giving  you   a   brief
+  explanation   of  CHSET  and  a list of examples of correct   command   line
+  syntax.   You  can also type CHSET without a command tail to summon  CHSET's
+  HELP display.
 
-    B:ERASE   .CMD settings are [8087=OFF,SHARED=OFF,SUSPEND=OFF]
+  ///2EXAMPLES
+  Examples:
 
-    Modifying  a command header is not a trivial matter.  While CHSET
-    cannot  harm  your  .CMD files, inappropriate use of it can cause
-    your programs to behave in unpredictable ways.
+  A>chset taxaid.cmd [shared=on,8087=opt,suspend=off]
 
-    CHSET [HELP]
+  The  above command modifies the command header of a program called TAXAID so
+  that  it can use Concurrent's facilities for shared code and can either  use
+  an  8087  if  it is present in the system or emulate an 8087 if  it  is  not
+  present.  The command also turns off the  SUSPEND  field for TAXAID, so that
+  TAXAID can run when it is in  a  switched-out  window.  The inclusion of the
+  .CMD filetype is optional.
 
-    If you type "help" in square brackets following the CHSET command
-    keyword  in  a command line, CHSET responds with a display giving
-    you  a  brief  explanation  of  CHSET  and  a list of examples of
-    correct  command  line syntax.  You can also type CHSET without a
-    command tail to summon CHSET's HELP display.
+  A>chset *
 
-    ///2EXAMPLES
-    Examples:
+  The  above command displays the current settings for every CMD command  file
+  in  the current directory.   CHSET does not accept a filespec of *.* because
+  it accepts only a blank filetype or filetype .CMD.
 
-    A>chset taxaid.cmd [shared=on,8087=opt,suspend=off]
+  B>chset ezesort [8087=on]
 
-    The above command modifies the command header of a program called
-    TAXAID so that it can use Concurrent CP/M's facilities for shared
-    code and can either use an 8087 if it is present in the system or
-    emulate an 8087 if it is not present.  The command also turns off
-    the  SUSPEND  field for TAXAID, so that TAXAID can run when it is
-    in  a  switched-out  virtual  console.  The inclusion of the .CMD
-    filetype is optional.
+  The   above   command  modifies  the  command  header for a  program  called
+  EZESORT so that it can use an installed 8087 processor.
 
-    A>chset *
+  A>chset rectify.cmd
 
-    The above command displays the current settings for every command
-    file  in the current directory.  CHSET does not accept a filespec
-    of *.* because it accepts only a blank filetype or filetype .CMD.
-
-    B>chset ezesort [8087=on]
-
-    The  above  command  modifies  the  command  header for a program
-    called EZESORT so that it can use an installed 8087 processor.
-
-    A>chset rectify.cmd
-
-    The  above  command causes CHSET to respond with a display of the
-    current settings of the fields in RECTIFY.CMD's command header.
-
+  The   above   command causes CHSET to respond with a display of the  current
+  settings of the fields in RECTIFY.CMD's command header.
 
 ///1CLS
-    CLS clears the screen.
+CLS
+Clears the current console and homes its cursor. CLS is a TMP/PCTMP
+shell built-in and is also recognized by CDOS BATCH. No CLS.CMD or
+separate CLS RSP is required. An explicit extension selects disk lookup.
 
-    CLS is a built-in shell command available at the prompt in both
-    the native TMP and PC-MODE. It sends the terminal clear-screen
-    sequence (ESC E) and does not require an external file.
-
-
-///1cntrlchars
-
-  Control Character                      Function
-
-  CTRL-C    stops executing program  when  entered  at  the  system
-            prompt or after CTRL-S.
-
-  CTRL-E    forces  a  physical  carriage  return  without  sending
-            command to CCP/M.
-
-  CTRL-I   same as the TAB key.
-
-  CTRL-H    delete character to the left of cursor.
-
-  CTRL-J    Line feed.  Same effect as RETURN.
-
-  CTRL-O    Suppresses console output.  Program continues running in
-            the  background.   Press  RETURN to return to the system
-            prompt.
-
-  CTRL-M    same as RETURN.
-
-  CTRL-P    echoes console output to the list device.
-
-  CTRL-Q    restarts screen scrolling after a CTRL-S.
-
-  CTRL-R    retypes the characters to the left of the cursor  on  a
-            new line.
-
-  CTRL-S    stops screen scrolling.
-
-  CTRL-U    cancels current command line.
-
-  CTRL-X    deletes all characters to the left of the cursor.
-
-  CTRL-Z    string separator for PIP and ED; terminates console input
-            when console is used as a source device with PIP.
+///1CNTRLCHARS
+See ACTIONKEYS for the current command-line editing and console keys.
+Applications and raw console input can assign different meanings.
 
 ///1COMMANDS
+Concurrent DOS 4.1 command reference for this distribution.
 
-    Type ? at the shell prompt for a compact list of common commands.
-    Type ? PIP (with a space) to run HELP for PIP. Topic lookup requires
-    HELP.CMD and HELP.HLP; bare ? is built into the shell. A ? topic line
-    may contain at most 125 characters including the question mark.
+Shell built-ins (PCTMP, also shared with BATCH):
+  drive letters A:..P:, USER, DIR, CLS, ORDER, COMSIZE, ADDMEM,
+  8087, SUSPEND, PRINTER, PAUSE, REM and SYS.
+  RUNMENU activates the interactive shell's linked menu interface.
+  STOP name window stops a process; bare STOP uses STOP.CMD.
 
-    PUT, GET and RDR redirect the console output and/or input of a
-    program to or from a disk file. See HELP PUT, HELP GET and HELP RDR.
+Aliases:
+  CD -> CHDIR.CMD    MD -> MKDIR.CMD    RD -> RMDIR.CMD
+  DEL -> ERA.CMD     DELQ -> ERAQ.CMD   RENAME -> REN.EXE
 
-    SETDEF displays or changes the command drive search list for this
-    console. The default is the current drive, followed by the fixed
-    system fallback. See HELP SETDEF for drive-list syntax and examples.
+Native commands supplied across the seven disks:
+  ASM80 ASM86 BACK BATCH BRINST CHDIR CHSET COPYMENU DATE DCOMP DCOPY
+  DIR DISKSTAT DREDIX DSKMAINT DSP ED EDITMENU ERA ERAQ FM FUNCTION
+  GENCCPM GENCMD GENLDR GET HDMAINT HELP HEXCOM INITDIR MKDIR N PIP
+  PRINT PRINTMGR PUT RDR REN REST RMDIR SDIR SET SETPORT SETUP SHOW
+  SPL STOP SUBMIT SYSDISK SYSTAT WINDOW WMENU
 
-    Concurrent CP/M command line syntax:
+DOS executables: COPY.EXE DATE.EXE ERASE.EXE PATH.EXE REN.EXE TIME.EXE.
+LOADCCPM.COM loads Concurrent from DOS; REDOS.COM returns to DOS.
+Use an explicit extension to distinguish DATE.CMD from DATE.EXE.
 
-    A> <command> {command tail} <RETURN>
+RSPs:
+  PIN, CLOCK, PCTMP and CONFIDD are resident system services. There are
+  no separate DIR, TYPE or other utility-command RSPs in this 4.1 build.
+  DIR and CLS are shell built-ins. Explicit DIR.CMD is a separate tool.
 
-    Concurrent CP/M  accepts the command lines you type following the
-    system prompt.  The command keyword identifies the system command
-    or program to be executed.  The optional command tail can consist
-    of  a  filespec or various command parameters, depending upon the
-    specific command.  To  complete  the command, press the RETURN or
-    ENTER key.  File  specifications in command lines are composed of
-    the following parts:
+Programs and help data are distributed across several disks. Mount the
+disk containing the requested program; HELP does not install that program.
+See the media README for complete disk contents.
 
-    {d:}filename{.typ}{;password}
+///1COMSIZE
+  COMSIZE  allows you to increase and decrease the amount of memory  allocated
+  to the current window for programs with the COM file extension.  The default
+  memory allocation is 128 kilobytes.
 
-    d:              is an optional drive specifier
-    filename        is the 1- to 8-character file name
-    .typ            is an optional file type
-    ;password       is an optional 1- to 8-character password
+  Syntax:
+  COMSIZE
+  COMSIZE=n
 
-///1CONFIG
-    Syntax:
+  Explanation:
+  The first form displays the current memory allocation for programs with  the
+  COM  file  extension.  The  second  form allows you  to  change  the  memory
+  allocation.   (N can represent any value from 0 through 999,  in kilobytes.)
+  Changes made with  COMSIZE  affect  the current  window  only and remain in
+  effect  until you turn off or  reset  the computer or run COMSIZE again.
+  You can create a BATCH file (see the BATCH command) to run COMSIZE and load
+  a frequently used program.
 
-    CONFIG
-
-    Purpose:
-
-
-    Concurrent CP/M  supports  three  parallel I/O  printers  (0, 1
-     2  )  and two  serial I/O  printers (3, 4).  The CONFIG command
-    lets  you  specify  the  parameters of   the   serial   printers
-    interactively or in a command line.
-
-    Interactive Mode:
-
-    When you enter:
-
-    A>config
-
-    the CONFIG menu appears.  If there is  only one serial  printer
-    connected, only the  Printer  3 column appears; if you have two
-    serial printers  a  column  for Printer 4  apppears.  This menu
-    shows the four sets  of  parameters  for  printers 3 and 4, odd
-    numbered keys for printer 3 and even-numbered keys for printer 4.
-
-    The values shown when you invoke CONFIG are the current values;
-    change  them by pressing the appropriate keys, with each stroke
-    incrementing the appropriate value.  The F9 and F10 keys return
-    you to command level.
-
-    BAUD RATE is the speed at which the computer sends data  to its
-    printer.  Refer  to  your printer's  technical  manual  for the
-    correct baud rate to program.
-
-    WORD LENGTH  indicates  the number of data  bits  in  a  single
-    transmitted  character.  This  value is  almost always  7 or 8.
-    Again, consult  the printer's documentation  to  determine  the
-    correct value.
-
-    PARITY monitors characters  to see  if they are transmitted and
-    received correctly.  Often both  the  printer  and computer can
-    enable or disable parity checking.  Refer to the printer manual
-    for specific details relevant to your printer.
-
-    STOP BITS  indicate  the end of a  transmitted  character.  See
-    your printer's manual for the proper value; 1 is commonly used.
-
-    Command Line Mode:
-
-    To define all serial port parameters  in a single command line,
-    use this syntax:
-
-    CONFIG PORT# BAUDRATE WORDLENGTH PARITY STOPBITS
-
-    In this  format, PORT# is either P3, indicating printer 3,  or
-    P4, indicating printer 4.
-
-    BAUDRATE  is  10, 150, 300, 600, 1200, 2400,  4800,  or  9600,
-    indicating the transmisstion speed in baud (bits-per-second).
-
-    WORDLENGTH is 5, 6, 7, or 8, specifying the number of data bits
-    for a transmitted character.
-
-    STOPBITS is either 1 or 2, adding that number of stop bits to the
-    end of a transmitted character.
-
-    ///2EXAMPLE
-
-    A typical CONFIG command line looks like this:
-
-    A>config p3 9600 7 even 1
-
-    This command line sets serial printer P3 to 9600 baud, with seven
-    data bits, even parity and 1 stop bit.
-
-    If you make an mistake in a CONFIG command line, the command line
-    is returned with a question mark under the error, and  a list  of
-    valid parameters follows.
-
-    If you have tried to configure a serial port on a  system without
-    such ports, CONFIG returns this error message:
-
-    No Serial communication options installed
-
-    Then control returns to system command level.
+  Note:  the current COMSIZE setting is the amount of memory a .COM program
+  will request when it loads.  If this amount of memory is not available
+  the program will not be able to load.  Remember that using a .COM program
+  with a large COMSIZE will limit the amount of memory available for programs
+  in other windows.
 
 ///1conventions
 
@@ -378,7 +392,44 @@
   ?    wildcard: replaces any single character
        in the same position of a filename and/or filetype.
 
+///1COPY
+  This command copies one or more files between disk drives and other devices.
+
+  Syntax:
+  COPY {/option} source{/option} destination{/option}
+
+  Explanation:
+  The  source  can be a file in a disk drive directory  or  a  keyboard.  COPY
+  leaves the source unaltered.  The destination can be a disk drive directory,
+  a  computer,  a printer,  or a new file name.   Specify a drive or directory
+  by entering  the drive  letter  followed  by  a colon.   If you wish to copy
+  from   or  to  a subdirectory,   assign  the letter to the subdirectory with
+  CHDIR before  the COPY  command is entered.   Printer and window devices are
+  specified by  the names shown in Section 8 of the User's Guide.
+
+  The   source   file specification must contain  the  complete  filename  and
+  file extension.   The destination can be indicated simply by the drive or
+  device number unless you want to change the fine name.  You can use the
+  wildcard characters, * and ?, to specify a group of files.
+
+  COPY does not recognize passwords in the file specifications.  If your files
+  are password protected, you must use PIP.
+
+///1COPYMENU
+  COPYMENU  is used to copy one or more menus between  existing  menu  files.
+
+  Syntax:
+  COPYMENU
+  COPYMENU -Ssource-filespec -Ddestination-filespec {-Mmenuname{, menuname...}}
+
+  EXAMPLE:
+  COPYMENU menu.dat newmenu.dat main
+
 ///1DATE
+  DATE.CMD is the native CP/M command. DATE.EXE on the DOS disk is the
+  separate DOS interface; use an explicit extension to select it.
+  Short years 00..77 mean 2000..2077; 78..99 mean 1978..1999.
+
     Syntax:
 
     DATE
@@ -484,293 +535,137 @@
       A>DCOPY A: A:[1]
       A>DCOPY A: B:[1
 
-///1DDT86
-    Syntax:
+///1DEL
+DEL filespec
+Alias for native ERA.CMD in both PCTMP and BATCH. Arguments are preserved.
+Use ERA for its command reference. ERASE.EXE is a separate DOS executable.
 
-    DDT86 {filespec}
-
-    Explanation:
-
-    DDT86  aids debugging of 8086 and 8088 programs.  DDT86 assumes a
-    default  filetype  of  CMD.   If  a  file  specification  is  not
-    included,  DDT86  is  loaded  into  User  Memory  without  a test
-    program. The test program is then loaded using the E command.  If
-    the  optional file specification is included in the command, both
-    DDT86 and the test program file specified by filespec are  loaded
-    into  memory. DDT86  does  not support passwords.  To exit DDT86,
-    press CTRL-C.
-
-    ///2EXAMPLES
-    Examples:
-
-    A>DDT86
-    A>DDT86 PROGRAM1
-    A>DDT86 PROGRAM2.CMD
-    A>DDT86 B:PROGRAM3.CMD
-
-    DDT86 Command Examples:
-
-    -D
-    -L1008:0,4F
-    -SW23a
-    -DW50:0
-    -F100,200,FF
-    -A10C
-    -Rprog.h86
-
-    ///2COMMANDS
-    DDT86 Command Summary:
-
-    The command character can be followed by one or  more  arguments.
-    Separate  arguments  from  one  another  by  commas or spaces; no
-    spaces are allowed between the command character  and  the  first
-    argument.
-
-    As             (Assemble)      Enter Assembly Language Statements
-    Bs,f,s1        (Block Compare) Compare Blocks of Memory
-    D{W}{s{,f}}    (Display)       Display Memory in Hexadecimal and ASCII
-    Efilespec      (Execution)     Load Program for Execution
-    Fs,f,bc        (Fill)          Fill Memory Block with a byte constant
-    FWs,f,wc       (Fill Word)     Fill Memory Block with a word constant
-    G{s}{,b1{,b2}} (Go)            Begin Execution with optional breakpoints
-    Hwc1,wc2       (Hex)           Hexadecimal Sum and Difference
-    Icommand tail  (Input)         Set Up Input Command Line
-    L{s{,f}}       (List)          List Memory in Mnemonic Form
-    Ms,f,d         (Move)          Move Memory Block
-    QI{W}n                         Read From I/O Port
-    QO{W}n,v                       Write To I/O Port
-    Rfilespec      (Read)          Read Disk File into Memory
-    S{W}s          (Set)           Set Memory Values
-    SRs,f,<string>                 Search For String
-    T{n}           (Trace)         Trace Program Execution
-    TS{n}          (Trace)         Trace and Show All Registers
-    U{n}           (Untrace)       Monitor execution without Trace
-    US{n}          (Untrace)       Monitor and Show all Registers
-    V              (Verify)        Show Memory Layout after Disk Read
-    Wfilespec      (Write)         Write Content of Block to Disk
-    X{r}           (Examine)       Examine and Modify CPU Registers
-
-
-    DDT-86 Command Parameters
-    -------------------------
-    Parameter   Replace With
-
-    bc          byte constant
-    b1          breakpoint one
-    b2          breakpoint two
-    d           destination for data
-    f           final address
-    n           number of instructions
-                to execute
-    r           register or flag name
-    s           starting address
-    W           word 16-bit
-    wc          word constant
-
-    ///3PARAMETERS
-    DDT-86 Command Parameters
-
-    Parameter   Replace With
-
-    bc          byte constant
-    b1          breakpoint one
-    b2          breakpoint two
-    d           destination for data
-    f           final address
-    n           number of instructions
-                to execute
-    r           register or flag name
-    s           starting address
-    W           word 16-bit
-    wc          word constant
-
-///1DFORM
-  Syntax:
-
-  DFORM drive: { [options] ... }
-
-  Purpose:
-
-      DFORM formats one floppy diskette using the same track layout,
-  boot sector and loader as DSKMAINT. The target drive is required and
-  must be an installed A: or B: floppy. All existing contents are replaced.
-  The command displays the selected capacity and verification setting,
-  and requires Y confirmation before formatting. N or Ctrl-C cancels.
-
-  Options:
-
-  1         Single-sided, 160K: 40 cylinders, eight 512-byte sectors.
-  2         Double-sided, 320K: the default if neither 1 nor 2 is given.
-  V         Verify every track after formatting and writing the boot track.
-            Without V, no verification pass is performed.
-
-      Combine options in one bracket group or use separate groups.
-  The closing ] is optional. Drive letters and options are case-insensitive.
-  Conflicting 1/2 options, unknown options and other incorrect arguments
-  display usage and exit. An empty command line also displays usage.
-
-      This build supports CP/M-86 1.1 using the IBM PC ROM BIOS and
-  Concurrent CP/M-86 3.1 using native XIOS. Nine-sector 180K/360K formats
-  are not supported. The formatted disk contains DSKMAINT's boot code
-  and the loader for the detected OS; copy CPM.SYS or CCPM.SYS to the
-  disk with PIP's [R] option to complete a boot disk.
-
-  Examples:
-
-      A>DFORM A:
-      A>DFORM B:[1V]
-      A>DFORM A: [V
-      A>DFORM A: [1] [V]
-      A>DFORM A: [1] [V
+///1DELQ
+DELQ filespec
+Alias for native ERAQ.CMD, which asks before deleting each matching file.
 
 ///1DIR
-    Syntax:
+Built-in shell/BATCH syntax:
+  DIR {filespec} {/L|/W} {/S} {/P}
+  DIR {filespec} [L|W,S,P]
 
-    DIR
-    DIR d:
-    DIR [Gn]
-    DIR [S]
-    DIR filespec
-    DIR filespec [Gn]
-    DIR filespec [S]
-    DIR filespec [P]
+/L selects long output; /W selects wide output. /S displays system files
+only. On DOS media hidden files are treated as system files too. /P
+pauses after a screen page with Press any key to continue...
+Without /S, system/hidden files are omitted. DOS defaults to long output;
+CP/M defaults to wide output. DOS subdirectory names are marked with a
+slash; CP/M user numbers apply only to CP/M media.
 
-    Explanation:
+CP/M bracket spellings use the same flags: [S], [P], [L], [W], [S,P].
+The closing ] may be omitted at the end: DIR B: [S
+Slash and bracket forms can be combined. Options can precede or follow
+the filespec. /S is a system-file filter, not recursive directory walking.
 
-    Displays the names of non-system (DIR) files in the directory  of
-    an  on-line  diskette.     Use DIR [S] to  display  the  names of
-    SYStem files (files that have the SYS attribute set). Use DIR [Gn]
-    to display non-system files in User n.
+Examples:
+  DIR B: /S
+  DIR B: [S]
+  DIR B: [S
+  DIR B:*.CMD /L [P]
 
-    [P] pauses after 23 screen rows. It works with both the resident DIR
-    and DIR.CMD, and can be combined with [S] or [Gn]. The prompt is the
-    native PCTMP PAUSE message: Press any key to continue...
-    Press a key to display the next page, or Ctrl-C to stop the listing.
-    Without [P], output is continuous. Paging resets for each command.
+Explicit DIR.CMD uses the separately imported native command, with
+its own CP/M [S], [Gn] and [P] options. Those are not a separate DIR RSP.
+Use USER to change the CP/M user number for the built-in DIR.
 
-    ///2EXAMPLES
-    Examples:
+///1DISKSTAT
+DISKSTAT is the retained OEM disk-allocation display utility. Its menus
+show file, directory and data-block allocation and allow drive selection.
 
-    A>DIR
-    A>DIR B:
-    A>DIR C:MYFILE.DAT
-    A>DIR *.CMD
-    A>DIR A*.A86
-    A>DIR PROG???.H86
-    A>DIR PROGRAM.*
-    A>DIR [S]
-    A>DIR B:UTILITY.CMD [S]
-    A>DIR A: B: [P]
-    A>DIR.CMD A: B: [P]
+///1DREDIX
+DREDIX {filename}
+Starts the DR EDIX full-screen text editor. Alt-H or F7 opens its help;
+Alt-W writes the file and Alt-X exits. Ctrl-F/Ctrl-B move through lessons.
+
+HELP.EDX supplies help screens; LSN.EDX supplies the interactive tutorial.
+Both are packaged with DREDIX.CMD. Select that disk as the current drive:
+the editor looks on the current drive, then A:, for its data files.
+These files are separate from the system HELP.HLP database.
 
 ///1DSKMAINT
-    DSKMAINT.CMD is on the bootable maintenance disk (ccpmmaint.img),
-    alongside HDMAINT and INITDIR.
+  DSKMAINT performs these diskette maintenance operations:   formatting new or
+  reusable  diskettes,   copying   one  diskette's contents  to  another,  and
+  verifying the integrity of the data on diskettes.
 
-    Syntax:
+  Syntax:
+  DSKMAINT
 
-    DSKMAINT
+  Explanation:
+  DSKMAINT  does not work if there are open files in any other  window.   When
+  DSKMAINT is invoked, the menu displayed offers these options:
 
-    Explanation:
+  F3  Verify a disk: Use this option to check a disk for unreadable sectors.
+  F5  Copy  from  one  disk  to another:   Use this option  to  duplicate  the
+      contents of one disk to another.
+  F7  Format  disks:  Use  this  option to prepare new disks  for  use  or  to
+      reformat used disks.
 
-    DSKMAINT is a  multi-function  menu-driven command  that performs
-    these diskette maintenance operations: formatting new or reusable
-    diskettes,  copying  one  diskette's  contents  to  another,  and
-    verifying the integrity of the data on diskettes.
+  Use  the Esc key to go back to the previous menu.   If a  verify,  copy,  or
+  format operation is being performed,  Esc aborts the command and returns you
+  to the previous menu or prompt.
 
-    Single and Double-Sided Diskettes:
+  ///2DISKCOPY
+  Press F5 to copy the contents of one disk to another.  Immediately after you
+  select  the copy option,  DSKMAINT asks for the source drive containing  the
+  disk  you  want  to copy.   Insert the source disk  first,  then  press  the
+  corresponding  function  key  to  proceed.   Next,  DSKMAINT  asks  for  the
+  destination drive containing the disk where the copy will be placed.  Insert
+  the destination disk first, then press the corresponding function key.
 
-    DSKMAINT can only  copy  between  two diskettes of the same type:
-    between two  single-sided  diskettes  or between two double-sided
-    diskettes.  Look at the  box of  diskettes  or at the label on an
-    individual diskette to determine if it is single or double-sided.
+  If  the source and destination disk formats match,  DSKMAINT summarizes  the
+  assignments and displays the following prompt:
 
-    To make a double-sided copy  of a single-sided diskette, format a
-    double-sided diskette, then use PIP to copy files between the two
-    diskettes.
+  This will erase data on the destination disk in drive A: or B:
+  Is this what you want to do (Y or N)?
 
-    Before you invoke  DSKMAINT, be sure your current virtual console
-    is in Dynamic mode.  You can  set the console to  Dynamic mode by
-    using the VCMODE command.
+  If there are files on the destination disk,  they will be erased as the copy
+  is  made.    To preserve the contents of the destination disk,  press N.  To
+  proceed with the copy, press Y.
 
-///1DYNAMIC
-    You can switch the current (foreground) virtual console into  the
-    background  by selecting a different virtual console for display.
-    If the switched-out virtual console is in  dynamic mode, you will
-    not  see  any  program  output that may  have  scrolled  off that
-    console while you were switched away.
+  If  the source and destination disks do not match,  DSKMAINT asks you  if
+  you want to format the destination disk.   If you press N,  you are returned
+  to  the Select Source Disk prompt.   (Be sure to insert a  destination  disk
+  that is the same format as the source this time.)  If you enter Y,  DSKMAINT
+  formats  the  entire destination disk to match the format of the source  and
+  checks it.   Then DSKMAINT writes and checks the tracks read and repeats the
+  read, write, and check cycle for all remaining tracks.
 
-    If the console is  in  buffered mode, this  data  is  stored in a
-    temporary disk file and displayed when you switch back.
+  When  copying disks in a single drive system,  the potential  for  confusing
+  disks  and  copying  to  the wrong disk is high.   Be  sure  to  pay  strict
+  attention  to  the DSKMAINT source and destination disk  swap  instructions.
+  You are strongly advised to cover the write-protect notch on the source disk
+  before beginning the copy so that DSKMAINT cannot write to the source disk.
 
-    Use the  VCMODE  command  to switch  a  console  from  dynamic to
-    buffered mode if you anticipate  a  program  outputting more than
-    one screen of data, and you do not wish to miss it.
+  When  a copy error occurs,  DSKMAINT beeps and displays an error message  on
+  the status line.  When this occurs, your options are to retry the operation,
+  ignore the error, or accept the error.
 
-///1DOS8087
-    Syntax:
+  ///2FORMAT
+  Press  F7 to prepare new disks for use or to reformat used disks.   You must
+  format a disk before you can record files on it.  There are four options:
 
-    DOS8087
-    DOS8087 {ON | OFF}
+  1.  Format a single-sided disk with the DOS format.
+  2.  Format a double-sided disk with the DOS format.
+  3.  Format a single-sided disk with the CP/M format.
+  4.  Format a double-sided disk with the CP/M format.
 
-    Explanation:
+  Select  the  option  you want by pressing the  corresponding  function  key.
+  DSKMAINT  responds  by  asking for the disk drive.   Insert the disk  to  be
+  formatted  into a drive and press the function key assigned to  that  drive.
+  Before  the  formatting operation begins,  you are reminded that  formatting
+  destroys  existing  files.   If  you  choose to go  ahead  with  the  format
+  operation anyway,  all tracks are formatted and subsequently checked. If the
+  disk fails the check a second time,  discard the disk.   After a  successful
+  check,  DSKMAINT returns you to the list of format options to format another
+  disk.  To exit from DSKMAINT, press the Esc key twice.
 
-    DOS8087 enables or disables 8087 numeric coprocessor support for DOS
-    applications running on the current virtual console.
-
-    When entered without an argument, DOS8087 displays the current 8087 state.
-    Setting DOS8087 ON requires an 8087 math coprocessor to be installed.
-
-    ///2EXAMPLES
-    Examples:
-
-        A>DOS8087          ; displays 8087 = ON or OFF
-        A>DOS8087 ON       ; enables 8087 coprocessor support
-        A>DOS8087 OFF      ; disables 8087 coprocessor support
-
-///1DOSMEM
-    Syntax:
-
-    DOSMEM
-    DOSMEM {size_in_kib}
-
-    Explanation:
-
-    DOSMEM displays or sets the default memory partition size (in KiB)
-    allocated for DOS (.COM and .EXE) processes running on the current
-    virtual console.
-
-    When entered without an argument, DOSMEM displays the current allocation.
-    The default is 128 KiB.
-
-    ///2EXAMPLES
-    Examples:
-
-        A>DOSMEM           ; displays DOS Memory Allocation (e.g. 128K)
-        A>DOSMEM 256       ; sets DOS process memory size to 256 KiB
-        A>DOSMEM 64        ; sets DOS process memory size to 64 KiB
-
-///1DOSUSPND
-    Syntax:
-
-    DOSUSPND
-    DOSUSPND {ON | OFF}
-
-    Explanation:
-
-    DOSUSPND controls whether background DOS processes continue executing
-    or are suspended when switching away from their virtual console.
-
-    When entered without an argument, DOSUSPND displays the current state.
-    Setting DOSUSPND ON suspends background DOS tasks; OFF allows them to
-    continue running in the background.
-
-    ///2EXAMPLES
-    Examples:
-
-        A>DOSUSPND         ; displays Suspend = ON or OFF
-        A>DOSUSPND ON      ; suspends DOS tasks when switched out
-        A>DOSUSPND OFF     ; keeps DOS tasks running in background
+///1DSP
+DSP displays print-spool information. It is supplied with PRINTMGR and
+the OEM SPL spooler support, including INDEX.DSP. PRINT is a separate
+direct-printing utility imported from CCP/M.
 
 ///1ED
     Syntax:
@@ -847,6 +742,24 @@
     :B5T
     :Rmyfile.txt
 
+///1EDITMENU
+  EDITMENU  is  used  to create a new menu or to  edit,  copy,  or  delete  an
+  existing menu.
+
+  Syntax:
+  EDITMENU
+  EDITMENU filespec
+
+  Explanation:
+  The first form invokes the default menu file, MENU.DAT, which you can use to
+  create,  edit,  copy, or delete menus.  The second form allows you to name a
+  new  menu  file or to access an existing menu file.   You can  then  create,
+  edit, copy, or delete menus in the specified menu file.
+
+  EXAMPLES:
+  EDITMENU
+  EDITMENU mymenus.dat
+
 ///1ERA
     Syntax:
 
@@ -887,7 +800,7 @@
 
     1A>ERAQ B:*.CMD
 
-    B:ABORT      CMD ?y
+    B:EXAMPLE    CMD ?y
     B:FUNCTION   CMD ?n
     B:SDIR       CMD ?y
     B:PIP        CMD ?y
@@ -900,6 +813,22 @@
 
     The command line above erases only the password information for the
     file myfile.dat.  First use SET to turn off password protection.
+
+///1ERASE
+  Syntax:
+  ERASE filespec or DEL filespec
+
+  Explanation:
+  ERASE   erases   one  or  more   files.    ERASE  accepts  ambiguous    file
+  specifications.   The  ERAQ command is like ERASE,   but prompts you  before
+  performing the erasure.
+
+  ///2EXAMPLES
+  Examples:
+  A>ERASE DRAFT.BAK
+  A>ERASE C:LETTER.*
+  A>ERASE D:*.BAK
+  A>ERASE B:*.*
 
 ///1FILESPEC
     Concurrent CP/M  identifies   every  file   by  its  unique  file
@@ -964,100 +893,173 @@
   ?    wildcard: replaces any single character
        in the same position of a filename and/or filetype.
 
+///1FM
+FM
+Starts the retained OEM file manager. Use its on-screen menus for file
+operations. FM.CFG is supplied beside it on the OEM utilities disk.
+
+///1FREEMEMORY
+SYSTAT [M] displays memory partitions; SYSTAT [O] displays system limits
+and free descriptor/queue resources. SHOW reports disk space, including
+the memory disk; it does not report free program memory.
+
 ///1FUNCTION
-    Syntax:
+  The  FUNCTION  command allows you to reassign the function keys and the keys
+  used to switch windows.
 
-    FUNCTION [filename.]
-    FUNCTION [filename.typ]
+  Syntax:
+  FUNCTION
+  FUNCTION {d:}filename.PFK
 
-    Purpose:
+  Explanation:
+  When you enter FUNCTION without a file specification,  Concurrent displays a
+  menu  presenting  you with options.   When you enter FUNCTION  with  a  file
+  specification,  function  assignments are made from the file specified.   No
+  menu is displayed and no user interaction is necessary.
 
-    FUNCTION specifies the operation of the 50 programmable  function
-    keys (PFKs).  FUNCTION  operates  in  two modes, specified by the
-    command tail entered with  FUNCTION.  If you  supply  no  command
-    tail  FUNCTION  displays  menus  to  select from. If you  specify
-    a filespec, FUNCTION takes its input from this file.
+  Function key assignments generally apply only to command line entries.  Many
+  Concurrent  commands and application programs use function keys for  special
+  purposes and will ignore any assignments you make with the FUNCTION command.
 
-    FUNCTION programs  function  keys on a per-virtual console basis.
-    PFK assignments you make in one  virtual console affect only that
-    virtual console.
+  When you exit some application programs,   however, the function keys do not
+  return  to their original assignment.    You should,  therefore,  save  your
+  default  key assignments  in  a file and run FUNCTION with that file if  you
+  need to restore the function key settings.
 
-    Concurrent CP/M  boots  with  commands  programmed  into  the ten
-    F1-F10  function  keys  at  the  left  of  the   keyboard.  These
-    commands are:
+  The following table describes the options presented when you invoke FUNCTION
+  without a file specification.
 
-    F1:  DIR\20A:\0D
-    F2:  DIR\20B:\0D
-    F3:  SDIR\20A:\0D
-    F4:  SDIR\20B:\0D
-    F5:  SHOW\20A:\0D
-    F6:  SHOW\20B:\0D
-    F7:  DSKMAINT\0D
-    F8:  PIP\0D
-    F9:  FUNCTION\0D
-    F10: CONFIG\0D
+      Selection                     Description
 
-    The other 40 keys, SHIFT F1-F10, ALT F1-F10, CTRL F1-F10, and the
-    numeric  keypad are not pre-programmed.  FUNCTION will  allow you
-    to program up to twenty characters in the first ten function keys
-    (F1-F10) and up to four characters in all of the others.
+      F3  Assign Function Keys:   Select this option to display or change  the
+          current  function  key assignments for those commands you  use  most
+          often.
 
-    The \20 in the commands above indicates a space.  It is generated
-    automatically when you enter a space into a command.
+      F5  Save  Function  Keys  in a File:   Select this options to  save  new
+          function key assignments in a file.
 
-    The commands terminated with \0D  include  carriage  returns.
-    The  commands  without  \0D  can  take  further specifications or
-    parameters you supply.  Terminate them with a carriage return and
-    Concurrent CP/M carries out the command.
+      F7  Change Window Switching Keys:  Select this option to change the  key
+          combination used to switch windows.
 
-    Using The FUNCTION Menu:
+  All  assignments with FUNCTION take effect as soon as you exit the  FUNCTION
+  command.   They  remain  in  effect only until you turn off  or  reset  your
+  computer,  however.   If you want to save your assignments, select option F5
+  before exiting FUNCTION.  If you want these settings to take effect when you
+  start Concurrent, use the Save System Parameters option of SETUP.
 
-    When  you  first  call  FUNCTION the menu appears. The string  of
-    Concurrent  CP/M  commands  and  symbols following "F-number:" is
-    the programmed function.  Press  any  function key  to  go to the
-    menu containing it and change the programmed value.  If you  make
-    a mistake, just backspace over it to erase it.  You can terminate
-    the string with \00 or CTRL-@ and return to the main menu.
+  Press  Esc  to  return to the previous menu.   Also,  use Esc  to  exit  the
+  FUNCTION main menu and return to the command line prompt.
 
-    If you  want  to  alter  or inspect the other  PFKs,  press  ESC.
-    Pressing ESC moves you  from  menu  to  menu of PFKs.  Entering a
-    carriage return returns you to the system command level.
+  F3  Assign Function Keys
 
-    Non-Printing Characters:
+  The  Concurrent commands shown for functions F1 through F10 are the  default
+  commands,  when  you select F3.   To change the command assigned,  press the
+  particular  function  key.   FUNCTION  then highlights  the  number  of  the
+  function  key selected and erases the currently assigned command.   You  can
+  now enter a new command.
 
-    You  can  specify  absolute  hexadecimal values so  all  possible
-    control  characters and 8-bit character codes can be used.  Refer
-    to  the  Concurrent  CP/M  User's  Guide  for  a  description  of
-    programming hexadecimal codes into the PFKs.
+  To  make an entry,  type the command exactly as if you were entering it from
+  the  command line.   Use the backspace key to edit the command as you  enter
+  it.   When you are satisfied with the command,  press Ctrl @ or enter \00 to
+  conclude the entry.  You can then select another function key or exit.
 
-    Saving Function Key Definitions:
+  The maximum length for each assignment is 20 characters long.
 
-    You can use the SETUP program to save  the function keys you have
-    entered, so that every  time  you  boot Concurrent CP/M they will
-    come up in your configuration.
+  If  you  want Concurrent to run a command when you press  the  corresponding
+  function key, press Enter before terminating the command entry.  If you want
+  Concurrent to wait for an additional entry,  do not place an <Enter> at  the
+  end of your command.   For example, if you wanted a function key to give you
+  an alphabetical listing of the files on the current drive,  you would assign
+  the following command to the key:
 
-    Using FUNCTION With a Command File:
+  SDIR <Enter>
 
-    If you enter a  filespec  with  FUNCTION,  Concurrent  CP/M opens
-    this  file  and  programs  the  function  keys with these command
-    strings.  These files must  contain  a  separate  line  for  each
-    function  key.  Examine the DATA.PFK file to learn how such files
-    are constructed; use a text editor like ED  to  create  your  own
-    customized version.  Refer to the FUNCTION command description in
-    the  Concurrent  CP/M  User's  Guide  for  further details.
+  If,  on  the other hand,  you wanted Concurrent to wait and let you  specify
+  which drive to list, you would make the following assignment instead.
 
-    Once you have  completed  writing  your  command file and checked
-    it  for  errors,  you  can return to the system command level and
-    call this command file to program the specified  keys.   If  your
-    file is named PFK.PFK, for example, give the command:
+  SDIR
 
-    A>FUNCTION PFK.PFK
+  Afterwards, when you press the associated function key, Concurrent waits for
+  you  to  press  Enter  before  running the  command.   This  gives  you  the
+  opportunity to enter a drive specification or other option.
 
-    FUNCTION reads the specified file, programs the keys accordingly,
-    and returns to system command level.
+  Note:   When  you press the spacebar during  function  assignment,  FUNCTION
+  displays \20 instead of a literal space.   When you press Enter,  Concurrent
+  displays \OD.   These are the numerical (hexadecimal) representations of the
+  spacebar and the Enter key.
 
-    See Section 9 of the Concurrent CP/M users guide for further
-    information about FUNCTION.
+  When  you  finish  making assignments to the F1 through F10  function  keys,
+  press  Enter  to  proceed to the second page of  the  assign  function  keys
+  display,   which  shows  the  numeric  keypad  and  Alt  plus  function  key
+  assignments.  Press Enter again to proceed to the third and last page of the
+  display,  which  shows  Shift plus function key and Ctrl plus  function  key
+  assignments.
+
+  Make  assignments to any of these keys the same way as for function keys  F1
+  through F10.  The maximum length for each assignment is:
+
+         Function keys in combination with the Ctrl,  Alt,  and Shift keys:  4
+         characters long
+
+         Numeric keypad keys: 4 characters long (the 5 cannot be reassigned)
+
+  Press  Enter to cycle through the display quickly.   Press Esc when you  are
+  finished making your assignments to return to the FUNCTION main menu.
+
+  F5  Save Function Keys in a File
+
+  After  you  have made your command assignments and returned to the  FUNCTION
+  main  menu,  press F5 to record your assignments.   FUNCTION displays a  new
+  menu presenting you with the following options:
+
+       Press F3 to save the assignments under a filename of your choice.   The
+       extension is also PFK.
+
+       Press F5 to save the assignments under the default filename, KEYS.PFK.
+
+  When you select F3,  FUNCTION erases the KEYS filename and waits for you  to
+  enter a new one.   The PFK file extension remains on the screen and there is
+  no  cursor.   Enter any  valid filename, up to a maximum of eight characters.
+
+  F7  Reset Window Switching Keys (See HELP topic, FUNCTION SWITCH.)
+
+  ///2SAVE
+  FUNCTION  allows  you  to assign commands to function keys for  push  button
+  execution  of commonly used commands.   You must use the Save  Function  Key
+  Assignments  if you want Concurrent to remember these settings each time you
+  use Concurrent.   Concurrent can store the function key settings in a  file.
+  You  can  restore the function key settings by typing:  FUNCTION  <filespec>
+  where <filespec> is the name of function key file.
+
+  The default file name is KEYS.PFK;  however, you can change the file name to
+  have  any name you choose.   It is often useful to have  different  function
+  keys  files  for different applications.   By changing the file name  before
+  saving the file, you can create another function key file.
+
+  Press  function  key F3 if you want to change the name of the  function  key
+  file.   Press  function  key  F5 to save the function key  settings  in  the
+  displayed filename.
+
+  ///2SWITCH
+  This option lets you change the keys used to switch windows.  This is needed
+  when  an application you are running uses the defined window switching  keys
+  for  another  purpose.   The entire range of combinations is shown  on  your
+  screen  when you press F7.   The current key combination is indicated by the
+  flashing arrow.
+
+  Notice that option F2 allows you to select a window by pressing the  numeric
+  keypad  key only.   All other options require the use of the numeric  keypad
+  key in combination with one or more other keys.
+
+  To  select  an  option,  press the associated function key  and  Esc.   This
+  returns  you  to the FUNCTION main menu.   Function key F5 also  saves  your
+  window switching key selection.  (Refer to HELP topic, FUNCTION.)
+
+///1GENCCPM
+GENCCPM is the native system-generation utility. It combines system CON
+modules and selected RSPs, applies configuration settings and produces
+CCPM.SYS. Follow its configuration prompts. The project build supplies a
+prepared configuration and module set; see the kernel/sysgen directory.
 
 ///1gencmd
     Syntax:
@@ -1096,6 +1098,11 @@
 
     All values represented by n are hexadecimal paragraph addresses.
 
+///1GENLDR
+GENLDR is the original CDOS loader-generation utility. It is supplied on
+the tools disk with LOADCCPM.COM. It generates loader material from the
+system image; follow its prompts and the accompanying OEM documentation.
+
 ///1GET
     Syntax:
 
@@ -1123,58 +1130,16 @@
 
     A>GET [SCRIPT.IN] ED MYFILE.TXT
     A>GET [CMDS.DAT] PIP
-    A>GET [BATCH.IN,E] DDT86 PROG.CMD
 
     See also: PUT, RDR
 
 ///1HDMAINT
-    Syntax:
-
-    HDMAINT
-
-    The  HDMAINT  hard-disk  maintenance  utility  is  a  menu-driven
-    program  that prepares your IBM-compatible hard disk for use with
-    Concurrent CP/M.   HDMAINT  works by offering you alternatives in
-    its menus.   You respond to HDMAINT by pressing the function keys
-    that correspond to your choices.
-
-    HDMAINT can perform the following functions:
-
-    o Creates or  changes  a Concurrent CP/M  partition  on  your hard
-      disk and prepares a volume within  that partition for Concurrent
-      CP/M's use.
-
-    o Deletes any existing Concurrent CP/M volume from your hard
-      disk.
-
-    o Makes any partition on the hard disk bootable or not bootable.
-
-    o Toggles the state of a verify switch on or off.  When the
-      switch is on, Concurrent CP/M confirms that everything it
-      writes to the hard disk is correctly written by reading the
-      data back and comparing it to data sent to the disk.
-
-    o Increases the number of possible directory entries within a
-      Concurrent CP/M volume that has fewer than the maximum number
-      of directory entries allowed.
-
-    o Permits you to scan an existing Concurrent CP/M volume for
-      surface defects that developed after the partition was created.
-
-    Before you invoke  HDMAINT, be sure  your current virtual console
-    is in  dynamic mode.  Set it to  dynamic mode with VCMODE.  It is
-    not possible to run HDMAINT when  any  other  programs  are being
-    executed.   Before  invoking  HDMAINT,  close  any open files and
-    terminate any running programs.
-
-    HDMAINT presents only meaningful options.  Options that cannot be
-    executed by HDMAINT at a given time never appear on the screen.
-
-    When  you  use  HDMAINT for  the  first time,  accept the default
-    values HDMAINT proposes whenever it asks you for a decision. This
-    allows  you  to  proceed  quickly  through the partition-creation
-    process. You can use HDMAINT later to change your Concurrent CP/M
-    partition when you have a better idea of your needs.
+HDMAINT
+The retained OEM hard-disk maintenance utility. Use its menus for the
+supported partition/format/system-disk operations. This is the CDOS 4.1
+program, not the CP/M-86 HDMAINT 1.1N rebuild. Its source build remains
+pending the original flat LBDOS loader; the original binary is packaged.
+The original detailed operating reference is retained in base/help.hlp.
 
 ///1HELP
 
@@ -1217,6 +1182,11 @@
        HELP>.
        HELP><cr>
 
+///1HEXCOM
+HEXCOM converts Intel HEX input to a flat COM binary. It is supplied as a
+development tool alongside ASM80 and ASM86. Use GENCMD, not HEXCOM, to
+package native CP/M-86 segmented H86 output into CMD format.
+
 ///1INITDIR
     Syntax:
 
@@ -1252,38 +1222,138 @@
 
     Do you want the existing time and date stamps cleared (Y/N)?
 
-///1PIP (copy)
+///1LOADCCPM
+  LOADCCPM allows you to use Concurrent on a hard disk-based computer if  your
+  hard disk is formatted only for DOS.
 
   Syntax:
-
-              DESTINATION              SOURCE
-
-    PIP d:{Gn} | filespec{[Gn]} = filespec{[o]},... | d:{[o]}
+  LOADCCPM
 
   Explanation:
+  LOADCCPM  allows  you to use Concurrent even if your hard disk is  formatted
+  only for DOS.   This is significant if you do not want to reformat your hard
+  disk  when  you  buy Concurrent.   To use Concurrent,  make  sure  that  the
+  CCPM.SYS  and  LOADCCPM.COM  files are on your  DOS  hard  disk.   To  start
+  Concurrent,  first  start DOS.   At the DOS command prompt (e.g., C>),  type
+  LOADCCPM  and  press  Enter.   You might find it  convenient  to  place  the
+  LOADCCPM   in   your  DOS  AUTOEXEC.BAT  file  so  that  Concurrent   starts
+  automatically when your computer is started.
 
-  This build displays CONCURRENT CP/M-86 PIP VERSION 3.1N.
+///1MD
+MD is a shell/BATCH alias for MKDIR.CMD. See MKDIR for syntax.
 
-  The file copy program  PIP  copies  files,  combines  files,  and
-  transfers  files  between  disks,  printers,  consoles,  or other
-  devices attached to your computer.  The  first  filespec  is  the
-  destination. The  second filespec is the source.  Use two or more
-  source filespecs separated by commas to combine two or more files
-  into  one file.  [o] is any combination of the available options.
-  The [Gn] option in the destination filespec  tells  PIP  to  copy
+///1MEMORYDISK
+  See SETUP MDISK.
+
+///1MKDIR
+  The MKDIR command makes subdirectories on DOS media.
+
+  Syntax:
+  MKDIR {d:} {\} {dirname} dirname
+
+  Explanation:
+  Use MKDIR to create a subdirectory.  Newly formatted DOS disks and hard disk
+  partitions have one directory called the root directory.
+
+  Subdirectories offer the same file storage facilities as the root directory.
+  Programs  invoked from a subdirectory run no differently than they  do  when
+  invoked from the root.   Subdirectories are useful for organizing files into
+  groups.
+
+  The path of subdirectories leading to the new one must be entered explicitly
+  and  all subdirectories in the path must already exist.   For  example,  the
+  following  command  creates  subdirectory  LEVEL4 on drive  B  only  if  the
+  subdirectories LEVEL2 and LEVEL3 already exist:
+
+  A>MKDIR B:LEVEL2\LEVEL3\LEVEL4
+
+  If  a  subdirectory  is specified that does not already exist  in  the  path
+  leading to the new directory,  Concurrent displays the following message and
+  terminates the command:
+
+  Directory missing
+
+  A  subdirectory  specification,  like a file specification,  consists of  an
+  eight-character name and an optional three-character extension.   MKDIR  can
+  be abbreviated as MD in your command line.
+
+  When  you  enter a MKDIR command with multiple subdirectory  specifications,
+  you must precede each specification except the first with a blackslash  (\).
+
+///1N
+N is the OEM national setup utility for the IBM PC. It uses NATIONAL.MSG
+and the national tables in CCPM.SYS. Run it from its supplied OEM disk and
+follow its language/setup prompts.
+
+///1ORDER
+  ORDER displays or changes the file extension search order used by Concurrent
+  to find a program.
+
+  Syntax:
+  ORDER
+  ORDER=ext1{,ext2{,ext3{,ext4}}}
+
+  Explanation:
+  When  you  enter a command,  Concurrent looks for the corresponding  program
+  file and runs it.   Because there might be programs with identical filenames
+  but  different file extensions,  Concurrent selects one file in  a  specific
+  sequence of file extensions.  The default file extension search sequence is:
+  CMD,  COM,  EXE, and BAT.  To have Concurrent run the BAT file first without
+  having to specifically request COPY.BAT, you must change the search order.
+
+  To display the current file extension search sequence, type:
+
+  A>ORDER
+
+  Separate  each file extension with a comma.   Omit those file extensions you
+  do  not want Concurrent to look for.   If you want Concurrent to search  for
+  BATCH files, first type:
+
+  A>ORDER=BAT,CMD,COM,EXE
+
+  Generally,   list  BAT  first  if  you  create  BATCH  files  for  all  your
+  applications.
+
+  A>ORDER=EXE,BAT
+
+  The  preceding command makes Concurrent first look for an EXE file and  then
+  the  BAT version.   If the search is unsuccessful,  Concurrent displays  the
+  following message:
+
+  Concurrent Error:  Can't Find Command
+
+  You can request a CMD file by specifying the entire name: SDIR.CMD.
+
+///1PATH
+  See the SYSDISK command.
+
+///1PAUSE
+PAUSE
+Displays Press any key to continue... and waits for a key. Implemented
+by the shell and BATCH; no PAUSE.CMD is needed for this built-in.
+
+///1PIP
+  Syntax:
+  PIP {d:{[Gn]}}|filespec{[Gn]} = filespec{[o]},... | d:{[o]}
+
+  Explanation:
+  The file copy program PIP copies files, combines files, and transfers  files
+  between  disks,  printers,  consoles,  or  other  devices attached  to  your
+  computer.  The first filespec is the destination. The second filespec is the
+  source.  Use two or more source filespecs separated by commas to combine two
+  or  more  files  into one file.   [o] is any combination  of  the  available
+  options.   The  [Gn] option in the destination filespec tells PIP   to  copy
   your file to that user number.
 
-  PIP with no command tail displays an *  prompt  and  awaits  your
-  series  of  commands,  entered  and processed one line at a time.
-  The source or destination can be any CCP/M  logical device.
+  PIP  with  no command tail displays an * prompt and awaits  your  series  of
+  commands,  entered  and  processed  one  line at  a  time.   The  source  or
+  destination can be any Concurrent logical device.
 
   ///2Examples
-
   COPY A FILE FROM ONE DISK TO ANOTHER
 
        A>PIP b:=a:draft.txt
        A>PIP b:draft.txt = a:
-
        B3>PIP myfile.dat=A:[G9]
        A9>PIP B:[G3]=myfile.dat
 
@@ -1296,7 +1366,7 @@
 
        A>PIP b:=draft.*
        A>PIP b:=*.*
-       B>PIP b:=c:*.*
+       B>PIP b:=c:.*.*
        C>PIP b:=*.txt[g5]
        C>PIP a:=*.cmd[wr]
        B>PIP a:[g3]=c:*.*
@@ -1321,39 +1391,32 @@
        A>PIP prn:=b:draft.txt
 
   ///2options
-
   PIP OPTIONS
 
-  A    Archive. Copy only files that have been  changed  since  the
-        last copy.
+  A    Archive.  Copy only files that have been changed since the last copy.
   C    Confirm. PIP prompts for confirmation before each file copy.
   Dn   Delete any characters past column n.
-  E    Echo transfer to console.
+  E    Echo transfer to window.
   F    Filter form-feeds from source data.
   Gn   Get from or go to user n.
-  H    Test for valid Hex format.
-  I    Ignore :00 Hex data records and test for valid Hex format.
-  K    Kill display of filespecs on console.
-  L    Translate upper case to lower case.
-  N    Number output lines
+  H    Test for valid hex format.
+  I    Ignore :00 hex data records and test for valid hex format.
+  K    Kill display of filespecs on window.
+  L    Translate uppercase to lowercase.
+  N    Number output lines.
   O    Object file transfer, ^Z ignored.
-  Pn   Set page length to n.  (default n=60)
-  Qs^Z Quit copying from source at string s.
+  Pn   Set page length to n (default n=60).
+  Qs   Quit copying from source at string s.
   R    Read files that have been set to SYStem.
-  Ss^Z Start copying from the source at the string s.
+  Ss   Start copying from the source at the string s.
   Tn   Expand tabs to n spaces.
-  U    Translate lower case to upper case.
+  U    Translate lowercase to uppercase.
   V    Verify that data has been written correctly.
-  W    Write over Read Only files without console query.
+  W    Write over Read/Only files without window query.
   Z    Zero the parity bit.
 
-  [A] and [C] apply to explicit filenames as well as wildcards.
-
-  With [H] or [I], the first printable character of each HEX
-  record must be a colon (:).
-
-  All  options  except  C,G,K,O,R,V  and  W  force  an  ASCII  file
-  transfer, character by character, terminated by a ^Z.
+  All options except C,G,K,O,R,V and W force an ASCII file transfer, character
+  by character, terminated by a ^Z.
 
 ///1PRINT
     Syntax:
@@ -1446,6 +1509,39 @@
     A>PRINTER 3          ; sets the current printer number
     Printer Number = 3
 
+///1PRINTMGR
+  PRINTMGR allows you to print one or more files without tying up a window.
+
+  Syntax:
+  PRINTMGR command
+
+  Explanation:
+  PRINTMGR  can be used from the command line or from a menu if your  computer
+  has  a hard disk.   To use the menu form of PRINTMGR,  press function key F6
+  from  the  Concurrent Startup Menu.   Follow the on-screen  menus  and  help
+  screens  to  use  PRINTMGR.   The rest of this discussion applies  to  using
+  PRINTMGR from the command line.
+
+  PRINTMGR must be started before you can use it.  From the command line, type
+  PRINTMGR  START  n  n ...  where n is (are) the  printer  number(s)  of  the
+  printers you want PRINTMGR to use.  For example, if you want PRINTMGR to use
+  printer 0, type PRINTMGR START 0.
+
+  Once PRINTMGR is started,  you can use it to print one or more files.   From
+  the command line, type
+  PRINTMGR  file file ...  where file is (are) the name(s) of the file(s)  you
+  want  to  print.   There are several options you can specify when you  print
+  files--see the Concurrent User's Guide section on printer manager.
+
+  Other PRINTMGR commands include:
+  PRINTMGR STATUS     lists all the print jobs and their status.
+  PRINTMGR DELETE     deletes a print job.
+  PRINTMGR RESET      stops the printer manager and deletes all print jobs.
+  PRINTMGR TERMINATE  suspends the printer manager until its restarted.
+  PRINTMGR HELP       prints a command summary.
+
+  See the Concurrent User's Guide for more information on these commands.
+
 ///1PUT
     Syntax:
 
@@ -1476,6 +1572,9 @@
 
     See also: GET, RDR
 
+///1RD
+RD is a shell/BATCH alias for RMDIR.CMD. See RMDIR for syntax.
+
 ///1RDR
     Syntax:
 
@@ -1505,6 +1604,30 @@
 
     See also: GET, PUT
 
+///1REDOS
+  REDOS is used to make DOS self-starting from your hard disk.
+
+  Syntax:
+  REDOS {d:}
+
+  Explanation:
+  REDOS  is  used to make DOS self-starting from your hard disk if  your  hard
+  disk  had been set up to start Concurrent.   To do this,  start DOS on  your
+  computer.   At the DOS prompt (e.g.  C>),  type REDOS and then the hard disk
+  drive  letter  followed by a :  and then Enter.   REDOS will prompt  you  to
+  insert your DOS system disk in drive A.
+
+  ///2EXAMPLE
+  REDOS C: <Enter>
+
+  The above command,  when entered while running DOS,  will initiate an action
+  that will cause DOS to start from drive C.
+
+///1REM
+REM text
+Ignores the rest of the command line, in the shell and BATCH.
+A line beginning with a semicolon or period is also a comment.
+
 ///1REN
     Syntax:
 
@@ -1533,6 +1656,47 @@
 
     In the last example, the new filename already  exists.  The  user
     overrides the error by entering a Y at the prompt.
+
+///1RENAME
+  See REN.
+
+///1REST
+  See the BACKREST command.
+
+///1RMDIR
+  The RMDIR command removes a specified empty subdirectory.
+
+  Syntax:
+  RMDIR {d:} {\}subspec{\subspec\subspec ... }
+
+  Explanation:
+  You  cannot remove a subdirectory that contains files.   Use PIP or COPY  to
+  copy  files to another directory and then ERASE them from  the  subdirectory
+  you want to remove.  You can remove a subdirectory from the current drive or
+  from  a  designated drive;  however,  you cannot remove the root or  current
+  directory.
+
+  The subdirectory to be removed must be preceded by the current  subdirectory
+  and   any  subdirectories  leading  to  it.    Separate  each   subdirectory
+  specification  with a backslash (\).   For example,  this command erases the
+  subdirectory SUB3 on drive A:
+
+  A>RMDIR SUB1\SUB2\SUB3
+
+///1RUNMENU
+  RUNMENU allows you to run a menu.
+
+  Syntax:
+  RUNMENU
+  RUNMENU filespec
+  RUNMENU filespec menuname
+
+  Explanation:
+  If  you  do not specify a menu file,  the  default,  MENU.DAT,  is  assumed.
+  Replace filespec in the command line with the name of the menu file you want
+  RUNMENU to access.  Replace menuname with the name of a specific menu within
+  that menu file.   RUNMENU then runs the specified menu.   The menu file  you
+  specify must be in your current directory.
 
 ///1SDIR
     Syntax:
@@ -1594,277 +1758,63 @@
     repeated headers separately; it does not enable interactive pauses.
 
 ///1SET
-
-  Syntax:
-
-          SET [options]
-          SET d: [options]
-          SET filespec [options]
-
-  Explanation:
-
-  SET  initiates  password   protection   and   time  stamping   of
-  files.  It  also  sets  the file and drive attributes Read-Write,
-  Read-Only, DIR and SYS.  It  lets  you  label a disk and password
-  protect  the  label.  To  enable  time  stamping  of  files,  you
-  must  first  run INITDIR to format the disk directory.
-
-  Labels, password protection and timestamp settings require CP/M
-  media. File and drive attributes also work on DOS media through
-  the kernel's attribute mapping.
-
-  ///2Label
-
-  Syntax:
-
-          SET {d:} [NAME=labelname.typ]
-          SET [PASSWORD=password]
-          SET [PASSWORD=,PROTECT=OFF]
-
-
-  Examples:
-
-  A>SET [NAME=DISK100]
-
-       Labels the disk on the default drive as DISK100.
-
-  A>SET [PASSWORD=SECRET]
-
-       Assigns SECRET to the  disk  label.
-
-  A>SET [PASSWORD=,PROTECT=OFF]
-
-       Removes the label password and disables drive protection.
-
-  ///2Passwords
-
-          SET [PROTECT=ON]
-          SET [PROTECT=OFF]
-          SET filespec [PASSWORD=password]
-          SET filespec [PASSWORD=,PROTECT=NONE]
-          SET filespec [PROTECT=READ]
-          SET filespec [PROTECT=WRITE]
-          SET filespec [PROTECT=DELETE]
-          SET filespec [PROTECT=NONE]
-
-
-          Password Protection Modes
-
-  Mode                        Protection
-
-  READ           The password  is  required  for  reading,  copying
-                 writing, deleting or renaming the file.
-
-  WRITE          The password is required for writing, deleting  or
-                 renaming  the file.  You do not need a password to
-                 read the file.
-
-  DELETE         The password is  only  required  for  deleting  or
-                 renaming  the file.  You do not need a password to
-                 read or modify the file.
-
-  NONE           No password exists for the file.   If  a  password
-                 password  exists,  this  modifier  can  be used to
-                 delete the password.
-
-  ///2Attributes
-
-     SET filespec [attribute]
-
-  Attribute      Meaning
-
-  RO             sets the file attribute to Read-Only.
-
-  RW             sets the file attribute to Read-Write.
-
-  SYS            sets the file attribute to SYS.
-
-  DIR            sets the file attribute to DIR.
-
-  ARCHIVE=OFF    means  that  the  file  has  not  been  backed  up
-                 (archived).
-
-  ARCHIVE=ON     means that the file has been backed up (archived).
-                 The  Archive  attribute can be turned on by SET or
-                 by PIP when copying a group of files with the  PIP
-                 [A]  option.  SHOW  and  DIR  display  the Archive
-                 option.
-
-  F1=ON|OFF      turns on or off the user-definable file  attribute
-                 F1.
-
-  F2=ON|OFF      turns on or off the user-definable file  attribute
-                 F2.
-
-  F3=ON|OFF      turns on or off the user-definable file  attribute
-                 F3.
-
-  F4=ON|OFF      turns on or off the user-definable file  attribute
-                 F4.
-
-
-  Examples:
-
-  SET [PROTECT=ON]
-
-       Turns on password protection for all the files on the  disk.
-       You  must  turn on password protection before you can assign
-       passwords to files.
-
-  SET [PROTECT=OFF]
-
-       Disables password protection for the files on your disk.
-
-  A>SET MYFILE.TEX [PASSWORD=MYFIL]
-
-       MYFIL is the password assigned to file MYFILE.TEX.
-
-  B>SET *.TEX [PASSWORD=SECRET, PROTECT=WRITE]
-
-       Assigns the password SECRET to all the TEX files on drive B.
-       Each  TEX  file  is  given  a  WRITE protect mode to prevent
-       unauthorized editing.
-
-  A>SET MYFILE.TEX [RO SYS]
-
-       Sets MYFILE.TEX to Read-Only and SYStem.
-
-  ///2Default
-
-  A>SET [DEFAULT=dd]
-
-       Instructs the system to use dd as a password if you  do  not
-       enter a password for a password-protected file.
-
-  ///2Time-Stamps
-
-  Syntax:
-
-          SET [CREATE=ON|OFF]
-          SET [ACCESS=ON|OFF]
-          SET [UPDATE=ON|OFF]
-
-  Explanation:
-
-  The above SET commands allow you to keep a  record  of  the  time
-  and  date  of file creation and update, or of the last access and
-  update of your files.
-
-
-  Option         Meaning
-
-  [CREATE=ON]    turns on CREATE time stamps on  the  disk  in  the
-                 default   or   specified   drive.  To  record  the
-                 creation time of a file, the CREATE option must be
-                 turned on before the file is created.
-
-  [ACCESS=ON]    turns on ACCESS time stamps on  the  disk  in  the
-                 default  or  specified  drive.  ACCESS  and CREATE
-                 options are mutually exclusive; only one can be in
-                 effect  at a time.  If you turn on the ACCESS time
-                 stamp on  a  disk  that   previously   had  CREATE
-                 time     stamp,   the   CREATE   time   stamp   is
-                 automatically turned off.
-
-  [UPDATE=ON]    turns on UPDATE time stamps on  the  disk  in  the
-                 default  or  specified  drive.  UPDATE time stamps
-                 record the time the file was last modified.
-
-
-  Examples:
-
-          A>SET [ACCESS=ON]
-          A>SET [CREATE=ON,UPDATE=ON]
-
-  ///2Drives
-
-  Syntax:
-
-          SET {d:} [RO]
-          SET {d:} [RW]
-
-
-  Example:
-
-  A>SET B: [RO]
-
-       Sets drive B to Read-Only.
-
-    ///2EXAMPLES
-    Examples:
-
-    A>SET [HELP]
-    A>SET [NAME=mylabel.dsk]
-    A>SET *.CMD [SYS,RO,PASSWORD=secret,PROTECTION=READ]
-    A>SET *.HEX [RW,PROTECTION=NONE,DIR]
-    A>SET *.TEX [PASSWORD=secret,PROTECTION=WRITE]
-    A>SET ONE.TEX,TWO.TEX [PROTECTION=NONE],*.PRN [SYS]
-    A>SET [DEFAULT=secret]
-    A>SET [CREATE=ON]
-    A>SET [ACCESS=ON]
-    A>SET [UPDATE=ON]
-    A>SET B:[RO]
-    A>SET B:[RW]
-
-    ///2OPTIONS
-    Options:
-
-    [ARCHIVE=ON|OFF]      Set or clear the archive attribute.
-    [F1=ON|OFF] ... [F4=ON|OFF]   Set or clear CP/M file flags.
-    [ACCESS=ON|OFF]       Turn access time stamps on/off.
-    [CREATE=ON|OFF]       Turn creation time stamps on/off.
-    [DEFAULT=password]    Specify a default password.
-    [DIR]                 Set file DIRectory attribute.
-    [HELP]                Display a list of examples.
-    [NAME=lablname.typ]   Specify directory label name.
-    [PASSWORD=password]   Specify file or directory label password.
-    [PROTECTION=READ|WRITE|DELETE|NONE]   Set level of password protection.
-    [RO]                  Set file or drive to Read-Only.
-    [RW]                  Set file or drive to Read/Write.
-    [SYS]                 Set file SYStem attribute.
-    [UPDATE=ON|OFF]       Turn update time stamps on/off.
+SET filespec [RO|RW,DIR|SYS,ARCHIVE=ON|OFF,F1=ON|OFF,...,F4=ON|OFF]
+SET filespec[;password] [PASSWORD=newpassword,PROTECT=READ|WRITE|DELETE|NONE]
+SET {d:} [NAME=label.typ]
+SET {d:} [RO|RW]
+SET {d:} [PROTECT=ON|OFF]
+SET {d:} [DEFAULT=password]
+SET {d:} [CREATE=ON|OFF,ACCESS=ON|OFF,UPDATE=ON|OFF]
+SET [HELP]
+
+File attributes work on CP/M and DOS media through BDOS. F1-F4 are CP/M
+file flags, not four additional FAT bits. CP/M ARCHIVE=ON means already
+archived and clears DOS's archive-needed bit; OFF sets that DOS bit.
+
+Labels, XFCB passwords and timestamp settings require CP/M media. Enable
+drive protection before assigning passwords or a default password:
+  SET A: [PROTECT=ON]
+  SET A:*.TXT [PASSWORD=SECRET,PROTECT=READ]
+
+READ protects reading, writing, renaming and deletion; WRITE protects
+writing, renaming and deletion; DELETE protects renaming and deletion;
+NONE removes file protection. The default password is inherited by
+later commands. Password input supports Backspace, Ctrl-X and Ctrl-C.
+
+To clear passwords, use an empty value followed by another option:
+  SET A:FILE.TXT [PASSWORD=,PROTECT=NONE]
+  SET A: [PASSWORD=,PROTECT=OFF]
+[PASSWORD=] alone is rejected by the historical parser.
+
+CREATE and ACCESS timestamps are mutually exclusive. Enabling either
+replaces the other; selecting both together is invalid. INITDIR must
+format the directory before timestamping can be enabled. UPDATE is
+independent. A bare filespec is not a query: use SDIR or SHOW to inspect.
+
+///1SETPORT
+SETPORT
+Configures installed serial ports for modems, printers and terminals.
+Run without arguments for its menus. Select the port, then configure
+baud rate, data bits, stop bits, parity and handshaking to match the
+connected device. Only installed ports are offered.
+
+SETPORT changes the running configuration. Use SETUP to save serial-port
+settings as boot defaults in CCPM.SYS. This is the retained OEM utility;
+its original detailed reference remains in base/help.hlp in the source
+tree. Refer to its menus for the complete supported parameter choices.
 
 ///1SETUP
-    Syntax:
+SETUP
+Menu-driven OEM system configuration. It can save function-key and
+serial-port settings, change disk head-step time, install additional
+terminals or an MDisk, configure floppy write verification and set a
+maximum program-memory allocation.
 
-    SETUP
-
-    SETUP is a menu-driven  utility program that allows you to tailor
-    your  system  configuration  to meet your needs.   SETUP works by
-    presenting  you  with  menus.   You  respond to SETUP by pressing
-    function  keys  appropriate  to  your  choices.  SETUP offers the
-    following options:
-
-    o Save XIOS Parameters - Allows  you  to  save  the  serial  port
-      configurations you make with CONFIG.   Also  allows you to save
-      the  current  function  key  assignments made with the FUNCTION
-      command.
-
-    o MDISK - This  option  allows the user to create a virtual drive
-      in memory.
-
-    o Diskette Head Step Time - Allows you  to  change  the head step
-      time in the diskette controller.
-
-    o Verify after Diskette Write - When enabled,  this option causes
-      Concurrent CP/M  to  verify  each  write operation to diskette,
-      with automatic retries for verification errors.
-
-    o Storage Disk - Allows you to  choose  where the  selections you
-      make with SETUP are stored.   If you boot  Concurrent CP/M from
-      diskette, select "Diskette"; if you boot from hard disk, select
-      "Hard Disk".
-
-    When you type SETUP and press Enter, SETUP responds with its main
-    menu,offering you all of the above options. Press the appropriate
-    function key to receive an option menu. Each option menu explains
-    the option  and  offers  you the choice of enabling the option or
-    returning to the main menu.
-
-    From the main menu, you have the choice of leaving without making
-    changes,  or enabling the changes made in the option menus.   The
-    changes made in SETUP do not take  effect until the next time you
-    power up your Personal Computer or perform a system reset.
+SETUP modifies CCPM.SYS for use at the next boot. That file must be
+available when saving changes. Use the menus for supported settings.
+This distribution retains the original 4.1 SETUP binary; it is not the
+older CCP/M CONFIG utility. The complete original reference is retained
+in base/help.hlp in the source tree.
 
 ///1SHOW
     Syntax:
@@ -1914,6 +1864,14 @@
     SHOW d:       ; SHOW with the optional drive specifier displays
                   ; information for the specified drive only.
 
+///1SPL
+SPL starts the OEM spooler. It uses the SPLIN/SPLOUT and MXSPL queues and
+the supplied INDEX.DSP data. PRINTMGR manages spool requests; DSP displays
+spool information. These are separate from the direct PRINT command.
+
+///1STOP
+  See FREEMEMORY.
+
 ///1SUBMIT
     Syntax:
 
@@ -1935,126 +1893,99 @@
     A>SUBMIT B:START
     A>SUBMIT MAX.SUB data1 data2 data3
 
-///1SETDEF
-    Syntax:
+///1SUSPEND
+  Syntax:
+  SUSPEND=ON|OFF
 
-    SETDEF
-    SETDEF drive-list
-    SETDEF [ORDER=(CMD)]
-    SETDEF [ORDER=(CMD,SUB)]
-    SETDEF [ORDER=(CMD,DOS)]
-    SETDEF [ORDER=(CMD,SUB,DOS)]
-    SETDEF drive-list [ORDER=(CMD,SUB,DOS)]
+  Explanation:
+  SUSPEND  causes  Concurrent to suspend the  operation  of  any  DOS programs
+  while   those  programs  occupy  a  background  window.   SUSPEND works on a
+  per-window  basis.   SUSPEND  has two settings,  ON and  OFF.   The  default
+  setting is ON.
 
-    Display or change command search settings for this console. With no
-    arguments, SETDEF displays the drive list and file order. Defaults
-    are * (current drive) and CMD,DOS. Sys Disk is shown last in the
-    drive list as a fixed role. Path and order are independent:
-    changing either preserves the other. Invalid input changes neither.
+  Many  DOS  programs  do not follow DOS  conventions  for  sending characters
+  to   the  video display.    When these  programs   output  characters  while
+  occupying  a  background  window,  they can  write  through  the  foreground
+  window to display characters  on your screen.    This  "writing through"  is
+  not a threat  to  your data.  It can, however, be distracting.
 
-    A list has one to four comma-separated entries: * for the current
-    drive, or A: through P:. Spaces/tabs around entries are allowed.
+  Most   of   the   applications  you  will   use   with   Concurrent  respond
+  immediately  to your commands.    For example,   a word  processing  program
+  displays    characters   immediately  after   you   press appropriate  keys.
+  Because  of  the  interactive  nature of most of the  popular  applications,
+  having SUSPEND set to ON is really more of  a  precaution  than a necessity.
+  If you  discover  that  an application does not output characters when it is
+  not switched in to the foreground, you can set SUSPEND to OFF.
 
-    SETDEF *,A:,C:                 Search current drive, A:, then C:.
-    SETDEF M:,*                    Prefer utilities copied to M:.
-    SETDEF [ORDER=(CMD,SUB)]        Enable automatic SUB scripts.
-    SETDEF * [ORDER=(CMD,DOS)]      Restore both defaults.
-
-    Four orders are accepted:
-      CMD                 CMD only; no automatic SUB or DOS lookup.
-      CMD,SUB             CMD then SUB; no automatic DOS lookup.
-      CMD,DOS             CMD then COM, EXE, BAT (default).
-      CMD,SUB,DOS         CMD then SUB, COM, EXE, BAT.
-
-    DOS is a fixed group: COM then EXE then BAT. Native TMP ignores DOS
-    and uses only CMD/SUB. The syntax and stored settings are the same
-    in native TMP and PC-MODE. Native TMP cannot run DOS programs.
-    SUB alone, SUB,CMD and individual COM/EXE/BAT entries are rejected.
-
-    Try the selected types on each drive before moving to the next.
-    A SUB or COM on an earlier drive can precede a CMD on a later drive.
-    An explicit extension bypasses ORDER: .SUB selects a script even
-    when automatic SUB lookup is disabled; in PC-MODE an explicit .COM,
-    .EXE or .BAT works even when automatic DOS lookup is disabled.
-    Native TMP accepts only .CMD and .SUB. An existing invalid CMD
-    reports its load error without trying another type or drive.
-    BAT uses PC-MODE's existing BATCH route and needs its interpreter;
-    enabling DOS does not install a BAT interpreter.
-
-    Resident commands have priority for names without an explicit type.
-    An explicit drive bypasses the list. Missing drives are skipped and
-    duplicates searched once. Your working drive and user are preserved.
-
-    The system drive is the final fallback, with existing SYS-file
-    rules for CMD and SUB. If also in the normal list, it is searched
-    there normally and not again. SYSDISK changes that drive globally;
-    SETDEF settings are local to this console and last until reboot.
-
-    Automatic SUB execution requires the matching rebuilt SUBMIT.CMD,
-    searched as CMD only through the same path and system fallback.
-    SUBMIT.CMD not found means the script did not run. An oversized
-    expanded tail reports Command tail too long for SUBMIT; arguments
-    are never truncated. The expanded tail (qualified script name,
-    optional password and arguments) can contain at most 126 characters.
-
-    SUBMIT's parameter/quoting rules are unchanged. Commands inside
-    scripts and program chaining use these settings. An explicit SUBMIT
-    script command retains SUBMIT's current/system script lookup.
-
-    Put SETDEF in STARTUP.nnn or a startup SUBMIT script to configure a
-    console automatically. A:SETDEF specifies the utility's own drive.
-    M: must already exist and contain the utilities to run.
-    SETDEF does not allocate, format or copy files to the memory disk.
-    TEMPORARY and DISPLAY options are not implemented.
+///1SYS
+SYS {text}
+This compatibility built-in is accepted and ignored. It does not copy
+system files or select the system search path. Use SYSDISK for that path.
 
 ///1SYSDISK
-    Syntax:
+  Use the SYSDISK command to show the current system disk,  to set a different
+  system disk, or to turn off the system disk search sequence.
 
-    SYSDISK
-    SYSDISK d:
+  Syntax:
+  SYSDISK
+  SYSDISK d:
+  SYSDISK {d:}subname{\subname\subname ...}
+  SYSDISK [ON]|[OFF]
 
-    Explanation:
+  Explanation:
+  The first form of the command asks SYSDISK which drive is the current system
+  disk.  The other forms make a different drive or subdirectory the new system
+  disk  and  turn Concurrent's system disk file searching feature OFF and  ON.
+  System disk assignments made with SYSDISK apply to the current window  only.
+  If  you  need  to change the system disk on a  regular  basis,  include  the
+  SYSDISK command in your STARTUP.BAT files for each window.
 
-    SYSDISK is available as a TMP built-in and as SYSDISK.CMD. The bare
-    command uses the built-in; SYSDISK.CMD selects the standalone tool.
-    A change is refused while files are open anywhere in the system.
+  You  can  designate any physical DOS or CP/M disk as the  system  disk.   In
+  addition,  floating drives N and O, memory drive M, and any subdirectory can
+  be  made the system disk.   When a CP/M disk is designated the system  disk,
+  Concurrent  searches in the current user number and user number 0  until  it
+  finds  the designated file.   When a DOS disk is designated the system disk,
+  Concurrent searches only in the root directory or designated subdirectory.
 
-    The SYSDISK command  tells you which  drive is the current system
-    drive  and  lets  you  specify  a  new system drive.  Valid drive
-    specifications are A: through P:, provided the drive is configured.
-    The distributed floppy setup provides A: and B:; other drives such as
-    M: require a system configuration that enables them.
+  Concurrent  assumes that the root directory is designated as the system disk
+  until  you  run SYSDISK to specify otherwise.   To make a  subdirectory  the
+  system disk,  you must specify all subdirectories in its path.  For example,
+  to  make  subdirectory  SUB3  on  drive C  (with  the  path  from  the  root
+  directory--SUB1\SUB2\SUB3--the system disk, enter the following:
 
-    Concurrent CP/M  assigns  one  drive as the system drive whenever
-    you start up Concurrent CP/M.  Concurrent CP/M  looks for program
-    files (.CMD filetype) on the system drive when it cannot find the
-    file using the SETDEF command drive search list. The system drive
-    is initially the drive whose letter appears in the system prompt
-    when you start up Concurrent CP/M.
+  C>SYSDISK \SUB1\SUB2\SUB3
 
-    SYSDISK is especially useful if you do not have a hard disk.  You
-    can create a start-up file with a SUBMIT command  that sets up an
-    MDISK (when configured), sets your system drive to drive M, and transfers  all your
-    command files to drive M.  This  frees  up  your  default  system
-    drive for other work.
+  The  backslash  before  SUB1 indicates that the path starts  from  the  root
+  directory rather than the current directory.
 
-    ///2EXAMPLES
-    Examples:
+  To  make the root directory the system disk from a subdirectory,  enter  the
+  following:
 
-    Here the SYSDISK command is used to tell you which is the current
-    system drive:
+  C>SYSDISK
 
-    A>SYSDISK
+  File  searching is automatic when Concurrent is started.   You can turn  off
+  this feature on a window-by-window basis by entering the following:
 
-    System disk is A:
+  A>SYSDISK [OFF]
 
+  When  the file searching option is off,  Concurrent searches no further than
+  the current directory for all files specified.   To turn on  file  searching
+  after  it  has  been  turned off on  a  window-by-window  basis,  enter  the
+  following:
 
-    In the following example, SYSDISK is used to  assign  the  system
-    drive to MDISK, drive M.
+  A>SYSDISK [ON]
 
-    A>SYSDISK M:
+  Making an MDISK the system disk can provide performance benefits, especially
+  for  floppy-disk  systems.   Because you must copy files to the MDISK  every
+  time Concurrent is started,  build a BATCH file that transfers the  programs
+  to  Drive M and then runs SYSDISK to change the system disk.   The following
+  example illustrates the command sequence:
 
-    System disk is M:
+  A>PIP M:=A:*.CMD[R]
+  A>SYSDISK M:<Enter>
+
+  The  PIP [R] option is necessary in this example because otherwise PIP  does
+  not  copy files with the SYS attribute.
 
 ///1systat
     Syntax:
@@ -2092,7 +2023,6 @@
              E(xit)
 
           ->_
-
 
     Typing the appropriate letter in response to the menu obtains the
     associated  display. To  use SYSTAT without the menu, specify the
@@ -2133,6 +2063,54 @@
             continuous display, until you press a key.  Following the
             C with a space and a one  or two-digit  number causes the
             display to update every n seconds.
+
+///1TIME
+  Syntax:
+  TIME {HH:MM:SS.XX}
+
+  HH is a one- or two-digit number from 0 to 23 for the hour.
+  MM is a one- or two-digit number from 0 to 59 for the minute.
+  SS is a one- or two-digit number from 0 to 59 for the second.
+  XX is a one- or two-digit number from 0 to 99 for the hundredths of a second.
+
+  Explanation:
+  TIME lets you display or set the time  on your system.  Concurrent  uses the
+  time and date you  enter with  the TIME and DATE commands to keep  track  of
+  when you  create, access, or update your files.
+
+  Time is expressed in terms of a 24-hour clock.  If your system has a  status
+  line  clock, resetting the time with the TIME command also changes the  time
+  displayed on the status line clock.
+
+  On  DOS  media,  space  for  recording times and  dates  of  file  usage  is
+  reserved automatically.  For CP/M media, you have the choice of reserving or
+  not reserving space for times and dates. To reserve space on CP/M media, use
+  the INITDIR and SET utilities.
+
+  ///2EXAMPLES
+  To display the current system time,   enter the following command.  You  see
+  that  the  system  has  recorded  the  current  time as 2:56:39 p.m.
+
+  A>TIME
+  Current time is 14:56:39.23
+  Enter new time: _
+
+  If the  preceding time is correct,  press Enter.   If the time is incorrect,
+  enter the correct time at the prompt.
+
+  You  do not have to include a leading zero for a.m.  settings.   You also do
+  not  have  to include the seconds or hundredths of a  second  fields.   TIME
+  considers the following command valid:
+
+  B>TIME
+  Current time is 20:19:18.17
+  Enter new time: 2:00
+
+  The time is set to 2:00 a.m.
+
+  The following command sets the time to 10:15 p.m.
+
+  A>TIME 22:15
 
 ///1TYPE
     Syntax:
@@ -2192,254 +2170,60 @@
     A>USER 15
     A>USER 7
 
-///1VCMODE
-    Syntax:
-
-    VCMODE {option}
-
-    VCMODE specifies background operating modes for the four  virtual
-    consoles. When  a virtual console is switched-out, it operates in
-    either the dynamic mode or the buffered mode. See the  HELP  file
-    explanations under BUFFERED  and DYNAMIC  for more information.
-
-    ///2EXAMPLES
-    Examples:
-
-    A>VCMODE
-    A>VCMODE dynamic
-    A>VCMODE buffered
-    A>VCMODE size=5
-
-    ///2OPTIONS
-    Options:
-
-    DYNAMIC  switches the console to dynamic mode. If a console is in
-             dynamic mode and you  switch to a different console, you
-             will not see any data that  may have scrolled  off  it's
-             screen while you were switched away.
-
-    BUFFERED If a console is in buffered mode and switched out,  data
-             output from a running program goes into a buffer file on
-             disk.  Thus screen output is preserved.
-
 ///1WINDOW
-    Syntax:
+WINDOW VIEW
+WINDOW TOP N=n
+WINDOW FULL N=n
+WINDOW CHANGE N=n PR=r,PC=c,NR=rows,NC=cols,VR=r,VC=c,TR=ROW,D=COLOR
+WINDOW WRITE N=n TYPE=WINDOW|CONSOLE|SETUP,FILE=filespec
 
-    WINDOW VIEW
-    WINDOW TOP number=n
-    WINDOW FULL number=n
-    WINDOW WRITE number=n type={w|c|s},file=filename
-    WINDOW CHANGE number=n field name=field value
+CDOS window numbers are 1..4. Screen and virtual coordinates are one-based:
+rows 1..24, columns 1..80. CHANGE validates its fields before changing XIOS;
+extents are clipped to the screen. VIEW reports all windows; TOP brings a
+window forward; FULL expands it to the screen.
 
-    Explanation:
+CHANGE fields (abbreviations allowed):
+  NUMBER/N       PC window number 1..4
+  PROW/PR        Physical top row
+  PCOL/PC        Physical left column
+  NROWS/NR       Window height
+  NCOLS/NC       Window width
+  VROW/VR        First visible row in the virtual console
+  VCOL/VC        First visible column in the virtual console
+  TRACKING/TR    NO or ROW cursor tracking
+  DISPLAY/D      B&W or COLOR
+  FGCOLOR/FG     Foreground color
+  BGCOLOR/BG     Background color
+Colors: BLACK BLUE GREEN CYAN RED MAGENTA YELLOW WHITE.
 
-    WINDOW is a  utility that allows you to make changes to your CP/M
-    Windows by entering values in a WINDOW command line.  WINDOW is a
-    command-line version of WMENU,  a menu-driven utility.   WINDOW's
-    principle use is that you can include WINDOW command lines  in  a
-    SUBMIT file.   In fact, by using either WINDOW or WMENU, you  can
-    generate an "instant" SUBMIT file containing WINDOW commands that
-    set up your windows the way you want them.
+WRITE WINDOW saves the visible virtual-screen rectangle. CONSOLE saves
+all 24 rows. Both trim trailing spaces. SETUP saves command lines for
+all four windows, even though a valid N is still required. Output is
+text ending at Ctrl-Z; disk-record padding is not part of the text.
 
-    The Concurrent CP/M window manager does not have to be present in
-    your computer's memory for you to use WINDOW.
+  WINDOW CH N=1 PR=2,PC=4,NR=5,NC=30,FG=WHITE,BG=BLUE
+  WINDOW WRITE N=1 TYPE=SETUP,FILE=B:WINDOWS.SUB
 
-    WINDOW  is divided into five subcommands, VIEW, TOP, FULL, WRITE,
-    and CHANGE.
-
-    WINDOW VIEW  allows  you  to  view a  table of the current values
-    associated with your CP/M Windows.
-
-    The  WINDOW TOP  command has the same effect as pressing Ctrl-Alt-1
-    through Ctrl-Alt-4 to select virtual consoles 0 through 3.
-    Ctrl-Alt-Tab selects the next console in round-robin order.
-
-    The WINDOW FULL command has the same effect as  pressing Ctrl-keypad-Del
-    to switch your window between full-screen and its former size and
-    position.
-
-    WINDOW WRITE  allows you to write any of three different kinds of
-    files:
-
-    o the text contained in a window (type=window).
-
-    o the text contained in the entire virtual console that lies
-      beneath that window (type=console).
-
-    o a SUBMIT file that produces the window setup that exists
-      at the time you execute the WINDOW WRITE command (type=setup)
-
-    WINDOW CHANGE is the command to make changes to your windows. You
-    can change the  size, location, colors, and  other  properties of
-    your windows.
-
-    With all of the WINDOW subcommands except VIEW you must specify a
-    virtual console number in a WINDOW command line.
-
-    ///2EXAMPLES
-    Examples:
-
-    The  following  examples  offer a  notion of the way  you can use
-    WINDOW.
-
-    B>window view
-
-    The command in the  above  example  causes  WINDOW  to  produce a
-    display  of  the  values  currently  associated  with  your  CP/M
-    Windows.   Included  in  the WINDOW VIEW display are the windows'
-    size, expressed in rows and columns, their locations, in terms of
-    the row  and  column  coordinates  of the upper right corner of a
-    window, background and foreground colors, and other values.
-
-    A>window top n=2
-
-    This  command  switches  in virtual console 2, just as if you had
-    pressed Ctrl-Alt-3.
-
-    A>window full n=1
-
-    This command makes the  window to  virtual console 1 jump to full
-    screen  size  with  its  location  coinciding  with  the physical
-    console.   If  the  window is already  full-screen,  this command
-    causes the window to return to the size and location it had prior
-    to the invocation of this command.
-
-    B>window write n=0 type=console,file=memo.txt
-
-    This  command  causes  WINDOW  to write the characters in virtual
-    console 0 to the file MEMO.TXT.  WINDOW writes all the characters
-    in the  virtual  console to a file,  regardless  of  the size and
-    position of the window to virtual console 0.
-
-    B>window write n=0 type=window,file=glimpse.txt
-
-    The  above command  causes WINDOW  to write the characters in the
-    window to  virtual  console 0  to the  file GLIMPSE.TXT.   WINDOW
-    writes all of the characters in the window,  even if a portion of
-    the window is off the screen.
-
-    A>window write n=2 type=setup,file=ALIGN.SUB
-
-    The above command causes WINDOW to write a SUBMIT file containing
-    WINDOW  commands that produce the window setup that exists at the
-    time you execute this command.
-
-    B>window change n=2 prow=12,pcol=40,nrows=10,ncols=12
-
-    This  command  changes  the  size  and  location of the window to
-    virtual console 2.  Prow and pcol are short for placement row and
-    placement column.   These two numbers are the coordinates for the
-    placement point,  a point in the  upper  right corner of a window
-    that is always visible in a switched-in window.   Nrows and ncols
-    are short for number of rows and number of columns. These figures
-    indicate the size of a window.
-
-    C>window change n=3 fgc=cyan,bgc=magenta
-
-    This command changes the  foreground  color  (fgc) and background
-    color (bgc) in the window to virtual console 3.  Foreground color
-    is the color of the characters in a window.   Background color is
-    the color of the window that contains those characters.  You must
-    have a  color card and a  color monitor  as part of your Personal
-    Computer system in order to receive color video output. Available
-    colors  are  black,  white,  red, green, blue, cyan, magenta, and
-    yellow.
-
-    B>window change n=0 tracking=row
-
-    This command causes  Concurrent CP/M  to always keep the row that
-    the cursor  is on in view  when you are  scrolling or  sizing the
-    window to virtual console 0.  This is the default setting for all
-    four windows.  Alternatively,  you can specify "tracking=no",  so
-    that  Concurrent CP/M  will not keep track of the cursor's row as
-    you scroll or size a window.
-
-    A>window change n=1 display=color
-
-    This  command causes  Concurrent CP/M  to  display  the window to
-    virtual  console 1 on a color monitor.   If you have both a color
-    and a monochrome monitor connected to your Personal Computer, you
-    can  display  a  window on either  monitor.   If you had only one
-    monitor connected to your computer,  the above command would have
-    no effect.
+WINDOW does not require WMENU to be installed. The resident manager is
+a separate interactive interface to the same window services.
 
 ///1WMENU
-    Syntax:
+WMENU
+Installs and detaches the resident window manager. Once installed,
+Ctrl-Alt-Esc opens its menu; Ctrl-keypad-Plus remains available.
 
-    WMENU
+Arrows or Space select a highlighted item; Return opens it:
+  Place     Move the window with arrows
+  Size      Change its dimensions with arrows
+  Scroll    Change its view into the virtual console
+  Tracking  Toggle NO/ROW with Up/Down or Space
+  Display   Toggle B&W/COLOR with Up/Down or Space
+  Color     Left/Right selects foreground/background; Up/Down changes it
+  Write     Save Window, Console or Setup output
+  Abort     Return confirms unloading; Esc returns to the menu
 
-    Explanation:
-
-    WMENU is a utility that loads the  Concurrent CP/M window manager
-    into your Personal Computer's memory.  Once the window manager is
-    in  memory,  WMENU  lets  you  manipulate  your  CP/M Windows  by
-    pressing the  arrow keys on your  numeric keypad in response to a
-    status-line (twenty-fifth line) menu.
-
-    Type WMENU and press Enter.   WMENU returns the message,  "Window
-    Manager installed." You will notice that the letters "Win" appear
-    on the  Concurrent CP/M status line.   With the window manager in
-    memory,  you can press Ctrl-Alt-Esc to obtain WMENU's main menu.
-    Ctrl-keypad-Plus remains available as a compatibility shortcut.
-    This menu offers you a choice from Place, Size, Scroll, Tracking,
-    Display, Color, Write,  and Abort.  You can press Escape (Esc) to
-    leave the main menu.
-
-    When you press the  arrow  keys on your  numeric  keypad  (or the
-    space bar)  you  can move the menu pointer,  a reverse-video box,
-    from  item to item in the  main menu.   When you press Enter, you
-    receive the submenu for the item that appears in the menu pointer.
-    In the submenus, you make changes to your windows by pressing the
-    arrow keys. The changes take effect instantaneously, as you press
-    the arrow keys.   Press Esc  to return  to the  main menu  from a
-    submenu.
-
-
-    MAIN MENU OPTIONS
-
-    Place allows you to move the window around on the screen.
-
-    Size allows you to change the size of each window.
-
-    Scroll  allows  you  to  change what portion of a virtual console
-    you see through a window.
-
-    Tracking lets  you  select  between row tracking and no tracking.
-    With row tracking selected,  Concurrent CP/M always keeps the row
-    that the  cursor is on in view  when you scroll or size a window.
-    With no tracking,  Concurrent CP/M  does  not  keep  track of the
-    cursor's row when you scroll or size a window.
-
-    The Display option  lets  you  choose  where  a  window  will  be
-    displayed, on a color or on a monochrome monitor. Selections made
-    in this  option  take  effect only if you have both a color and a
-    monochrome monitor connected to your Personal Computer.
-
-    Color lets you  change  the  foreground and background color of a
-    window displayed on a color monitor.
-
-    One of WMENU's more useful  options  is  WRITE.   After selecting
-    WRITE from the main menu, you can, with a single Enter keystroke,
-    create any of three different files:
-
-    1. A  SUBMIT  file  containing  WINDOW  commands that set up your
-       windows  exactly  as  they  are  set up at the moment when you
-       press Enter.
-
-    2. A file containing the characters in a window.
-
-    3. A file  containing  the  characters  in a virtual console that
-       lies beneath a window.
-
-    The Abort  option  allows you to  remove  the window manager from
-    your computer's memory.   After  pressing  Enter  from  the Abort
-    submenu, you must reinvoke WMENU to load the window manager.
-
-    Remember that you can press Ctrl-Alt-Esc to obtain WMENU's main menu
-    even when you are in an application program.  Also you can switch
-    virtual  consoles  when  you are in the  main  menu or while in a
-    submenu.  This means that you could, for example, change the size
-    of the window to virtual console 0, press Ctrl-Alt-2, and immediately
-    change the size of the window to virtual console 1.
-
-
+Window numbers are 1..4. Esc or Return leaves an editing submenu with
+live changes in effect. Esc from the main menu hides it without unloading.
+Write uses a default d:WINDOWn.TXT filename; Return writes, Esc cancels.
+Ctrl-Alt-1..4 and Ctrl-Alt-Tab remain the console-switch shortcuts.
+WINDOW provides the nonresident command-line interface.

@@ -98,3 +98,11 @@ check-systat: all
 check-window: all
 	$(MAKE) -C commands/window check livetest.cmd
 	python3 tools/window_check.py
+
+.PHONY: check-help check-dir-options check-batch-live
+check-help: all
+	python3 tools/help_check.py
+check-dir-options: all
+	python3 tools/dir_options_check.py
+check-batch-live: all
+	python3 tools/batch_check.py

@@ -2665,13 +2665,9 @@
     {
       "path": "kernel/rsp3/tmpdir.lib",
       "origin": "41SRC_03.IMG.DIR/TMPDIR.LIB",
-      "sha256": "c5e3653d020bacda4b38700657afe2dc13d93ed70bb8678d433ae057d2a83de9",
+      "sha256": "6bee438830a3ba42f1bd0ae3b8a83d75815d7b29240b8e28c092c2f76db43ef8",
       "original_sha256": "74374f01d1fd312cdc6d05520bb2326c1afde142492c0ba6c200c2e3f1db92d1",
-      "modifications": [
-        "Remove unused USER warning string; add CLS command/string.",
-        "Map DEL to native ERA.CMD; preserve the eleven-byte alias slot and existing argument shift.",
-        "Use the CCP/M 3.1 PAUSE message for PAUSE and DIR /P."
-      ]
+      "modifications": "Reviewed 4.1 help, DIR bracket aliases and TMP/BATCH message consistency; see patches.md."
     },
     {
       "path": "kernel/rsp3/tmpmenu.lib",
@@ -3031,17 +3027,16 @@
     {
       "path": "commands/batch/tmpdir.lib",
       "origin": "41SRC_03.IMG.DIR/TMPDIR.LIB",
-      "sha256": "a04e2307795e661f052ba014f573ef7fe9f3f191fedb6784af7e13cef1ee1ed4",
+      "sha256": "de0496b037e40de115ee037903240f44929e25c279610a4082db984153471895",
       "original_sha256": "74374f01d1fd312cdc6d05520bb2326c1afde142492c0ba6c200c2e3f1db92d1",
-      "modifications": [
-        "Map DEL to native ERA.CMD; preserve the eleven-byte alias slot and existing argument shift.",
-        "Use the CCP/M 3.1 PAUSE message for PAUSE and DIR /P."
-      ]
+      "modifications": "Reviewed 4.1 help, DIR bracket aliases and TMP/BATCH message consistency; see patches.md."
     },
     {
       "path": "commands/batch/tmpmenu.lib",
       "origin": "41SRC_04.IMG.DIR/TMPMENU.LIB",
-      "sha256": "aed3e7be5396817e0c9ac86d3934779584e4f4a11bb41c6c1d4c8a91e5cdb8ed"
+      "sha256": "79ed710c842e0907623a4b033d93dc96ae83dded5bfce9ed36789e000576bb44",
+      "original_sha256": "aed3e7be5396817e0c9ac86d3934779584e4f4a11bb41c6c1d4c8a91e5cdb8ed",
+      "modifications": "Reviewed 4.1 help, DIR bracket aliases and TMP/BATCH message consistency; see patches.md."
     },
     {
       "path": "commands/chset/chset.sub",
@@ -5442,9 +5437,9 @@
     {
       "path": "commands/help/help.dat",
       "origin": "ccpm86-kernel/commands/help/help.dat",
-      "sha256": "f4ec3b4b49b6f99e6c7f771d9a6e9e7fef8329903bdc8302f76f61da8d561dec",
+      "sha256": "a810e7107754b072f16979ca9abb2388d9456ab03e1e18db20dab2356c3d32e2",
       "original_sha256": "be082138ed971b145f4e44678fb8add340002dbdb86a4bbfd640859428cb61c7",
-      "modifications": "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md."
+      "modifications": "Reviewed 4.1 help, DIR bracket aliases and TMP/BATCH message consistency; see patches.md."
     },
     {
       "path": "commands/print/sqlink.inp",
@@ -5663,5 +5658,108 @@
       "origin": "Original CDOS OEM DREDIX data, moved from base/lsn.edx",
       "sha256": "f2cd1a21f16da8dc06a69653580d484034f8ca094645906ed9c5965f4029f920"
     }
-  ]
+  ],
+  "help_review": {
+    "topics": [
+      "8087",
+      "ACTIONKEYS",
+      "ADDMEM",
+      "ASM80",
+      "ASM86",
+      "BACK",
+      "BACKREST",
+      "BATCH",
+      "BRINST",
+      "CD",
+      "CHDIR",
+      "CHSET",
+      "CLS",
+      "CNTRLCHARS",
+      "COMMANDS",
+      "COMSIZE",
+      "CONVENTIONS",
+      "COPY",
+      "COPYMENU",
+      "DATE",
+      "DCOMP",
+      "DCOPY",
+      "DEL",
+      "DELQ",
+      "DIR",
+      "DISKSTAT",
+      "DREDIX",
+      "DSKMAINT",
+      "DSP",
+      "ED",
+      "EDITMENU",
+      "ERA",
+      "ERAQ",
+      "ERASE",
+      "FILESPEC",
+      "FM",
+      "FREEMEMORY",
+      "FUNCTION",
+      "GENCCPM",
+      "GENCMD",
+      "GENLDR",
+      "GET",
+      "HDMAINT",
+      "HELP",
+      "HEXCOM",
+      "INITDIR",
+      "LOADCCPM",
+      "MD",
+      "MEMORYDISK",
+      "MKDIR",
+      "N",
+      "ORDER",
+      "PATH",
+      "PAUSE",
+      "PIP",
+      "PRINT",
+      "PRINTER",
+      "PRINTMGR",
+      "PUT",
+      "RD",
+      "RDR",
+      "REDOS",
+      "REM",
+      "REN",
+      "RENAME",
+      "REST",
+      "RMDIR",
+      "RUNMENU",
+      "SDIR",
+      "SET",
+      "SETPORT",
+      "SETUP",
+      "SHOW",
+      "SPL",
+      "STOP",
+      "SUBMIT",
+      "SUSPEND",
+      "SYS",
+      "SYSDISK",
+      "SYSTAT",
+      "TIME",
+      "TYPE",
+      "USER",
+      "WINDOW",
+      "WMENU"
+    ],
+    "removed": [
+      "ABORT",
+      "CONFIG",
+      "DDT86",
+      "DFORM",
+      "DOS8087",
+      "DOSMEM",
+      "DOSUSPND",
+      "SETDEF",
+      "VCMODE",
+      "BUFFERED",
+      "DYNAMIC"
+    ],
+    "base_help_sha256": "931b280060403d3d9fd5f25b2c75aa5f275fcedebab2bcceefdb946306a26da8"
+  }
 }

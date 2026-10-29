@@ -34,7 +34,7 @@ MENU_COMMANDS = ../commands/dredix/dredix.cmd ../commands/copymenu/copymenu.cmd 
 
 DOS_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
     ../commands/copy/copy.exe ../commands/datetime/date.exe ../commands/erase/erase.exe \
-    ../commands/path/path.exe ../base/time.exe ../base/ren.exe \
+    ../commands/path/path.exe ../commands/datetime/time.exe ../base/ren.exe \
     ../base/redos.com
 
 OEM1_COMMANDS = ../base/back.cmd ../base/rest.cmd ../base/brinst.cmd \
@@ -45,7 +45,7 @@ OEM2_COMMANDS = ../commands/function/function.cmd ../commands/help/help.cmd ../b
     ../base/n.cmd \
     ../base/setport.cmd ../base/setup.cmd \
     ../base/stop.cmd ../base/hdmaint.cmd \
-    ../base/hdmaint.doc ../base/help.hlp
+    ../base/hdmaint.doc ../commands/help/help.hlp
 
 .PHONY: all check check-media check-pce test clean
 .DELETE_ON_ERROR:

@@ -222,3 +222,20 @@ spaces. WMENU uses the native highlighted menu, arrow/Space navigation,
 live-edit commit on Esc/Return and native color-arrow direction. Its status
 buffer is passed as CX:DX offset:segment. These correct confirmed differences
 from the initial CCP/M-derived rewrite; original binaries remain as references.
+
+## TMP/BATCH: DIR spellings and message consistency
+
+The 4.1 shell and BATCH accept CP/M bracketed DIR flags as aliases for native
+/L /W /P /S. Combined bracket flags and a final omitted ] are accepted.
+System filtering applies to CP/M SYS files and DOS hidden/system files.
+BATCH now shares the shell's CLS built-in and omits the redundant USER media
+note; its PAUSE prompt already matches the shell. Native ERA/DEL behavior is
+retained. The DIR regression runs a CP/M-hosted BAT against DOS media.
+
+## Maintained help and editor data
+
+HELP documents packaged commands, TMP built-ins/aliases and actual system
+RSPs, using original 4.1 documentation plus reviewed local/import behavior.
+Unavailable old CCP/M topics are removed; every packaged HELP.HLP is rebuilt.
+DREDIX's HELP.EDX/LSN.EDX live beside its sources and remain on its image.
+The LETTER.TXT sample is removed from base and distribution inputs.
