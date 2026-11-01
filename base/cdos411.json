@@ -52,7 +52,8 @@
     },
     {
       "name": "cardfile.cmd",
-      "status": "restored as reference only; excluded from distribution",
+      "repository_path": "extra/cardfile.cmd",
+      "status": "restored from 4.11 image; distributed on cdosextras.img",
       "base_sha256": "5d4b9ee78041ccc1247b2e455ee7250bbc8d253068fb0d0ea24535f11c2932e5",
       "references": [
         {
@@ -100,7 +101,8 @@
           "sha256": "20a45a36c3a7b9cd979e7cf7bb0c47bea8a24c92ba06371d7d67ecd45faf5386",
           "bytes": 768
         }
-      ]
+      ],
+      "repository_path": "extra/compaq.cmd"
     },
     {
       "name": "copy.exe",
@@ -241,7 +243,7 @@
     },
     {
       "name": "fm.cmd",
-      "status": "existing base retained",
+      "status": "distributed on cdosadmin.img",
       "base_sha256": "c895d3c29537fc861a4a4c41809a0e7aba62da1153c2fe01bdef6a00ca215c10",
       "references": [
         {
@@ -250,7 +252,8 @@
           "sha256": "c895d3c29537fc861a4a4c41809a0e7aba62da1153c2fe01bdef6a00ca215c10",
           "bytes": 73856
         }
-      ]
+      ],
+      "repository_path": "extra/fm.cmd"
     },
     {
       "name": "function.cmd",
@@ -315,7 +318,8 @@
           "sha256": "55f160ef557698319ee576095458819a4bf801893807d27b1cc0938acd944858",
           "bytes": 1536
         }
-      ]
+      ],
+      "repository_path": "extra/load6300.com"
     },
     {
       "name": "loadccpm.com",
@@ -365,32 +369,6 @@
           "path": "NEAT.CMD",
           "sha256": "02ee2b7f92c4de94bfbee381dc239b9ef7e516ed0d1f767f7e10fde463a14efd",
           "bytes": 3968
-        }
-      ]
-    },
-    {
-      "name": "off.cmd",
-      "status": "restored from 4.11 image",
-      "base_sha256": "dd5fc4df5565cdc7468043e65c836ff663438fed0136a81189ba8aaf83eb1974",
-      "references": [
-        {
-          "image": "cdos-4.11-1.img",
-          "path": "OFF.CMD",
-          "sha256": "dd5fc4df5565cdc7468043e65c836ff663438fed0136a81189ba8aaf83eb1974",
-          "bytes": 640
-        }
-      ]
-    },
-    {
-      "name": "patcher.cmd",
-      "status": "restored from 4.11 image",
-      "base_sha256": "13a3ff60650384123b883315b77213380c9d80fdc2de25a0c8b415f370304b3e",
-      "references": [
-        {
-          "image": "cdos-4.11-1.img",
-          "path": "PATCHER.CMD",
-          "sha256": "13a3ff60650384123b883315b77213380c9d80fdc2de25a0c8b415f370304b3e",
-          "bytes": 1792
         }
       ]
     },
@@ -456,19 +434,6 @@
           "path": "REN.EXE",
           "sha256": "21072eff5a230c9dfb64dccbc09c36e4ca3dab3572fe1eb25cb49ad522dc7bad",
           "bytes": 2048
-        }
-      ]
-    },
-    {
-      "name": "res86.cmd",
-      "status": "restored from 4.11 image",
-      "base_sha256": "264a608d868cb5928b0a28945c3e4de67d0fa9382b54bdc9c38d149b7ab31c74",
-      "references": [
-        {
-          "image": "cdos-4.11-1.img",
-          "path": "RES86.CMD",
-          "sha256": "264a608d868cb5928b0a28945c3e4de67d0fa9382b54bdc9c38d149b7ab31c74",
-          "bytes": 17152
         }
       ]
     },
