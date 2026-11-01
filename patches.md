@@ -314,3 +314,7 @@ handler: valid dates, 2000/2100 century boundaries, range/BCD rejection,
 absent and unsupported services, stable/unstable rollover reads, write-back
 and date-write failure, and preserved startup registers/flags. No real clock
 is changed. The check is also included in `make check`.
+
+## IBM XIOS graphics on EGA and VGA
+
+The color XIOS uses the captured video BIOS for CGA-compatible modes and palettes on enhanced adapters. INT E6h selector 30 advertises native 640×350, 16-color mode when the adapter has sufficient memory. The foreground graphics owner must restore text before switching consoles.

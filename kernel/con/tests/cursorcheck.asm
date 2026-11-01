@@ -31,6 +31,11 @@ start:
     mov ax,4c00h
     int 21h
 bios:
+    cmp ah,0fh
+    jne probe_adapter
+    mov al,3
+    iret
+probe_adapter:
     cmp ah,12h
     jne failed
     cmp bx,0ff10h

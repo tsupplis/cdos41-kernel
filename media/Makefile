@@ -47,7 +47,7 @@ OEM1_COMMANDS = ../base/back.cmd ../base/rest.cmd ../base/brinst.cmd \
 OEM2_COMMANDS = ../commands/function/function.cmd ../commands/help/help.cmd ../base/diskstat.cmd \
     ../base/n.cmd \
     ../commands/setport/setport.cmd ../base/setup.cmd \
-    ../base/stop.cmd ../base/hdmaint.cmd \
+    ../base/stop.cmd ../commands/hdmaint/hdmaint.cmd \
     ../base/hdmaint.doc ../commands/help/help.hlp
 
 .PHONY: all check check-media check-pce test clean

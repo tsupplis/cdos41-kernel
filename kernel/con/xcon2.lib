@@ -305,8 +305,11 @@ put_crt_m:
 	push	dx
 	push	bp
 
-;	test	cs:vs_screen_mode,0F0h
-;	jnz	put_m_done	; if we're graphics, bag it
+	cmp	cs:bios_graphics,0
+	je	put_m_alpha
+	cmp	cs:vs_crt_seg,color_seg
+	je	put_m_done	; protect the active graphics framebuffer
+put_m_alpha:
 
 	test	cs:vs_mode,sync_bit
 	jz	put_m_all	; skip if not syncing
@@ -443,8 +446,11 @@ put_crt_c:
 	push	dx
 	push	bx
 
-;	test	cs:vs_screen_mode,0F0h
-;	jnz	put_c_done	; if we're graphics, bag it
+	cmp	cs:bios_graphics,0
+	je	put_c_alpha
+	cmp	cs:vs_crt_seg,color_seg
+	je	put_c_done	; protect the active graphics framebuffer
+put_c_alpha:
 
 	mov	es,vs_crt_seg	; mono or color
 	mov	dl,vs_mode
@@ -563,6 +569,20 @@ list_vc		rb	1	; same here
 mono_bits	rb	1	; which vc's are mono
 color_bits	rb	1	; which vc's are color
 graphic_bits	db	0	; which vc's in graphics (or 40 col)
+video_rom dw 0,0	; firmware INT 10h captured before PC-MODE starts
+enhanced_video db 0	; active color EGA/VGA detected at startup
+enhanced_ega db 0	; 128 KB or more, native 640x350x16 permitted
+enhanced_text db 3	; BIOS text mode to restore
+bios_graphics db 0	; enhanced hardware currently in graphics
+video_bios_mask db 0
+		 db 0		; word alignment
+video_bios_ax rw 1
+video_bios_ss rw 1
+video_bios_sp rw 1
+video_bios_stack rb 1024
+video_bios_stack_top equ offset $
+
+
 top_screen_mode	db	05h	; current screen mode of color monitor
 mode_reg	db	29h	; current mode register val
 palette_reg	db	0	; current palette port val

@@ -14,13 +14,12 @@ disks contain CCPM.SYS and STARTUP.0; the remaining disks are data-only.
 | cdosmenu.img | No | PRINT, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP, menu/terminal/message data, window BAT examples and sample text. |
 | cdosdos.img | No | Rebuilt COPY.EXE, DATE.EXE, ERASE.EXE, PATH.EXE, TIME.EXE, REN.EXE and SETENV.EXE; LOADCCPM.COM, original REDOS.COM and core commands. |
 | cdosoem1.img | No | Original BACK, REST, BRINST, FM, SPL and backup/file-manager support files. |
-| cdosoem2.img | No | Rebuilt FUNCTION and HELP; original SETUP, SETPORT, DISKSTAT, N, STOP, HDMAINT, its manual and the original 4.1 HELP.HLP. |
+| cdosoem2.img | No | Rebuilt FUNCTION, HELP, SETPORT and HDMAINT; original SETUP, DISKSTAT, N, STOP, HDMAINT manual and the original 4.1 HELP.HLP. |
 
 Rebuilt command outputs are used wherever available. Remaining original
 binaries and data are explicit base/ prerequisites in the Makefile; there
-are no wildcard copies or dependencies on another project. HDMAINT's source
-build remains pending the missing LBDOS loader: its unmodified OEM binary
-is preserved on cdosoem2.img. REDOS's source is still missing; its original
+are no wildcard copies or dependencies on another project. The byte-identical source-built HDMAINT.CMD
+is included on cdosoem2.img. REDOS's source is still missing; its original
 COM is on cdosdos.img. TIME.EXE likewise awaits the later datetime source work.
 
 The tools disk uses HELP.HLP rebuilt from the imported CCP/M HELP.DAT baseline.

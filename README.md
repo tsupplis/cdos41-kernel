@@ -78,6 +78,7 @@ and built-in DIR retain their respective option syntax.
 system-path configuration remains with SYSDISK.
 
 See [the shell command and alias table](ccp.md) and `HELP` for command syntax.
+See [the API inventory](api.md) for native, DOS, BIOS and graphics interfaces.
 HELP on the tools disk uses the imported CCP/M text as a starting point;
 the second OEM disk retains the original 4.1 help text.
 
@@ -111,7 +112,7 @@ mechanism. [PUT/GET/RDR notes](commands/putget/README.md).
 | `cdosmenu.img` | No | PRINT, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP, menu/terminal data, BAT examples and PIP |
 | `cdosdos.img` | No | COPY.EXE, DATE.EXE, ERASE.EXE, PATH.EXE, SETENV.EXE, LOADCCPM.COM, TIME.EXE, REN.EXE and REDOS.COM, core commands and PIP |
 | `cdosoem1.img` | No | Original backup/file-manager tools, their support files and PIP |
-| `cdosoem2.img` | No | FUNCTION, HELP, rebuilt SETPORT, original SETUP and HDMAINT, HDMAINT manual, original 4.1 help text and PIP |
+| `cdosoem2.img` | No | FUNCTION, HELP, rebuilt SETPORT and HDMAINT, original SETUP, HDMAINT manual, original 4.1 help text and PIP |
 
 `make dist` places these seven images and `disks.zip` at the repository root.
 Source distribution and history stay in Git.
@@ -180,7 +181,7 @@ Compatibility details live with each tool.
 | `get` | Feed console input from a text file | — | New; shared putget.lib engine, imported from the CCP/M project |
 | `genccpm` | Generate and configure the system image | — | Recompiled from CDOS 4.1 and adapted; flag-table fix |
 | `genldr` | Generate a system loader | — | Recompiled from CDOS 4.1; carried-over SCD2 startup |
-| `hdmaint` | Hard-disk maintenance | Original | 4.1 source present; build pending the missing flat LBDOS loader |
+| `hdmaint` | Hard-disk maintenance | Recompiled | 4.1 OEM sources with recovered flat LBDOS; byte-identical to the original |
 | `help / help.hlp` | Browse indexed command help | HLP only | Recompiled from CDOS 4.1; help.dat reviewed against the 4.1 reference and maintained imports |
 | `hexcom` | Convert Intel HEX to COM binaries | — | HEXCOM 3.00-compatible C from [tpzasm](https://github.com/johnsonjh/tpzasm) |
 | `initdir` | Enable or remove directory date/time stamps | — | Recompiled from CDOS 4.1 |
@@ -227,8 +228,11 @@ Only changes made for this 4.1 rebuild are recorded there.
 
 The IBM SQUID XIOS is the selected build. The alternative modular OEM XIOS
 is preserved separately; its link still needs the missing 8087.SIM input/profile.
-HDMAINT's source build awaits its flat LBDOS loader; its original binary and
-manual remain available on the second OEM disk. HELP text and imported commands
+HDMAINT is rebuilt byte-for-byte, including its embedded CP/M and FAT boot
+stages, and supplied with its manual on the second OEM disk. See
+[HDMAINT build notes](commands/hdmaint/README.md) for loader provenance and checks.
+Installation and cold boot from both CP/M and FAT12 hard-disk partitions
+have passed under PCE with the rebuilt kernel. HELP text and imported commands
 will be aligned with the original 4.1 distribution progressively.
 
 ## Build and checks
