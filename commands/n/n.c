@@ -22,10 +22,15 @@ char *s;
 {
     while (*s) emit_char(*s++ & 255);
 }
+static position(y,x)
+int y,x;
+{
+    text("\033Y"); emit_char(32+y); emit_char(32+x);
+}
 static row(y)
 int y;
 {
-    text("\033Y"); emit_char(32+y); emit_char(34);
+    position(y,2);
 }
 static char *msg(n)
 int n;
@@ -40,31 +45,80 @@ int n;
     text("Invalid NATIONAL.MSG"); exit(1);
     return "";
 }
+static repeat(c,n)
+int c,n;
+{
+    while (n-- > 0) emit_char(c);
+}
+static center(y,s)
+int y;
+char *s;
+{
+    position(y,40-strlen(s)/2); text(s);
+}
+static rule(y,left,line,right)
+int y,left,line,right;
+{
+    position(y,0); emit_char(left); repeat(line,78); emit_char(right);
+}
+static frame(heading)
+char *heading;
+{
+    int y;
+    text("\033q\033f\033w\033E");
+    rule(0,0xda,0xc4,0xbf);
+    for (y=1;y<23;y++) {
+        position(y,0); emit_char(0xb3);
+        position(y,79); emit_char(0xb3);
+    }
+    rule(2,0xc6,0xcd,0xb5);
+    rule(23,0xc0,0xc4,0xd9);
+    text("\033v"); center(1,title);
+    text("\033p"); center(4,heading); text("\033q");
+}
+static choice_row(y,s,width,selected)
+int y,width,selected;
+char *s;
+{
+    int len;
+    len=strlen(s);
+    position(y,40-width);
+    if (selected) text("\033p");
+    text(" o "); repeat(' ',width-3-len/2); text(s);
+    repeat(' ',width-len+len/2);
+    if (selected) text("\033q");
+}
 /* One highlighted option; arrows and space wrap, Escape selects the last
    (Back/Discard) entry, just as in the release menu dispatcher. */
 static menu(heading, items, count, current)
 char *heading, **items;
 int count,current;
 {
-    int i,key;
-    int initial;
-    initial=current;
-    text("\033E"); row(1); text(title); row(4); text(heading);
-    if ((count==6 && heading==msg(6)) || count==7) {
-        row(5); text(msg(26)); text(items[initial]);
+    int i,key,width,length,old;
+    width=0;
+    for (i=0;i<count;i++) {
+        length=strlen(items[i]);
+        if (length>width) width=length;
     }
-    if (count != 10) { row(6); text(msg(36)); row(7); text(msg(37)); }
+    width=(width+10)/2;
+    frame(heading);
+    if ((count==6 && heading==msg(6)) || count==7) {
+        row(6); text(msg(26)); text(items[current]);
+    }
+    if (count != 10) { center(8,msg(36)); center(9,msg(37)); }
+    for (i=0;i<count;i++) choice_row(11+i,items[i],width,i==current);
     for (;;) {
-        for (i=0;i<count;i++) {
-            row(9+i); text(i==current ? "\033p > " : "   ");
-            text(items[i]); text("\033q");
-        }
+        old=current;
         key=__BDOS(6,253)&255;
         if (key==13) return current;
         if (key==27) return count-1;
         if (key==0xc8 || key==0xcb || key=='8' || key=='4')
             current=(current+count-1)%count;
-        else current=(current+1)%count;
+        else if (key==0xd0 || key==0xcd || key=='2' || key=='6' || key==' ')
+            current=(current+1)%count;
+        else continue;
+        choice_row(11+old,items[old],width,0);
+        choice_row(11+current,items[current],width,1);
     }
 }
 static install(fd,mfd)
@@ -94,12 +148,12 @@ int fd,mfd;
                 if (model<6) models[device]=model;
             }
         } else {
-            text("\033E"); row(2); text(msg(24)); text(msg(7+keyboard));
-            row(4); text(msg(25));
+            frame(msg(4)); row(6); text(msg(24)); text(msg(7+keyboard));
+            row(8); text(msg(25));
             for (i=0;i<5;i++) {
-                row(6+i); text(msg(13+i)); text(" = "); text(msg(model_msg[models[i]]));
+                row(10+i); text(msg(13+i)); text(" = "); text(msg(model_msg[models[i]]));
             }
-            row(14); text(msg(18)); __BDOS(6,253);
+            row(18); text(msg(18)); __BDOS(6,253);
         }
         option=(option+1)%4;
     }
@@ -132,30 +186,38 @@ int fd;
     }
     return 1;
 }
+static finish(status)
+int status;
+{
+    text("\0337\033e\033q"); exit(status);
+}
 main()
 {
     int fd,mfd,i,ok;
     if (OSVERS() != 0x1441) {
         text("Requires Concurrent PC DOS"); exit(1);
     }
+    __BDOS(110,0);
+    __BDOS(109,__BDOS(109,65535)|14);
+    text("\0336");
     i=menu("Select your language:",languages,10,0);
-    if (i==9) { text("\033E"); exit(0); }
+    if (i==9) { text("\033E"); finish(0); }
     language=lang_index[i];
     mfd=openb("NATIONAL.MSG",0);
     if (mfd<0) mfd=openb("P:NATIONAL.MSG",0);
-    if (mfd<0) { text("\033EMissing NATIONAL.MSG"); exit(1); }
+    if (mfd<0) { text("\033EMissing NATIONAL.MSG"); finish(1); }
     catalog=malloc(20480);
-    if (!catalog) { text("Insufficient memory"); exit(1); }
+    if (!catalog) { text("Insufficient memory"); finish(1); }
     catalog_size=read(mfd,catalog,20479);
-    if (catalog_size<=0) { text("Cannot read NATIONAL.MSG"); exit(1); }
+    if (catalog_size<=0) { text("Cannot read NATIONAL.MSG"); finish(1); }
     catalog[catalog_size]=0;
     fd=openb("CCPM.SYS",2);
     if (fd<0) fd=openb("P:CCPM.SYS",2);
-    if (fd<0) { text(msg(29)); exit(1); }
-    if (!load_settings(fd)) { text(msg(30)); exit(1); }
+    if (fd<0) { text(msg(29)); finish(1); }
+    if (!load_settings(fd)) { text(msg(30)); finish(1); }
     ok=install(fd,mfd);
     if (close(fd)<0) ok=0;
     close(mfd); text("\033E");
     if (!ok) text(msg(28));
-    exit(!ok);
+    finish(!ok);
 }
