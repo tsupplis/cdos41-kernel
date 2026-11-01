@@ -166,18 +166,14 @@ Unclassified means the release is unknown; None means no reference has been
 identified. SUBMIT's original is not currently retained in `base/`. Internal version strings (for example SHOW 3.3) do not override
 release-image provenance. Details are in `base/cdos411.json`.
 
-Only Pending and Known gap entries are active work.
-
-| Parity status | What it means | Work remaining |
+| Parity status | What it means | 
 | --- | --- | --- |
-| Byte-identical | Complete rebuilt executable matches the 4.11 reference | None for release equivalence |
-| Equivalent | Complete comparison allows only documented, checked non-functional differences | None for identified differences |
-| Behavior tested | Reviewed behavior matches the reference in documented tests, with intentional improvements retained | No known fix pending; not an exhaustive equivalence claim |
-| Known gap | A substantive difference remains | Fix and verify |
-| Pending | Differences have not all been classified | Complete the comparison; parity is not established |
-| No reference | No independent release binary is available for comparison | No active work |
-| Additional tool | Imported/new tool without a corresponding retained CDOS release binary | Outside the 4.11 replacement audit |
-| Original used | Distribution uses the original itself; no replacement is being compared | No parity comparison needed; sources may still be missing |
+| Byte-identical | Complete rebuilt executable matches the 4.11 reference |
+| Equivalent | Complete comparison allows only documented, checked non-functional differences | 
+| Behavior tested | Reviewed behavior matches the reference in documented tests, with intentional improvements retained | 
+| No reference | No independent release binary is available for comparison | 
+| Additional tool | Imported/new tool without a corresponding retained CDOS release binary |
+| Original used | Distribution uses the original itself; no replacement is being compared | 
 
 
 | Tool | Purpose | Original reference | Source (`commands/`) | Parity |
