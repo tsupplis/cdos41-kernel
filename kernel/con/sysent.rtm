@@ -56,6 +56,9 @@ creat_proc_entry:	;Create Process - DX->new PD
 
 	call proc_creat ! jmp pdisp
 
+chain_proc_entry:
+	call chain_creat ! jmp pdisp
+
 ;===========		==============================
 sleep_entry:		;Put Calling PD on System List
 ;===========		==============================

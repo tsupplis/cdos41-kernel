@@ -349,5 +349,6 @@ supfunc	dw	n_imp		; 0-not implemented
 	dw	chain_ent	; 12-(47)Program Chain
 	dw	ser_ent		; 13-(107)return serial
 	dw	cload_ent	; 14-chain load function
+	dw	retcode_ent	; 15-(108)get/set program return code
 
                                                                                                                                                                                                                                   

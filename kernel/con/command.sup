@@ -515,7 +515,10 @@ ctdone:
 	    mov dx,1 ! call osif
 nprior:
 	mov si,cli_pd ! or p_flag[si],pf_dskld	;from disk, to differ 
-	mov dx,si ! mov cx,f_createproc		;from RSP with same name
+	mov dx,si ! mov cx,f_createproc
+	cmp cli_chain,true ! jne cli_create
+	mov cx,f_chain_create
+cli_create:
 	call osif
 
 		; 11. Assign Console to new process
@@ -578,9 +581,7 @@ cli_exit:	; close file and release CLI SYNC
 	mov cx,cli_dma_ofst ! mov u_dma_ofst,cx
 	mov cx,cli_dma_seg ! mov u_dma_seg,cx
 	cmp cli_chain,true ! jne clirls
-	    mov bx,rlr ! mov si,cli_pd		;inherit calling PD's
-	    mov ax,p_parent[bx]			;parent if chaining
-	    mov p_parent[si],ax
+	    mov bx,rlr
 	    cmp cli_term,true ! jne clirls
 		and p_flag[bx],not (pf_keep+pf_sys+pf_tempkeep+pf_ctlc)
 if netversion

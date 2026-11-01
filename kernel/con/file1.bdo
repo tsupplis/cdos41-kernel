@@ -95,6 +95,7 @@ report_err:
 
 if BMPM
 	mov si,rlr
+	mov p_retcode[si],0fffdh	; fatal disk error, returning modes bypass this
 	or p_flag[si],pf_ctlc		;set process ^c flag
 endif
 if BCPM

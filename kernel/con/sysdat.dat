@@ -309,7 +309,7 @@ sysent	db	0,	rtm	        ;  0-system reset
 	db	43,	bdos	        ;105-Get Date and Time
 	db	44,	bdos or net_bit ;106-Set Default Password
 	db	13,	sup	        ;107-Return Serial Number
-	db	0,	sup	        ;108-(not implemented)
+	db	15,	sup	        ;108-Get/Set Program Return Code
 	db	25,	cio	        ;109-Get/Set Console Mode
 	db	26,	cio	        ;110-Get/Set Output Delimiter
 	db	27,	cio	        ;111-Print Block

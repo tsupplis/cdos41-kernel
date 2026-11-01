@@ -409,6 +409,7 @@ $endif
                                  /* purge character                       */
   if (pd.ps_flag and psf$reset) = 0 then
   do;	/* process in abort mode for ^C */
+    if (pd.flag and (pf$keep or pf$sys)) = 0 then pd.pret = 0fffeh;
     call mon1(m$abort, .apb);
     end;
   else

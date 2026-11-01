@@ -50,6 +50,14 @@ nxtchld:
 	    mov p_parent[bx],dx		;found a child, 0 its parent field
 	    jmps nxtchld
 nochld:
+	; The thread lock protects the parent link against orphaning/reuse.
+	mov si,rlr
+	mov bx,p_parent[si]
+	or bx,bx
+	jz term_no_parent
+	mov ax,p_retcode[si]
+	mov p_retcode[bx],ax
+term_no_parent:
 	mov bx,offset thrd_spb
 	call unsync_entry
 					;set parent's child abort flag
