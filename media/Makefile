@@ -5,7 +5,7 @@ PYTHON ?= python3
 FORMAT=ccpm86-320
 TWIST=$(PYTHON) ../tools/cpm86twist.py
 CPMCP=cpmcp -f $(FORMAT)
-IMAGES=cdos86.img cdostools.img cdosmaint.img cdosmenu.img cdosdos.img cdosoem1.img cdosoem2.img
+IMAGES=cdos86.img cdostools.img cdosmaint.img cdosmenu.img cdosdos.img cdosextras.img cdosadmin.img
 PIP=../commands/pip/pip4.cmd
 
 SYSTEM_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
@@ -13,24 +13,23 @@ SYSTEM_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ..
     ../commands/era/eraq.cmd ../commands/ren/ren.cmd ../commands/date/date.cmd \
     ../commands/sdir/sdir.cmd ../commands/show/show.cmd ../commands/set/set.cmd \
     ../commands/submit/submit.cmd ../commands/type/type.cmd ../commands/dir/dir.cmd \
-    ../commands/ed/ed.cmd ../commands/rename/ren.exe ../commands/stop/stop.cmd \
-    ../commands/putget/put.cmd ../commands/putget/get.cmd ../commands/putget/rdr.cmd
+    ../commands/ed/ed.cmd ../commands/rename/ren.exe ../commands/stop/stop.cmd
 
-TOOLS_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
+TOOLS_COMMANDS = ../commands/putget/put.cmd ../commands/putget/get.cmd ../commands/putget/rdr.cmd ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
     ../commands/asm80/asm80.cmd ../commands/asm86/asm86.cmd ../commands/ddt86/ddt86.cmd ../commands/gencmd/gencmd.cmd \
     ../commands/genccpm/genccpm.cmd ../commands/hexcom/hexcom.cmd ../commands/help/help.cmd \
     ../commands/help/help.hlp ../commands/systat/systat.cmd \
     ../commands/chset/chset.cmd ../commands/genldr/genldr.cmd \
     ../commands/window/window.cmd ../commands/window/wmenu.cmd
 
-MAINT_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
-    ../commands/dskmaint/dskmaint.cmd ../commands/disk/dcopy.cmd ../commands/disk/dcomp.cmd \
-    ../commands/initdir/initdir.cmd
+MAINT_COMMANDS = ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
+    ../commands/dskmaint/dskmaint.cmd ../commands/disk/dcopy.cmd ../commands/hdmaint/hdmaint.cmd \
+    ../base/hdmaint.doc
 
-MENU_COMMANDS = ../commands/print/print.cmd ../commands/dredix/dredix.cmd ../commands/copymenu/copymenu.cmd ../commands/editmenu/editmenu.cmd \
+MENU_COMMANDS = ../base/spl.cmd ../commands/print/print.cmd ../commands/dredix/dredix.cmd ../commands/copymenu/copymenu.cmd ../commands/editmenu/editmenu.cmd \
     ../commands/printmgr/printmgr.cmd ../commands/dsp/dsp.cmd ../base/term.dat \
     ../base/menu.dat ../base/fdmenu.dat ../base/hdmenu.dat \
-    ../base/national.msg ../base/index.dsp ../commands/dredix/help.edx \
+    ../base/index.dsp ../commands/dredix/help.edx \
     ../commands/dredix/lsn.edx ../base/keys.pfk ../base/carddeck.bat \
     ../base/clear.bat \
     ../base/user.txt
@@ -40,15 +39,15 @@ DOS_COMMANDS = ../commands/loadccpm/loadccpm.com ../commands/setenv/setenv.exe .
     ../commands/path/path.exe ../commands/datetime/time.exe ../commands/rename/ren.exe \
     ../commands/redos/redos.com
 
-OEM1_COMMANDS = ../extra/back.cmd ../extra/rest.cmd ../extra/brinst.cmd \
-    ../extra/control.br ../extra/backrest.doc ../base/fm.cmd \
-    ../base/fm.cfg ../base/spl.cmd
+EXTRAS_COMMANDS = ../commands/initdir/initdir.cmd ../extra/back.cmd ../extra/rest.cmd ../extra/brinst.cmd \
+    ../extra/cardfile.cmd ../extra/cardfile.dis ../extra/cardfile.trm ../extra/control.br ../extra/drtalk.exe \
+    ../extra/drtalk.def ../extra/drtalk.dir ../extra/drtalk.key
 
-OEM2_COMMANDS = ../commands/function/function.cmd ../commands/help/help.cmd \
-    ../base/n.cmd \
-    ../commands/setport/setport.cmd ../base/setup.cmd \
-    ../commands/stop/stop.cmd ../commands/hdmaint/hdmaint.cmd \
-    ../base/hdmaint.doc ../commands/help/help.hlp
+ADMIN_COMMANDS = ../extra/backrest.doc ../commands/function/function.cmd ../commands/disk/dcomp.cmd \
+    ../base/n.cmd ../base/national.msg \
+    ../commands/setport/setport.cmd ../commands/setup/setup.cmd \
+    ../commands/stop/stop.cmd \
+    ../extra/fm.cmd ../extra/fm.cfg ../base/term.dat
 
 .PHONY: all check check-media check-pce test clean
 .DELETE_ON_ERROR:
@@ -70,9 +69,9 @@ cdos86base.img: base.img ../boot/boottrack.bin diskdefs ../tools/cpm86twist.py M
 
 # Commands/kernel are built by the project root; these rules package outputs.
 
-cdos86.img: cdos86base.img ../kernel/sysgen/ccpm.sys startup.0 $(SYSTEM_COMMANDS) $(PIP) Makefile
+cdos86.img: cdos86base.img ../kernel/sysgen/ccpm.sys $(SYSTEM_COMMANDS) $(PIP) Makefile
 	$(TWIST) untwist cdos86base.img $@.logical.tmp
-	$(CPMCP) $@.logical.tmp ../kernel/sysgen/ccpm.sys startup.0 $(SYSTEM_COMMANDS) 0:
+	$(CPMCP) $@.logical.tmp ../kernel/sysgen/ccpm.sys $(SYSTEM_COMMANDS) 0:
 	$(CPMCP) $@.logical.tmp $(PIP) 0:PIP.CMD
 	cpmchattr -f $(FORMAT) $@.logical.tmp s 0:BATCH.CMD
 	cpmls -F -f $(FORMAT) $@.logical.tmp '0:*.*'
@@ -90,9 +89,9 @@ cdostools.img: cdos86base.img $(TOOLS_COMMANDS) $(PIP) Makefile
 	mv $@.tmp $@
 	$(RM) $@.logical.tmp
 
-cdosmaint.img: cdos86base.img ../kernel/sysgen/ccpm.sys startup.0 $(MAINT_COMMANDS) $(PIP) Makefile
+cdosmaint.img: cdos86base.img ../kernel/sysgen/ccpm.sys $(MAINT_COMMANDS) $(PIP) Makefile
 	$(TWIST) untwist cdos86base.img $@.logical.tmp
-	$(CPMCP) $@.logical.tmp ../kernel/sysgen/ccpm.sys startup.0 $(MAINT_COMMANDS) 0:
+	$(CPMCP) $@.logical.tmp ../kernel/sysgen/ccpm.sys $(MAINT_COMMANDS) 0:
 	$(CPMCP) $@.logical.tmp $(PIP) 0:PIP.CMD
 	cpmchattr -f $(FORMAT) $@.logical.tmp s 0:BATCH.CMD
 	cpmls -F -f $(FORMAT) $@.logical.tmp '0:*.*'
@@ -119,18 +118,18 @@ cdosdos.img: cdos86base.img $(DOS_COMMANDS) $(PIP) Makefile
 	mv $@.tmp $@
 	$(RM) $@.logical.tmp
 
-cdosoem1.img: cdos86base.img $(OEM1_COMMANDS) $(PIP) Makefile
+cdosextras.img: cdos86base.img $(EXTRAS_COMMANDS) $(PIP) Makefile
 	$(TWIST) untwist cdos86base.img $@.logical.tmp
-	$(CPMCP) $@.logical.tmp $(OEM1_COMMANDS) 0:
+	$(CPMCP) $@.logical.tmp $(EXTRAS_COMMANDS) 0:
 	$(CPMCP) $@.logical.tmp $(PIP) 0:PIP.CMD
 	cpmls -F -f $(FORMAT) $@.logical.tmp '0:*.*'
 	$(TWIST) twist $@.logical.tmp $@.tmp
 	mv $@.tmp $@
 	$(RM) $@.logical.tmp
 
-cdosoem2.img: cdos86base.img $(OEM2_COMMANDS) $(PIP) Makefile
+cdosadmin.img: cdos86base.img $(ADMIN_COMMANDS) $(PIP) Makefile
 	$(TWIST) untwist cdos86base.img $@.logical.tmp
-	$(CPMCP) $@.logical.tmp $(OEM2_COMMANDS) 0:
+	$(CPMCP) $@.logical.tmp $(ADMIN_COMMANDS) 0:
 	$(CPMCP) $@.logical.tmp $(PIP) 0:PIP.CMD
 	cpmls -F -f $(FORMAT) $@.logical.tmp '0:*.*'
 	$(TWIST) twist $@.logical.tmp $@.tmp
@@ -145,13 +144,13 @@ check check-media: all
 	    dd if="$$tmp/logical.img" bs=4096 count=1 2>/dev/null | cmp ../boot/boottrack.bin -; \
 	    $(PYTHON) -c "from pathlib import Path; assert Path('$$image').stat().st_size==327680"; \
 	    case $$image in \
-	      cdos86.img) sources='../kernel/sysgen/ccpm.sys startup.0 $(SYSTEM_COMMANDS)' ;; \
+	      cdos86.img) sources='../kernel/sysgen/ccpm.sys $(SYSTEM_COMMANDS)' ;; \
 	      cdostools.img) sources='$(TOOLS_COMMANDS)' ;; \
-	      cdosmaint.img) sources='../kernel/sysgen/ccpm.sys startup.0 $(MAINT_COMMANDS)' ;; \
+	      cdosmaint.img) sources='../kernel/sysgen/ccpm.sys $(MAINT_COMMANDS)' ;; \
 	      cdosmenu.img) sources='$(MENU_COMMANDS)' ;; \
 	      cdosdos.img) sources='$(DOS_COMMANDS)' ;; \
-	      cdosoem1.img) sources='$(OEM1_COMMANDS)' ;; \
-	      cdosoem2.img) sources='$(OEM2_COMMANDS)' ;; \
+	      cdosextras.img) sources='$(EXTRAS_COMMANDS)' ;; \
+	      cdosadmin.img) sources='$(ADMIN_COMMANDS)' ;; \
 	    esac; \
 	    for source in $$sources $(PIP); do \
 	        name=$${source##*/}; if test "$$source" = "$(PIP)"; then name=PIP.CMD; fi; \

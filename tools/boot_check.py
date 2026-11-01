@@ -29,7 +29,7 @@ def check(video):
         for name in ['cdos86.img', 'cdostools.img']:
             shutil.copyfile(MEDIA / name, folder / name)
         # The released tools disk is full. Reserve space only in this disposable
-        # copy for BOOTCHK.TXT; none of the tests uses its HELP.HLP payload.
+        # copy for BOOTCHK.CMD; none of the tests uses its HELP.HLP payload.
         logical = folder / 'tools-logical.img'
         subprocess.run(['python3', str(ROOT / 'tools/cpm86twist.py'), 'untwist',
                         str(folder / 'cdostools.img'), str(logical)], check=True)
@@ -103,7 +103,7 @@ def check(video):
         save('pip')
         type_command('\n')
         save('return')
-        type_command('pip b:bootchk.txt=a:startup.0\n')
+        type_command('pip b:bootchk.cmd=a:era.cmd\n')
         save('copy')
         type_command('dir b:\n')
         save('drive-b')
@@ -135,7 +135,7 @@ def check(video):
             assert actual == bytes([expected]), (name, expected, actual)
         prompt = lambda s: bool(re.search(r'^A>\s*$', s, re.M))
         assert 'Concurrent DOS 4.1' in text['boot'] and prompt(text['boot']), text['boot']
-        assert 'PIP' in text['dir'].upper() and 'STARTUP' in text['dir'].upper() and prompt(text['dir']), text['dir']
+        assert 'PIP' in text['dir'].upper() and 'ERA' in text['dir'].upper() and prompt(text['dir']), text['dir']
         assert re.search(r'^\*\s*$', text['pip'], re.M), text['pip']
         assert prompt(text['return']), text['return']
         assert prompt(text['copy']) and 'error' not in text['copy'].lower(), text['copy']
@@ -148,9 +148,9 @@ def check(video):
         subprocess.run(['python3', str(ROOT / 'tools/cpm86twist.py'), 'untwist',
                         str(folder / 'cdostools.img'), str(folder / 'logical.img')], check=True)
         subprocess.run(['cpmcp', '-f', 'ccpm86-320', str(folder / 'logical.img'),
-                        '0:bootchk.txt', str(folder / 'bootchk.txt')], cwd=MEDIA, check=True)
-        content = (folder / 'bootchk.txt').read_bytes().rstrip(b'\x00\x1a')
-        assert content == (MEDIA / 'startup.0').read_bytes(), 'PIP changed the copied text'
+                        '0:bootchk.cmd', str(folder / 'bootchk.cmd')], cwd=MEDIA, check=True)
+        content = (folder / 'bootchk.cmd').read_bytes()
+        assert content == (ROOT / 'commands/era/era.cmd').read_bytes(), 'PIP changed the copied command'
         print(f'PASS: PCE {video}: 4.1 prompt, DIR, native PIP, cross-drive copy, line editing/recall, console shortcuts, CLS, USER and SYSDISK')
 
 

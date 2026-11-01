@@ -1,666 +1,495 @@
-;*****************************************************************************
-; SETUP - Concurrent CP/M-86 IBM PC/XT XIOS customization, version 1.0.
+;*****************************************************
+;*
+;*   SETUP - Concurrent DOS IBM PC/XT system customization
+;*
+;*****************************************************
 ;
-; Reconstructed from ../../base/setup.cmd, using the CP/M-86 SETUP
-; reconstruction as reference. setuporg.a86 is the frozen original.
-; Build: make. Verify complete original and maintained CMD files: make check.
-; Usage: SETUP (interactive function-key menus; no command-line options).
-; Save current function keys or serial settings, reserve a memory disk,
-; choose diskette step time / write verification and the storage disk.
-; Update writes the configuration sector for the next power-on/reset.
-; Requires Concurrent 3.x, a local console, foreground and DYNAMIC mode.
-;
-; Layout: one 8080-model CODE group, including the 256-byte loader page,
-; code, menu dispatch tables, 512-byte configuration sector and working data.
-; All executable bytes are assembled instructions. DB contains only actual
-; strings, initialized storage and padding; dispatch addresses use DW.
-; There are no raw opcode substitutions or instruction encoding exceptions.
-; The three CALLF instructions with CS overrides retain the original far ABI.
-;*****************************************************************************
+; Select hardware settings with function keys. F1 opens HELP.HLP.
+; F10 opens the update menu. Escape quits without writing CCPM.SYS.
+; The command tail can also select one of the eight slash entries in tail_dispatch.
+; Reconstructed from the 4.11 release. The displayed utility version is 4.1.
 
-; Absolute aliases avoid automatic CS overrides on shared CODE/data.
-; Their values match the original layout; make check guards every address.
-configuration_sector equ 0908h
-memory_segment equ 090ah
-verify_flag equ 090ch
-step_rate equ 090dh
-save_serial_flag equ 0968h
-save_keys_flag equ 096ah
-serial_parameters equ 096ch
-field_096d equ 096dh
-function_key_data equ 0978h
-save_keys equ 0b08h
-save_serial equ 0b09h
-disk_head equ 0b0ah
-disk_chs equ 0b0ch
-hard_disk_chs equ 0b0eh
-xios_gateway equ 0b10h
-item_0b11 equ 0b11h
-system_segment equ 0b12h
-xios_segment equ 0b14h
-process_descriptor equ 0b16h
-console_descriptor equ 0b18h
-console_number equ 0b1ah
-field_0b1c equ 0b1ch
-field_0b1d equ 0b1dh
-bios_disk_gateway equ 0b1eh
-memory_range_1 equ 0b2ah
-memory_range_2 equ 0b2ch
-memory_range_3 equ 0b2eh
-field_0b30 equ 0b30h
-field_0b32 equ 0b32h
-field_0b33 equ 0b33h
-item_0b34 equ 0b34h
-item_0b44 equ 0b44h
-item_0b54 equ 0b54h
-item_0b8c equ 0b8ch
-item_0bc6 equ 0bc6h
-item_0bd5 equ 0bd5h
-item_0bde equ 0bdeh
-item_0bf0 equ 0bf0h
-item_0c0c equ 0c0ch
-item_0c12 equ 0c12h
-item_0c36 equ 0c36h
-item_0c58 equ 0c58h
-page_title equ 0c5fh
-page_choices equ 0c61h
-page_dispatch equ 0c63h
-field_0c65 equ 0c65h
-item_0c71 equ 0c71h
-item_0ca0 equ 0ca0h
-item_0cb9 equ 0cb9h
-item_0cc3 equ 0cc3h
-item_0cdf equ 0cdfh
-item_0cff equ 0cffh
-item_0d13 equ 0d13h
-item_0d14 equ 0d14h
-item_0d1f equ 0d1fh
-item_0d4c equ 0d4ch
-item_0d91 equ 0d91h
-item_0da1 equ 0da1h
-item_0e7c equ 0e7ch
-item_0ec5 equ 0ec5h
-item_0ecb equ 0ecbh
-item_0ed1 equ 0ed1h
-item_0f05 equ 0f05h
-item_102b equ 102bh
-item_104e equ 104eh
-item_1054 equ 1054h
-item_1075 equ 1075h
-item_1079 equ 1079h
-item_1089 equ 1089h
-item_10ab equ 10abh
-item_10ae equ 10aeh
-item_1167 equ 1167h
-item_117e equ 117eh
-item_1185 equ 1185h
-item_11a0 equ 11a0h
-item_12d2 equ 12d2h
-item_1310 equ 1310h
-item_1335 equ 1335h
-item_133e equ 133eh
-item_1347 equ 1347h
-item_1468 equ 1468h
-item_14a1 equ 14a1h
-item_14cb equ 14cbh
-item_14d2 equ 14d2h
-item_1526 equ 1526h
-field_15e1 equ 15e1h
-item_1605 equ 1605h
-item_1625 equ 1625h
-item_1648 equ 1648h
-item_1652 equ 1652h
-field_165c equ 165ch
-field_1660 equ 1660h
-item_1701 equ 1701h
-item_181e equ 181eh
-field_185e equ 185eh
+xios_gate equ 28h	; far XIOS entry in SYSDAT, addressed through DS
 
 	cseg
-	org 0
-; Loader base page occupies offsets 0000h-00FFh.
 
-; Original non-instruction bytes at 0h.
-data_0000	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h
-
-; -----------------------------------------------------------------------------
-; Enter through the original short jump, skipping the embedded copyright.
-; -----------------------------------------------------------------------------
 entry:
 	jmps	initialize
+	db	'Copyright (C) 1984, Digital Research'
 
-; Original non-instruction bytes at 102h.
-data_0102	db	'Copyright (C) 1983, Digital Research'
-
-; -----------------------------------------------------------------------------
-; Validate the environment, flush input, discover XIOS and load the saved settings before displaying menus.
-; -----------------------------------------------------------------------------
+; Read the running XIOS configuration before interpreting the optional command tail.
 initialize:
-	call	check_console
 	call	check_version
+	call	check_console
 	call	flush_keyboard
-	call	discover_xios
+	call	get_system_context
 	call	get_xios_parameters
-	call	drawframe
-	call	loadsettings
+	call	draw_frame
+	call	load_configuration
+	call	dispatch_command_tail
 
-; -----------------------------------------------------------------------------
-; Draw the current page, read a permitted function key, dispatch its action and clear the menu interior.
-; -----------------------------------------------------------------------------
-main_loop:
-	call	showpage
-	mov	di,word ptr .page_choices
-	call	getchoice
-	add	bx,word ptr .page_dispatch
-	call	word ptr [bx]
+main_menu_loop:
 	call	clear_menu
-	jmps	main_loop
+	call	draw_main_menu
+	mov	di,offset main_keys
+	call	read_menu_choice
+	call	cs:word ptr main_choices[bx]
+	jmps	main_menu_loop
 
-; Menu dispatch addresses: functions return to the main loop.
-dispatch_0150:
-	dw	 offset save_menu
-	dw	 offset memory_menu
-	dw	 offset step_time_menu
-	dw	 offset verify_menu
-	dw	 offset storage_menu
-	dw	 offset update_and_exit
-	dw	 offset exit_program
+main_choices:
+	dw	parameters_menu,mdisk_menu,head_step_menu,verify_menu,serial_menu,memory_limit_menu,scroll_menu,main_help,update_menu,exit_setup
 
-; -----------------------------------------------------------------------------
-; Return to the caller in the main menu loop.
-; -----------------------------------------------------------------------------
-return_to_main:
+return_to_menu:
 	ret
 
-; -----------------------------------------------------------------------------
-; BDOS 153 identifies the console; refuse terminal numbers four and above.
-; -----------------------------------------------------------------------------
-check_console:
-	mov	cl,99h
-	int	0e0h
-	cmp	ax,4h
-	jc	loc_0175
-	mov	dx,176h
-	mov	cl,9h
-	int	0e0h
-	xor	cx,cx
-	xor	dx,dx
-	int	0e0h
-loc_0175:
-	ret
+main_help:
+	lea	si,msg_setup
+	jmp	open_help_topic
 
-; Original non-instruction bytes at 176h.
-data_0176	db	0dh,0ah
-	db	'This utility cannot be used from a user terminal.'
-	db	0dh,0ah,0ah,24h
-; -----------------------------------------------------------------------------
-; Require Concurrent OS identity 1431h; print an error and terminate otherwise.
-; -----------------------------------------------------------------------------
+; Check the BDOS family and the BDOS 163 release word before calling private XIOS services.
 check_version:
 	mov	cx,0ch
 	int	0e0h
 	and	ah,0fh
 	cmp	ah,4h
-	jz	loc_01bf
+	jz	check_system_release
 	cmp	ah,6h
-	jnz	loc_01ca
-loc_01bf:
+	jnz	wrong_version
+
+check_system_release:
 	mov	cx,0a3h
 	int	0e0h
-	cmp	ax,1431h
-	jnz	loc_01ca
+	cmp	ax,1441h
+	jnz	wrong_version
 	ret
-loc_01ca:
-	mov	dx,1d8h
+
+wrong_version:
+	mov	dx,offset version_error
+	jmps	print_startup_error
+
+check_console:
+	mov	cl,99h
+	int	0e0h
+	cmp	al,4h
+	jnc	serial_console_error
+	cbw
+	mov	word ptr console_number,ax
+	ret
+
+serial_console_error:
+	lea	dx,terminal_error
+
+print_startup_error:
 	mov	cx,9h
 	int	0e0h
+
+terminate:
 	xor	cx,cx
 	xor	dx,dx
 	int	0e0h
+	jmps	terminate
 
-; Original non-instruction bytes at 1d8h.
-data_01d8	db	0dh,0ah
-	db	'SETUP requires Concurrent CP/M to run.'
-	db	0dh,0ah,24h
+; Toggle which live settings will be captured when the user updates the system file.
+parameters_menu:
+	mov	si,offset parameters_title
+	mov	ax,offset parameters_instructions
+	call	show_page
+	mov	si,offset parameters_buttons
+	call	draw_options
 
-; -----------------------------------------------------------------------------
-; Select which live settings will be copied into the configuration sector at update time.
-; -----------------------------------------------------------------------------
-save_menu:
-	mov	si,item_0ca0
-	mov	ax,0db1h
-	call	showhelp
-	mov	si,item_0e7c
-	call	showoptions
-
-; -----------------------------------------------------------------------------
-; Display saved/not-saved markers and dispatch the selected snapshot option.
-; -----------------------------------------------------------------------------
-saveloop:
-	call	showsaves
+parameters_loop:
+	call	show_save_flags
 	mov	dh,0ah
-	call	selectprompt
-	mov	di,item_0ed1
-	call	getchoice
-	jmp	word ptr 224h[bx]
+	call	select_prompt
+	mov	di,offset parameters_keys
+	call	read_menu_choice
+	jmp	cs:word ptr parameters_choices[bx]
 
-; Menu dispatch addresses: functions return to the main loop.
-dispatch_0224:
-	dw	 offset toggle_keys
-	dw	 offset toggle_serial
-	dw	 offset return_to_main
+parameters_choices:
+	dw	toggle_keys,toggle_ports,parameters_help,return_to_menu
 
-; -----------------------------------------------------------------------------
-; Toggle function-key snapshot selection and redisplay the save menu.
-; -----------------------------------------------------------------------------
+parameters_help:
+	lea	si,msg_setup_params
+	call	open_help_topic
+	jmp	parameters_menu
+
 toggle_keys:
-	xor	byte ptr .save_keys,0ffh
-	jmp	saveloop
+	xor	byte ptr save_keys,0ffh
+	jmp	parameters_loop
 
-; -----------------------------------------------------------------------------
-; Toggle serial-port snapshot selection and redisplay the save menu.
-; -----------------------------------------------------------------------------
-toggle_serial:
-	xor	byte ptr .save_serial,0ffh
-	jmp	saveloop
+toggle_ports:
+	xor	byte ptr save_ports,0ffh
+	jmp	parameters_loop
 
-; -----------------------------------------------------------------------------
-; Display the current state of the two save-selection flags.
-; -----------------------------------------------------------------------------
-showsaves:
-	mov	dx,item_0c0c
+show_save_flags:
+	mov	dx,0c0ch
 	mov	cx,2h
-	mov	bx,0b08h
-	call	reverseon
+	mov	bx,offset save_keys
+	call	reverse_video
 
-; -----------------------------------------------------------------------------
-; Choose the Saved marker or blank replacement for the current flag.
-; -----------------------------------------------------------------------------
-saveshow:
-	mov	si,item_0ec5
+next_save_flag:
+	mov	si,offset msg_saved
 	test	byte ptr [bx],0ffh
-	jnz	saveput
-	mov	si,item_0ecb
+	jnz	print_save_flag
+	mov	si,offset blank_save_state
 
-; -----------------------------------------------------------------------------
-; Output the marker and continue with the next option.
-; -----------------------------------------------------------------------------
-saveput:
-	call	putat
+print_save_flag:
+	call	print_positioned
 	inc	bx
 	add	dh,3h
-	loop	saveshow
-	jmp	reverseoff
+	loop	next_save_flag
+	jmp	normal_video
 
-; -----------------------------------------------------------------------------
-; Display memory-disk size and starting segment; offer entry of a new segment.
-; -----------------------------------------------------------------------------
-memory_menu:
-	mov	si,item_0cb9
-	mov	ax,0ed5h
-	call	showhelp
-	call	showmemory
-	mov	si,item_1089
-	call	showoptions
-	mov	dh,10h
-	call	selectprompt
-	mov	di,item_10ab
-	call	getchoice
-	jmp	word ptr 27eh[bx]
+; Select a starting segment for the RAM disk. Its size is the contiguous memory above that segment.
+mdisk_menu:
+	mov	si,offset msg_mdisk
+	mov	ax,offset mdisk_instructions
+	call	show_page
+	mov	si,offset mdisk_buttons
+	call	draw_options
+	mov	dh,0ch
+	call	select_prompt
 
-; Menu dispatch addresses: functions return to the main loop.
-dispatch_027e:
-	dw	 offset loc_0282
-	dw	 offset return_to_main
-loc_0282:
-	mov	dh,0fh
+mdisk_loop:
+	call	show_mdisk
+	mov	di,offset mdisk_keys
+	call	read_menu_choice
+	jmp	cs:word ptr mdisk_choices[bx]
+
+mdisk_choices:
+	dw	increase_mdisk,decrease_mdisk,enter_mdisk_address,mdisk_help,return_to_menu
+
+mdisk_help:
+	lea	si,msg_setup_mdisk
+	call	open_help_topic
+	jmp	mdisk_menu
+
+; Lower the segment by 0400h paragraphs (16 KiB), stopping at the bottom of the selected bank.
+increase_mdisk:
+	mov	ax,word ptr mdisk_segment
+	test	ax,ax
+	jnz	choose_mdisk_bank
+	mov	ax,word ptr lower_memory_end
+
+choose_mdisk_bank:
+	cmp	ax,0c000h
+	jnc	grow_upper_bank
+	cmp	ax,4000h
+	jz	mdisk_limit_reached
+	sub	ax,400h
+	cmp	ax,4000h
+	jnc	store_mdisk_segment
+	mov	ax,4000h
+	jmps	store_mdisk_segment
+
+grow_upper_bank:
+	cmp	ax,0c000h
+	jz	mdisk_limit_reached
+	sub	ax,400h
+	cmp	ax,0c000h
+	jnc	store_mdisk_segment
+	mov	ax,0c000h
+	jmps	store_mdisk_segment
+
+; Raise the segment in 16 KiB steps. Reaching the end of the bank disables MDisk.
+decrease_mdisk:
+	mov	ax,word ptr mdisk_segment
+	test	ax,ax
+	jz	mdisk_limit_reached
+	cmp	ax,0c000h
+	ja	shrink_upper_bank
+	add	ax,400h
+	cmp	ax,word ptr lower_memory_end
+	jc	store_mdisk_segment
+	sub	ax,ax
+	jmps	store_mdisk_segment
+
+shrink_upper_bank:
+	add	ax,400h
+	cmp	ax,0e000h
+	jc	store_mdisk_segment
+	sub	ax,ax
+
+store_mdisk_segment:
+	mov	word ptr mdisk_segment,ax
+	jmp	mdisk_loop
+
+mdisk_limit_reached:
+	mov	al,7h
+	call	write_char
+	jmp	mdisk_loop
+
+enter_mdisk_address:
+	mov	dh,0ch
 	call	clear_menu_row
-	mov	si,item_10ae
-	mov	dx,item_0f05
-	call	putlines
-	mov	si,item_1167
-	mov	dh,13h
-	call	revcent
-	mov	si,item_117e
-	mov	dx,item_1526
-	call	putat
-	call	gethex
+	mov	si,offset segment_instructions
+	mov	dx,0d05h
+	call	print_lines
+	mov	si,offset hex_input_prompt
+	mov	dx,1326h
+	call	print_positioned
+	call	read_hex_digit
 	mov	cl,4h
 	shl	al,cl
 	mov	dh,al
-	call	gethex
+	call	read_hex_digit
 	or	dh,al
 	mov	al,66h
-	call	escout
+	call	terminal_escape
 	mov	al,dh
 	cmp	al,0h
-	jz	storememory
+	jz	accept_segment
 	cmp	al,40h
-	jc	badmemory
+	jc	reject_segment
 	cmp	al,90h
-	jna	storememory
+	jna	accept_segment
 	cmp	al,0c0h
-	jc	badmemory
+	jc	reject_segment
 	cmp	al,0e0h
-	jna	storememory
+	jna	accept_segment
 
-; -----------------------------------------------------------------------------
-; Report an invalid memory segment and return to memory selection.
-; -----------------------------------------------------------------------------
-badmemory:
-	call	memoryerror
-	jmp	memory_menu
+reject_segment:
+	call	invalid_address
+	jmp	mdisk_menu
 
-; -----------------------------------------------------------------------------
-; Store the validated segment in the configuration sector.
-; -----------------------------------------------------------------------------
-storememory:
+; DB00h also reinstalls both serial menu handlers in the writable CODE table.
+accept_segment:
 	mov	dl,0h
-	mov	word ptr .memory_segment,dx
-	jmp	memory_menu
+	mov	word ptr mdisk_segment,dx
+	cmp	dh,0dbh
+	jnz	redisplay_mdisk
+	mov	bx,offset serial_choices
+	db	2eh	; CS override emitted separately to retain the short addressing form.
+	mov	word ptr [bx],offset toggle_serial_zero
+	db	2eh	; CS override emitted separately to retain the short addressing form.
+	mov	word ptr 2[bx],offset toggle_serial_one
 
-; -----------------------------------------------------------------------------
-; Display the current segment and compute/display its resulting memory-disk size.
-; -----------------------------------------------------------------------------
-showmemory:
-	mov	si,item_102b
-	mov	dx,item_0c12
-	call	putat
-	call	reverseon
-	mov	dx,word ptr .memory_segment
-	call	puthexbyte
+redisplay_mdisk:
+	jmp	mdisk_menu
+
+show_mdisk:
+	mov	si,offset msg_current_mdisk_size
+	mov	dx,0a05h
+	call	print_positioned
+	call	reverse_video
+	call	mdisk_size_kb
+	call	print_decimal
+	mov	si,offset msg_kb
+	call	print_string
+	call	normal_video
+	mov	si,offset msg_current_starting_addre
+	mov	dx,0a27h
+	call	print_positioned
+	call	reverse_video
+	mov	dx,word ptr mdisk_segment
+	call	print_hex_byte
 	xchg	dh,dl
-	call	puthexbyte
-	mov	si,item_104e
-	call	puts
-	call	reverseoff
-	mov	si,item_1054
-	mov	dx,item_0d14
-	call	putat
-	call	reverseon
-	call	memory_size_kb
-	call	put_decimal
-	mov	si,item_1075
-	call	puts
-	jmp	reverseoff
+	call	print_hex_byte
+	mov	si,offset segment_suffix
+	call	print_string
+	call	normal_video
+	ret
 
-; -----------------------------------------------------------------------------
-; Output the high and low hexadecimal digits of DH.
-; -----------------------------------------------------------------------------
-puthexbyte:
+print_hex_byte:
 	mov	al,dh
 	mov	cl,4h
 	shr	al,cl
-	call	puthexdigit
+	call	print_hex_digit
 	mov	al,dh
 	and	al,0fh
 
-; -----------------------------------------------------------------------------
-; Translate a nibble through the hexadecimal character table.
-; -----------------------------------------------------------------------------
-puthexdigit:
-	mov	bx,1079h
-	xlat	byte ptr [bx]
-	jmp	put_character
-; -----------------------------------------------------------------------------
-; Validate the requested memory-disk segment against the XIOS memory ranges; return size in KiB, or zero.
-; -----------------------------------------------------------------------------
-memory_size_kb:
-	mov	ax,word ptr .memory_segment
+print_hex_digit:
+	mov	bx,offset hex_digits
+	xlat	hex_digits
+	jmp	write_char
+
+; Subtract the starting segment from the end of the selected bank and divide by 64 paragraphs per KiB.
+mdisk_size_kb:
+	mov	ax,word ptr mdisk_segment
 	cmp	ax,0h
-	jz	loc_0347
-	mov	dx,word ptr .memory_range_1
+	jz	no_mdisk
+	mov	dx,word ptr lower_memory_end
 	cmp	ax,dx
-	jc	loc_034a
-	cmp	ax,word ptr .memory_range_2
-	jc	loc_0347
-	mov	dx,word ptr .memory_range_3
+	jc	paragraphs_to_kb
+	cmp	ax,word ptr upper_memory_start
+	jc	no_mdisk
+	mov	dx,word ptr upper_memory_end
 	cmp	ax,dx
-	jc	loc_034a
-loc_0347:
+	jc	paragraphs_to_kb
+
+no_mdisk:
 	sub	ax,ax
 	ret
-loc_034a:
+
+paragraphs_to_kb:
 	xchg	ax,dx
 	sub	ax,dx
 	mov	cl,6h
 	shr	ax,cl
 	ret
-; -----------------------------------------------------------------------------
-; Print a decimal value using the stored decimal divisors; suppress leading zeroes.
-; -----------------------------------------------------------------------------
-put_decimal:
+
+print_decimal:
 	mov	dh,0h
-	div	byte ptr .field_0b32
-	call	put_decimal_digit
+	div	byte ptr decimal_hundreds
+	call	print_decimal_digit
 	mov	al,ah
 	cbw
-	div	byte ptr .field_0b33
-	call	put_decimal_digit
+	div	byte ptr decimal_tens
+	call	print_decimal_digit
 	mov	dh,0ffh
 	mov	al,ah
-; -----------------------------------------------------------------------------
-; Suppress leading zeroes until a nonzero digit appears; preserve AX for the next digit.
-; -----------------------------------------------------------------------------
-put_decimal_digit:
+
+print_decimal_digit:
 	push	ax
 	or	dh,al
-	jz	loc_0373
+	jz	digit_done
 	or	al,30h
-	call	put_character
-loc_0373:
+	call	write_char
+
+digit_done:
 	pop	ax
 	ret
 
-; -----------------------------------------------------------------------------
-; Read an uppercase hexadecimal digit, rejecting other characters with a bell.
-; -----------------------------------------------------------------------------
-gethex:
-	call	read_key
+read_hex_digit:
+	call	read_char
 	cmp	al,60h
-	jc	hexscan
+	jc	lookup_hex_digit
 	sub	al,20h
 
-; -----------------------------------------------------------------------------
-; Find the digit in the sixteen-character hexadecimal table.
-; -----------------------------------------------------------------------------
-hexscan:
-	mov	di,item_1079
+lookup_hex_digit:
+	mov	di,offset hex_digits
 	mov	cx,10h
 	cld
 	repne	scasb
-	jz	hexecho
+	jz	echo_hex_digit
 	mov	al,7h
-	call	put_character
-	jmps	gethex
+	call	write_char
+	jmps	read_hex_digit
 
-; -----------------------------------------------------------------------------
-; Echo the accepted digit and return its numerical value.
-; -----------------------------------------------------------------------------
-hexecho:
-	call	put_character
+echo_hex_digit:
+	call	write_char
 	mov	al,20h
-	call	put_character
+	call	write_char
 	mov	al,8h
-	call	put_character
+	call	write_char
 	mov	al,0fh
 	sub	al,cl
 	ret
 
-; -----------------------------------------------------------------------------
-; Display the invalid-address message, beep three times and wait for acknowledgement.
-; -----------------------------------------------------------------------------
-memoryerror:
+invalid_address:
 	mov	al,70h
-	call	escout
-	mov	si,item_1185
-	mov	dh,15h
-	call	putcent
+	call	terminal_escape
+	mov	si,offset msg_invalid_starting_addre
+	mov	dh,13h
+	call	print_centered
 	mov	al,71h
-	call	escout
+	call	terminal_escape
 	mov	cx,3h
 
-; -----------------------------------------------------------------------------
-; Emit the counted bells before displaying the acknowledgement prompt.
-; -----------------------------------------------------------------------------
-errorbeep:
+address_error_bell:
 	mov	al,7h
-	call	put_character
-	loop	errorbeep
-	mov	si,item_11a0
-	mov	dh,13h
-	call	revcent
-	jmp	read_key
+	call	write_char
+	loop	address_error_bell
+	mov	si,offset continue_prompt
+	mov	dh,15h
+	call	reverse_centered
+	jmp	read_char
 
-; -----------------------------------------------------------------------------
-; Select whether diskette writes will be verified at the next boot.
-; -----------------------------------------------------------------------------
+; Select whether the floppy driver verifies each completed write.
 verify_menu:
-	mov	si,item_0cdf
-	mov	ax,11b9h
-	call	showhelp
-	mov	si,item_12d2
-	call	showoptions
+	mov	si,offset verify_title
+	mov	ax,offset verify_instructions
+	call	show_page
+	mov	si,offset verify_buttons
+	call	draw_options
 	mov	dh,0dh
-	call	selectprompt
+	call	select_prompt
 
-; -----------------------------------------------------------------------------
-; Display the verify state and dispatch enable, disable or return.
-; -----------------------------------------------------------------------------
-verifyloop:
-	call	showverify
-	mov	di,item_1347
-	call	getchoice
-	jmp	word ptr 3eah[bx]
+verify_loop:
+	call	show_verify
+	mov	di,offset verify_keys
+	call	read_menu_choice
+	jmp	cs:word ptr verify_choices[bx]
 
-; Menu dispatch addresses: functions return to the main loop.
-dispatch_03ea:
-	dw	 offset verifyon
-	dw	 offset verifyoff
-	dw	 offset return_to_main
+verify_choices:
+	dw	enable_verify,disable_verify,verify_help,return_to_menu
 
-; -----------------------------------------------------------------------------
-; Set the saved verify-after-write flag.
-; -----------------------------------------------------------------------------
-verifyon:
-	mov	byte ptr .verify_flag,0ffh
-	jmps	verifyloop
+verify_help:
+	lea	si,msg_setup_verify
+	call	open_help_topic
+	jmp	verify_menu
 
-; -----------------------------------------------------------------------------
-; Clear the saved verify-after-write flag.
-; -----------------------------------------------------------------------------
-verifyoff:
-	mov	byte ptr .verify_flag,0h
-	jmps	verifyloop
+enable_verify:
+	mov	byte ptr verify_flag,0ffh
+	jmps	verify_loop
 
-; -----------------------------------------------------------------------------
-; Display the enabled or disabled caption for the saved flag.
-; -----------------------------------------------------------------------------
-showverify:
-	mov	si,item_1310
-	mov	dx,item_0b11
-	call	putat
-	call	reverseon
-	mov	si,item_1335
-	test	byte ptr .verify_flag,0ffh
-	jnz	verifyput
-	mov	si,item_133e
+disable_verify:
+	mov	byte ptr verify_flag,0h
+	jmps	verify_loop
 
-; -----------------------------------------------------------------------------
-; Output the selected verify caption.
-; -----------------------------------------------------------------------------
-verifyput:
-	call	puts
-	jmp	reverseoff
+show_verify:
+	mov	si,offset verify_caption
+	mov	dx,0b11h
+	call	print_positioned
+	call	reverse_video
+	mov	si,offset msg_enabled
+	test	byte ptr verify_flag,0ffh
+	jnz	print_verify_state
+	mov	si,offset msg_disabled
 
-; -----------------------------------------------------------------------------
-; Offer adjustment of the diskette head step time stored in the BIOS parameter byte.
-; -----------------------------------------------------------------------------
-step_time_menu:
-	mov	si,item_0cc3
-	mov	ax,134bh
-	call	showhelp
-	mov	si,item_1468
-	call	showoptions
+print_verify_state:
+	call	print_string
+	jmp	normal_video
+
+; Change the high nibble of the floppy step-rate parameter. Display the converted time in milliseconds.
+head_step_menu:
+	mov	si,offset step_title
+	mov	ax,offset step_instructions
+	call	show_page
+	mov	si,offset step_buttons
+	call	draw_options
 	mov	dh,0dh
-	call	selectprompt
+	call	select_prompt
 
-; -----------------------------------------------------------------------------
-; Display the current delay and dispatch faster/slower/return.
-; -----------------------------------------------------------------------------
-steploop:
-	call	showstep
-	mov	di,item_14d2
-	call	getchoice
-	jmp	word ptr 43eh[bx]
+step_loop:
+	call	show_step
+	mov	di,offset step_keys
+	call	read_menu_choice
+	jmp	cs:word ptr step_choices[bx]
 
-; Menu dispatch addresses: functions return to the main loop.
-dispatch_043e:
-	dw	 offset stepfaster
-	dw	 offset stepslower
-	dw	 offset return_to_main
+step_choices:
+	dw	reduce_step,increase_step,head_step_help,return_to_menu
 
-; -----------------------------------------------------------------------------
-; Increase the inverted high-nibble rate encoding, reducing the delay.
-; -----------------------------------------------------------------------------
-stepfaster:
-	mov	al,byte ptr .step_rate
+head_step_help:
+	lea	si,msg_setup_hdstep
+	call	open_help_topic
+	jmp	head_step_menu
+
+reduce_step:
+	mov	al,byte ptr head_step
 	add	al,10h
-	jmps	storestep
+	jmps	store_step
 
-; -----------------------------------------------------------------------------
-; Decrease the encoded rate, increasing the delay; reject underflow.
-; -----------------------------------------------------------------------------
-stepslower:
-	mov	al,byte ptr .step_rate
+increase_step:
+	mov	al,byte ptr head_step
 	sub	al,10h
 
-; -----------------------------------------------------------------------------
-; Save the new step-time byte and return to its display loop.
-; -----------------------------------------------------------------------------
-storestep:
-	jc	stepbeep
-	mov	byte ptr .step_rate,al
-	jmps	steploop
+store_step:
+	jc	step_limit_reached
+	mov	byte ptr head_step,al
+	jmps	step_loop
 
-; -----------------------------------------------------------------------------
-; Reject an out-of-range step-time change with a bell.
-; -----------------------------------------------------------------------------
-stepbeep:
+step_limit_reached:
 	mov	al,7h
-	call	put_character
-	jmps	steploop
+	call	write_char
+	jmps	step_loop
 
-; -----------------------------------------------------------------------------
-; Convert the inverted rate encoding to milliseconds for display.
-; -----------------------------------------------------------------------------
-showstep:
-	mov	si,item_14a1
-	mov	dx,xios_gateway
-	call	putat
-	call	reverseon
-	mov	al,byte ptr .step_rate
+show_step:
+	mov	si,offset step_time_caption
+	mov	dx,0b10h
+	call	print_positioned
+	call	reverse_video
+	mov	al,byte ptr head_step
 	mov	cl,4h
 	shr	al,cl
 	or	al,0f0h
@@ -668,172 +497,538 @@ showstep:
 	shl	al,1
 	aam
 	test	ah,ah
-	jz	stepunits
+	jz	print_step_units
 	push	ax
 	mov	al,ah
 	or	al,30h
-	call	put_character
+	call	write_char
 	pop	ax
 
-; -----------------------------------------------------------------------------
-; Display the units following the decimal step-time value.
-; -----------------------------------------------------------------------------
-stepunits:
+print_step_units:
 	or	al,30h
-	call	put_character
-	mov	si,item_14cb
-	call	puts
-	jmp	reverseoff
+	call	write_char
+	mov	si,offset msg_msec
+	call	print_string
+	jmp	normal_video
 
-; -----------------------------------------------------------------------------
-; Select floppy A or the first supported hard disk as the configuration storage device.
-; -----------------------------------------------------------------------------
-storage_menu:
-	mov	si,item_0cff
-	mov	ax,14d6h
-	call	showhelp
-	mov	si,field_15e1
-	call	showoptions
+; Assign either physical serial port to a terminal or to auxiliary/printer use.
+serial_menu:
+	mov	si,offset msg_select_serial_console
+	mov	ax,offset serial_instructions
+	call	show_page
+	mov	si,offset serial_buttons
+	call	draw_options
 	mov	dh,0dh
-	call	selectprompt
+	call	select_prompt
 
-; -----------------------------------------------------------------------------
-; Read the storage-device choice and dispatch to floppy, return or hard disk.
-; -----------------------------------------------------------------------------
-storage_loop:
-	call	showdisk
-	mov	di,field_165c
-	call	getchoice
-	jmp	word ptr 4b5h[bx]
+serial_loop:
+	call	show_serial_ports
+	mov	di,offset serial_keys
+	call	read_menu_choice
+	jmp	cs:word ptr serial_choices[bx]
 
-; Menu dispatch addresses: functions return to the main loop.
-dispatch_04b5:
-	dw	 offset usefloppy
-	dw	 offset return_to_main
-	dw	 offset usehard
+serial_choices:
+	dw	toggle_serial_zero,toggle_serial_one,serial_help,return_to_menu
 
-; -----------------------------------------------------------------------------
-; Select floppy A and its configuration-sector CHS address.
-; -----------------------------------------------------------------------------
-usefloppy:
-	mov	byte ptr .disk_head,0h
-	mov	word ptr .disk_chs,2h
-	mov	si,item_1648
-	call	diskcaption
-	jmps	storage_loop
+serial_help:
+	lea	si,msg_setup_serial
+	call	open_help_topic
+	jmp	serial_menu
 
-; -----------------------------------------------------------------------------
-; Select BIOS hard disk 80h and the discovered partition configuration sector.
-; -----------------------------------------------------------------------------
-usehard:
-	mov	byte ptr .disk_head,80h
-	mov	ax,word ptr .hard_disk_chs
-	mov	word ptr .disk_chs,ax
-	mov	si,item_1652
-	call	diskcaption
-	jmps	storage_loop
+toggle_serial_zero:
+	xor	byte ptr port_zero_console,0ffh
+	jmps	serial_loop
 
-; -----------------------------------------------------------------------------
-; Display the selected storage-device caption.
-; -----------------------------------------------------------------------------
-diskcaption:
+toggle_serial_one:
+	xor	byte ptr port_one_console,0ffh
+	jmps	serial_loop
+
+show_serial_ports:
+	mov	si,offset port_zero_caption
+	mov	dx,0a0fh
+	mov	bx,0h
+	call	show_port_role
+	mov	si,offset port_one_caption
+	mov	dx,0b0fh
+	mov	bx,1h
+
+show_port_role:
+	call	print_positioned
+	call	reverse_video
+	mov	si,offset msg_an_aux
+	test	byte ptr port_zero_console[bx],0ffh
+	jz	print_port_role
+	mov	si,offset msg_multiuser_terminal
+
+print_port_role:
+	call	print_string
+	jmp	normal_video
+
+; Store the per-process ceiling in paragraphs. The menu accepts 064 through 999 KiB.
+memory_limit_menu:
+	mov	si,offset memory_title
+	mov	ax,offset memory_instructions
+	call	show_page
+	call	show_memory_limit
+	mov	si,offset memory_buttons
+	call	draw_options
+	mov	dh,0fh
+	call	select_prompt
+	mov	di,offset memory_keys
+	call	read_menu_choice
+	jmp	cs:word ptr memory_choices[bx]
+
+memory_choices:
+	dw	enter_memory_limit,memory_limit_help,return_to_menu
+
+memory_limit_help:
+	lea	si,msg_setup_maxmem
+	call	open_help_topic
+	jmp	memory_limit_menu
+
+enter_memory_limit:
+	mov	dh,0fh
+	call	clear_menu_row
+	mov	si,offset limit_instructions
+	mov	dx,0f05h
+	call	print_lines
+	mov	si,offset decimal_input_prompt
+	mov	dx,1326h
+	call	print_positioned
+	call	read_three_digits
+	mov	al,66h
+	call	terminal_escape
+	xchg	ax,dx
+	mov	si,offset msg_value_is_too_small
+	cmp	ax,40h
+	jc	reject_memory_limit
+	mov	si,offset msg_value_is_too_large
+	cmp	ax,3e7h
+	ja	reject_memory_limit
+	mov	cl,6h
+	shl	ax,cl
+	mov	word ptr max_memory_paragraphs,ax
+	jmp	memory_limit_menu
+
+reject_memory_limit:
+	mov	al,70h
+	call	terminal_escape
+	mov	dh,13h
+	call	print_centered
+	mov	al,71h
+	call	terminal_escape
+	mov	cx,3h
+
+memory_error_bell:
+	mov	al,7h
+	call	write_char
+	loop	memory_error_bell
+	mov	si,offset continue_prompt
+	mov	dh,15h
+	call	reverse_centered
+	call	read_char
+	jmp	memory_limit_menu
+
+show_memory_limit:
+	mov	si,offset max_memory_caption
+	mov	dx,0c0fh
+	call	print_positioned
+	call	reverse_video
+	mov	ax,word ptr max_memory_paragraphs
+	mov	cl,6h
+	shr	ax,cl
+	call	print_decimal
+	mov	si,offset text_kb_142b
+	call	print_string
+	jmp	normal_video
+
+read_three_digits:
+	mov	dx,0h
+	mov	cx,3h
+
+next_decimal_digit:
+	call	read_char
+	cmp	al,30h
+	jc	reject_decimal_digit
+	cmp	al,39h
+	ja	reject_decimal_digit
+	push	ax
+	call	write_char
+	mov	al,20h
+	call	write_char
+	mov	al,8h
+	call	write_char
+	mov	ax,0ah
+	mul	dx
+	xchg	ax,dx
+	pop	ax
+	sub	al,30h
+	cbw
+	add	dx,ax
+	loop	next_decimal_digit
+	ret
+
+reject_decimal_digit:
+	mov	al,7h
+	call	write_char
+	jmps	next_decimal_digit
+
+; Select fast/flicker, slow/smooth or wide-open access to color video memory.
+scroll_menu:
+	mov	si,offset scroll_title
+	mov	ax,offset scroll_instructions
+	call	show_page
+	call	show_scroll_mode
+	mov	si,offset scroll_buttons
+	call	draw_options
+	mov	dh,0fh
+	call	select_prompt
+
+scroll_loop:
+	mov	di,offset scroll_keys
+	call	read_menu_choice
+	jmp	cs:word ptr scroll_choices[bx]
+
+scroll_choices:
+	dw	cycle_scroll_mode,scroll_help,return_to_menu
+
+scroll_help:
+	lea	si,msg_setup_scroll
+	call	open_help_topic
+	jmp	scroll_menu
+
+cycle_scroll_mode:
+	mov	al,byte ptr scroll_mode
+	inc	al
+	cmp	al,2h
+	jna	store_scroll_mode
+	mov	al,0h
+
+store_scroll_mode:
+	mov	byte ptr scroll_mode,al
+	call	show_scroll_mode
+	jmp	scroll_loop
+
+show_scroll_mode:
+	mov	si,offset scroll_caption
+	mov	dx,0c0fh
+	call	print_positioned
+	call	reverse_video
+	mov	al,byte ptr scroll_mode
+	cbw
+	shl	ax,1
+	xchg	ax,bx
+	mov	si,word ptr scroll_captions[bx]
+	call	print_string
+	jmp	normal_video
+
+open_help_topic:
+	mov	dx,si
+	call	help_entry
+	call	draw_frame
+	ret
+
+; Choose a destination drive or write the saved settings. F1 and Escape return to the menu system.
+update_menu:
+	mov	si,offset msg_update_and_exit
+	mov	ax,offset update_instructions
+	call	show_page
+	mov	si,offset update_buttons
+	call	draw_options
+	mov	dh,0dh
+	call	select_prompt
+	call	show_update_drive
+	mov	di,offset update_keys
+	call	read_menu_choice
+	jmp	cs:word ptr update_choices[bx]
+
+update_choices:
+	dw	select_update_disk,update_system_file,update_help,return_to_menu
+
+update_help:
+	lea	si,msg_setup_update
+	call	open_help_topic
+	jmp	update_menu
+
+select_update_disk:
+	mov	dh,0ch
+	call	clear_menu_row
+	mov	si,offset drive_instructions
+	mov	dx,0e05h
+	call	print_lines
+	mov	si,offset drive_input_prompt
+	mov	dx,1226h
+	call	print_positioned
+	call	read_drive_letter
+	mov	byte ptr system_fcb,al
+	mov	al,66h
+	call	terminal_escape
+	jmp	update_menu
+
+; Open CCPM.SYS on the update drive. Check the embedded signature before replacing its configuration.
+update_system_file:
+	call	snapshot_options
+	mov	dh,0ch
+	call	clear_menu_row
+	lea	si,updating_system
+	mov	dh,0fh
+	call	print_centered
+	mov	al,byte ptr system_fcb
+	add	al,40h
+	call	write_char
+	mov	al,3ah
+	call	write_char
+	mov	dx,3ch
+	mov	cl,8dh
+	int	0e0h
+	call	set_error_mode_and_dma
+	call	open_system_file
+	lea	si,missing_system_file
+	test	ax,ax
+	jnz	show_update_error
+	call	clear_file_protection
+	sub	ax,ax
+	mov	dl,1h
+	call	read_random_record
+	lea	si,system_read_error
+	test	ax,ax
+	jnz	close_after_error
+	call	locate_config_record
+	mov	dl,5h
+	call	read_random_record
+	lea	si,system_read_error
+	test	ax,ax
+	jnz	close_after_error
+	call	check_setup_signature
+	lea	si,wrong_system_version
+	jnz	close_after_error
+	call	copy_config_block
+	call	write_random_record
+	lea	si,system_write_error
+	test	ax,ax
+	jnz	close_after_error
+	call	close_system_file
+	call	restore_file_attributes
+	jmp	exit_setup
+
+close_after_error:
+	call	close_system_file
+
+show_update_error:
+	mov	al,70h
+	call	terminal_escape
+	mov	dh,13h
+	call	print_centered
+	mov	al,71h
+	call	terminal_escape
+	mov	cx,3h
+
+update_error_bell:
+	mov	al,7h
+	call	write_char
+	loop	update_error_bell
+	lea	si,continue_prompt
+	mov	dh,15h
+	call	reverse_centered
+	call	read_char
+	jmp	update_menu
+
+set_error_mode_and_dma:
+	mov	dl,0ffh
+	mov	cl,2dh
+	int	0e0h
+	lea	dx,record_buffer
+	mov	cl,1ah
+	int	0e0h
+	ret
+
+open_system_file:
 	push	ds
 	pop	es
-	mov	di,item_0d1f
-	mov	cx,9h
+	lea	di,system_fcb_extent
+	mov	cx,18h
+	mov	al,0h
 	cld
-	rep	movsb
+	rep	stosb
+	lea	dx,system_fcb
+	mov	cl,0fh
+	int	0e0h
 	ret
 
-; -----------------------------------------------------------------------------
-; Choose the floppy or hard-disk text from the saved device byte.
-; -----------------------------------------------------------------------------
-showdisk:
-	mov	si,item_1625
-	mov	dx,system_segment
-	call	putat
-	call	reverseon
-	mov	si,item_1648
-	cmp	byte ptr .disk_head,0h
-	jz	diskput
-	mov	si,item_1652
-
-; -----------------------------------------------------------------------------
-; Output the selected storage-device text.
-; -----------------------------------------------------------------------------
-diskput:
-	call	puts
-	jmp	reverseoff
-
-; -----------------------------------------------------------------------------
-; Snapshot the requested live parameters, write the configuration sector and leave through the common exit path.
-; -----------------------------------------------------------------------------
-update_and_exit:
-	call	snapshot_options
-	call	diskparams
-	mov	bx,908h
-	mov	ah,3h
-	call	disk_io
-
-; -----------------------------------------------------------------------------
-; Restore process flags and terminate without another menu iteration.
-; -----------------------------------------------------------------------------
-exit_program:
-	mov	si,item_0bd5
-	call	puts
-loc_0520:
-	cmp	byte ptr .field_0b1d,0ffh
-	jnz	loc_052e
-	mov	dx,item_0b44
-	mov	cl,8bh
+; Remember the original read-only bit so the successful update can reinstate it.
+clear_file_protection:
+	test	byte ptr system_fcb_type,80h
+	jz	protection_cleared
+	mov	byte ptr restore_read_only,0ffh
+	call	close_system_file
+	and	byte ptr system_fcb_type,7fh
+	lea	dx,system_fcb
+	mov	cl,1eh
 	int	0e0h
-loc_052e:
-	mov	es,word ptr .system_segment
-	cmp	byte ptr .field_0b1c,0ffh
-	jnz	loc_0543
-	mov	bx,word ptr .console_descriptor
-	and	es:word ptr 0eh[bx],0fff7h
-loc_0543:
-	mov	bx,word ptr .process_descriptor
-	and	es:word ptr 6h[bx],0fffdh
-	mov	cl,0h
-	mov	dl,0h
+	call	open_system_file
+
+protection_cleared:
+	ret
+
+; DL is the number of consecutive 128-byte records. AX is the first record number.
+read_random_record:
+	mov	word ptr system_random_record,ax
+	mov	cl,2ch
 	int	0e0h
-; -----------------------------------------------------------------------------
-; Copy the selected live serial and function-key settings into the saved configuration sector.
-; -----------------------------------------------------------------------------
+	lea	dx,system_fcb
+	mov	cl,21h
+	int	0e0h
+	ret
+
+write_random_record:
+	lea	dx,system_fcb
+	mov	cl,22h
+	int	0e0h
+	ret
+
+close_system_file:
+	lea	dx,system_fcb
+	mov	cl,10h
+	int	0e0h
+	ret
+
+restore_file_attributes:
+	mov	dl,1h
+	mov	cl,2ch
+	int	0e0h
+	test	byte ptr restore_read_only,0ffh
+	jz	attributes_restored
+	or	byte ptr system_fcb_type,80h
+	lea	dx,system_fcb
+	mov	cl,1eh
+	int	0e0h
+
+attributes_restored:
+	ret
+
+; Convert the paragraph address to a 128-byte record and a byte offset within it.
+locate_config_record:
+	mov	ax,word ptr system_code_paragraphs
+	add	ax,0dfh
+	push	ax
+	and	ax,7h
+	mov	cl,4h
+	shl	ax,cl
+	mov	word ptr config_record_offset,ax
+	pop	ax
+	mov	cl,3h
+	shr	ax,cl
+	ret
+
+check_setup_signature:
+	push	ds
+	pop	es
+	lea	di,record_buffer
+	add	di,word ptr config_record_offset
+	lea	si,setup_signature
+	mov	cx,10h
+	cld
+	repe	cmpsb
+	ret
+
+copy_config_block:
+	lea	si,config_block
+	mov	cx,100h
+	cld
+	rep	movsw
+	ret
+
+show_update_drive:
+	mov	si,offset drive_caption
+	mov	dx,0b19h
+	call	print_positioned
+	call	reverse_video
+	mov	al,byte ptr system_fcb
+	add	al,40h
+	call	write_char
+	mov	al,3ah
+	call	write_char
+	jmp	normal_video
+
+read_drive_letter:
+	call	read_char
+	cmp	al,41h
+	jc	reject_drive_letter
+	cmp	al,50h
+	jna	accept_drive_letter
+	cmp	al,61h
+	jc	reject_drive_letter
+	cmp	al,70h
+	jna	accept_drive_letter
+
+reject_drive_letter:
+	mov	al,7h
+	call	write_char
+	jmps	read_drive_letter
+
+accept_drive_letter:
+	and	al,0dfh
+	push	ax
+	call	write_char
+	pop	ax
+	sub	al,40h
+	ret
+
 snapshot_options:
-	cmp	byte ptr .save_serial,0h
-	jz	loc_055d
-	call	snapshot_serial
-loc_055d:
-	cmp	byte ptr .save_keys,0h
-	jz	loc_0567
-	call	snapshot_keys
-loc_0567:
+	cmp	byte ptr save_ports,0h
+	jz	check_save_keys
+	call	snapshot_serial_ports
+
+check_save_keys:
+	cmp	byte ptr save_keys,0h
+	jz	snapshot_done
+	call	snapshot_function_keys
+
+snapshot_done:
 	ret
-; -----------------------------------------------------------------------------
-; Mark serial parameters saved and read both UARTs into the configuration sector.
-; -----------------------------------------------------------------------------
-snapshot_serial:
-	mov	byte ptr .save_serial_flag,0ffh
+
+; Capture each UART configuration and, if available, the four live XIOS port-state bytes.
+snapshot_serial_ports:
+	mov	byte ptr saved_serial_flag,0ffh
 	mov	dx,3f8h
 	call	read_uart
-	mov	byte ptr .serial_parameters,al
+	mov	byte ptr com1_settings,al
 	mov	dx,2f8h
 	call	read_uart
-	mov	byte ptr .field_096d,al
+	mov	byte ptr com2_settings,al
+	cmp	byte ptr config_present,0ffh
+	jnz	serial_snapshot_done
+	push	ds
+	mov	al,0eh
+	mov	cx,3h
+	mov	es,word ptr user_data_segment
+	mov	ds,word ptr sysdat_segment
+	callf	dword ptr .xios_gate	; DS addresses SYSDAT here
+	pop	es
+	push	es
+	mov	bx,ax
+	lea	di,port_state
+	mov	cx,4h
+
+copy_port_state:
+	mov	si,word ptr [bx]
+	movsb
+	inc	bx
+	inc	bx
+	loop	copy_port_state
+	pop	ds
+
+serial_snapshot_done:
 	ret
-; -----------------------------------------------------------------------------
-; Probe the UART, read its divisor/latch, restore the latch, and encode baud/parity/stop/word bits.
-; -----------------------------------------------------------------------------
+
+; Probe the interrupt identification register, then read the divisor latch and restore line control.
 read_uart:
 	inc	dx
 	inc	dx
 	in	al,dx
 	test	al,0f8h
 	mov	al,43h
-	jnz	loc_05b1
+	jnz	uart_done
 	inc	dx
 	in	al,dx
 	mov	bl,al
@@ -847,7 +1042,7 @@ read_uart:
 	in	al,dx
 	push	ds
 	pop	es
-	mov	di,item_0b34
+	mov	di,offset uart_divisors
 	mov	cx,8h
 	repne	scasw
 	add	dx,3h
@@ -858,421 +1053,268 @@ read_uart:
 	mov	cl,5h
 	shl	bl,cl
 	or	al,bl
-loc_05b1:
+
+uart_done:
 	ret
-; -----------------------------------------------------------------------------
-; Mark function keys saved and copy 180 words from the current console key table.
-; -----------------------------------------------------------------------------
-snapshot_keys:
-	mov	byte ptr .save_keys_flag,0ffh
+
+; Select this console's key table in SYSDAT and save 180 words in the configuration block.
+snapshot_function_keys:
+	mov	byte ptr saved_key_flag,0ffh
 	push	ds
 	push	ds
 	pop	es
-	mov	bx,word ptr .console_number
+	mov	bx,word ptr console_number
 	add	bx,bx
-	mov	si,word ptr 0b22h[bx]
-	mov	di,function_key_data
+	mov	si,word ptr key_tables[bx]
+	mov	di,offset function_key_data
 	mov	cx,0b4h
-	mov	ds,word ptr .system_segment
+	mov	ds,word ptr sysdat_segment
 	rep	movsw
 	pop	ds
 	ret
-; -----------------------------------------------------------------------------
-; Check Concurrent version; obtain system data, process and console descriptors. Inhibit process suspension while customizing, and require foreground DYNAMIC mode.
-; -----------------------------------------------------------------------------
-discover_xios:
-	mov	cl,0a3h
+
+exit_setup:
+	mov	si,offset screen_exit
+	call	print_string
+	mov	cl,0h
+	mov	dl,0h
 	int	0e0h
-	and	ax,0fff0h
-	cmp	ax,1430h
-	jz	loc_05e4
-	mov	si,item_0b54
-	jmp	loc_0657
-loc_05e4:
-	mov	dl,96h
-	mov	cl,91h
-	int	0e0h
+
+get_system_context:
 	mov	cl,9ah
 	int	0e0h
-	mov	word ptr .system_segment,es
-	mov	ax,es:word ptr .28h
-	mov	word ptr .xios_gateway,ax
+	mov	word ptr sysdat_segment,es
 	mov	cl,9ch
 	int	0e0h
-	mov	word ptr .process_descriptor,bx
 	mov	ax,es:word ptr 10h[bx]
-	mov	word ptr .xios_segment,ax
-	or	es:word ptr 6h[bx],2h
-	mov	cl,99h
-	int	0e0h
-	cbw
-	mov	word ptr .console_number,ax
-	mov	ah,2ch
-	mul	ah
-	mov	es,word ptr .system_segment
-	add	ax,es:word ptr .54h
-	mov	word ptr .console_descriptor,ax
-	mov	bx,ax
-	cli
-	cmp	es:word ptr 0eh[bx],0h
-	jz	loc_0637
-	sti
-	mov	si,item_0b8c
-	jmp	loc_0657
-loc_0637:
-	or	es:word ptr 0eh[bx],8h
-	mov	byte ptr .field_0b1c,0ffh
-	sti
-	mov	dx,item_0b44
-	mov	cl,87h
-	int	0e0h
-	mov	dx,item_0b44
-	mov	cl,89h
-	int	0e0h
-	mov	byte ptr .field_0b1d,0ffh
-	ret
-loc_0657:
-	call	puts
-	jmp	loc_0520
-
-; -----------------------------------------------------------------------------
-; Load the current page title, choices and dispatch table, then draw its frame and help text.
-; -----------------------------------------------------------------------------
-showpage:
-	mov	si,word ptr .page_title
-	mov	dh,3h
-	call	putcent
-	mov	si,word ptr .field_0c65
-	call	drawbuttons
-	mov	si,item_0d13
-	call	drawbuttons
-	mov	si,item_0d4c
-	mov	dx,item_1605
-	call	putat
-	mov	si,item_0c71
-	mov	dh,5h
-	jmp	revcent
-
-; -----------------------------------------------------------------------------
-; Draw the terminal frame using the stored corner and line descriptors.
-; -----------------------------------------------------------------------------
-drawframe:
-	mov	si,item_0bc6
-	call	puts
-	mov	cx,4eh
-	mov	dx,1h
-	mov	bl,0c4h
-	call	hline
-	mov	dx,201h
-	mov	bl,0cdh
-	call	hline
-	mov	dx,item_1701
-	mov	bl,0c4h
-	call	hline
-	mov	cx,16h
-	mov	dx,100h
-	mov	bl,0b3h
-	call	vline
-	mov	dx,14fh
-	mov	bl,0b3h
-	call	vline
-	mov	si,item_0bde
-	mov	cx,6h
-
-; -----------------------------------------------------------------------------
-; Place each configured corner character.
-; -----------------------------------------------------------------------------
-cornloop:
-	mov	al,59h
-	call	escout
-	lodsb
-	add	al,20h
-	call	put_character
-	lodsb
-	add	al,20h
-	call	put_character
-	lodsb
-	call	put_character
-	loop	cornloop
-	mov	si,item_0bf0
-	mov	dh,1h
-	jmp	putcent
-
-; -----------------------------------------------------------------------------
-; Draw a counted horizontal run from the current cursor position.
-; -----------------------------------------------------------------------------
-hline:
-	push	cx
-	call	gotoxy
-
-; -----------------------------------------------------------------------------
-; Output one horizontal-frame character per iteration.
-; -----------------------------------------------------------------------------
-hlloop:
-	mov	al,bl
-	call	put_character
-	loop	hlloop
-	pop	cx
+	mov	word ptr user_data_segment,ax
+	mov	al,es:byte ptr 12h[bx]
+	inc	al
+	mov	byte ptr system_fcb,al
 	ret
 
-; -----------------------------------------------------------------------------
-; Draw a counted vertical run by advancing the row.
-; -----------------------------------------------------------------------------
-vline:
-	push	cx
-	push	dx
-
-; -----------------------------------------------------------------------------
-; Position and output the next vertical-frame character.
-; -----------------------------------------------------------------------------
-vlloop:
-	call	gotoxy
-	mov	al,bl
-	call	put_character
-	inc	dh
-	loop	vlloop
-	pop	dx
-	pop	cx
-	ret
-
-; -----------------------------------------------------------------------------
-; Locate the configuration storage, read its sector and validate the saved signature.
-; -----------------------------------------------------------------------------
-loadsettings:
-	push	ds
-	pop	es
-	mov	dx,80h
-	mov	cx,1h
-	mov	bx,1660h
-	mov	ax,201h
-	call	disk_io
-	jc	loc_073d
-	cmp	word ptr .field_185e,0aa55h
-	jnz	loc_073d
-	mov	cx,4h
-	mov	si,item_181e
-
-; -----------------------------------------------------------------------------
-; Scan the four MBR partition entries for a usable disk partition.
-; -----------------------------------------------------------------------------
-partscan:
-	cmp	byte ptr 4h[si],0dbh
-	jz	foundpart
-	add	si,10h
-	loop	partscan
-	jmps	loc_073d
-
-; -----------------------------------------------------------------------------
-; Retain the selected partition CHS location for configuration-sector access.
-; -----------------------------------------------------------------------------
-foundpart:
-	mov	ax,word ptr 2h[si]
-	and	al,0c0h
-	or	al,3h
-	mov	word ptr .hard_disk_chs,ax
-	mov	byte ptr .field_165c,3h
-	mov	byte ptr .field_15e1,2h
-loc_073d:
-	cmp	byte ptr .field_0b30,0h
-	jnz	readhard
-	mov	dx,0h
-	mov	cx,2h
-	mov	bx,1660h
-	mov	ax,201h
-	call	disk_io
-	jc	readhard
-	cmp	word ptr .field_1660,0ddb2h
-	jz	copysector
-
-; -----------------------------------------------------------------------------
-; Read a hard-disk sector using the selected partition address.
-; -----------------------------------------------------------------------------
-readhard:
-	mov	dl,80h
-	mov	cx,word ptr .hard_disk_chs
-	mov	ax,201h
-	call	disk_io
-	jc	loadret
-	cmp	word ptr .field_1660,0ddb2h
-	jnz	loadret
-	mov	byte ptr .disk_head,dl
-	mov	word ptr .disk_chs,cx
-	mov	si,item_1652
-	call	diskcaption
-
-; -----------------------------------------------------------------------------
-; Copy the saved sector into the local configuration area.
-; -----------------------------------------------------------------------------
-copysector:
-	mov	si,field_1660
-	mov	di,configuration_sector
-	mov	cx,100h
-	cld
-	rep	movsw
-
-; -----------------------------------------------------------------------------
-; Return from configuration-sector loading.
-; -----------------------------------------------------------------------------
-loadret:
-	ret
-
-; -----------------------------------------------------------------------------
-; Prepare ES:BX, CHS and record count for configuration-sector I/O.
-; -----------------------------------------------------------------------------
-diskparams:
-	push	ds
-	pop	es
-	mov	dx,word ptr .disk_head
-	mov	cx,word ptr .disk_chs
-	mov	al,1h
-	ret
-; -----------------------------------------------------------------------------
-; Route hard-disk requests through the saved BIOS interrupt gateway. Translate drive-A floppy operations to the Concurrent XIOS far-call ABI; reject other drives.
-; -----------------------------------------------------------------------------
-disk_io:
-	cmp	dl,80h
-	jnz	loc_07a6
-	pushf
-	callf	dword ptr .bios_disk_gateway
-	ret
-loc_07a6:
-	cmp	dl,0h
-	jz	loc_07ad
-	stc
-	ret
-loc_07ad:
-	push	bx
-	push	cx
-	push	dx
-	push	si
-	push	di
-	push	es
-	push	ds
-	mov	dh,al
-	push	dx
-	mov	dh,0h
-	mov	dl,ch
-	push	dx
-	mov	dl,cl
-	dec	dx
-	push	dx
-	push	es
-	push	bx
-	mov	al,ah
-	add	al,8h
-	mov	es,word ptr .xios_segment
-	mov	ds,word ptr .system_segment
-	callf	cs:dword ptr .xios_gateway
-	add	sp,0ah
-	add	al,0ffh
-	pop	ds
-	pop	es
-	pop	di
-	pop	si
-	pop	dx
-	pop	cx
-	pop	bx
-	ret
-; -----------------------------------------------------------------------------
-; Call XIOS function 0Eh and copy its twenty-byte parameter/pointer block locally.
-; -----------------------------------------------------------------------------
 get_xios_parameters:
 	push	ds
 	mov	al,0eh
 	mov	cx,1h
-	mov	es,word ptr .xios_segment
-	mov	ds,word ptr .system_segment
-	callf	cs:dword ptr .xios_gateway
-	push	cs
+	mov	es,word ptr user_data_segment
+	mov	ds,word ptr sysdat_segment
+	callf	dword ptr .xios_gate	; DS addresses SYSDAT here
 	pop	es
-	mov	di,bios_disk_gateway
+	push	es
+	mov	di,offset xios_parameters
 	mov	si,ax
-	mov	cx,14h
+	mov	cx,12h
 	cld
 	rep	movsb
 	pop	ds
+	mov	ax,word ptr lower_memory_end
+	mov	word ptr mdisk_segment,ax
 	ret
 
-; -----------------------------------------------------------------------------
-; Draw the option lists and the current page heading.
-; -----------------------------------------------------------------------------
-showoptions:
-	call	drawbuttons
-	mov	si,item_0da1
-	call	drawbuttons
-	mov	si,word ptr .page_title
-	jmp	puts
+; Compare the 16-byte signature in SYSDAT and the DDB2h marker before importing the 512-byte block.
+load_configuration:
+	push	es
+	push	ds
+	push	ds
+	pop	es
+	mov	di,offset setup_signature
+	mov	ds,word ptr sysdat_segment
+	mov	si,0d70h
+	mov	cx,10h
+	cld
+	repe	cmpsb
+	jnz	config_loaded
+	mov	es:byte ptr .642h,0ffh
+	mov	si,0d80h
+	cmp	word ptr [si],0ddb2h
+	jnz	config_loaded
+	lea	di,config_block
+	mov	cx,100h
+	rep	movsw
 
-; -----------------------------------------------------------------------------
-; Walk the function-key button descriptions.
-; -----------------------------------------------------------------------------
-drawbuttons:
+config_loaded:
+	pop	ds
+	pop	es
+	ret
+
+; Compare the supplied tail length against the eight slash keywords, then jump to its handler.
+dispatch_command_tail:
+	cmp	byte ptr command_tail,0h
+	jz	tail_done
+	push	ds
+	pop	es
+	mov	si,offset tail_dispatch
+	mov	cx,8h
+
+next_tail_switch:
+	call	compare_tail
+	jz	run_tail_switch
+	add	si,2h
+	loop	next_tail_switch
+
+tail_done:
+	ret
+
+run_tail_switch:
+	jmp	word ptr [si]
+
+; Compare exactly the supplied length. A prefix can therefore select the first matching entry.
+compare_tail:
+	lodsw
+	push	si
+	push	cx
+	xchg	ax,si
+	mov	di,offset command_tail_text
+	mov	cl,byte ptr command_tail
+	mov	ch,0h
+	repe	cmpsb
+	pop	cx
+	pop	si
+	ret
+
+request_key_save:
+	mov	byte ptr save_keys,0ffh
+	ret
+
+request_port_save:
+	mov	byte ptr save_ports,0ffh
+	ret
+
+draw_main_menu:
+	mov	si,offset main_heading
+	mov	dh,3h
+	call	print_centered
+	mov	si,offset main_buttons
+	call	draw_buttons
+	mov	si,offset main_prompt
+	mov	dh,5h
+	jmp	reverse_centered
+
+; Draw the horizontal and vertical edges, place six corner/junction glyphs, then center the title.
+draw_frame:
+	mov	si,offset screen_init
+	call	print_string
+	mov	cx,4eh
+	mov	dx,1h
+	mov	bl,0c4h
+	call	horizontal_rule
+	mov	dx,201h
+	mov	bl,0cdh
+	call	horizontal_rule
+	mov	dx,1701h
+	mov	bl,0c4h
+	call	horizontal_rule
+	mov	cx,16h
+	mov	dx,100h
+	mov	bl,0b3h
+	call	vertical_rule
+	mov	dx,14fh
+	mov	bl,0b3h
+	call	vertical_rule
+	mov	si,offset frame_corners
+	mov	cx,6h
+
+draw_frame_corner:
+	mov	al,59h
+	call	terminal_escape
+	lodsb
+	add	al,20h
+	call	write_char
+	lodsb
+	add	al,20h
+	call	write_char
+	lodsb
+	call	write_char
+	loop	draw_frame_corner
+	mov	si,offset program_title
+	mov	dh,1h
+	jmp	print_centered
+
+horizontal_rule:
+	push	cx
+	call	position_cursor
+
+next_horizontal_cell:
+	mov	al,bl
+	call	write_char
+	loop	next_horizontal_cell
+	pop	cx
+	ret
+
+vertical_rule:
+	push	cx
+	push	dx
+
+next_vertical_cell:
+	call	position_cursor
+	mov	al,bl
+	call	write_char
+	inc	dh
+	loop	next_vertical_cell
+	pop	dx
+	pop	cx
+	ret
+
+draw_options:
+	call	draw_buttons
+	mov	si,offset return_buttons
+	call	draw_buttons
+	mov	si,offset main_heading
+	jmp	print_string
+
+; Each button record contains row, column, three key legend bytes and a NUL-terminated caption.
+draw_buttons:
 	lodsb
 	cbw
 	xchg	ax,cx
 
-; -----------------------------------------------------------------------------
-; Render each function-key caption in the button list.
-; -----------------------------------------------------------------------------
-buttonloop:
+draw_next_button:
 	lodsw
 	xchg	al,ah
 	mov	dx,ax
-	lodsw
-	mov	bx,ax
 	push	si
-	mov	si,item_0c36
-	call	putat
-	mov	al,bl
-	call	put_character
-	mov	al,bh
-	call	put_character
-	mov	si,item_0c58
-	call	puts
+	mov	si,offset keycap_prefix
+	call	print_positioned
 	pop	si
-	call	puts
-	loop	buttonloop
+	lodsb
+	call	write_char
+	lodsb
+	call	write_char
+	lodsb
+	call	write_char
+	push	si
+	mov	si,offset keycap_suffix
+	call	print_string
+	pop	si
+	call	print_string
+	loop	draw_next_button
 	ret
 
-; -----------------------------------------------------------------------------
-; Clear the menu and display the selected help text.
-; -----------------------------------------------------------------------------
-showhelp:
+show_page:
 	push	ax
 	call	clear_menu
 	mov	dh,4h
-	call	putcent
+	call	print_centered
 	pop	si
 	mov	dx,605h
 
-; -----------------------------------------------------------------------------
-; Display successive zero-terminated lines of help text.
-; -----------------------------------------------------------------------------
-putlines:
-	call	putat
+print_lines:
+	call	print_positioned
 	inc	dh
 	test	byte ptr [si],0ffh
-	jnz	putlines
+	jnz	print_lines
 	ret
 
-; -----------------------------------------------------------------------------
-; Position and display the function-selection prompt.
-; -----------------------------------------------------------------------------
-selectprompt:
-	mov	si,item_0d91
+select_prompt:
+	mov	si,offset select_function
 
-; -----------------------------------------------------------------------------
-; Enable reverse video before displaying centered text.
-; -----------------------------------------------------------------------------
-revcent:
-	call	reverseon
-	call	putcent
-	jmp	reverseoff
+reverse_centered:
+	call	reverse_video
+	call	print_centered
+	jmp	normal_video
 
-; -----------------------------------------------------------------------------
-; Compute a centered column from the text length and requested row.
-; -----------------------------------------------------------------------------
-putcent:
+print_centered:
 	push	ds
 	pop	es
 	mov	di,si
@@ -1282,151 +1324,108 @@ putcent:
 	shr	cx,1
 	mov	dl,cl
 
-; -----------------------------------------------------------------------------
-; Position the cursor and output the selected string.
-; -----------------------------------------------------------------------------
-putat:
-	call	gotoxy
+print_positioned:
+	call	position_cursor
 
-; -----------------------------------------------------------------------------
-; Output a zero-terminated string, retaining the caller's screen state.
-; -----------------------------------------------------------------------------
-puts:
+print_string:
 	lodsb
 
-; -----------------------------------------------------------------------------
-; Send characters until the terminating zero.
-; -----------------------------------------------------------------------------
-putsloop:
-	call	put_character
+print_next_char:
+	call	write_char
 	lodsb
 	test	al,al
-	jnz	putsloop
+	jnz	print_next_char
 	ret
 
-; -----------------------------------------------------------------------------
-; Output the terminal cursor-position sequence from DH/DL.
-; -----------------------------------------------------------------------------
-gotoxy:
+position_cursor:
 	mov	al,59h
-	call	escout
+	call	terminal_escape
 	mov	al,dh
 	add	al,20h
-	call	put_character
+	call	write_char
 	mov	al,dl
 	add	al,20h
-	jmp	put_character
+	jmp	write_char
 
-; -----------------------------------------------------------------------------
-; Read keys until one occurs in the menu's permitted-choice list.
-; -----------------------------------------------------------------------------
-getchoice:
+; Return twice the selected key index in BX for the near dispatch table.
+read_menu_choice:
 	mov	cl,byte ptr [di]
 	mov	ch,0h
 	inc	di
 
-; -----------------------------------------------------------------------------
-; Read a key and scan the current choice list.
-; -----------------------------------------------------------------------------
-choicekey:
+retry_menu_key:
 	push	cx
 	push	di
 	push	ds
 	pop	es
 	mov	bx,cx
-	call	read_key
+	call	read_char
 	sub	al,0bah
 	repne	scasb
 	mov	dx,cx
 	pop	di
 	pop	cx
-	jz	choicefound
+	jz	menu_key_found
 	mov	al,7h
-	call	put_character
-	jmps	choicekey
+	call	write_char
+	jmps	retry_menu_key
 
-; -----------------------------------------------------------------------------
-; Convert the matching choice position into a word-table dispatch offset.
-; -----------------------------------------------------------------------------
-choicefound:
+menu_key_found:
 	sub	bx,dx
 	dec	bx
 	add	bx,bx
 	mov	ah,0h
 	ret
-; -----------------------------------------------------------------------------
-; Discard pending direct-console input before displaying the menu.
-; -----------------------------------------------------------------------------
+
 flush_keyboard:
-	call	poll_key
+	call	poll_char
 	test	al,al
 	jnz	flush_keyboard
 	ret
-; -----------------------------------------------------------------------------
-; Erase the interior rows of the menu while retaining its right-hand frame.
-; -----------------------------------------------------------------------------
+
 clear_menu:
 	mov	dh,3h
-; -----------------------------------------------------------------------------
-; Position at column one, erase to end of line and redraw the right border through row 22.
-; -----------------------------------------------------------------------------
+
 clear_menu_row:
 	mov	dl,1h
-	call	gotoxy
+	call	position_cursor
 	mov	al,4bh
-	call	escout
+	call	terminal_escape
 	mov	dl,4fh
-	call	gotoxy
+	call	position_cursor
 	mov	al,0b3h
-	call	put_character
+	call	write_char
 	inc	dh
 	cmp	dh,16h
 	jna	clear_menu_row
 	ret
 
-; -----------------------------------------------------------------------------
-; Select reverse-video text.
-; -----------------------------------------------------------------------------
-reverseon:
+reverse_video:
 	mov	al,72h
-	jmps	escout
+	jmps	terminal_escape
 
-; -----------------------------------------------------------------------------
-; Restore normal text video.
-; -----------------------------------------------------------------------------
-reverseoff:
+normal_video:
 	mov	al,75h
 
-; -----------------------------------------------------------------------------
-; Prefix the requested terminal operation with ESC.
-; -----------------------------------------------------------------------------
-escout:
+terminal_escape:
 	push	ax
 	mov	al,1bh
-	call	put_character
+	call	write_char
 	pop	ax
-; -----------------------------------------------------------------------------
-; Direct-console output of AL. Shared wrapper preserves registers used by screen helpers.
-; -----------------------------------------------------------------------------
-put_character:
+
+write_char:
 	mov	ah,6h
-	jmps	conout
-; -----------------------------------------------------------------------------
-; Read one direct-console character using the FDh input selector.
-; -----------------------------------------------------------------------------
-read_key:
+	jmps	console_io
+
+read_char:
 	mov	ax,6fdh
-	jmps	conout
-; -----------------------------------------------------------------------------
-; Poll direct-console input using selector FFh; return zero when no input is available.
-; -----------------------------------------------------------------------------
-poll_key:
+	jmps	console_io
+
+poll_char:
 	mov	ax,6ffh
 
-; -----------------------------------------------------------------------------
-; Preserve editor registers across direct BDOS console input/output.
-; -----------------------------------------------------------------------------
-conout:
+; Preserve the menu registers across direct console I/O. Return the result in AL.
+console_io:
 	push	bx
 	push	cx
 	push	dx
@@ -1444,291 +1443,2975 @@ conout:
 	pop	cx
 	pop	bx
 	ret
+	rb	11	; align embedded HELP to a paragraph
+; Embedded HELP V2.0 entry: skip its copyright and save the caller context.
+; -----------------------------------------------------------------------------
+help_entry:
+	jmps	help_save_context
+	nop
+help_copyright	db	'COPYRIGHT(C)1983,84,DIGITAL RESEARCH(05/02/84)1031-0000-009373'
 
 ; -----------------------------------------------------------------------------
-; Saved 512-byte sector, runtime state, menu descriptors and text.
-; The first sector word is DDB2h; offsets are the original XIOS ABI.
+; Save caller flags/registers, obtain the system drive, and copy the topic.
+; The zero immediates loading ES and DS are loader-relocated DATA segments
+; at CODE 0B03h and 0B10h; their on-disk words must remain zero.
 ; -----------------------------------------------------------------------------
-configuration_sector_storage	db	0b2h,0ddh
-memory_segment_storage	db	0h,0d0h
-verify_flag_storage	db	0h
-step_rate_storage	db	0cfh,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h
-save_serial_flag_storage	db	0h,0h
-save_keys_flag_storage	db	0h,0h
-serial_parameters_storage	db	0h
-field_096d_storage	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-function_key_data_storage	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h
-save_keys_storage	db	0h
-save_serial_storage	db	0h
-disk_head_storage	db	0h,0h
-disk_chs_storage	db	2h,0h
-hard_disk_chs_storage	db	0h,0h
-xios_gateway_storage	db	0h
-item_0b11_storage	db	0h
-system_segment_storage	db	0h,0h
-xios_segment_storage	db	0h,0h
-process_descriptor_storage	db	0h,0h
-console_descriptor_storage	db	0h,0h
-console_number_storage	db	0h,0h
-field_0b1c_storage	db	0h
-field_0b1d_storage	db	0h
-bios_disk_gateway_storage	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-memory_range_1_storage	db	0h,0h
-memory_range_2_storage	db	0h,0h
-memory_range_3_storage	db	0h,0h
-field_0b30_storage	db	0h,0h
-field_0b32_storage	db	64h
-field_0b33_storage	db	0ah
-item_0b34_storage	db	0ch,0h,18h,0h,30h,0h,60h,0h,0c0h,0h,80h,1h
-	db	0h,3h,17h,4h
-item_0b44_storage	db	0h,0h,0h,0h,0h,0h,0h,0h
-	db	'MXdisk  '
-item_0b54_storage	db	0dh,0ah
-	db	'SETUP runs only under Concurrent CP/M-86 version 3.'
-	db	0dh,0ah,0h
-item_0b8c_storage	db	0dh,0ah
-	db	'SETUP must be run in the Foreground, in DYNAMIC mode.'
-	db	0dh,0ah,0h
-item_0bc6_storage	db	1bh,45h,1bh,77h,1bh,66h,1bh,71h,1bh,74h,1bh,75h
-	db	1bh,36h,0h
-item_0bd5_storage	db	1bh,45h,1bh,76h,1bh,65h,1bh,37h,0h
-item_0bde_storage	db	0h,0h,0dah,0h,4fh,0bfh,2h,0h,0c6h,2h,4fh,0b5h
+help_save_context:
+	pushf
+	push	ds
+	push	es
+	push	ax
+	push	bx
+	push	cx
+	push	dx
+	push	es
+	push	dx
+	mov	cl,9ah
+	int	0e0h
+	mov	word ptr help_system_segment,es
+	mov	bx,4bh
+	mov	al,es:byte ptr [bx]
+	inc	al
+	mov	byte ptr help_system_disk,al
+	pop	dx
+	pop	es
+	cld
+	mov	si,dx
+	mov	ax,0h
+	mov	es,ax
+	mov	di,offset help_input_text
+	mov	cx,7fh
+	rep	movsb
+	mov	ax,0h
+	mov	ds,ax
+	mov	bx,offset help_input_buffer
+measure_help_topic:
+	inc	bx
+	cmp	byte ptr [bx],0h
+	jnz	measure_help_topic
+	sub	bx,offset help_input_text
+	mov	byte ptr help_input_buffer,bl
+	mov	word ptr help_caller_ss,ss
+	mov	word ptr help_caller_sp,sp
+	call	help_private_stack
+	call	help_main
+
+; -----------------------------------------------------------------------------
+; Restore the caller's stack, registers and flags; return to SETUP.
+; -----------------------------------------------------------------------------
+help_return:
+	pushf
+	pop	bx
+	cli
+	mov	ss,word ptr help_caller_ss
+	mov	sp,word ptr help_caller_sp
+	push	bx
+	popf
+	pop	dx
+	pop	cx
+	pop	bx
+	pop	ax
+	pop	es
+	pop	ds
+	popf
+	ret
+
+; -----------------------------------------------------------------------------
+; PL/M stack interface: function and argument are words on the stack.
+; Intercept BDOS 10 for HELP's local line editor; save AX/BX/CX/DX results.
+; -----------------------------------------------------------------------------
+help_bdos:
+	push	bp
+	mov	bp,sp
+	add	bp,4h
+	mov	dx,word ptr 0h[bp]
+	add	bp,2h
+	mov	cx,word ptr 0h[bp]
+	cmp	cl,0ah
+	jnz	help_bdos_interrupt
+	call	help_line_editor
+	jmps	save_help_bdos_results
+	nop
+help_bdos_interrupt:
+	int	0e0h
+save_help_bdos_results:
+	mov	word ptr help_saved_ax,ax
+	mov	word ptr help_saved_bx,bx
+	mov	word ptr help_saved_cx,cx
+	mov	word ptr help_saved_dx,dx
+	pop	bp
+	ret	word ptr 4h
+
+; -----------------------------------------------------------------------------
+; Switch to the HELP stack within DATA with interrupts safely masked.
+; -----------------------------------------------------------------------------
+help_private_stack:
+	pop	dx
+	pushf
+	pop	bx
+	cli
+	mov	cx,ds
+	mov	ss,cx
+	mov	sp,180h
+	push	bx
+	popf
+	push	dx
+	ret
+
+; -----------------------------------------------------------------------------
+; Retained PL/M startup entry; normal HELP entry calls help_main directly.
+; -----------------------------------------------------------------------------
+help_plm_start:
+	mov	bp,sp
+	sti
+
+; -----------------------------------------------------------------------------
+; Initialize HELP, open HELP.HLP on the default or system drive, parse the
+; requested topic and navigate topics/subtopics. Close the file and return
+; to SETUP, including on a user abort or missing help file.
+; -----------------------------------------------------------------------------
+help_main:
+	mov	sp,24h
+	mov	bp,sp
+	mov	byte ptr help_end_of_data,0h
+	mov	byte ptr help_line_count,0h
+	call	help_private_stack
+	call	help_get_version
+	mov	word ptr help_version,ax
+	mov	byte ptr help_page_length,16h
+	mov	byte ptr help_page_mode,0ffh
+	call	help_parse
+	mov	byte ptr help_token_count,al
+	mov	al,0dh
+	push	ax
+	mov	ax,offset help_filename
+	push	ax
+	mov	ax,offset help_fcb
+	push	ax
+	call	help_move
+	mov	ax,offset help_fcb
+	push	ax
+	call	help_open_file
+	mov	byte ptr help_open_status,al
+	cmp	byte ptr help_open_status,0ffh
+	jnz	test_help_open_result
+	call	help_system_drive
+	mov	byte ptr help_fcb,al
+	mov	al,0h
+	push	ax
+	call	help_set_user
+	mov	ax,offset help_fcb
+	push	ax
+	call	help_open_file
+	mov	byte ptr help_open_status,al
+test_help_open_result:
+	cmp	byte ptr help_open_status,0ffh
+	jnz	initialize_help_index
+	jmp	report_missing_help_file
+initialize_help_index:
+	call	help_reset_index
+	mov	al,byte ptr help_list_mode
+	not	al
+	rcr	al,1
+	jnc	test_initial_help_topic
+	mov	ax,offset help_clear_screen
+	push	ax
+	call	help_print_string
+test_initial_help_topic:
+	cmp	byte ptr help_token_count,0h
+	jnz	test_help_token_count
+	mov	byte ptr help_level,0h
+	mov	ax,offset help_intro
+	push	ax
+	call	help_print_string
+	mov	byte ptr help_line_count,2h
+display_available_topics:
+	call	help_display_index
+prompt_for_help_topic:
+	call	help_prompt
+	mov	byte ptr help_token_count,al
+test_help_token_count:
+	mov	al,0h
+	cmp	byte ptr help_token_count,al
+	jnz	test_help_question_mark
+	jmp	close_help_and_return
+test_help_question_mark:
+	mov	byte ptr help_level,al
+	mov	cx,offset help_topic_tokens
+	push	cx
+	mov	cx,offset help_question_token
+	push	cx
+	call	help_compare
+	cmp	al,0h
+	jnz	search_exact_help_topic
+	jmp	choose_help_next_action
+search_exact_help_topic:
+	mov	byte ptr help_search_level,0h
+	call	help_search
+	cmp	al,0ffh
+	jz	search_parent_help_topic
+	call	help_print_topic
+	mov	ax,offset help_topic_tokens
+	push	ax
+	mov	ax,offset help_command_token
+	jmps	compare_help_keyword
+search_parent_help_topic:
+	mov	byte ptr help_search_level,1h
+	mov	byte ptr help_level,0h
+	call	help_search
+	cmp	al,0ffh
+	jz	report_missing_help_topic
+	call	help_print_topic
+	mov	ax,offset help_topic_tokens
+	push	ax
+	mov	ax,offset help_intro_token
+compare_help_keyword:
+	push	ax
+	call	help_compare
+	cmp	al,0h
+	jz	help_topic_displayed
+	jmp	choose_help_next_action
+help_topic_displayed:
+	jmp	reset_help_level
+report_missing_help_topic:
+	mov	ax,offset help_line_count
+	push	ax
+	call	help_page_check
+	mov	byte ptr help_end_of_data,al
+	mov	al,0dh
+	push	ax
+	call	help_write_console
+	mov	al,byte ptr help_end_of_data
+	not	al
+	rcr	al,1
+	jnc	reset_help_level
+	mov	ax,offset help_line_count
+	push	ax
+	call	help_page_check
+	mov	byte ptr help_end_of_data,al
+	mov	al,byte ptr help_end_of_data
+	not	al
+	rcr	al,1
+	jnc	reset_help_level
+	mov	ax,offset help_topic_heading
+	push	ax
+	call	help_print_string
+	mov	ax,offset help_line_count
+	push	ax
+	call	help_page_check
+	mov	byte ptr help_end_of_data,al
+	mov	al,0dh
+	push	ax
+	call	help_write_console
+	push	word ptr help_token_count
+	call	help_display_tokens
+	mov	ax,offset help_line_count
+	push	ax
+	call	help_page_check
+	mov	byte ptr help_end_of_data,al
+	mov	al,0dh
+	push	ax
+	call	help_write_console
+	mov	ax,offset help_line_count
+	push	ax
+	call	help_page_check
+	mov	byte ptr help_end_of_data,al
+	mov	al,0dh
+	push	ax
+	call	help_write_console
+	mov	ax,offset help_not_found
+	push	ax
+	call	help_print_string
+	mov	ax,offset help_line_count
+	push	ax
+	call	help_page_check
+	mov	byte ptr help_end_of_data,al
+	mov	al,0dh
+	push	ax
+	call	help_write_console
+reset_help_level:
+	mov	byte ptr help_level,0h
+choose_help_next_action:
+	mov	al,byte ptr help_end_of_data
+	not	al
+	rcr	al,1
+	jnc	return_to_help_prompt
+	jmp	display_available_topics
+return_to_help_prompt:
+	jmp	prompt_for_help_topic
+close_help_and_return:
+	mov	ax,offset help_fcb
+	push	ax
+	call	help_close_file
+	mov	byte ptr help_file_status,al
+	jmps	finish_help_session
+report_missing_help_file:
+	mov	al,0h
+	push	ax
+	mov	ax,offset help_file_missing
+	push	ax
+	call	help_error
+finish_help_session:
+	call	help_return
+	sti
+	hlt
+
+; -----------------------------------------------------------------------------
+; PL/M wrapper for BDOS 1; retained although not called by this HELP path.
+; -----------------------------------------------------------------------------
+help_read_console:
+	push	bp
+	mov	bp,sp
+	mov	al,1h
+	push	ax
+	mov	ax,0h
+	push	ax
+	call	help_bdos
+	pop	bp
+	ret
+
+; -----------------------------------------------------------------------------
+; PL/M wrapper for BDOS 2, console character output.
+; -----------------------------------------------------------------------------
+help_write_console:
+	push	bp
+	mov	bp,sp
+	mov	al,2h
+	push	ax
+	mov	al,byte ptr 4h[bp]
+	mov	ah,0h
+	push	ax
+	call	help_bdos
+	pop	bp
+	ret	word ptr 2h
+
+; -----------------------------------------------------------------------------
+; PL/M wrapper for BDOS 9, dollar-terminated string output.
+; -----------------------------------------------------------------------------
+help_print_string:
+	push	bp
+	mov	bp,sp
+	mov	al,9h
+	push	ax
+	push	word ptr 4h[bp]
+	call	help_bdos
+	pop	bp
+	ret	word ptr 2h
+
+; -----------------------------------------------------------------------------
+; PL/M wrapper for BDOS 10; intercepted by the local HELP line editor.
+; -----------------------------------------------------------------------------
+help_read_line:
+	push	bp
+	mov	bp,sp
+	mov	al,0ah
+	push	ax
+	push	word ptr 4h[bp]
+	call	help_bdos
+	pop	bp
+	ret	word ptr 2h
+
+; -----------------------------------------------------------------------------
+; PL/M wrapper for BDOS 6, direct console I/O.
+; -----------------------------------------------------------------------------
+help_direct_console:
+	push	bp
+	mov	bp,sp
+	mov	al,6h
+	push	ax
+	mov	al,byte ptr 4h[bp]
+	mov	ah,0h
+	push	ax
+	call	help_bdos
+	pop	bp
+	ret	word ptr 2h
+
+; -----------------------------------------------------------------------------
+; PL/M wrapper for BDOS 12, system version.
+; -----------------------------------------------------------------------------
+help_get_version:
+	push	bp
+	mov	bp,sp
+	mov	al,0ch
+	push	ax
+	mov	ax,0h
+	push	ax
+	call	help_bdos
+	pop	bp
+	ret
+
+; -----------------------------------------------------------------------------
+; PL/M wrapper for BDOS 19; retained file interface entry.
+; -----------------------------------------------------------------------------
+help_delete_file:
+	push	bp
+	mov	bp,sp
+	mov	al,13h
+	push	ax
+	push	word ptr 4h[bp]
+	call	help_bdos
+	pop	bp
+	ret	word ptr 2h
+
+; -----------------------------------------------------------------------------
+; Clear extent/current-record fields and open an FCB using BDOS 15.
+; -----------------------------------------------------------------------------
+help_open_file:
+	push	bp
+	mov	bp,sp
+	mov	bx,word ptr 4h[bp]
+	mov	byte ptr 0ch[bx],0h
+	mov	byte ptr 20h[bx],0h
+	mov	al,0fh
+	push	ax
+	push	bx
+	call	help_bdos
+	pop	bp
+	ret	word ptr 2h
+
+; -----------------------------------------------------------------------------
+; PL/M wrapper for BDOS 16, close FCB.
+; -----------------------------------------------------------------------------
+help_close_file:
+	push	bp
+	mov	bp,sp
+	mov	al,10h
+	push	ax
+	push	word ptr 4h[bp]
+	call	help_bdos
+	pop	bp
+	ret	word ptr 2h
+
+; -----------------------------------------------------------------------------
+; PL/M wrapper for BDOS 20, sequential record read.
+; -----------------------------------------------------------------------------
+help_read_record:
+	push	bp
+	mov	bp,sp
+	mov	al,14h
+	push	ax
+	push	word ptr 4h[bp]
+	call	help_bdos
+	pop	bp
+	ret	word ptr 2h
+
+; -----------------------------------------------------------------------------
+; PL/M wrapper for BDOS 21; retained file interface entry.
+; -----------------------------------------------------------------------------
+help_write_record:
+	push	bp
+	mov	bp,sp
+	mov	al,15h
+	push	ax
+	push	word ptr 4h[bp]
+	call	help_bdos
+	pop	bp
+	ret	word ptr 2h
+
+; -----------------------------------------------------------------------------
+; Clear FCB extent/current-record fields, then call BDOS 22.
+; -----------------------------------------------------------------------------
+help_make_file:
+	push	bp
+	mov	bp,sp
+	mov	bx,word ptr 4h[bp]
+	mov	byte ptr 0ch[bx],0h
+	mov	byte ptr 20h[bx],0h
+	mov	al,16h
+	push	ax
+	push	bx
+	call	help_bdos
+	pop	bp
+	ret	word ptr 2h
+
+; -----------------------------------------------------------------------------
+; PL/M wrapper for BDOS 33, random record read.
+; -----------------------------------------------------------------------------
+help_read_random:
+	push	bp
+	mov	bp,sp
+	mov	al,21h
+	push	ax
+	push	word ptr 4h[bp]
+	call	help_bdos
+	pop	bp
+	ret	word ptr 2h
+
+; -----------------------------------------------------------------------------
+; PL/M wrapper for BDOS 26, select DMA address.
+; -----------------------------------------------------------------------------
+help_set_dma:
+	push	bp
+	mov	bp,sp
+	mov	al,1ah
+	push	ax
+	push	word ptr 4h[bp]
+	call	help_bdos
+	pop	bp
+	ret	word ptr 2h
+
+; -----------------------------------------------------------------------------
+; PL/M wrapper for BDOS 36; retained file interface entry.
+; -----------------------------------------------------------------------------
+help_set_random_record:
+	push	bp
+	mov	bp,sp
+	mov	al,24h
+	push	ax
+	push	word ptr 4h[bp]
+	call	help_bdos
+	pop	bp
+	ret	word ptr 2h
+
+; -----------------------------------------------------------------------------
+; PL/M wrapper for BDOS 32, select/query user number.
+; -----------------------------------------------------------------------------
+help_set_user:
+	push	bp
+	mov	bp,sp
+	mov	al,20h
+	push	ax
+	mov	al,byte ptr 4h[bp]
+	mov	ah,0h
+	push	ax
+	call	help_bdos
+	pop	bp
+	ret	word ptr 2h
+
+; -----------------------------------------------------------------------------
+; Return the system drive only for the recognized concurrent OS family.
+; -----------------------------------------------------------------------------
+help_system_drive:
+	push	bp
+	mov	bp,sp
+	call	help_get_version
+	mov	al,ah	; 0E54h: original 88E0, ASM86 8AC4 (same instruction/length)
+	and	al,0fdh
+	cmp	al,14h
+	jz	return_help_system_drive
+	mov	al,0h
+	pop	bp
+	ret
+return_help_system_drive:
+	mov	al,byte ptr help_system_disk
+	pop	bp
+	ret
+
+; -----------------------------------------------------------------------------
+; Print ERROR, the supplied dollar-terminated message and CR/LF.
+; Return to SETUP when the caller requests termination.
+; -----------------------------------------------------------------------------
+help_error:
+	push	bp
+	mov	bp,sp
+	mov	ax,offset help_error_prefix
+	push	ax
+	call	help_print_string
+	push	word ptr 4h[bp]
+	call	help_print_string
+	mov	ax,offset help_newline
+	push	ax
+	call	help_print_string
+	mov	al,byte ptr 6h[bp]
+	rcr	al,1
+	jnc	help_error_return
+	call	help_return
+help_error_return:
+	pop	bp
+	ret	word ptr 4h
+
+; -----------------------------------------------------------------------------
+; Copy a byte count between two addresses; PL/M callee removes arguments.
+; -----------------------------------------------------------------------------
+help_move:
+	push	bp
+	mov	bp,sp
+	mov	cl,byte ptr 8h[bp]
+	mov	ch,0h
+	mov	si,word ptr 6h[bp]
+	mov	di,word ptr 4h[bp]
+	push	ds
+	pop	es
+	cld
+	repne	movsb
+	pop	bp
+	ret	word ptr 6h
+
+; -----------------------------------------------------------------------------
+; Compare two space-padded, twelve-character topic names.
+; Return 0 for equal, 1 for less and 2 for greater.
+; -----------------------------------------------------------------------------
+help_compare:
+	push	bp
+	mov	bp,sp
+	mov	byte ptr help_compare_result,0h
+	mov	byte ptr help_compare_index,0h
+compare_topic_character:
+	mov	al,byte ptr help_compare_index
+	cmp	al,0ch
+	mov	al,0ffh
+	jc	load_topic_character
+	inc	ax
+load_topic_character:
+	mov	cl,byte ptr help_compare_index
+	mov	ch,0h
+	mov	si,cx	; 0EBEh: original 89CE, ASM86 8BF1 (same instruction/length)
+	mov	bx,word ptr 6h[bp]
+	mov	dl,byte ptr [bx+si]
+	push	ax
+	cmp	dl,20h
+	mov	al,0ffh
+	jnz	test_topic_compare_limit
+	inc	ax
+test_topic_compare_limit:
+	pop	cx
+	and	al,cl
+	rcr	al,1
+	jnc	return_topic_comparison
+	mov	bx,word ptr 4h[bp]
+	cmp	dl,byte ptr [bx+si]
+	jz	advance_topic_character
+	cmp	dl,byte ptr [bx+si]
+	jnc	topic_compares_greater
+	mov	byte ptr help_compare_result,1h
+	jmps	finish_topic_difference
+topic_compares_greater:
+	mov	byte ptr help_compare_result,2h
+finish_topic_difference:
+	mov	byte ptr help_compare_index,0bh
+advance_topic_character:
+	inc	byte ptr help_compare_index
+	jmps	compare_topic_character
+return_topic_comparison:
+	mov	al,byte ptr help_compare_result
+	pop	bp
+	ret	word ptr 4h
+
+; -----------------------------------------------------------------------------
+; Move through 16-byte index entries in a 1 KiB cache. Crossing a 64-entry
+; boundary reloads eight records; 8000h resets the index to its start.
+; -----------------------------------------------------------------------------
+help_step_index:
+	pop	cx
+	pop	word ptr help_index_step
+	pop	word ptr help_index_pointer
+	push	cx
+	push	bp
+	mov	bp,sp
+	mov	byte ptr help_records_per_block,8h
+	cmp	word ptr help_index_step,8000h
+	jnz	test_index_direction
+	mov	ax,0h
+	mov	word ptr help_index_block,ax
+	mov	byte ptr help_record_number,al
+	mov	bx,word ptr help_index_pointer
+	mov	word ptr [bx],ax
+	call	help_load_index_block
+	pop	bp
+	ret
+test_index_direction:
+	cmp	word ptr help_index_step,8000h
+	jna	test_forward_index_step
+	neg	word ptr help_index_step
+	mov	byte ptr help_step_count,1h
+previous_index_entry:
+	mov	al,byte ptr help_step_count
+	mov	ah,0h
+	cmp	ax,word ptr help_index_step
+	ja	index_step_complete
+	mov	bx,word ptr help_index_pointer
+	mov	ax,word ptr [bx]
+	dec	ax
+	mov	word ptr [bx],ax
+	cmp	ax,8000h
+	jna	count_backward_step
+	mov	ax,word ptr help_index_block
+	mov	cl,byte ptr help_records_per_block
+	mov	ch,0h
+	mul	cx
+	sub	ax,cx
+	mov	byte ptr help_record_number,al
+	call	help_load_index_block
+	mov	bx,word ptr help_index_pointer
+	add	word ptr [bx],40h
+	dec	word ptr help_index_block
+count_backward_step:
+	inc	byte ptr help_step_count
+	jnz	previous_index_entry
+	pop	bp
+	ret
+test_forward_index_step:
+	cmp	word ptr help_index_step,0h
+	jna	index_step_complete
+	mov	byte ptr help_step_count,1h
+next_index_entry:
+	mov	al,byte ptr help_step_count
+	mov	ah,0h
+	cmp	ax,word ptr help_index_step
+	ja	index_step_complete
+	mov	bx,word ptr help_index_pointer
+	mov	ax,word ptr [bx]
+	inc	ax
+	mov	word ptr [bx],ax
+	cmp	ax,3fh	; 0F9Ch: original 83F83F, ASM86 3D3F00 (same instruction/length)
+	jna	count_forward_step
+	mov	ax,word ptr help_index_block
+	mov	cl,byte ptr help_records_per_block
+	mov	ch,0h
+	mul	cx
+	add	ax,cx
+	mov	byte ptr help_record_number,al
+	call	help_load_index_block
+	mov	bx,word ptr help_index_pointer
+	sub	word ptr [bx],40h
+	inc	word ptr help_index_block
+count_forward_step:
+	inc	byte ptr help_step_count
+	jnz	next_index_entry
+index_step_complete:
+	pop	bp
+	ret
+
+; -----------------------------------------------------------------------------
+; Read eight random 128-byte records into the index cache, restoring the
+; normal DMA afterward. A read error closes HELP.HLP and returns to SETUP.
+; -----------------------------------------------------------------------------
+help_load_index_block:
+	push	bp
+	mov	bp,sp
+	mov	byte ptr help_record_index,0h
+load_index_record:
+	mov	al,byte ptr help_records_per_block
+	dec	al
+	cmp	byte ptr help_record_index,al
+	ja	restore_help_dma
+	mov	al,byte ptr help_record_index
+	mov	cl,80h
+	mul	cl
+	mov	cx,10h
+	xor	dx,dx	; 0FE4h: original 31D2, ASM86 33D2 (same instruction/length)
+	div	cx
+	mul	cx
+	mov	bx,ax	; 0FEAh: original 89C3, ASM86 8BD8 (same instruction/length)
+	lea	ax,word ptr help_index_cache[bx]
+	push	ax
+	call	help_set_dma
+	mov	al,byte ptr help_record_number
+	mov	byte ptr help_random_record,al
+	mov	al,0h
+	mov	byte ptr help_random_record_middle,al
+	mov	byte ptr help_random_record_high,al
+	mov	cx,offset help_fcb
+	push	cx
+	call	help_read_random
+	cmp	al,0h
+	jz	advance_index_record
+	mov	ax,offset help_fcb
+	push	ax
+	call	help_close_file
+	mov	ah,0h
+	mov	word ptr help_index_step,ax
+	mov	al,0ffh
+	push	ax
+	mov	ax,offset help_read_error
+	push	ax
+	call	help_error
+advance_index_record:
+	inc	byte ptr help_record_number
+	inc	byte ptr help_record_index
+	jnz	load_index_record
+restore_help_dma:
+	mov	ax,offset help_input_buffer
+	push	ax
+	call	help_set_dma
+	pop	bp
+	ret
+
+; -----------------------------------------------------------------------------
+; Advance a sequential buffer index, reading another record after byte 127.
+; Set the end-of-data flag on a failed read.
+; -----------------------------------------------------------------------------
+help_next_byte:
+	push	bp
+	mov	bp,sp
+	mov	al,byte ptr 4h[bp]
+	inc	al
+	mov	byte ptr 4h[bp],al
+	cmp	al,7fh
+	jna	return_help_byte_index
+	mov	ax,offset help_fcb
+	push	ax
+	call	help_read_record
+	cmp	al,0h
+	jz	reset_help_byte_index
+	mov	byte ptr help_end_of_data,0ffh
+reset_help_byte_index:
+	mov	byte ptr 4h[bp],0h
+return_help_byte_index:
+	mov	al,byte ptr 4h[bp]
+	pop	bp
+	ret	word ptr 2h
+
+; -----------------------------------------------------------------------------
+; Count output lines and prompt at the configured page length unless paging
+; is disabled. RETURN continues, Ctrl-C returns to SETUP, other keys stop
+; the current display. Return the stop flag in AL.
+; -----------------------------------------------------------------------------
+help_page_check:
+	push	bp
+	mov	bp,sp
+	mov	byte ptr help_page_stop,0h
+	mov	al,byte ptr help_no_page_mode
+	not	al
+	and	al,byte ptr help_page_mode
+	rcr	al,1
+	jnc	paging_disabled
+	mov	bx,word ptr 4h[bp]
+	mov	al,byte ptr [bx]
+	inc	al
+	mov	byte ptr [bx],al
+	cmp	al,byte ptr help_page_length
+	jna	output_page_linefeed
+	mov	ax,offset help_continue_prompt
+	push	ax
+	call	help_print_string
+	mov	bx,word ptr 4h[bp]
+	mov	byte ptr [bx],0h
+wait_page_response:
+	mov	bx,word ptr 4h[bp]
+	cmp	byte ptr [bx],0h
+	jnz	erase_page_prompt
+	mov	al,0fdh
+	push	ax
+	call	help_direct_console
+	mov	bx,word ptr 4h[bp]
+	mov	byte ptr [bx],al
+	jmps	wait_page_response
+erase_page_prompt:
+	mov	ax,offset help_erase_prompt
+	push	ax
+	call	help_print_string
+	mov	bx,word ptr 4h[bp]
+	cmp	byte ptr [bx],3h
+	jnz	test_page_return_key
+	mov	ax,offset help_fcb
+	push	ax
+	call	help_close_file
+	mov	bx,word ptr 4h[bp]
+	mov	byte ptr [bx],al
+	call	help_return
+	jmps	return_page_stop_flag
+test_page_return_key:
+	mov	bx,word ptr 4h[bp]
+	cmp	byte ptr [bx],0dh
+	jz	reset_page_line_count
+	mov	byte ptr help_page_stop,0ffh
+reset_page_line_count:
+	mov	bx,word ptr 4h[bp]
+	mov	byte ptr [bx],0h
+	jmps	return_page_stop_flag
+paging_disabled:
+	mov	bx,word ptr 4h[bp]
+	mov	byte ptr [bx],0h
+output_page_linefeed:
+	mov	al,0ah
+	push	ax
+	call	help_write_console
+return_page_stop_flag:
+	mov	al,byte ptr help_page_stop
+	pop	bp
+	ret	word ptr 2h
+
+; -----------------------------------------------------------------------------
+; Reset the cached directory traversal to its initial index block.
+; -----------------------------------------------------------------------------
+help_reset_index:
+	push	bp
+	mov	bp,sp
+	mov	word ptr help_global_index,8000h
+	mov	ax,offset help_index_position
+	push	ax
+	mov	ax,8000h
+	push	ax
+	call	help_step_index
+	pop	bp
+	ret
+
+; -----------------------------------------------------------------------------
+; Normalize commas/tabs to spaces; parse topic and subtopic tokens plus HELP
+; options. A leading period extends the current topic path.
+; -----------------------------------------------------------------------------
+help_parse:
+	push	bp
+	mov	bp,sp
+	mov	byte ptr help_parse_index,0h
+	cmp	byte ptr help_input_buffer,0h
+	jnz	begin_separator_normalization
+	jmp	initialize_help_options
+begin_separator_normalization:
+	mov	byte ptr help_parse_index,1h
+normalize_next_separator:
+	mov	al,byte ptr help_parse_index
+	cmp	al,byte ptr help_input_buffer
+	ja	begin_leading_space_scan
+	mov	ah,0h
+	mov	bx,ax	; 1126h: original 89C3, ASM86 8BD8 (same instruction/length)
+	cmp	byte ptr help_input_buffer[bx],9h
+	jz	replace_separator_with_space
+	mov	bl,byte ptr help_parse_index
+	mov	bh,0h
+	cmp	byte ptr help_input_buffer[bx],2ch
+	jnz	advance_separator_scan
+replace_separator_with_space:
+	mov	byte ptr help_input_buffer[bx],20h
+advance_separator_scan:
+	inc	byte ptr help_parse_index
+	jnz	normalize_next_separator
+begin_leading_space_scan:
+	mov	byte ptr help_parse_index,1h
+test_leading_space_limit:
+	mov	al,byte ptr help_parse_index
+	cmp	al,byte ptr help_input_buffer
+	mov	al,0ffh
+	jc	test_leading_space_character
+	inc	ax
+test_leading_space_character:
+	mov	bl,byte ptr help_parse_index
+	mov	bh,0h
+	push	ax
+	cmp	byte ptr help_input_buffer[bx],20h
+	mov	al,0ffh
+	jz	combine_leading_space_tests
+	inc	ax
+combine_leading_space_tests:
+	pop	cx
+	and	al,cl
+	rcr	al,1
+	jnc	test_relative_topic_prefix
+	inc	byte ptr help_parse_index
+	jmps	test_leading_space_limit
+test_relative_topic_prefix:
+	mov	bl,byte ptr help_parse_index
+	mov	bh,0h
+	cmp	byte ptr help_input_buffer[bx],2eh
+	jnz	reset_topic_path_level
+	mov	al,byte ptr help_level
+	mov	byte ptr help_parse_level,al
+	mov	byte ptr help_input_buffer[bx],20h
+	jmps	prepare_topic_slots
+reset_topic_path_level:
+	mov	byte ptr help_parse_level,0h
+prepare_topic_slots:
+	mov	al,byte ptr help_parse_level
+	mov	byte ptr help_parse_index,al
+clear_next_topic_slot:
+	cmp	byte ptr help_parse_index,0ah
+	ja	begin_help_token_scan
+	mov	al,0fh
+	push	ax
+	mov	cx,offset help_blank_topic
+	push	cx
+	mov	cx,ax	; 11A9h: original 89C1, ASM86 8BC8 (same instruction/length)
+	mov	al,byte ptr help_parse_index
+	mul	cl
+	mov	bx,ax	; 11B0h: original 89C3, ASM86 8BD8 (same instruction/length)
+	lea	ax,word ptr help_topic_tokens[bx]
+	push	ax
+	call	help_move
+	inc	byte ptr help_parse_index
+	jnz	clear_next_topic_slot
+begin_help_token_scan:
+	mov	al,byte ptr help_parse_level
+	mov	byte ptr help_parse_index,al
+	mov	byte ptr help_input_index,1h
+	mov	byte ptr help_parse_done,0h
+	mov	byte ptr help_option_seen,0h
+test_help_input_end:
+	mov	bl,byte ptr help_input_index
+	mov	bh,0h
+	cmp	byte ptr help_input_buffer[bx],0h
+	mov	al,0ffh
+	jnz	test_help_parse_stop
+	inc	ax
+test_help_parse_stop:
+	mov	cl,byte ptr help_parse_done
+	not	cl
+	and	al,cl
+	rcr	al,1
+	jc	test_help_token_space
+	jmp	initialize_help_options
+test_help_token_space:
+	cmp	byte ptr help_input_buffer[bx],20h
+	jnz	begin_help_token
+	jmp	advance_help_input_index
+begin_help_token:
+	mov	byte ptr help_token_character_index,0h
+read_help_token_character:
+	mov	bl,byte ptr help_input_index
+	mov	bh,0h
+	mov	al,byte ptr help_input_buffer[bx]
+	push	ax
+	cmp	al,20h
+	mov	al,0ffh
+	jnz	test_open_option_bracket
+	inc	ax
+test_open_option_bracket:
+	pop	cx
+	push	ax
+	cmp	cl,5bh
+	mov	al,0ffh
+	jnz	test_close_option_bracket
+	inc	ax
+test_close_option_bracket:
+	pop	dx
+	and	al,dl
+	push	ax
+	cmp	cl,0h
+	mov	al,0ffh
+	jnz	test_help_token_width
+	inc	ax
+test_help_token_width:
+	pop	dx
+	and	al,dl
+	push	ax
+	cmp	byte ptr help_token_character_index,0ch
+	mov	al,0ffh
+	jc	test_help_token_capacity
+	inc	ax
+test_help_token_capacity:
+	push	ax
+	cmp	byte ptr help_parse_index,0bh
+	mov	al,0ffh
+	jc	combine_help_token_tests
+	inc	ax
+combine_help_token_tests:
+	pop	dx
+	and	al,dl
+	pop	dx
+	and	al,dl
+	rcr	al,1
+	jnc	advance_help_token_slot
+	cmp	cl,60h
+	jna	compute_help_token_address
+	cmp	cl,7bh
+	jnc	compute_help_token_address
+	sub	cl,20h
+	mov	al,byte ptr help_parse_index
+	mov	dl,0fh
+	mul	dl
+	jmps	store_help_token_character
+compute_help_token_address:
+	mov	al,byte ptr help_parse_index
+	mov	cl,0fh
+	mul	cl
+	mov	bl,byte ptr help_input_index
+	mov	bh,0h
+	mov	cl,byte ptr help_input_buffer[bx]
+store_help_token_character:
+	mov	dl,byte ptr help_token_character_index
+	mov	bx,ax	; 1279h: original 89C3, ASM86 8BD8 (same instruction/length)
+	mov	dh,0h
+	mov	si,dx	; 127Dh: original 89D6, ASM86 8BF2 (same instruction/length)
+	mov	byte ptr help_topic_tokens[bx+si],cl
+	inc	byte ptr help_input_index
+	inc	byte ptr help_token_character_index
+	jmp	read_help_token_character
+advance_help_token_slot:
+	mov	al,byte ptr help_parse_index
+	inc	al
+	mov	byte ptr help_parse_index,al
+	cmp	al,0ah
+	ja	stop_help_token_scan
+	mov	al,byte ptr help_option_seen
+	rcr	al,1
+	jnc	test_help_option_bracket
+stop_help_token_scan:
+	mov	byte ptr help_parse_done,0ffh
+	jmps	repeat_help_input_scan
+test_help_option_bracket:
+	mov	bl,byte ptr help_input_index
+	mov	bh,0h
+	cmp	byte ptr help_input_buffer[bx],5bh
+	jnz	repeat_help_input_scan
+	mov	al,byte ptr help_parse_index
+	dec	al
+	mov	cl,0fh
+	mul	cl
+	mov	bx,ax	; 12BEh: original 89C3, ASM86 8BD8 (same instruction/length)
+	cmp	byte ptr help_topic_tokens[bx],20h
+	jnz	store_help_option_token
+	mov	al,byte ptr help_parse_index
+	dec	al
+	mov	byte ptr help_parse_index,al
+store_help_option_token:
+	mov	al,byte ptr help_parse_index
+	mov	cl,0fh
+	mul	cl
+	mov	bx,ax	; 12D6h: original 89C3, ASM86 8BD8 (same instruction/length)
+	mov	byte ptr help_topic_tokens[bx],5bh
+	inc	byte ptr help_input_index
+	inc	byte ptr help_parse_index
+	mov	byte ptr help_option_seen,0ffh
+	jmps	repeat_help_input_scan
+advance_help_input_index:
+	inc	byte ptr help_input_index
+repeat_help_input_scan:
+	jmp	test_help_input_end
+initialize_help_options:
+	mov	al,0h
+	mov	byte ptr help_list_mode,al
+	mov	byte ptr help_no_page_mode,al
+	mov	byte ptr help_create_mode,al
+	mov	byte ptr help_extract_mode,al
+	cmp	byte ptr help_parse_index,al
+	ja	begin_help_option_scan
+	jmp	return_help_token_count
+begin_help_option_scan:
+	mov	byte ptr help_token_character_index,al
+next_help_option_slot:
+	mov	al,byte ptr help_token_character_index
+	cmp	al,0ah
+	jc	test_help_option_marker
+	jmp	return_help_token_count
+test_help_option_marker:
+	mov	cl,0fh
+	mul	cl
+	mov	bx,ax	; 131Bh: original 89C3, ASM86 8BD8 (same instruction/length)
+	cmp	byte ptr help_topic_tokens[bx],5bh
+	jnz	advance_help_option_slot
+	cmp	byte ptr help_topic_tokens+0fh[bx],43h
+	jnz	test_help_list_option
+	mov	byte ptr help_create_mode,0ffh
+	jmps	remove_help_option_tokens
+test_help_list_option:
+	mov	al,byte ptr help_token_character_index
+	mov	cl,0fh
+	mul	cl
+	mov	bx,ax	; 1339h: original 89C3, ASM86 8BD8 (same instruction/length)
+	cmp	byte ptr help_topic_tokens+0fh[bx],45h
+	jnz	test_help_no_page_option
+	mov	byte ptr help_extract_mode,0ffh
+remove_help_option_tokens:
+	sub	byte ptr help_parse_index,2h
+	jmps	finish_help_option_scan
+test_help_no_page_option:
+	mov	al,byte ptr help_token_character_index
+	mov	cl,0fh
+	mul	cl
+	mov	bx,ax	; 1355h: original 89C3, ASM86 8BD8 (same instruction/length)
+	cmp	byte ptr help_topic_tokens+0fh[bx],4eh
+	jz	enable_help_no_page
+	mov	al,byte ptr help_token_character_index
+	mov	cl,0fh
+	mul	cl
+	mov	bx,ax	; 1365h: original 89C3, ASM86 8BD8 (same instruction/length)
+	cmp	byte ptr help_topic_tokens+0fh[bx],4ch
+	jnz	test_help_create_option
+	mov	byte ptr help_list_mode,0ffh
+enable_help_no_page:
+	mov	byte ptr help_no_page_mode,0ffh
+	jmps	remove_help_option_tokens
+test_help_create_option:
+	mov	al,byte ptr help_token_character_index
+	mov	cl,0fh
+	mul	cl
+	mov	bx,ax	; 1381h: original 89C3, ASM86 8BD8 (same instruction/length)
+	cmp	byte ptr help_topic_tokens+0fh[bx],20h
+	jnz	remove_help_option_tokens
+	dec	byte ptr help_parse_index
+finish_help_option_scan:
+	mov	byte ptr help_token_character_index,0ah
+advance_help_option_slot:
+	inc	byte ptr help_token_character_index
+	jmp	next_help_option_slot
+return_help_token_count:
+	mov	al,byte ptr help_parse_index
+	pop	bp
+	ret
+
+; -----------------------------------------------------------------------------
+; Walk the help index and display the available topics or subtopics,
+; respecting nesting level, pagination and the user's stop request.
+; -----------------------------------------------------------------------------
+help_display_index:
+	push	bp
+	mov	bp,sp
+	mov	ax,0h
+	mov	word ptr help_listing_position,ax
+	mov	byte ptr help_listing_heading_shown,al
+	mov	byte ptr help_listing_top_level,al
+	mov	word ptr help_listing_stride,1h
+	mov	al,byte ptr help_level
+	inc	al
+	mov	byte ptr help_listing_level,al
+	cmp	al,0ah
+	jnc	mark_top_level_listing
+	cmp	byte ptr help_level,0h
+	jnz	use_saved_index_position
+	mov	word ptr help_listing_position,0h
+	jmps	reset_displayed_topic_count
+use_saved_index_position:
+	mov	ax,word ptr help_saved_index
+	mov	word ptr help_listing_position,ax
+reset_displayed_topic_count:
+	mov	word ptr help_displayed_topics,0h
+	jmps	calculate_index_display_step
+mark_top_level_listing:
+	mov	byte ptr help_listing_top_level,0ffh
+calculate_index_display_step:
+	mov	ax,word ptr help_listing_position
+	sub	ax,word ptr help_listing_cursor
+	mov	word ptr help_listing_delta,ax
+	mov	cx,offset help_listing_cursor
+	push	cx
+	push	ax
+	call	help_step_index
+	mov	word ptr help_listing_position,0h
+test_top_level_listing:
+	mov	al,byte ptr help_listing_top_level
+	not	al
+	rcr	al,1
+	jc	load_index_entry_level
+	jmp	finish_topic_listing
+load_index_entry_level:
+	mov	ax,word ptr help_listing_cursor
+	mov	cx,10h
+	mul	cx
+	mov	bx,ax	; 140Eh: original 89C3, ASM86 8BD8 (same instruction/length)
+	cmp	byte ptr help_index_cache[bx],24h
+	jnz	load_index_entry_name
+	mov	byte ptr help_listing_top_level,0ffh
+load_index_entry_name:
+	mov	ax,word ptr help_listing_cursor
+	mov	cx,10h
+	mul	cx
+	mov	bx,ax	; 1424h: original 89C3, ASM86 8BD8 (same instruction/length)
+	mov	al,byte ptr help_index_cache+0fh[bx]
+	cmp	al,byte ptr help_listing_level
+	jz	test_subtopic_heading_printed
+	jmp	load_next_index_level
+test_subtopic_heading_printed:
+	mov	al,byte ptr help_listing_heading_shown
+	not	al
+	rcr	al,1
+	jc	print_topics_heading
+	jmp	test_topic_column_boundary
+print_topics_heading:
+	mov	byte ptr help_listing_heading_shown,0ffh
+	mov	ax,offset help_line_count
+	push	ax
+	call	help_page_check
+	mov	byte ptr help_listing_character,al
+	cmp	byte ptr help_listing_level,1h
+	jnz	test_index_scan_direction
+	mov	al,byte ptr help_listing_top_level
+	not	al
+	rcr	al,1
+	jnc	begin_index_display_page
+	mov	ax,offset help_topics_heading
+	push	ax
+	call	help_print_string
+	mov	ax,offset help_listing_cursor
+	push	ax
+	mov	ax,8000h
+	push	ax
+	call	help_step_index
+	jmps	begin_index_display_page
+test_index_scan_direction:
+	cmp	byte ptr help_listing_level,2h
+	jna	test_subtopic_heading_needed
+	mov	ax,word ptr help_listing_cursor
+	mov	word ptr help_listing_stride,ax
+scan_previous_index_entry:
+	mov	ax,offset help_listing_cursor
+	push	ax
+	mov	ax,0ffffh
+	push	ax
+	call	help_step_index
+	mov	ax,word ptr help_listing_cursor
+	mov	cx,10h
+	mul	cx
+	push	ax
+	mov	ax,word ptr help_listing_cursor
+	dec	ax
+	mul	cx
+	pop	bx
+	mov	cl,byte ptr help_index_cache+0fh[bx]
+	mov	bx,ax	; 149Eh: original 89C3, ASM86 8BD8 (same instruction/length)
+	cmp	cl,byte ptr help_index_cache+0fh[bx]
+	jz	scan_previous_index_entry
+	mov	ax,offset help_listing_cursor
+	push	ax
+	mov	ax,0ffffh
+	push	ax
+	call	help_step_index
+	mov	ax,word ptr help_listing_cursor
+	sub	word ptr help_listing_stride,ax
+test_subtopic_heading_needed:
+	cmp	byte ptr help_listing_level,2h
+	ja	print_subtopics_heading
+	mov	al,byte ptr help_listing_top_level
+	not	al
+	rcr	al,1
+	jnc	begin_index_display_page
+print_subtopics_heading:
+	mov	ax,offset help_subtopics_heading
+	push	ax
+	call	help_print_string
+begin_index_display_page:
+	mov	ax,offset help_line_count
+	push	ax
+	call	help_page_check
+	mov	byte ptr help_listing_character,al
+	mov	ax,offset help_heading_newline
+	push	ax
+	call	help_print_string
+test_topic_column_boundary:
+	mov	ax,word ptr help_displayed_topics
+	mov	cx,6h
+	xor	dx,dx	; 14E6h: original 31D2, ASM86 33D2 (same instruction/length)
+	div	cx
+	cmp	dx,0h
+	jnz	prepare_topic_output_buffer
+	mov	ax,offset help_line_count
+	push	ax
+	call	help_page_check
+	mov	byte ptr help_listing_character,al
+	mov	al,0dh
+	push	ax
+	call	help_write_console
+prepare_topic_output_buffer:
+	mov	byte ptr help_listing_character,0h
+clear_topic_output_byte:
+	cmp	byte ptr help_listing_character,0dh
+	ja	terminate_topic_output_buffer
+	mov	bl,byte ptr help_listing_character
+	mov	bh,0h
+	mov	byte ptr help_listing_text[bx],20h
+	inc	byte ptr help_listing_character
+	jnz	clear_topic_output_byte
+terminate_topic_output_buffer:
+	mov	byte ptr help_listing_terminator,24h
+	mov	al,0ch
+	push	ax
+	mov	ax,word ptr help_listing_cursor
+	mov	cx,10h
+	mul	cx
+	mov	bx,ax	; 152Ch: original 89C3, ASM86 8BD8 (same instruction/length)
+	lea	ax,word ptr help_index_cache[bx]
+	push	ax
+	mov	ax,offset help_listing_text
+	push	ax
+	call	help_move
+	mov	ax,offset help_listing_text
+	push	ax
+	call	help_print_string
+	inc	word ptr help_displayed_topics
+	jmps	advance_display_index
+load_next_index_level:
+	mov	ax,word ptr help_listing_cursor
+	mov	cx,10h
+	mul	cx
+	mov	bx,ax	; 154Fh: original 89C3, ASM86 8BD8 (same instruction/length)
+	mov	al,byte ptr help_index_cache+0fh[bx]
+	cmp	al,byte ptr help_listing_level
+	jnc	advance_display_index
+	mov	byte ptr help_listing_top_level,0ffh
+advance_display_index:
+	mov	ax,offset help_listing_cursor
+	push	ax
+	push	word ptr help_listing_stride
+	call	help_step_index
+	mov	word ptr help_listing_stride,1h
+	jmp	test_top_level_listing
+finish_topic_listing:
+	mov	al,byte ptr help_listing_heading_shown
+	rcr	al,1
+	jnc	restore_index_display_dma
+	mov	ax,offset help_line_count
+	push	ax
+	call	help_page_check
+	mov	byte ptr help_listing_character,al
+	mov	ax,304h
+	push	ax
+	call	help_print_string
+restore_index_display_dma:
+	mov	ax,offset help_input_buffer
+	push	ax
+	call	help_set_dma
+	pop	bp
+	ret
+
+; -----------------------------------------------------------------------------
+; Search the index for the requested topic path; return FFh when not found
+; and retain its text position for display.
+; -----------------------------------------------------------------------------
+help_search:
+	push	bp
+	mov	bp,sp
+	mov	al,0h
+	mov	byte ptr help_search_matched,al
+	mov	byte ptr help_search_done,al
+	mov	byte ptr help_search_failed,al
+	mov	byte ptr help_search_passed_name,al
+	mov	ah,0h
+	mov	word ptr help_search_cursor,ax
+	call	help_reset_index
+	mov	byte ptr help_search_restart,0ffh
+	cmp	byte ptr help_search_level,1h
+	jnz	test_parent_search_restart
+	mov	byte ptr help_last_token,0ah
+find_last_topic_token:
+	mov	al,byte ptr help_last_token
+	mov	cl,0fh
+	mul	cl
+	mov	bx,ax	; 15C6h: original 89C3, ASM86 8BD8 (same instruction/length)
+	cmp	byte ptr help_topic_tokens[bx],20h
+	jnz	prepare_parent_topic_search
+	dec	byte ptr help_last_token
+	jmps	find_last_topic_token
+prepare_parent_topic_search:
+	mov	al,byte ptr help_last_token
+	sub	al,2h
+	mov	byte ptr help_parent_level,al
+	mov	al,byte ptr help_last_token
+	mov	cl,0fh
+	mul	cl
+	mov	bx,ax	; 15E4h: original 89C3, ASM86 8BD8 (same instruction/length)
+	lea	ax,word ptr help_topic_tokens[bx]
+	push	ax
+	mov	al,byte ptr help_parent_level
+	mul	cl
+	mov	bx,ax	; 15F0h: original 89C3, ASM86 8BD8 (same instruction/length)
+	lea	ax,word ptr help_topic_tokens[bx]
+	push	ax
+	call	help_compare
+	mov	byte ptr help_search_restart,al
+	mov	al,byte ptr help_parent_level
+	mov	cl,0fh
+	mul	cl
+	mov	bx,ax	; 1604h: original 89C3, ASM86 8BD8 (same instruction/length)
+	mov	al,byte ptr help_topic_tokens+0fh[bx]
+	mov	byte ptr help_parent_token_saved,al
+test_parent_search_restart:
+	cmp	byte ptr help_search_restart,0h
+	jz	select_parent_topic_level
+	cmp	byte ptr help_search_level,0h
+	jz	select_parent_topic_level
+	jmp	topic_search_failed
+select_parent_topic_level:
+	cmp	byte ptr help_search_level,1h
+	jnz	test_search_completion
+	mov	al,byte ptr help_parent_level
+	mov	cl,0fh
+	mul	cl
+	mov	bx,ax	; 162Ch: original 89C3, ASM86 8BD8 (same instruction/length)
+	mov	byte ptr help_topic_tokens+0fh[bx],20h
+test_search_completion:
+	mov	al,byte ptr help_search_done
+	not	al
+	mov	cl,byte ptr help_search_failed
+	not	cl
+	and	al,cl
+	rcr	al,1
+	jc	load_search_index_entry
+	jmp	load_matched_topic_position
+load_search_index_entry:
+	mov	ax,word ptr help_search_cursor
+	mov	cx,10h
+	mul	cx
+	mov	bx,ax	; 164Fh: original 89C3, ASM86 8BD8 (same instruction/length)
+	cmp	byte ptr help_index_cache[bx],24h
+	jnz	test_search_child_level
+	jmp	mark_search_not_found
+test_search_child_level:
+	mov	al,byte ptr help_level
+	inc	al
+	cmp	byte ptr help_index_cache+0fh[bx],al
+	jz	compute_search_token_offset
+	jmp	test_search_order_result
+compute_search_token_offset:
+	mov	al,byte ptr help_level
+	mov	dl,0fh
+	mul	dl
+	mov	si,ax	; 1670h: original 89C6, ASM86 8BF0 (same instruction/length)
+	lea	ax,word ptr help_topic_tokens[si]
+	push	ax
+	lea	ax,word ptr help_index_cache[bx]
+	push	ax
+	call	help_compare
+	mov	byte ptr help_search_restart,al
+	cmp	byte ptr help_search_restart,0h
+	jz	compare_search_topic
+	jmp	advance_search_index
+compare_search_topic:
+	mov	al,0ch
+	push	ax
+	mov	ax,word ptr help_search_cursor
+	mov	cx,10h
+	mul	cx
+	mov	bx,ax	; 1697h: original 89C3, ASM86 8BD8 (same instruction/length)
+	lea	ax,word ptr help_index_cache[bx]
+	push	ax
+	mov	al,byte ptr help_level
+	mov	cl,0fh
+	mul	cl
+	mov	bx,ax	; 16A5h: original 89C3, ASM86 8BD8 (same instruction/length)
+	lea	ax,word ptr help_topic_tokens[bx]
+	push	ax
+	call	help_move
+	mov	al,byte ptr help_level
+	inc	al
+	mov	byte ptr help_level,al
+	mov	al,byte ptr help_search_passed_name
+	not	al
+	rcr	al,1
+	jnc	test_search_depth_limit
+	mov	al,byte ptr help_level
+	mov	byte ptr help_compare_byte,al
+	mov	byte ptr help_search_passed_name,0ffh
+test_search_depth_limit:
+	mov	al,byte ptr help_level
+	cmp	al,8h
+	ja	mark_search_match
+	mov	cl,0fh
+	mul	cl
+	mov	bx,ax	; 16D6h: original 89C3, ASM86 8BD8 (same instruction/length)
+	cmp	byte ptr help_topic_tokens[bx],20h
+	jz	mark_search_match
+	cmp	byte ptr help_topic_tokens[bx],5bh
+	jnz	skip_search_subtree
+mark_search_match:
+	mov	byte ptr help_search_matched,0ffh
+	mov	byte ptr help_search_done,0ffh
+	jmps	repeat_topic_search
+skip_search_subtree:
+	mov	ax,offset help_search_cursor
+	push	ax
+	mov	ax,1h
+	push	ax
+	call	help_step_index
+	mov	byte ptr help_search_matched,0h
+	jmps	repeat_topic_search
+test_search_order_result:
+	mov	al,byte ptr help_search_passed_name
+	rcr	al,1
+	jnc	advance_search_index
+	mov	ax,word ptr help_search_cursor
+	mov	cx,10h
+	mul	cx
+	mov	bx,ax	; 1713h: original 89C3, ASM86 8BD8 (same instruction/length)
+	mov	cl,byte ptr help_compare_byte
+	cmp	cl,byte ptr help_index_cache+0fh[bx]
+	jc	advance_search_index
+mark_search_not_found:
+	mov	byte ptr help_search_failed,0ffh
+	jmps	repeat_topic_search
+advance_search_index:
+	mov	ax,offset help_search_cursor
+	push	ax
+	mov	ax,1h
+	push	ax
+	call	help_step_index
+repeat_topic_search:
+	jmp	test_search_completion
+load_matched_topic_position:
+	mov	al,byte ptr help_search_matched
+	rcr	al,1
+	jnc	restore_parent_topic_token
+	mov	ax,word ptr help_search_cursor
+	inc	ax
+	mov	word ptr help_saved_index,ax
+	mov	al,1h
+	push	ax
+	mov	ax,word ptr help_search_cursor
+	mov	cx,10h
+	mul	cx
+	mov	bx,ax	; 174Dh: original 89C3, ASM86 8BD8 (same instruction/length)
+	lea	ax,word ptr help_index_cache+0ch[bx]
+	push	ax
+	mov	ax,offset help_random_record
+	push	ax
+	call	help_move
+	mov	al,1h
+	push	ax
+	mov	ax,word ptr help_search_cursor
+	mov	cx,10h
+	mul	cx
+	mov	bx,ax	; 1766h: original 89C3, ASM86 8BD8 (same instruction/length)
+	lea	ax,word ptr help_index_cache+0ch[bx]
+	inc	ax
+	push	ax
+	mov	ax,offset help_random_record_middle
+	push	ax
+	call	help_move
+	mov	byte ptr help_random_record_high,0h
+	mov	ax,word ptr help_search_cursor
+	mov	cx,10h
+	mul	cx
+	mov	bx,ax	; 1782h: original 89C3, ASM86 8BD8 (same instruction/length)
+	mov	cl,byte ptr help_index_cache+0eh[bx]
+	mov	byte ptr help_file_status,cl
+	mov	al,byte ptr help_index_cache+0fh[bx]
+	mov	byte ptr help_level,al
+restore_parent_topic_token:
+	cmp	byte ptr help_search_level,1h
+	jnz	return_topic_search_result
+	mov	al,byte ptr help_parent_level
+	mov	cl,0fh
+	mul	cl
+	mov	bx,ax	; 17A1h: original 89C3, ASM86 8BD8 (same instruction/length)
+	mov	cl,byte ptr help_parent_token_saved
+	mov	byte ptr help_topic_tokens+0fh[bx],cl
+	jmps	return_topic_search_result
+topic_search_failed:
+	mov	byte ptr help_search_failed,0ffh
+return_topic_search_result:
+	mov	al,byte ptr help_search_failed
+	pop	bp
+	ret
+
+; -----------------------------------------------------------------------------
+; Print the requested topic path, separating its tokens for diagnostics.
+; -----------------------------------------------------------------------------
+help_display_tokens:
+	push	bp
+	mov	bp,sp
+	mov	byte ptr help_token_display_index,0h
+test_display_token_limit:
+	mov	al,byte ptr help_token_display_index
+	cmp	al,byte ptr 4h[bp]
+	mov	al,0ffh
+	jc	test_token_display_abort
+	inc	ax
+test_token_display_abort:
+	mov	cl,byte ptr help_end_of_data
+	not	cl
+	and	al,cl
+	rcr	al,1
+	jnc	token_display_complete
+	mov	ax,offset help_line_count
+	push	ax
+	call	help_page_check
+	mov	byte ptr help_end_of_data,al
+	mov	al,byte ptr help_end_of_data
+	not	al
+	rcr	al,1
+	jnc	test_display_token_limit
+	mov	byte ptr help_token_indent,0h
+indent_topic_token:
+	mov	al,byte ptr help_token_indent
+	cmp	al,byte ptr help_token_display_index
+	ja	print_topic_token
+	mov	ax,offset help_indent_string
+	push	ax
+	call	help_print_string
+	inc	byte ptr help_token_indent
+	jnz	indent_topic_token
+print_topic_token:
+	mov	al,byte ptr help_token_display_index
+	mov	cl,0fh
+	mul	cl
+	mov	bx,ax	; 180Bh: original 89C3, ASM86 8BD8 (same instruction/length)
+	lea	ax,word ptr help_topic_tokens[bx]
+	push	ax
+	call	help_print_string
+	inc	byte ptr help_token_display_index
+	jmps	test_display_token_limit
+token_display_complete:
+	pop	bp
+	ret	word ptr 2h
+
+; -----------------------------------------------------------------------------
+; Read and display the selected HELP.HLP topic text, tracking lines and
+; record boundaries until the topic ends or the user stops the display.
+; -----------------------------------------------------------------------------
+help_print_topic:
+	push	bp
+	mov	bp,sp
+	mov	al,0dh
+	push	ax
+	call	help_write_console
+	push	word ptr help_level
+	call	help_display_tokens
+	mov	al,byte ptr help_end_of_data
+	not	al
+	rcr	al,1
+	jnc	read_first_topic_record
+	mov	ax,offset help_line_count
+	push	ax
+	call	help_page_check
+	mov	byte ptr help_end_of_data,al
+read_first_topic_record:
+	mov	al,byte ptr help_end_of_data
+	not	al
+	rcr	al,1
+	jnc	topic_read_failed
+	mov	ax,offset help_fcb
+	push	ax
+	call	help_read_random
+	cmp	al,0h
+	jz	initialize_topic_text_scan
+	mov	ax,offset help_fcb
+	push	ax
+	call	help_close_file
+	mov	byte ptr help_file_status,al
+	mov	al,0ffh
+	push	ax
+	mov	ax,offset help_topic_read_error
+	push	ax
+	call	help_error
+topic_read_failed:
+	mov	byte ptr help_end_of_data,0h
+	pop	bp
+	ret
+initialize_topic_text_scan:
+	mov	byte ptr help_topic_finished,0h
+test_topic_text_end:
+	mov	cl,byte ptr help_topic_finished
+	not	cl
+	mov	al,byte ptr help_end_of_data
+	not	al
+	and	al,cl
+	push	ax
+	mov	cx,offset help_fcb
+	push	cx
+	call	help_read_record
+	cmp	al,0h
+	mov	al,0ffh
+	jz	test_topic_record_limit
+	inc	ax
+test_topic_record_limit:
+	pop	cx
+	and	al,cl
+	rcr	al,1
+	jnc	topic_read_failed
+	mov	al,byte ptr help_file_status
+	dec	al
+	mov	byte ptr help_text_index,al
+advance_topic_text_byte:
+	mov	al,byte ptr help_text_index
+	inc	al
+	mov	byte ptr help_text_index,al
+	cmp	al,7fh
+	mov	al,0ffh
+	jna	test_topic_delimiter_state
+	inc	ax
+test_topic_delimiter_state:
+	mov	cl,byte ptr help_topic_finished
+	not	cl
+	and	al,cl
+	rcr	al,1
+	jc	load_topic_text_character
+	jmp	begin_next_topic_record
+load_topic_text_character:
+	mov	bl,byte ptr help_text_index
+	mov	bh,0h
+	mov	al,byte ptr help_input_buffer[bx]
+	mov	byte ptr help_text_character,al
+	cmp	al,1ah
+	jnz	begin_topic_delimiter_scan
+	mov	byte ptr help_end_of_data,0ffh
+begin_topic_delimiter_scan:
+	mov	byte ptr help_delimiter_count,0h
+test_delimiter_scan_end:
+	mov	al,byte ptr help_topic_finished
+	not	al
+	mov	cl,byte ptr help_end_of_data
+	not	cl
+	and	al,cl
+	push	ax
+	cmp	byte ptr help_delimiter_count,3h
+	mov	al,0ffh
+	jc	test_delimiter_character
+	inc	ax
+test_delimiter_character:
+	mov	bl,byte ptr help_text_index
+	mov	bh,0h
+	push	ax
+	cmp	byte ptr help_input_buffer[bx],2fh
+	mov	al,0ffh
+	jz	combine_delimiter_tests
+	inc	ax
+combine_delimiter_tests:
+	pop	cx
+	and	al,cl
+	pop	cx
+	and	al,cl
+	rcr	al,1
+	jnc	test_complete_topic_delimiter
+	inc	byte ptr help_delimiter_count
+	push	bx
+	call	help_next_byte
+	mov	byte ptr help_text_index,al
+	mov	bl,byte ptr help_delimiter_count
+	dec	bl
+	mov	bh,0h
+	push	bx
+	mov	bl,byte ptr help_text_index
+	mov	bh,0h
+	mov	al,byte ptr help_input_buffer[bx]
+	pop	bx
+	mov	byte ptr help_delimiter_buffer[bx],al
+	jmps	test_delimiter_scan_end
+test_complete_topic_delimiter:
+	cmp	byte ptr help_delimiter_count,3h
+	jnz	terminate_delimiter_buffer
+	mov	byte ptr help_topic_finished,0ffh
+	jmps	test_topic_output_enabled
+terminate_delimiter_buffer:
+	mov	bl,byte ptr help_delimiter_count
+	mov	bh,0h
+	mov	byte ptr help_delimiter_buffer[bx],24h
+test_topic_output_enabled:
+	mov	al,byte ptr help_end_of_data
+	not	al
+	mov	cl,byte ptr help_topic_finished
+	not	cl
+	and	al,cl
+	rcr	al,1
+	jnc	continue_topic_text_scan
+	cmp	byte ptr help_text_character,0ah
+	jnz	output_pending_topic_character
+	mov	al,byte ptr help_no_page_mode
+	not	al
+	rcr	al,1
+	jnc	output_pending_topic_character
+	mov	ax,offset help_line_count
+	push	ax
+	call	help_page_check
+	mov	byte ptr help_end_of_data,al
+	jmps	output_partial_delimiter
+output_pending_topic_character:
+	push	word ptr help_text_character
+	call	help_write_console
+output_partial_delimiter:
+	cmp	byte ptr help_delimiter_count,0h
+	jna	reset_delimiter_count
+	mov	ax,offset help_delimiter_buffer
+	push	ax
+	call	help_print_string
+reset_delimiter_count:
+	mov	byte ptr help_delimiter_count,0h
+continue_topic_text_scan:
+	jmp	advance_topic_text_byte
+begin_next_topic_record:
+	mov	byte ptr help_file_status,0h
+	jmp	test_topic_text_end
+
+; -----------------------------------------------------------------------------
+; Print the topic prompt, read a line, then pass it to the topic parser.
+; -----------------------------------------------------------------------------
+help_prompt:
+	push	bp
+	mov	bp,sp
+	mov	al,1h
+	push	ax
+	mov	ax,offset help_input_limit
+	push	ax
+	mov	ax,offset help_input_buffer
+	dec	ax
+	push	ax
+	call	help_move
+	mov	ax,offset help_line_count
+	push	ax
+	call	help_page_check
+	mov	byte ptr help_prompt_tokens,al
+	mov	ax,offset help_topic_prompt
+	push	ax
+	call	help_print_string
+	mov	ax,offset help_input_buffer
+	dec	ax
+	push	ax
+	call	help_read_line
+	mov	bl,byte ptr help_input_buffer
+	mov	bh,0h
+	mov	byte ptr help_input_text[bx],0h
+	mov	byte ptr help_line_count,0ffh
+	call	help_parse
+	mov	byte ptr help_prompt_tokens,al
+	cmp	byte ptr help_prompt_tokens,0h
+	jz	return_prompt_token_count
+	mov	al,byte ptr help_list_mode
+	not	al
+	rcr	al,1
+	jnc	return_prompt_token_count
+	mov	ax,offset help_clear_screen
+	push	ax
+	call	help_print_string
+return_prompt_token_count:
+	mov	al,byte ptr help_prompt_tokens
+	pop	bp
+	ret
+
+; -----------------------------------------------------------------------------
+; Local BDOS-10-style editor: CR/LF accept, Escape/Ctrl-C cancel, backspace
+; and DEL erase, Ctrl-E starts a new line, Ctrl-X/Ctrl-U clear, Ctrl-R retypes.
+; Preserve the caller's ES and handle control-character/tab display widths.
+; -----------------------------------------------------------------------------
+help_line_editor:
+	mov	word ptr help_editor_es,es
+	mov	word ptr help_editor_buffer,dx
+	mov	word ptr help_editor_sp,sp
+initialize_line_edit:
+	push	dx
+	push	es
+	mov	cl,9ah
+	call	help_editor_bdos
+	mov	ax,es
+	mov	si,es:word ptr .68h
+	mov	bl,es:byte ptr 20h[si]
+	mov	byte ptr help_printer_number,bl
+	pop	es
+	pop	dx
+	mov	al,byte ptr help_output_column
+	mov	byte ptr help_prompt_column,al
+	mov	bx,dx
+	mov	cl,es:byte ptr [bx]
+	inc	bx
+	push	bx
+	mov	ch,0h
+preserve_line_edit_state:
+	push	cx
+	push	bx
+read_line_edit_key:
+	call	help_get_key
+	pop	bx
+	pop	cx
+	cmp	al,0dh
+	jnz	test_linefeed_or_backspace
+accept_line_jump:
+	jmp	accept_input_line
+test_linefeed_or_backspace:
+	cmp	al,0ah
+	jz	accept_line_jump
+	cmp	al,8h
+	jnz	test_escape_key
+	or	ch,ch
+	jz	preserve_line_edit_state
+	dec	ch
+	mov	al,byte ptr help_output_column
+	mov	byte ptr help_retype_width,al
+	jmp	retype_input_line
+test_escape_key:
+	cmp	al,1bh
+	jnz	test_delete_key
+	jmp	cancel_input_line
+test_delete_key:
+	cmp	al,7fh
+	jnz	test_new_line_key
+	or	ch,ch
+	jz	preserve_line_edit_state
+	mov	al,es:byte ptr [bx]
+	dec	ch
+	dec	bx
+	jmp	echo_input_character
+test_new_line_key:
+	cmp	al,5h
+	jnz	test_clear_to_prompt_key
+	push	cx
+	push	bx
+	call	help_crlf
+	mov	byte ptr help_prompt_column,0h
+continue_line_edit:
+	jmps	read_line_edit_key
+test_clear_to_prompt_key:
+	cmp	al,18h
+	jnz	test_kill_line_key
+	pop	bx
+erase_back_to_prompt:
+	mov	al,byte ptr help_prompt_column
+	cmp	al,byte ptr help_output_column
+	jnc	restart_line_edit
+	dec	byte ptr help_output_column
+	call	help_erase_cell
+	jmps	erase_back_to_prompt
+test_kill_line_key:
+	cmp	al,15h
+	jnz	test_retype_line_key
+	call	help_retype_prefix
+	pop	bx
+restart_line_edit:
+	mov	sp,word ptr help_editor_sp
+	mov	dx,word ptr help_editor_buffer
+	jmp	initialize_line_edit
+test_retype_line_key:
+	cmp	al,12h
+	jnz	test_abort_line_key
+retype_input_line:
+	push	cx
+	call	help_retype_prefix
+	pop	cx
+	pop	bx
+	push	bx
+	push	cx
+retype_next_character:
+	or	ch,ch
+	jz	finish_line_retype
+	inc	bx
+	mov	cl,es:byte ptr [bx]
+	dec	ch
+	push	cx
+	push	bx
+	call	help_echo_char
+	pop	bx
+	pop	cx
+	jmp	retype_next_character
+finish_line_retype:
+	push	bx
+	mov	al,byte ptr help_retype_width
+	or	al,al
+	jz	resume_after_retype
+	sub	al,byte ptr help_output_column
+	mov	byte ptr help_retype_width,al
+erase_deleted_character_cells:
+	call	help_erase_cell
+	dec	byte ptr help_retype_width
+	jnz	erase_deleted_character_cells
+resume_after_retype:
+	jmp	continue_line_edit
+test_abort_line_key:
+	cmp	al,3h
+	jnz	test_input_buffer_capacity
+	mov	ax,ds
+	mov	es,ax
+	jmp	cancel_input_line
+test_input_buffer_capacity:
+	cmp	ch,cl
+	jnc	read_next_line_character
+	inc	bx
+	mov	es:byte ptr [bx],al
+	inc	ch
+echo_input_character:
+	push	cx
+	push	bx
+	mov	cl,al
+	call	help_echo_char
+	pop	bx
+	pop	cx
+read_next_line_character:
+	jmp	preserve_line_edit_state
+accept_input_line:
+	inc	bx
+	mov	es:byte ptr [bx],0dh
+	pop	bx
+	mov	es:byte ptr [bx],ch
+	mov	es,word ptr help_editor_es
+	mov	cl,0dh
+	jmp	help_output_char
+cancel_input_line:
+	mov	es,word ptr help_editor_es
+	mov	bx,word ptr help_editor_buffer
+	mov	byte ptr 1h[bx],0h
+	mov	sp,word ptr help_editor_sp
+	ret
+
+; -----------------------------------------------------------------------------
+; Check the saved key first, otherwise poll direct console status.
+; -----------------------------------------------------------------------------
+help_key_pending:
+	mov	ax,word ptr help_pending_key
+	or	ax,ax
+	jnz	return_key_status
+	push	cx
+	mov	dl,0feh
+	mov	cl,6h
+	call	help_editor_bdos
+	pop	cx
+	or	al,al
+return_key_status:
+	ret
+
+; -----------------------------------------------------------------------------
+; Write CL through BDOS 6, preserving CX.
+; -----------------------------------------------------------------------------
+help_raw_output:
+	push	cx
+	mov	dl,cl
+	mov	cl,6h
+	call	help_editor_bdos
+	pop	cx
+	ret
+
+; -----------------------------------------------------------------------------
+; Consume a saved key or wait for input, preserving extended-key state.
+; -----------------------------------------------------------------------------
+help_get_key:
+	mov	ax,word ptr help_pending_key
+	or	ax,ax
+	jz	read_fresh_help_key
+	cmp	byte ptr help_extended_key,0ffh
+	jz	return_saved_scan_code
+	or	al,al
+	jnz	clear_saved_key
+	mov	byte ptr help_extended_key,0ffh
+	ret
+return_saved_scan_code:
+	mov	al,ah
+clear_saved_key:
+	mov	byte ptr help_extended_key,0h
+	mov	word ptr help_pending_key,0h
+	ret
+read_fresh_help_key:
+	call	help_wait_key
+	or	al,al
+	jnz	return_help_key
+	mov	byte ptr help_extended_key,0ffh
+	mov	word ptr help_pending_key,ax
+return_help_key:
+	ret
+
+; -----------------------------------------------------------------------------
+; Recognize CR, LF, TAB and BS; otherwise compare AL with space.
+; -----------------------------------------------------------------------------
+help_classify_char:
+	cmp	al,0dh
+	jz	return_character_class
+	cmp	al,0ah
+	jz	return_character_class
+	cmp	al,9h
+	jz	return_character_class
+	cmp	al,8h
+	jz	return_character_class
+	cmp	al,20h
+return_character_class:
+	ret
+
+; -----------------------------------------------------------------------------
+; Poll for Ctrl-C abort and Ctrl-S pause; Ctrl-Q resumes output.
+; Save other pending input for the line editor.
+; -----------------------------------------------------------------------------
+help_flow_control:
+	call	help_key_pending
+	jz	flow_control_complete
+	call	help_get_key
+	cmp	al,3h
+	jnz	test_output_pause
+	mov	word ptr help_pending_key,0h
+	jmp	cancel_input_line
+test_output_pause:
+	cmp	al,13h
+	jnz	save_pending_input_key
+wait_output_resume:
+	call	help_get_key
+	cmp	al,3h
+	jnz	test_output_resume_key
+	mov	word ptr help_pending_key,0h
+	jmp	cancel_input_line
+test_output_resume_key:
+	cmp	al,11h
+	jnz	wait_output_resume
+	xor	ax,ax
+	mov	word ptr help_pending_key,0h
+flow_control_complete:
+	ret
+save_pending_input_key:
+	mov	word ptr help_pending_key,ax
+	mov	al,0ffh
+	ret
+
+; -----------------------------------------------------------------------------
+; Output CL unless retyping silently, then update the tracked column.
+; -----------------------------------------------------------------------------
+help_output_char:
+	test	byte ptr help_retype_width,0ffh
+	jnz	update_output_column
+	call	help_flow_control
+	call	help_raw_output
+update_output_column:
+	mov	al,cl
+	cmp	al,7fh
+	jz	output_character_complete
+	inc	byte ptr help_output_column
+	cmp	al,20h
+	jnc	output_character_complete
+	dec	byte ptr help_output_column
+	jz	output_character_complete
+	cmp	al,8h
+	jnz	test_output_linefeed
+	dec	byte ptr help_output_column
+output_character_complete:
+	ret
+test_output_linefeed:
+	cmp	al,0ah
+	jnz	output_column_complete
+	mov	byte ptr help_output_column,0h
+output_column_complete:
+	ret
+
+; -----------------------------------------------------------------------------
+; Echo controls as caret notation and expand tabs to eight-column stops.
+; -----------------------------------------------------------------------------
+help_echo_char:
+	mov	al,cl
+	call	help_classify_char
+	jnc	test_tab_expansion
+	push	ax
+	mov	cl,5eh
+	call	help_output_char
+	pop	cx
+	or	cl,40h
+; Shared entry: CL contains a display character. Expand TAB, otherwise output it.
+test_tab_expansion:
+	cmp	cl,9h
+	jnz	help_output_char
+output_tab_space:
+	mov	cl,20h
+	call	help_output_char
+	mov	al,byte ptr help_output_column
+	and	al,7h
+	jnz	output_tab_space
+expanded_character_complete:
+	ret
+
+; -----------------------------------------------------------------------------
+; Erase one display cell with backspace and space.
+; -----------------------------------------------------------------------------
+help_erase_cell:
+	call	help_backspace
+	mov	cl,20h
+	call	help_raw_output
+
+; -----------------------------------------------------------------------------
+; Emit backspace through direct console output.
+; -----------------------------------------------------------------------------
+help_backspace:
+	mov	cl,8h
+	jmp	help_raw_output
+
+; -----------------------------------------------------------------------------
+; Print the retype marker and CR/LF, then indent to the original prompt column.
+; -----------------------------------------------------------------------------
+help_retype_prefix:
+	mov	cl,23h
+	call	help_output_char
+	call	help_crlf
+restore_prompt_indentation:
+	mov	al,byte ptr help_output_column
+	cmp	al,byte ptr help_prompt_column
+	jnc	expanded_character_complete
+	mov	cl,20h
+	call	help_output_char
+	jmps	restore_prompt_indentation
+
+; -----------------------------------------------------------------------------
+; Print CR/LF through the tracked console-output routine.
+; -----------------------------------------------------------------------------
+help_crlf:
+	mov	cl,0dh
+	call	help_output_char
+	mov	cl,0ah
+	jmp	help_output_char
+
+; -----------------------------------------------------------------------------
+; Wait for a key through BDOS 6, DL=FDh, preserving CX.
+; -----------------------------------------------------------------------------
+help_wait_key:
+	push	cx
+	mov	cl,6h
+	mov	dl,0fdh
+	call	help_editor_bdos
+	pop	cx
+	ret
+
+; -----------------------------------------------------------------------------
+; Print a dollar-terminated string from the stack segment, expanding tabs.
+; -----------------------------------------------------------------------------
+help_print_stack_string:
+	mov	si,cx
+	lodsb
+	cmp	al,24h
+	jz	expanded_character_complete
+	inc	cx
+	push	cx
+	mov	cl,al
+	push	ds
+	push	ss
+	pop	ds
+	call	test_tab_expansion
+	pop	ds
+	pop	cx
+	jmps	help_print_stack_string
+
+; -----------------------------------------------------------------------------
+; BDOS entry used by the local line editor.
+; -----------------------------------------------------------------------------
+help_editor_bdos:
+	int	0e0h
+	ret
+code_padding	db	0h,0h,0h
+
+; -----------------------------------------------------------------------------
+
+	dseg
+	org	0
+
+; Loader base-page bytes preceding the supplied stack segment.
+base_page	rb	15h	; zero-filled workspace
+
+; STACK segment supplied by the CMD loader.
+base_stack_segment	dw	0h
+
+; Remaining loader base-page fields, initially zero.
+base_page_reserved	rb	69h	; zero-filled workspace
+
+; Length of the command tail at 81h.
+command_tail	db	0h
+
+; CP/M command tail, supplied by the command processor.
+command_tail_text	rb	7fh	; zero-filled workspace
+
+; HELP switches SS to DATA and uses SP=180h for its private stack.
+help_stack_space	rb	80h	; zero-filled workspace
+help_stack_guard	db	0h
+help_system_disk	db	0h
+
+; Standard FCB through the current sequential-record byte.
+help_fcb	rb	21h	; zero-filled workspace
+help_random_record	db	0h
+help_random_record_middle	db	0h
+help_random_record_high	db	0h
+
+; Input length byte; also the normal DMA buffer.
+help_input_buffer	db	0h
+help_input_text	rb	7fh	; zero-filled workspace
+help_system_segment	dw	0h
+help_output_column	db	21h
+help_saved_ax	dw	0h
+help_saved_bx	dw	0h
+help_saved_cx	dw	0h
+help_saved_dx	dw	0h
+help_caller_sp	dw	0h
+help_caller_ss	dw	0h
+help_context_padding	db	0h
+help_error_prefix	db	0dh,0ah
+	db	'ERROR:  $'
+help_newline	db	0dh,0ah,24h
+help_read_error	db	'Reading file HELP.HLP.$'
+help_continue_prompt	db	0dh,0ah
+	db	'Press RETURN to continue $'
+help_erase_prompt	db	0dh
+	db	'                             '
+	db	0dh,24h
+help_blank_topic	db	'             '
+	db	0dh,24h
+help_topics_heading	db	0dh
+	db	'Topics available:$'
+help_subtopics_heading	db	0dh
+	db	'For more information, type a period and one of the following '
+	db	'subtopics:$'
+
+; Retained workspace/alignment between records.
+help_heading_newline	db	0dh,24h,0dh
+help_short_newline	db	0ah,24h
+help_indent_string	db	20h,20h,24h
+help_topic_read_error	db	'Reading file HELP.HLP.$'
+
+; Maximum input size used by the local line editor.
+help_input_limit	db	80h
+help_topic_prompt	db	0dh
+	db	'HELP (Enter topic, ESC to exit)> $'
+
+; FCB prefix: drive, eight-character HELP name (attribute bit retained), HLP, extent.
+help_filename	db	0h
+	db	'HELP '
+	db	0a0h
+	db	'  HLP'
+	db	0h
+help_intro	db	0dh,0ah
+	db	'HELP UTILITY V2.0'
+	db	0dh,0ah,0ah
+	db	'At "HELP (Enter topic, ESC to exit)> " enter topic {,subtopic}...'
+	db	0dh,0ah,0ah
+	db	'EXAMPLE:  HELP (Enter topic, ESC to exit)> DIR EXAMPLES'
+	db	0dh,0ah,24h
+
+; Space-padded topic comparison token.
+help_question_token	db	'?           '
+
+; Space-padded topic comparison token.
+help_command_token	db	'HELP        '
+
+; Space-padded topic comparison token.
+help_intro_token	db	'HELP        '
+help_topic_heading	db	'Topic:$'
+help_not_found	db	'Not found$'
+help_file_missing	db	'No HELP.HLP file on the default drive.$'
+
+
+config_block	dw	0ddb2h
+
+mdisk_segment	dw	0d000h
+
+verify_flag	db	0h
+
+head_step	db	0cfh
+
+scroll_mode	rb	44
+
+max_memory_paragraphs	dw	04000h
+
+port_zero_console	db	0h
+
+port_one_console	db	0h
+
+port_state	db	0h,0h,7h,7h
+	rb	38
+
+saved_serial_flag	db	0h
+	db	0h
+
+saved_key_flag	db	0h
+	db	0h
+
+com1_settings	db	0h
+
+com2_settings	rb	11
+
+function_key_data	rb	400
+
+config_present	db	0h
+
+restore_read_only	db	0h
+
+save_keys	db	0h
+
+save_ports	db	0h
+
+tail_dispatch	dw	offset switch_param,offset parameters_menu
+	dw	offset switch_pfksave,offset request_key_save
+	dw	offset switch_portsav,offset request_port_save
+	dw	offset switch_mdisk,offset mdisk_menu
+	dw	offset switch_head,offset head_step_menu
+	dw	offset switch_verify,offset verify_menu
+	dw	offset switch_serial,offset serial_menu
+	dw	offset switch_memory,offset memory_limit_menu
+
+switch_param	db	'/PARAM'
+
+switch_pfksave	db	'/PFKSAVE'
+
+switch_portsav	db	'/PORTSAV'
+
+switch_mdisk	db	'/MDISK'
+
+switch_head	db	'/HEAD'
+
+switch_verify	db	'/VERIFY'
+
+switch_serial	db	'/SERIAL'
+
+switch_memory	db	'/MEMORY'
+
+sysdat_segment	dw	0
+
+user_data_segment	dw	0
+
+console_number	dw	0
+
+setup_signature	db	'Setup Buffer ==>'
+
+xios_parameters	rb	4
+
+key_tables	rb	8
+
+lower_memory_end	dw	0
+
+upper_memory_start	dw	0
+
+upper_memory_end	dw	0
+
+decimal_hundreds	db	64h
+
+decimal_tens	db	0ah
+
+uart_divisors	dw	12,24,48,96,192,384,768,1047
+
+version_error	db	0dh,0ah
+	db	'SETUP requires Concurrent DOS to run.'
+	db	0dh,0ah,24h
+
+terminal_error	db	0dh,0ah
+	db	'SETUP can',27h,'t be run from a Serial Terminal.'
+	db	0dh,0ah,24h
+
+msg_setup	db	'SETUP'
+	db	0h
+
+msg_setup_params	db	'SETUP PARAMS'
+	db	0h
+
+msg_setup_mdisk	db	'SETUP MDISK'
+	db	0h
+
+msg_setup_verify	db	'SETUP VERIFY'
+	db	0h
+
+msg_setup_hdstep	db	'SETUP HDSTEP'
+	db	0h
+
+msg_setup_serial	db	'SETUP SERIAL'
+	db	0h
+
+msg_setup_maxmem	db	'SETUP MAXMEM'
+	db	0h
+
+msg_setup_scroll	db	'SETUP SCROLL'
+	db	0h
+
+msg_setup_update	db	'SETUP UPDATE'
+	db	0h
+	db	'At this point we jump to the HELP program.'
+	db	0h
+	db	'Type any key to continue...'
+	db	0h
+
+screen_init	db	1bh,45h,1bh,77h,1bh,66h,1bh,71h,1bh,74h,1bh,75h
+	db	1bh,36h
+	db	0h
+
+screen_exit	db	1bh,45h,1bh,76h,1bh,65h,1bh,37h
+	db	0h
+
+frame_corners	db	0h,0h,0dah,0h,4fh,0bfh,2h,0h,0c6h,2h,4fh,0b5h
 	db	17h,0h,0c0h,17h,4fh,0d9h
-; item_0c0c and item_0c12 are interior addresses into this banner.
-item_0bf0_storage	db	'Concurrent CP/M XIOS Customization for the IBM PC and XT  version 1.0'
+
+program_title	db	'Concurrent System Customization for the IBM PC and XT   ver 4.1'
 	db	0h
-item_0c36_storage	db	0dah,0c4h,0c4h,0c4h,0c4h,0bfh,0ah,8h,0b3h,8h,8h,8h
+
+keycap_prefix	db	0dah,0c4h,0c4h,0c4h,0c4h,0bfh,0ah,8h,0b3h,8h,8h,8h
 	db	8h,8h,8h,0b3h,0ah,8h,0c0h,0c4h,0c4h,0c4h,0c4h,0d9h
-	db	1bh,41h,8h,8h,8h,8h,1bh,72h,46h,0h
-item_0c58_storage	db	1bh,75h,1bh,43h,20h,20h,0h
-page_title_storage	db	67h,0ch
-page_choices_storage	db	93h,0ch
-page_dispatch_storage	db	50h,1h
-field_0c65_storage	db	9bh,0ch
-	db	'Main Menu'
+	db	1bh,41h,8h,8h,8h,8h,1bh,72h
 	db	0h
-item_0c71_storage	db	' SELECT XIOS CUSTOMIZATION OPTION'
-	db	0h,7h,1h,2h,3h,4h,5h,9h,0ah,5h,7h,4h
-	db	31h,20h
-item_0ca0_storage	db	'Save XIOS Parameters'
-	db	0h,7h,2ah,32h,20h
-item_0cb9_storage	db	'MDisk'
-	db	0h,0ah,4h,33h,20h
-item_0cc3_storage	db	'Diskette Head Step Time'
-	db	0h,0ah,2ah,34h,20h
-item_0cdf_storage	db	'Verify After Diskette Write'
-	db	0h,0dh,4h,35h,20h
-item_0cff_storage	db	'Select Storage Disk'
+
+keycap_suffix	db	1bh,75h,1bh
+	db	'C  '
 	db	0h
-item_0d13_storage	db	2h
-item_0d14_storage	db	12h,4h
-	db	'9 Update '
-item_0d1f_storage	db	'Diskette  and Exit'
-	db	0h,12h
-	db	'*10Exit without Updating'
+
+main_heading	db	'Main Menu'
 	db	0h
-item_0d4c_storage	db	'All modified options will take effect at the next Power-On or Reset.'
+
+main_prompt	db	' SELECT SYSTEM CUSTOMIZATION OPTION'
 	db	0h
-item_0d91_storage	db	'SELECT FUNCTION'
+
+main_keys	db	10,3,4,5,6,7,8,9,1,10,97	; count followed by accepted key codes
+
+main_buttons	db	10	; number of buttons
+	db	7,4,'F3 Save System Parameters',0
+parameters_title	equ	main_buttons+6
+	db	7,42,'F4 MDisk',0
+msg_mdisk	equ	main_buttons+34
+	db	10,4,'F5 Diskette Head Step Time',0
+step_title	equ	main_buttons+45
+	db	10,42,'F6 Verify After Diskette Write',0
+verify_title	equ	main_buttons+74
+	db	13,4,'F7 Select Serial Console',0
+msg_select_serial_console	equ	main_buttons+107
+	db	13,42,'F8 Maximum Memory per Process',0
+memory_title	equ	main_buttons+134
+	db	16,4,'F9 Color Monitor Scroll Mode',0
+scroll_title	equ	main_buttons+166
+	db	20,4,'F1 Help',0
+	db	20,21,'F10Update and Exit',0
+msg_update_and_exit	equ	main_buttons+207
+	db	20,48,'EscQuit without Update',0
+
+select_function	db	'SELECT FUNCTION'
 	db	0h
-item_0da1_storage	db	1h,14h,14h
-	db	'9 Return to '
-	db	0h
-	db	'      This option allows the current state of certain XIOS parameters'
+
+return_buttons	db	2	; number of buttons
+	db	20,4,'F1 Help',0
+	db	20,42,'EscReturn to ',0
+
+parameters_instructions	db	'    This option allows the current state of certain system parameters'
 	db	0h
 	db	'to be saved, and reinstated at the next Power-On or System Reset.  To'
 	db	0h
 	db	'cancel the Save command, retype the appropriate function key.'
-	db	0h,0h
-item_0e7c_storage	db	2h,0bh,14h
-	db	'1 Save Programmable Function Keys'
-	db	0h,0eh,14h
-	db	'3 Save Serial Port Configurations'
 	db	0h
-item_0ec5_storage	db	'Saved'
 	db	0h
-item_0ecb_storage	db	'     '
+
+parameters_buttons	db	2	; number of buttons
+	db	11,20,'F3 Save Programmable Function Keys',0
+	db	14,20,'F5 Save Serial Port Configurations',0
+
+msg_saved	db	'Saved'
 	db	0h
-item_0ed1_storage	db	3h,1h,3h,9h
-	db	'      This option reserves a portion of memory t'
-item_0f05_storage	db	'o be used as a Logical'
+
+blank_save_state	db	'     '
 	db	0h
-	db	'Disk Drive, referred to as M:.  The user selects the starting address,'
+
+parameters_keys	db	4,3,5,1,97	; count followed by accepted key codes
+
+mdisk_instructions	db	'      This option allows you to reserve a portion of memory to be used'
 	db	0h
-	db	'and the XIOS allocates all of the contiguous memory above that address'
+	db	'as a Logical Disk Drive, or MDisk.  You may increase, decrease, or set'
 	db	0h
-	db	'to MDisk.   If no memory is located at the starting address, or if the'
+	db	'a new starting address for MDisk.'
 	db	0h
-	db	'starting address is zero, then no MDisk will be created.'
-	db	0h,0h
-item_102b_storage	db	'The current Starting Address is:  '
 	db	0h
-item_104e_storage	db	':0000'
+
+msg_current_mdisk_size	db	'Current MDisk size:  '
 	db	0h
-item_1054_storage	db	'Resulting in an MDisk size of:  '
+
+msg_kb	db	' Kb  '
 	db	0h
-item_1075_storage	db	20h,4bh,62h,0h
-item_1079_storage	db	'0123456789ABCDEF'
-item_1089_storage	db	1h,11h,14h
-	db	'1 Enter a new Starting Address'
+
+msg_current_starting_addre	db	'Current Starting Address:  '
 	db	0h
-item_10ab_storage	db	2h,1h,9h
-item_10ae_storage	db	'      Type the two most significant hexadecimal digits (0-9 or A-F) of'
+
+segment_suffix	db	':0000'
+	db	0h
+
+hex_digits	db	'0123456789ABCDEF'
+
+mdisk_buttons	db	3	; number of buttons
+	db	14,4,'F3 Increase MDisk size',0
+	db	17,4,'F5 Decrease MDisk size',0
+	db	14,42,'F7 Enter a new Starting Address',0
+
+mdisk_keys	db	5,3,5,7,1,97	; count followed by accepted key codes
+
+segment_instructions	db	'      Type the two most significant hexadecimal digits (0-9 or A-F) of'
 	db	0h
 	db	'the Starting Address segment.  The address must be within the range of'
 	db	0h
-	db	'4000-9000 or C000-E000, or equal to 0000.'
-	db	0h,0h
-item_1167_storage	db	'ENTER STARTING ADDRESS'
+	db	'4000-9000 or C000-E000, or equal to 0000. The system will allocate all'
 	db	0h
-item_117e_storage	db	20h,5fh,8h,8h,1bh,65h,0h
-item_1185_storage	db	' Invalid Starting Address '
+	db	'of the contiguous memory above that address to MDisk.  If no memory is'
 	db	0h
-item_11a0_storage	db	'TYPE ANY KEY TO CONTINUE'
+	db	'located at the starting address, or if the starting address is 0, then'
 	db	0h
-	db	'      This option controls the Verify After Write feature of the XIOS'
+	db	'no MDisk will be created.'
+	db	0h
+	db	0h
+
+hex_input_prompt	db	' _'
+	db	8h,8h,1bh,65h
+	db	0h
+
+msg_invalid_starting_addre	db	' Invalid Starting Address '
+	db	0h
+
+continue_prompt	db	'TYPE ANY KEY TO CONTINUE'
+	db	0h
+
+verify_instructions	db	'    This option controls the Verify After Write feature of the system'
 	db	0h
 	db	'Diskette software.  When enabled, the Diskette is verified after each'
 	db	0h
 	db	'write operation, with automatic retries for verification errors.  The'
 	db	0h
 	db	'Verify feature results in greater data security at the cost of speed.'
-	db	0h,0h
-item_12d2_storage	db	2h,0eh,14h
-	db	'1 Enable Verify After Write'
-	db	0h,11h,14h
-	db	'3 Disable Verify After Write'
 	db	0h
-item_1310_storage	db	'The Verify After Write feature is:  '
 	db	0h
-item_1335_storage	db	'Enabled '
+
+verify_buttons	db	2	; number of buttons
+	db	14,20,'F3 Enable Verify After Write',0
+	db	17,20,'F5 Disable Verify After Write',0
+
+verify_caption	db	'The Verify After Write feature is:  '
 	db	0h
-item_133e_storage	db	'Disabled'
+
+msg_enabled	db	'Enabled '
 	db	0h
-item_1347_storage	db	3h,1h,3h,9h
-	db	'    This option sets a Head Step Time of 2 to 32 mSec for the Diskette'
+
+msg_disabled	db	'Disabled'
+	db	0h
+
+verify_keys	db	4,3,5,1,97	; count followed by accepted key codes
+
+step_instructions	db	'    This option sets a Head Step Time of 2 to 32 mSec for the Diskette'
 	db	0h
 	db	'Drive Hardware.  The smaller the time, the faster the Drive Head moves'
 	db	0h
 	db	'from track to track.   The default time is set to 8 mSec, but times of'
 	db	0h
 	db	'6 mSec or 4 mSec work with some Diskette Drives.   Caution is advised.'
+	db	0h
+	db	0h
+
+step_buttons	db	2	; number of buttons
+	db	14,20,'F3 Decrease Head Step Time',0
+	db	17,20,'F5 Increase Head Step Time',0
+
+step_time_caption	db	'The current Diskette Head Step Time is:  '
+	db	0h
+
+msg_msec	db	' mSec '
+	db	0h
+
+step_keys	db	4,3,5,1,97	; count followed by accepted key codes
+
+serial_instructions	db	'      This option is used to select whether a serial port will be used'
+	db	0h
+	db	'as an Auxiliary / Printer port, or as an additional Virtual Console in'
+	db	0h
+	db	'a multi-user system.  Both ports may perform either function.'
+	db	0h
+	db	0h
+
+serial_buttons	db	2	; number of buttons
+	db	14,20,'F3 Change Serial Port 0  (Printer 3)',0
+	db	17,20,'F5 Change Serial Port 1  (Printer 4)',0
+
+port_zero_caption	db	'Serial Port 0 is currently:  '
+	db	0h
+
+port_one_caption	db	'Serial Port 1 is currently:  '
+	db	0h
+
+msg_an_aux	db	'an Aux / Printer port'
+	db	0h
+
+msg_multiuser_terminal	db	'Multiuser Terminal   '
+	db	0h
+
+serial_keys	db	4,3,5,1,97	; count followed by accepted key codes
+
+memory_instructions	db	'     This option controls the maximum amount of memory that the system'
+	db	0h
+	db	'can allocate to a single process.  If this value is too small, certain'
+	db	0h
+	db	'application programs can',27h,'t be loaded into memory.  If the value is too'
+	db	0h
+	db	'large, certain applications may "hog" the system',27h,'s memory, and prevent'
+	db	0h
+	db	'other programs from running concurrently.'
+	db	0h
+	db	0h
+
+max_memory_caption	db	'The current Maximum Memory per Process is:  '
+	db	0h
+
+text_kb_142b	db	' Kb'
+	db	0h
+
+memory_buttons	db	1	; number of buttons
+	db	16,20,'F3 Enter a new Maximum Value',0
+
+memory_keys	db	3,3,1,97	; count followed by accepted key codes
+
+limit_instructions	db	'     Enter a three digit decimal number to set a new Maximum Value in '
+	db	0h
+	db	'Kilobytes (Kb).   The new Maximum Value must be between 64 and 999 Kb.'
+	db	0h
+	db	'To enter a value less than 100 Kb, be sure to start with a zero.'
 	db	0h,0h
-item_1468_storage	db	2h,0eh,14h
-	db	'1 Decrease Head Step Time'
-	db	0h,11h,14h
-	db	'3 Increase Head Step Time'
+	db	'ENTER MAXIMUM VALUE'
 	db	0h
-item_14a1_storage	db	'The current Diskette Head Step Time is:  '
+
+decimal_input_prompt	db	' __'
+	db	8h,8h,8h,1bh,65h
 	db	0h
-item_14cb_storage	db	' mSec '
+
+msg_value_is_too_small	db	' Value is Too Small '
 	db	0h
-item_14d2_storage	db	3h,1h,3h,9h
-	db	'      This option controls which disk is used to store the information'
+
+msg_value_is_too_large	db	' Value is Too Large '
 	db	0h
-	db	'which is '
-item_1526_storage	db	'created by the SETUP program.  Selecting "Diskette" will send'
+
+scroll_instructions	db	'    This option lets you select how the video memory on a color monitor'
 	db	0h
-	db	'the information to drive A:. Selecting "Hard Disk" will send it to the'
+	db	'is to be accessed.  Your choice will affect the appearance and speed of'
 	db	0h
-	db	'Hard Disk with the lowest drive letter (usually B:).'
+	db	'the color monitor.  Try each of the modes available, and choose the one'
+	db	0h
+	db	'which best suits the hardware of your system and your personal taste.'
+	db	0h
+	db	0h
+
+scroll_caption	db	'The current Color Monitor Scroll Mode is:  '
+	db	0h
+
+scroll_captions	dw	offset scroll_fast,offset scroll_smooth,offset scroll_wide
+
+scroll_fast	db	'Fast/Flicker'
+	db	0h
+
+scroll_smooth	db	'Slow/Smooth '
+	db	0h
+
+scroll_wide	db	'Wide Open   '
+	db	0h
+
+scroll_buttons	db	1	; number of buttons
+	db	16,20,'F3 Change the Scroll Mode',0
+
+scroll_keys	db	3,3,1,97	; count followed by accepted key codes
+
+update_instructions	db	'       You may now exit SETUP, saving your changes to the Update Disk,'
+	db	0h
+	db	'or you may select a different Update Disk.  A CCPM.SYS file must be on'
+	db	0h
+	db	'the Update Disk for the changes to be saved.   The changes will be put'
+	db	0h
+	db	'into effect at the next Power-On or System Reset using the Update Disk.'
+	db	0h
+	db	0h
+
+update_buttons	db	2	; number of buttons
+	db	14,20,'F3 Select the Update Disk',0
+	db	17,20,'F5 Update System and Exit',0
+
+drive_caption	db	'The current Update Disk is:  '
+	db	0h
+
+update_keys	db	4,3,5,1,97	; count followed by accepted key codes
+
+drive_instructions	db	'       Enter the designation letter for the Disk upon which you would'
+	db	0h
+	db	'like your changes saved.  You may use any letter from A to P, as long'
+	db	0h
+	db	'as it corresponds to an actual Disk Drive.'
+	db	0h
+	db	0h
+
+drive_input_prompt	db	1bh,65h
+	db	0h
+
+record_buffer	db	0h
+
+system_code_paragraphs	rb	639
+
+system_fcb	db	0h
+	db	'CCPM    '
+
+system_fcb_type	db	'SYS'
+
+system_fcb_extent	rb	21
+
+system_random_record	rb	3
+
+config_record_offset	db	0h
+	db	0h
+
+updating_system	db	'Updating CCPM.SYS on drive '
+	db	0h
+
+missing_system_file	db	' Can',27h,'t find CCPM.SYS '
+	db	0h
+
+system_read_error	db	' Can',27h,'t read CCPM.SYS '
+	db	0h
+
+system_write_error	db	' Can',27h,'t write to CCPM.SYS '
+	db	0h
+
+wrong_system_version	db	' Wrong version of CCPM.SYS '
+	rb	3
+help_index_block	dw	0h
+
+; Eight 128-byte HELP index records, 64 sixteen-byte entries.
+help_index_cache	rb	400h	; zero-filled workspace
+help_saved_index	dw	0h
+help_version	dw	0h
+help_index_step	dw	0h
+help_index_pointer	dw	0h
+help_global_index	dw	0h
+help_index_position	dw	0h
+help_listing_position	dw	0h
+help_listing_cursor	dw	0h
+help_listing_delta	dw	0h
+help_listing_stride	dw	0h
+help_displayed_topics	dw	0h
+help_search_cursor	dw	0h
+help_list_mode	db	0h
+help_no_page_mode	db	0h
+help_create_mode	db	0h
+help_extract_mode	db	0h
+help_page_mode	db	0h
+help_file_status	db	0h
+help_end_of_data	db	0h
+
+; Retained HELP utility secondary FCB workspace.
+help_secondary_fcb	rb	24h	; zero-filled workspace
+help_token_count	dw	0h
+help_search_level	db	0h
+
+; Space-padded subtopic name.
+help_subtopic_name	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
+
+; Eleven 15-byte topic slots (12-character name and three work bytes).
+help_topic_tokens	rb	0a5h	; zero-filled workspace
+
+; Temporary topic name.
+help_name_buffer	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
+help_parent_level	db	0h
+help_level	dw	0h
+help_page_length	db	0h
+
+; Console clear-screen string and associated buffer space.
+help_clear_screen	db	1bh,45h,24h,0h,0h,0h,0h,0h,0h,0h,0h,0h
+	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
 	db	0h,0h
-field_15e1_storage	db	1h,0eh,14h
-	db	'1 Store SETUP data on Diskette'
-	db	0h,11h,14h
-item_1605_storage	db	'3 Store SETUP data on Hard Disk'
+help_compare_result	db	0h
+help_compare_index	db	0h
+help_records_per_block	dw	0h
+help_step_count	db	0h
+help_record_number	db	0h
+help_record_index	db	0h
+help_page_stop	db	0h
+help_parse_index	db	0h
+help_parse_level	db	0h
+help_input_index	db	0h
+help_token_character_index	dw	0h
+help_parse_done	db	0h
+help_option_seen	db	0h
+help_listing_level	db	0h
+help_listing_character	dw	0h
+help_listing_top_level	db	0h
+help_listing_heading_shown	db	0h
+
+; Topic name assembled for display; terminator follows.
+help_listing_text	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
 	db	0h
-item_1625_storage	db	'The current Storage Disk is the:  '
-	db	0h
-item_1648_storage	db	'Diskette '
-	db	0h
-item_1652_storage	db	'Hard Disk'
-	db	0h
-field_165c_storage	db	2h,1h,9h,3h
-field_1660_storage	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h
-item_1701_storage	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h
-item_181e_storage	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h
-field_185e_storage	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
-	db	0h,0h,0h,0h,0h,0h
+help_listing_terminator	db	0h
+help_last_token	db	0h
+help_search_done	db	0h
+help_search_failed	db	0h
+help_search_restart	db	0h
+help_search_matched	db	0h
+help_search_passed_name	db	0h
+help_parent_token_saved	db	0h
+help_compare_byte	db	0h
+help_token_display_index	db	0h
+help_token_indent	db	0h
+help_text_index	db	0h
+help_delimiter_count	db	0h
+help_text_character	dw	0h
+
+; Up to three consecutive delimiter bytes.
+help_delimiter_buffer	db	0h,0h,0h
+help_prompt_tokens	db	0h
+help_open_status	dw	0h
+
+; Retained workspace/alignment between records.
+help_reserved_byte_4	db	0h
+help_printer_number	db	0h
+
+; Retained printer-status diagnostic.
+help_printer_busy	db	0h,0dh,0ah
+	db	'Printer Busy'
+	db	0dh,0ah,24h
+help_pending_key	dw	0h
+help_extended_key	db	0h
+help_retype_width	db	0h
+
+; Retained workspace/alignment between records.
+help_edit_padding	db	0h
+help_prompt_column	db	0h
+help_editor_sp	dw	0h
+help_editor_buffer	dw	0h
+help_editor_es	dw	0h
+
+
+	rb	9	; paragraph alignment
+help_line_count	equ	help_level+1h
+help_topic_finished	equ	help_text_character+1h
+
+
+	sseg
+	rb	2fh
+	db	0
 	end

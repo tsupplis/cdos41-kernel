@@ -116,13 +116,13 @@ mechanism. [PUT/GET/RDR notes](commands/putget/README.md).
 
 | Image | Bootable | Contents |
 | --- | --- | --- |
-| `cdos86.img` | Yes | Kernel, core file commands, ED, DATE, SDIR, SET, SHOW, SUBMIT, BATCH, SYSDISK, ERA/ERAQ, PUT/GET/RDR, PIP and shell alias targets |
-| `cdostools.img` | No | ASM80/ASM86, DDT86, GENCMD, GENCCPM, HEXCOM, HELP, SYSTAT, CHSET, GENLDR, WINDOW/WMENU and core commands |
-| `cdosmaint.img` | Yes | Kernel, DSKMAINT, DCOPY, DCOMP, INITDIR, BATCH, SYSDISK, ERA and PIP |
-| `cdosmenu.img` | No | PRINT, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP, menu/terminal data, BAT examples and PIP |
+| `cdos86.img` | Yes | Kernel, core file commands, ED, DATE, SDIR, SET, SHOW, SUBMIT, BATCH, SYSDISK, ERA/ERAQ, PIP and shell alias targets |
+| `cdostools.img` | No | ASM80/ASM86, DDT86, GENCMD, GENCCPM, HEXCOM, HELP, SYSTAT, CHSET, GENLDR, WINDOW/WMENU, PUT/GET/RDR, SYSDISK, ERA and PIP |
+| `cdosmaint.img` | Yes | Kernel, DSKMAINT, HDMAINT.CMD, HDMAINT.DOC, DCOPY, SYSDISK, ERA and PIP |
+| `cdosmenu.img` | No | SPL, PRINT, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP, menu/terminal data, BAT examples and PIP |
 | `cdosdos.img` | No | COPY.EXE, DATE.EXE, ERASE.EXE, PATH.EXE, SETENV.EXE, LOADCCPM.COM, TIME.EXE, REN.EXE and REDOS.COM, core commands and PIP |
-| `cdosoem1.img` | No | Original backup/file-manager tools, their support files and PIP |
-| `cdosoem2.img` | No | FUNCTION, HELP, rebuilt SETPORT and HDMAINT, original SETUP, HDMAINT manual, original 4.1 help text and PIP |
+| `cdosextras.img` | No | INITDIR, BackRest, CARDFILE, DRTALK, their support files and PIP |
+| `cdosadmin.img` | No | BACKREST.DOC, FUNCTION, DCOMP, SETPORT, SETUP, STOP, N with NATIONAL.MSG, FM with FM.CFG and TERM.DAT and PIP |
 
 `make dist` places these seven images and `disks.zip` at the repository root.
 Source distribution and history stay in Git.
@@ -223,7 +223,7 @@ release-image provenance. Details are in `base/cdos411.json`.
 | `set` | Set file and drive attributes | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |
 | `setenv.exe` | Display and edit the 1 KB per-console DOS environment | None | New implementation for CDOS 4.11 | Additional tool |
 | `setport` | Configure serial ports and protocols | 4.11 | Reverse Engineered from CDOS 4.11 and patched | Equivalent |
-| `setup` | Customize system hardware settings | 4.11 | —; original OEM binary retained | Original used |
+| `setup` | Customize system hardware settings | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical |
 | `show` | Display disk space and drive information | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |
 | `submit` | Run SUB command files | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool |
 | `stop` | List processes and stop a selected entry | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical |

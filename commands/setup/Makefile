@@ -15,12 +15,14 @@ REF=../../base/setup.cmd
 all: $(TOOLS)
 
 # Assemble absolute groups, then generate the complete CMD image.
-%.cmd: %.h86 Makefile
+%.cmd: %.h86 Makefile pack.py
 	$(GENCMD) $<
+	$(PYTHON) pack.py $@
 	$(CMDINFO) $@
 
 %.h86: %.a86 Makefile
-	$(ASM86) $<
+	@$(ASM86) $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
+	@grep -qiE 'NUMBER OF ERRORS: +0' $*.log
 
 # Validate both the frozen reconstruction and maintained version, including headers.
 check: $(TOOLS)

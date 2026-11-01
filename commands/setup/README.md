@@ -1,33 +1,50 @@
-# SETUP for Concurrent CP/M-86
+# SETUP.CMD
 
-`setup.a86` is the maintained disassembly; `setuporg.a86` freezes the
-original. Run `make check` to assemble both and compare the complete files
-with `../../base/setup.cmd`, including headers and padding. No code bytes
-are patched during the build.
+SETUP customizes the IBM PC/XT XIOS. Run it from a local console. F1 opens
+the current topic in HELP.HLP. Escape at the main menu exits. F10 opens the
+update menu, where F3 selects a drive and F5 writes its CCPM.SYS. The new
+settings take effect when that system next boots.
 
-The CP/M-86 disassembly was used as a reference. The Concurrent version retains the memory-disk, serial/function-key saving,
-floppy timing, verification and storage-selection routines. It checks the
-Concurrent OS and console context and uses the Concurrent XIOS interfaces.
-CP/M startup-command, FIDDS and musical-error menus are absent. The
-configuration sector begins at 0908h with signature DDB2h.
+| Main menu key | Setting |
+| --- | --- |
+| F3 | Save current programmable function keys or serial settings |
+| F4 | MDisk size and starting segment |
+| F5 | Diskette head step time |
+| F6 | Verify after diskette writes |
+| F7 | Serial port assignment to printer or terminal |
+| F8 | Maximum memory per process, 064–999 KiB |
+| F9 | Color monitor scroll mode |
 
-Byte equality verifies layout and encodings; it does not exercise hardware.
+The command-tail table recognizes `/PARAM`, `/MDISK`, `/HEAD`, `/VERIFY`,
+`/SERIAL` and `/MEMORY` to enter their menus directly. `/PFKSAVE` and
+`/PORTSAV` preselect the corresponding save flag and enter the main menu.
+The comparison uses the supplied tail length and uppercase bytes. A prefix
+selects the first matching entry. An unmatched tail falls through to the
+main menu.
 
-## Disassembly coverage and encoding
+## Relationship to CCP/M SETUP
 
-The executable region 0100h..0907h contains 767 instructions. Its only
-non-instruction ranges are the copyright (0102h..0125h), console error
-(0176h..01ACh), OS error (01D8h..0202h), and menu dispatch tables at
-0150h, 0224h, 027Eh, 03EAh, 043Eh and 04B5h. All other DB storage is the
-loader page or data beginning at 0908h. There are no opcode-DB exceptions.
+The two programs share the function-key menu design, MDisk arithmetic,
+diskette timing and verification logic, and console drawing routines.
+The CCP/M version updates a configuration sector. CDOS opens CCPM.SYS,
+uses its header to locate the configuration, checks the 16-byte
+`Setup Buffer ==>` signature, then replaces the 512-byte configuration
+block. The CDOS program also has serial-console assignment, a per-process
+memory limit, scroll modes and a linked HELP reader. The utility displays
+version 4.1 on the 4.11 release disk.
 
-The image shares CODE and DATA. Absolute symbolic aliases deliberately
-prevent ASM86 from inserting CS overrides for code-resident variables.
-The complete-file comparison protects those original addresses. Interior
-banner addresses retain aliases without breaking the displayed sentence
-into artificial string fragments. Menu text is grouped on logical lines;
-control bytes and zero terminators remain explicit.
+## Rebuilding the release
 
-Usage: `SETUP` opens the function-key menus; it has no command-tail parser.
-CP/M reference menus for startup commands, FIDDS and musical error messages
-are not present in this Concurrent image. Both references remain separate.
+`setup.a86` is the maintained disassembly and `setuporg.a86` is the frozen
+reconstruction. Run `make check` to assemble both with ASM86 and compare
+each complete CMD against the reference from CDOS 4.11 disk 2 (16,256 bytes).
+
+CODE contains SETUP through 0A94h and embedded HELP from 0AA0h. The nine
+menu dispatch tables are symbolic words. Two instructions at 0202h and
+0207h have an explicit 2Eh CS prefix followed by a mnemonic MOV. Combining
+the override and MOV in ASM86 selects a longer displacement. In HELP,
+ASM86 selects 39 equivalent encodings. Each is annotated in the source.
+`pack.py` checks and restores those encodings, restores the linker's DATA
+maximum, compacts the group descriptors and emits the two CODE-to-DATA
+relocations at 0B03h and 0B10h. The build reads the reference only for
+the final comparison.
