@@ -1,9 +1,9 @@
 # SDIR: Concurrent DOS 4.1 compatibility
 
 Built from the imported CCP/M-86 3.1 PL/M sources. The independent 4.11
-reference is `base/sdir411.cmd`, extracted from release disk 3. The older
-`base/sdir.cmd` identifies itself as CCP/M-86 2.0 and is preserved separately;
-it is not the 4.11 oracle. Neither binary is a build dependency.
+reference is `base/sdir.cmd`, extracted from release disk 3. It replaces
+the older CCP/M-86 2.0 reference after the 4.11 assessment. The original
+binary is a test reference, not a build dependency.
 
 ## Syntax and options
 

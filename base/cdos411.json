@@ -1,6 +1,6 @@
 {
   "release": "4.11",
-  "policy": "Reference binaries only; packaging continues to use maintained command builds. Existing base files are not overwritten. Image-set membership does not establish OEM authorship for supplemental files.",
+  "policy": "Reference binaries only; packaging continues to use maintained command builds. Existing base files are retained unless an assessed replacement is explicitly selected; SDIR now uses the 4.11 reference. Image-set membership does not establish OEM authorship for supplemental files.",
   "images": {
     "cdos-4.11-2.img": "238eedd9ab93c1528759e9718a9520bbae8541b6b63a91cd16048213aa347a7c",
     "cdos-4.11-1.img": "8f3222ca4f789fd94b5c2dbcb126500bbbde076f0fa80d563b2f5d20e8e4cbab",
@@ -498,8 +498,8 @@
     },
     {
       "name": "sdir.cmd",
-      "status": "existing base retained",
-      "base_sha256": "d51187d2d0d8e588787c3fcbbbd7ad4ca8625bcb8cb19b8c962223accb189945",
+      "status": "replaced legacy base with assessed 4.11 reference",
+      "base_sha256": "cfde9821dbe883275e57e92b2d5b7c6f5f0613818940f06bad10f5c3555c3c79",
       "references": [
         {
           "image": "cdos-4.11-3.img",
@@ -507,12 +507,7 @@
           "sha256": "cfde9821dbe883275e57e92b2d5b7c6f5f0613818940f06bad10f5c3555c3c79",
           "bytes": 13312
         }
-      ],
-      "assessment_reference": {
-        "path": "sdir411.cmd",
-        "sha256": "cfde9821dbe883275e57e92b2d5b7c6f5f0613818940f06bad10f5c3555c3c79",
-        "reason": "Existing sdir.cmd is a legacy CCP/M 2.0 binary; preserve it until the 4.11 assessment is complete."
-      }
+      ]
     },
     {
       "name": "set.cmd",

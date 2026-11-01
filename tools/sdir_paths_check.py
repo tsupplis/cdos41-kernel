@@ -38,7 +38,7 @@ def check():
         shutil.copyfile(MEDIA / 'diskdefs', folder / 'diskdefs')
         shutil.copyfile(MEDIA / 'cdos86.img', folder / 'cdos86.img')
         command('mformat', '-C', '-i', 'fat.img', '-t', '40', '-h', '2', '-n', '8', '-c', '2', '::')
-        for src, name in [(ROOT / 'base/sdir411.cmd', 'OSDIR.CMD'),
+        for src, name in [(ROOT / 'base/sdir.cmd', 'OSDIR.CMD'),
                           (ROOT / 'commands/sdir/sdir.cmd', 'NSDIR.CMD')]:
             command('mcopy', '-i', 'fat.img', str(src), '::' + name)
         fixtures = {'FZERO.TXT': b'', 'FONE.TXT': b'hello\r\n\x1a',

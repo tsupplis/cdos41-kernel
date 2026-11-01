@@ -46,29 +46,33 @@ restored locally; no build depends on the external archive. Reference imports
 do not add tools to the distribution. CARDFILE, LOAD6300 and COMPAQ are retained
 as references only. Supplemental image contents also remain references only.
 
-"Rebuild" below means the maintained build, including local patches, not a
-fresh pristine-OEM compilation. A binary difference alone is not a defect.
+The top-level [command table](../README.md#commands) is the complete inventory
+and defines the parity statuses. This work list uses those same statuses.
+Provenance notes are kept below the table, separate from outstanding tasks.
 
-| Command/group | Current assessment against 4.11 | Next step |
+Only Pending and Known gap entries are active work.
+
+| Command/group | Parity | Remaining work |
 | --- | --- | --- |
-| CHDIR, MKDIR, SYSDISK, HDMAINT, REN.EXE | Byte-identical | Closed |
-| SETPORT | Only 39 documented equivalent instruction encodings | Closed; existing check |
-| INITDIR | Only an overwritten runtime stack-limit word differs | Closed; new complete-file check and tool README |
-| COPY.EXE | Path guard aligned; only serial and exact MZ header differences remain | Closed; complete-file check and 18 routine cases |
-| RMDIR | 4.11 diagnostics ported; code/data match after copyright relocation | Closed; complete comparison and 12 error-path cases |
-| LOADCCPM | 4.11 messages and vector preservation ported; byte-identical | Closed; complete-file check |
-| DSKMAINT | Main command code matches after 316 data relocations; helper/runtime and embedded boot differences remain | In progress |
-| ERASE.EXE | Executable logic identical; exact serial/header/zero-padding differences checked | Closed |
-| PATH.EXE, FUNCTION, ERAQ | Binary differences not yet classified | Pending |
-| CHSET, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP | Compiler/runtime versus logic differences not yet separated | Pending |
-| BATCH, PIP, HELP, DATE.EXE | Intentional local changes exist; residual differences not yet classified | Pending |
-| TIME.EXE | Reconstruction and formatting correction already tested | Retain regression coverage |
-| WINDOW/WMENU | Immediate colour repaint restored; stored-state checks extended to actual screen attributes | Closed for the reported colour bug; live WINDOW/WMENU coverage passes |
-| SHOW, SET, TYPE | Prior parity comparison already used matching 4.11 binaries | Closed for identified gaps |
-| SDIR | 27 option cases plus 7 explicit-path/current-directory cases pass | Closed for identified gaps; retain intentional improvements |
-| GENCCPM, GENLDR | No original in this release-image set | Separate reference needed |
+| CHDIR, MKDIR, SYSDISK, HDMAINT, REN.EXE, LOADCCPM | Byte-identical | None for release equivalence |
+| SETPORT | Equivalent | None; 39 equivalent instruction encodings checked |
+| INITDIR | Equivalent | None; overwritten runtime word checked |
+| COPY.EXE, ERASE.EXE | Equivalent | None; exact serial/header/padding exceptions checked |
+| RMDIR | Equivalent | None; copyright relocation checked, diagnostics aligned |
+| SDIR | Behavior tested | No known fix pending; 27 option and 7 path/current-directory cases |
+| WINDOW/WMENU | Behavior tested | No known fix pending; immediate colour repaint now checked against actual screen bytes |
+| SHOW, SET, TYPE, TIME.EXE | Behavior tested | No known fix pending; retain documented regression coverage |
+| SYSTAT | Behavior tested | Compared against the retained 4.1 original; no known fix pending |
+| ERA, REN.CMD | Behavior tested | Import review complete against retained originals; release not established |
+| SUBMIT | No reference | CCP/M-86 3.1 original unavailable. No active work. |
+| DSKMAINT | Known gap | Recover/verify 4.11 DOS boot sector; classify helper/runtime differences |
+| PATH.EXE, FUNCTION, ERAQ | Pending | Classify binary differences |
+| CHSET, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP | Pending | Separate compiler/runtime differences from command logic |
+| BATCH, PIP, HELP, DATE.EXE | Pending | Separate intentional local changes from remaining release differences |
+| GENCCPM, GENLDR | No reference | No independent release binaries available |
 
-Existing base files were not overwritten. SDIR uses `base/sdir411.cmd` as
-its independent 4.11 oracle; the older `base/sdir.cmd` is retained separately. SET's two image variants are both recorded in the
-manifest; the current base matches one. Other retained imports without a 4.11
-counterpart are not newly certified by this audit.
+SDIR's verified 4.11 reference is now `base/sdir.cmd`, replacing the older
+CCP/M reference. Other original binaries were retained. SET matches one
+of two variants in the 4.11 image set. Neither note by itself is an outstanding
+code fix. Other imported/new tools without a retained CDOS release counterpart
+are Additional tool, not implicitly pending replacements.
