@@ -1,0 +1,31 @@
+ cseg
+ call getcode
+ cmp ax,1234h
+ jnz bad
+ call getcode
+ cmp ax,1234h
+ jnz bad
+ mov dx,0fedch
+ mov cl,108
+ int 224
+ mov dx,offset good
+ jmp report
+bad:
+ mov dx,offset fail
+report:
+ mov cl,9
+ int 224
+ mov dx,0
+ mov cl,0
+ int 224
+getcode:
+ mov dx,0ffffh
+ mov cl,108
+ int 224
+ ret
+ dseg
+ org 100h
+good db ' PASS rleaf',13,10,'$'
+fail db ' FAIL rleaf',13,10,'$'
+
+ end

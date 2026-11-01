@@ -1,0 +1,30 @@
+ cseg
+ mov dx,offset waitmsg
+ mov cl,9
+ int 224
+again:
+ mov dx,1
+ mov cl,141
+ int 224
+ jmp again
+ mov dx,offset good
+ jmp report
+bad:
+ mov dx,offset fail
+report:
+ mov cl,9
+ int 224
+ mov dx,0
+ mov cl,0
+ int 224
+getcode:
+ mov dx,0ffffh
+ mov cl,108
+ int 224
+ ret
+ dseg
+ org 100h
+good db ' PASS rabort',13,10,'$'
+fail db ' FAIL rabort',13,10,'$'
+waitmsg db 'CTRL-C READY',13,10,'$'
+ end

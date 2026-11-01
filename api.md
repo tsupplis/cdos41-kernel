@@ -307,7 +307,7 @@ Sources: [xcon1.lib](kernel/con/xcon1.lib), [xcon2.lib](kernel/con/xcon2.lib),
 | 69 | 105 | Get Date and Time | BDOS | Implemented | — |
 | 6A | 106 | Set Default Password | BDOS | Implemented | — |
 | 6B | 107 | Return Serial Number | SUP | Implemented | — |
-| 6C | 108 | Get/set program return code (CP/M 3 API) | SUP | Not implemented in this CDOS kernel; AX=BX=FFFFh, CX=1 | — |
+| 6C | 108 | Get/set program return code (CP/M 3 API) | SUP | DX=FFFFh reads the current process word. Other DX values set it. AX=BX returns the word, CX=0 | — |
 | 6D | 109 | Get/Set Console Mode | CIO | Implemented | — |
 | 6E | 110 | Get/Set Output Delimiter | CIO | Implemented | — |
 | 6F | 111 | Print Block | CIO | Implemented | — |
@@ -392,7 +392,7 @@ beyond them (the source range guard uses the table byte length).
 | 2 | Minimum memory | DX=FFFFh queries; other values set minimum memory |
 | 3 | 8087 policy | DL=FFh queries; zero/nonzero clears/sets policy bit |
 | 4 | Suspend policy | DL=FFh queries; zero/nonzero clears/sets policy bit |
-| 5 | Shell return code | DX=FFFFh queries; other values set; separate from DOS AH=4Dh and unsupported native function 108 |
+| 5 | Shell return code | DX=FFFFh queries; other values set; separate from DOS AH=4Dh and native function 108 |
 | 6 | ORDER | DS:DX points to 13 bytes: byte 0 zero=set, nonzero=query; remaining 12 bytes are four three-character extensions |
 | 7 | Built-in table address | Internal table offset returned in DX; not a standalone application service |
 | 8 | Additional memory | DX=FFFFh queries; other values set additional memory |
@@ -417,7 +417,7 @@ callers must manage launch selection, console reacquisition and cleanup.
 
 | Area | Current limit |
 | --- | --- |
-| Native return status | E0h/6Ch (108 decimal) remains unimplemented, despite DOS AH=4Dh and the private shell return-code service |
+| Native return status | INT E0h, CL=108. New processes start at zero. P_CHAIN transfers the word to the replacement CMD. Termination publishes the result to the surviving parent. Reads are repeatable. Fatal BDOS disk termination sets FFFDh and keyboard Ctrl-C termination sets FFFEh. |
 | Serial | Native AUX and DOS 03h/04h are present; INT 14h remains firmware-owned. Hardware protocol/ownership tests are separate from this source inventory |
 | DOS control calls | Ctrl-Break flag is stored but unused; verify is a no-op; IOCTL only implements AL=0; country information is a five-byte US subset |
 | Residency | INT 27h is an IRET stub; AH=31h has a limited keep-memory path, not full TSR semantics |

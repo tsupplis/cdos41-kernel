@@ -1,0 +1,35 @@
+ cseg
+ call getcode
+ or ax,ax
+ jnz bad
+ mov dx,1234h
+ mov cl,108
+ int 224
+ mov dx,offset tail
+ mov cl,26
+ int 224
+ mov cl,47
+ int 224
+ jmp bad
+ mov dx,offset good
+ jmp report
+bad:
+ mov dx,offset fail
+report:
+ mov cl,9
+ int 224
+ mov dx,0
+ mov cl,0
+ int 224
+getcode:
+ mov dx,0ffffh
+ mov cl,108
+ int 224
+ ret
+ dseg
+ org 100h
+good db ' PASS rchain',13,10,'$'
+fail db ' FAIL rchain',13,10,'$'
+tail db 'B:RLEAF',0
+ rb 122
+ end

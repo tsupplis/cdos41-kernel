@@ -1,0 +1,35 @@
+ cseg
+ mov dx,1
+ mov cl,14
+ int 224
+ mov dx,0
+ mov cl,45
+ int 224
+ mov cl,28
+ int 224
+ mov dx,offset fcb
+ mov cl,22
+ int 224
+ jmp bad
+ mov dx,offset good
+ jmp report
+bad:
+ mov dx,offset fail
+report:
+ mov cl,9
+ int 224
+ mov dx,0
+ mov cl,0
+ int 224
+getcode:
+ mov dx,0ffffh
+ mov cl,108
+ int 224
+ ret
+ dseg
+ org 100h
+good db ' PASS rfatal',13,10,'$'
+fail db ' FAIL rfatal',13,10,'$'
+fcb db 2,'NOFILE  TXT'
+ rb 24
+ end

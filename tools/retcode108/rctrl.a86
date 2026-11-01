@@ -1,0 +1,39 @@
+ cseg
+ mov dx,100
+ mov cl,145
+ int 224
+ mov dx,4321h
+ mov cl,108
+ int 224
+ mov dx,offset child
+ mov cl,150
+ int 224
+ or cx,cx
+ jnz bad
+ mov cl,146
+ int 224
+ call getcode
+ cmp ax,0fffeh
+ jnz bad
+ mov dx,offset good
+ jmp report
+bad:
+ mov dx,offset fail
+report:
+ mov cl,9
+ int 224
+ mov dx,0
+ mov cl,0
+ int 224
+getcode:
+ mov dx,0ffffh
+ mov cl,108
+ int 224
+ ret
+ dseg
+ org 100h
+good db ' PASS rctrl',13,10,'$'
+fail db ' FAIL rctrl',13,10,'$'
+child db 0,'B:RABORT',0
+ rb 120
+ end

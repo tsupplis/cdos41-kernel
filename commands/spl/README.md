@@ -30,3 +30,69 @@ Run `make check` to assemble SPL and compare the whole 12,160-byte CMD
 against the retained copy from CDOS 4.11 disk 3. All instructions are ASM86
 mnemonics. The packaging step restores the release DATA growth limit and
 seven equivalent register MOV encodings selected differently by ASM86.
+
+## Reconstructed C server
+
+[splc.c](splc.c) is a behavioral reconstruction, not recovered original source.
+It uses Digital Research C **1.11**, K&R declarations, unsigned bytes and
+16-bit words. [splc.h](splc.h) mirrors the relevant layouts from the surviving
+DSP/PRINTMGR SPLDEF.H. Startup verifies all eight wire/disk structure sizes.
+The build reuses DSP's UTLASM assembly interfaces and the installed C runtime.
+
+The C build is deliberately separate:
+
+```sh
+make cbuild      # DRC 1.11 + RASM86 + LINK86 -> splc.cmd
+make check-c     # paired machine-code behavioral tests under emu2
+make check-live  # paired PRINTMGR/DSP workflows under CDOS in PCE
+```
+
+`all`, `check` and distribution images still use the byte-identical assembly
+`spl.cmd`. The C command does not need encoding patches and is not expected to
+match the original bytes. Its DATA allocation is capped at 5 KB, including
+stack space, rather than the linker's default 64 KB.
+
+| C routines | Assembly behavior |
+| --- | --- |
+| `splinit`, `readyin` | Queue setup, INDEX.DSP creation/recovery, stable priority insertion |
+| `spstart`, `spdata`, `spfinish` | Eight concurrent submissions, record buffering, ready-job creation |
+| `spabort`, `spstatus` | Submission/queued/active cancellation and saved-job enumeration |
+| `spevent`, `spreport`, `spsched` | DSP completion/status messages and device dispatch |
+| `spsend`, `spstop` | Stale-reply retry/drain and preserve/delete shutdown |
+
+Compatibility details retained include the 254 job numbers plus sentinel,
+A-P filename digits, one-way APPEND, six reply attempts before draining stale
+SPLOUT data, 64-byte index halves, partial-close FCB flags, and final-record
+byte counts without tail padding. Historical disk-error handling is retained:
+full-record write errors set flag 2, while a failed final partial-record write
+does not change FINISH's result. This reconstruction does not silently repair
+that release behavior.
+
+Defined deviations are bounds checks for malformed job/device requests and
+diagnostics for invalid one-way messages, invalid ready/saved-device state,
+incompatible layouts, and index create/open failures. The assembly's
+out-of-bounds memory accesses are not reproduced.
+
+### Validation
+
+[tests/check.py](tests/check.py) loads **both actual CMD binaries**, including
+their startup runtimes, into [the emu2 harness](tests/splcheck.asm). It compares
+queue payloads, spool-record writes, index writes, deletions and retry delays.
+Twenty paired scenarios cover submission, defaults, length clamping, capacity,
+priority/FIFO scheduling, two devices, cancellation, DSP reports, recovery,
+job-number wrap, truncated indexes, shutdown and injected errors.
+Additional C-only cases check malformed-message guards. This requires Python 3,
+NASM and emu2; no Python packages are needed.
+
+[tests/live.py](tests/live.py) additionally compares eleven screens from real
+PRINTMGR/DSP startup, submission, status, reset, restart and termination in PCE.
+It requires the normal built system components, GENCCPM, PRINTMGR, DSP, the
+system image, PCE/ROMs, mtools and cpmtools. All disk writes are to temporary
+copies; printer output uses the existing null-device emulator configuration.
+
+The default system image's 1 KB queue pool cannot start even the original SPL
+in this workflow. The live test therefore generates a disposable system with
+`qbufsize=800` (hex: 2 KB) and `nqcbs=20` (hex: 32). It validates that system
+before booting it and does not change the repository's system configuration
+or distribution images. Synthetic tests are not a substitute for testing real
+printer hardware or every possible BDOS failure.

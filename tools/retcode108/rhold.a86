@@ -1,0 +1,33 @@
+ cseg
+ mov dx,6666h
+ mov cl,108
+ int 224
+ mov dx,offset waitmsg
+ mov cl,9
+ int 224
+ mov cl,1
+ int 224
+ call getcode
+ cmp ax,6666h
+ jnz bad
+ mov dx,offset good
+ jmp report
+bad:
+ mov dx,offset fail
+report:
+ mov cl,9
+ int 224
+ mov dx,0
+ mov cl,0
+ int 224
+getcode:
+ mov dx,0ffffh
+ mov cl,108
+ int 224
+ ret
+ dseg
+ org 100h
+good db ' PASS rhold',13,10,'$'
+fail db ' FAIL rhold',13,10,'$'
+waitmsg db 'ISOLATION READY',13,10,'$'
+ end

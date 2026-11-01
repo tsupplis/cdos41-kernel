@@ -584,3 +584,16 @@ The IBM PC XIOS publishes the JW signature at DATA + 0C3Ch and the
 keyboard maps, printer records, translation data and saved selections.
 The status line uses the release Prn= field to leave space for the
 two-character country code and the seven/eight-bit indicator.
+
+### Native program return code (BDOS 108)
+
+A native CMD can read its 16-bit return code with CL=108 and DX=FFFFh, or
+set it with any other DX value. Ordinary process creation clears the word.
+A disk CMD chain transfers the value and the parent relationship before
+scheduling its replacement. On exit the surviving parent receives the
+completed child's word. If multiple children finish, the latest delivery
+wins. The implementation uses the existing PD word at offset 2Ch.
+
+Ctrl-C termination returns FFFEh. Fatal BDOS disk errors return FFFDh.
+The DOS child-status call and the private shell return-code service keep
+their existing interfaces. Run `make check-retcode` for the PCE regression.

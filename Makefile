@@ -158,3 +158,7 @@ check-release-commands: all
 .PHONY: check-dskmaint-live
 check-dskmaint-live: all
 	python3 tools/dskmaint_live_check.py
+
+.PHONY: check-retcode
+check-retcode: media
+	python3 tools/retcode108/check.py
