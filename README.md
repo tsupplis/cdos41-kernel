@@ -179,21 +179,15 @@ Only Pending and Known gap entries are active work.
 | Additional tool | Imported/new tool without a corresponding retained CDOS release binary | Outside the 4.11 replacement audit |
 | Original used | Distribution uses the original itself; no replacement is being compared | No parity comparison needed; sources may still be missing |
 
-“Behavior tested” applies to the reference named in that row. For ERA and REN.CMD,
-it does not certify an independently identified 4.11 release.
-Detailed test scope and intentional command-line extensions belong in tool
-READMEs. The [assessment work list](commands/README.md#411-reference-assessment)
-records the remaining tasks. A successful build or `make check` does not turn
-a Pending row into verified parity.
 
 | Tool | Purpose | Original reference | Source (`commands/`) | Parity |
 | --- | --- | --- | --- | --- |
 | `asm80` | 8080 assembler | - | Translated using XLT86 from CP/M-80 2.2 and adapted | Additional tool |
 | `asm86` | 8086 assembler | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool |
-| `batch` | Run BAT command files | 4.11 | Recompiled from CDOS 4.1 and adapted | Behavior tested |
+| `batch` | Run BAT command files | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Behavior tested |
 | `chdir / mkdir` | Change or create directories | 4.11 | Recompiled from CDOS 4.1; shared D.A86 implementation | Byte-identical |
 | `rmdir` | Remove directories | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Equivalent |
-| `chset` | Inspect or change CMD header flags | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
+| `chset` | Inspect or change CMD header flags | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Behavior tested |
 | `cls` | Clear the terminal screen | - | New; TMP built-in; VT52 ESC-E | Additional tool |
 | `copy.exe` | Copy files | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Equivalent |
 | `copymenu` | Copy menu definitions | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
@@ -203,7 +197,7 @@ a Pending row into verified parity.
 | `ddt86` | 8086 interactive debugger | - | Recompiled from CCP/M-86 3.1 | Additional tool |
 | `dir` | List directory contents | - | Recompiled from CCP/M-86 3.1 and adapted; separate CDOS 4.1 TMP built-in | Additional tool |
 | `dredix` | Full-screen text editor | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
-| `dskmaint` | Format, verify and copy diskettes | 4.11 | Recompiled from CDOS 4.1 | Known gap |
+| `dskmaint` | Format, verify and copy diskettes | 4.11 | Recompiled from CDOS 4.1 with reconstructed 4.11 DOS boot sector | Behavior tested |
 | `dsp` | Inspect print-spool information | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
 | `ed` | Line-oriented text editor | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool |
 | `editmenu` | Edit menu definitions | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
@@ -223,7 +217,7 @@ a Pending row into verified parity.
 | `path.exe` | Display or set the DOS search path | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
 | `pip` | Copy and transfer files | 4.11 | Recompiled from CDOS 4.1 and adapted | Behavior tested |
 | `print` | Print files using Concurrent printer services | - | Recompiled from CCP/M-86 3.1 | Additional tool |
-| `printmgr` | Manage print spooling | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
+| `printmgr` | Manage print spooling | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Behavior tested |
 | `put` | Capture console output into a file | - | New; shared putget.lib engine, imported from the CCP/M project | Additional tool |
 | `rdr` | Redirect console input and output together | - | New; shared putget.lib engine, imported from the CCP/M project | Additional tool |
 | `redos.com` | Return from Concurrent to DOS | 4.11 | —; original OEM binary retained, implementation source missing | Original used |
@@ -294,6 +288,8 @@ system and the live regression checks.
 | `make check-aliases` | TMP/BATCH DEL execution, argument preservation and common PAUSE text |
 | `make test` | Launch PCE with system/tools disks on A:/B: |
 | `make dist` | Root-level disk images and disks.zip |
+| `make check-release-commands` | Compare 4.11 and rebuilt command behavior in PCE and run the DATE parser cases |
+| `make check-dskmaint-live` | Format a disposable FAT floppy and verify empty-disk recovery and both system filenames at cold boot |
 | `make check-dist` | Build and verify the disk archive |
 | `make clean` | Remove generated build outputs, media and releases |
 

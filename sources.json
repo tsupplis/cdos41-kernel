@@ -2987,10 +2987,11 @@
     {
       "path": "commands/pip/pip4.plm",
       "origin": "ccpm86-kernel/commands/pip/pip4.plm",
-      "sha256": "0109fd431e7a09ae03ea945905b079b1faf0c909dbf027dd47132b460cb1fc40",
+      "sha256": "9dc24f1b45388089a07ced159d3f39ebefb558697a38052742b7ebdc49dff9f9",
       "original_sha256": "3e9eb5a3b3d955699a3582a459ae6e2202bb9f4842765a9c3c9c8f43763e7fc5",
       "modifications": [
-        "Update the displayed PIP version banner to 4.1N."
+        "Update the displayed PIP version banner to 4.1N.",
+        "Correct interactive banner to 4.1N."
       ]
     },
     {
@@ -3038,9 +3039,12 @@
     {
       "path": "commands/batch/tmpmenu.lib",
       "origin": "41SRC_04.IMG.DIR/TMPMENU.LIB",
-      "sha256": "79ed710c842e0907623a4b033d93dc96ae83dded5bfce9ed36789e000576bb44",
+      "sha256": "7251b1da13d1b224afb807f284a477378d4286abbd8031b450f61cce0dea4f18",
       "original_sha256": "aed3e7be5396817e0c9ac86d3934779584e4f4a11bb41c6c1d4c8a91e5cdb8ed",
-      "modifications": "Reviewed 4.1 help, DIR bracket aliases and TMP/BATCH message consistency; see patches.md."
+      "modifications": [
+        "Reviewed 4.1 help, DIR bracket aliases and TMP/BATCH message consistency; see patches.md.",
+        "Restore 4.11 console attach order and priority reset."
+      ]
     },
     {
       "path": "commands/chset/chset.sub",
@@ -3055,7 +3059,11 @@
     {
       "path": "commands/chset/function.c",
       "origin": "41SRC_07.IMG.DIR/FUNCTION.C",
-      "sha256": "cd13003572a601b9abeb8c815d30f62180388178bc5140623fb950483b2a45fb"
+      "sha256": "4d9e5b6d1ca6d8c976ef516bc451d68260397cb4e436352b4e2b4bb58f60bdba",
+      "original_sha256": "cd13003572a601b9abeb8c815d30f62180388178bc5140623fb950483b2a45fb",
+      "modifications": [
+        "Treat unset CMD header fields as byte FFh."
+      ]
     },
     {
       "path": "commands/chset/cpmfunc.h",
@@ -3065,7 +3073,11 @@
     {
       "path": "commands/chset/chset.c",
       "origin": "41SRC_07.IMG.DIR/CHSET.C",
-      "sha256": "06d85afae9e1f2904495f70d82cffc4c44fed836f9afb99d6bc077b003310ee2"
+      "sha256": "52d78e531c74c67f462ad743383b43099caab2d815841b6e52b0d8afc2aa433c",
+      "original_sha256": "06d85afae9e1f2904495f70d82cffc4c44fed836f9afb99d6bc077b003310ee2",
+      "modifications": [
+        "Compare empty option fields as byte values."
+      ]
     },
     {
       "path": "commands/chset/main.c",
@@ -3510,7 +3522,11 @@
     {
       "path": "commands/dskmaint/dosboot.a86",
       "origin": "41SRC_08.IMG.DIR/DOSBOOT.A86",
-      "sha256": "3936fda77a6ff4e940bd2873e38892a9d0857e67ab1534e108b661986d48b4b0"
+      "sha256": "a85b89790d89d8622a9ed482577519ba6a43c72f8e4e34f7702b1ee4f947cc9b",
+      "original_sha256": "3936fda77a6ff4e940bd2873e38892a9d0857e67ab1534e108b661986d48b4b0",
+      "modifications": [
+        "Replace OEM non-system sector with labelled reconstruction of the 4.11 sector in base/dskmaint.cmd."
+      ]
     },
     {
       "path": "commands/dskmaint/func10.a86",
@@ -3809,7 +3825,11 @@
     {
       "path": "commands/printmgr/spoolm.c",
       "origin": "41SRC_11.IMG.DIR/SPOOLM.C",
-      "sha256": "4956ccf84a2d672537ca205f3f0bc101ae0841e7ae271b758e2867686fa850a8"
+      "sha256": "df4a1dc1a746e61bc811e07a87031712fceeedb8142345fcbb37aa47e63cfc6f",
+      "original_sha256": "4956ccf84a2d672537ca205f3f0bc101ae0841e7ae271b758e2867686fa850a8",
+      "modifications": [
+        "Document the 4.11 default page length."
+      ]
     },
     {
       "path": "commands/printmgr/spldef.h",
@@ -3819,7 +3839,11 @@
     {
       "path": "commands/printmgr/spool.c",
       "origin": "41SRC_11.IMG.DIR/SPOOL.C",
-      "sha256": "f7eb505d380382442e1213a0b5bf1d1e297f93e64673e9af8f93c595c8ca3b25"
+      "sha256": "72858d3aac692601423281e41a0273e5930a7d340356a2475e69bad5fd365407",
+      "original_sha256": "f7eb505d380382442e1213a0b5bf1d1e297f93e64673e9af8f93c595c8ca3b25",
+      "modifications": [
+        "Restore 4.11 default page length of 60 lines."
+      ]
     },
     {
       "path": "commands/printmgr/cpmcall.h",

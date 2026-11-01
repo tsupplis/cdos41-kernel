@@ -1,0 +1,89 @@
+"""Format a disposable FAT floppy with DSKMAINT and cold-boot its written sector."""
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def run(folder, *args, **kwargs):
+    return subprocess.run(args, cwd=folder, check=True, capture_output=True, **kwargs)
+
+
+def session(folder, drive_a, drive_b, commands):
+    config = (ROOT / 'media/cdos86.cfg').read_text().replace('driver = "sdl"', 'driver = "null"')
+    config = config.replace('sdl:lowpass=5000', 'null')
+    config = config.replace('cdos86.img', drive_a).replace('cdostools.img', drive_b)
+    (folder/'cfg').write_text(config)
+    with (folder/'pce.log').open('wb') as log:
+        subprocess.run(['pce-ibmpc','-c','cfg','-t','null','-g','vga'],cwd=folder,
+                       input=('\n'.join(commands+['q'])+'\n').encode(),
+                       stdout=log,stderr=log,timeout=150,check=True)
+
+
+def screen(folder, label):
+    data = (folder/(label+'.bin')).read_bytes()
+    text = '\n'.join(data[i:i+160:2].decode('cp437').rstrip() for i in range(0,3840,160))
+    (folder/(label+'.txt')).write_text(text)
+    return text
+
+
+def format_floppy(folder):
+    shutil.copyfile(ROOT/'media/cdosmaint.img', folder/'maint.img')
+    floppy = folder/'formatted.img'
+    floppy.write_bytes(bytes(368640))
+    commands = ['c f000000']
+    for ch in list('dskmaint')+['Space','f','Return']:
+        commands.extend(['key '+ch,'c 200000'])
+    for label, key in [('type','F5'),('drive','F4'),('confirm','y')]:
+        commands.extend(['c 4000000', f'save "{label}.bin" bin b800:0000 fa0','key '+key])
+    commands.extend(['c f000000','save "formatted.bin" bin b800:0000 fa0'])
+    session(folder,'maint.img','formatted.img',commands)
+    for label in ('type','drive','confirm','formatted'):
+        screen(folder,label)
+    sector=(ROOT/'commands/dskmaint/dosboot.bin').read_bytes()
+    assert floppy.read_bytes()[:512] == sector, 'DSKMAINT did not write the release sector to drive B'
+    run(folder,'mdir','-i','formatted.img','::')
+    return floppy
+
+
+def build_low_kernel(folder):
+    # This release bootstrap enters at 0060:0000. Generate a matching system
+    # in isolation; the normal CP/M boot image uses OSSTART=6000h.
+    gen = folder/'sysgen'
+    gen.mkdir()
+    source=ROOT/'kernel/sysgen'
+    for pattern in ('*.con','*.rsp'):
+        for component in source.glob(pattern):
+            shutil.copyfile(component,gen/component.name)
+    recipe=(source/'genccpm.in').read_text()
+    assert recipe.count('osstart=6000') == 1
+    run(gen,'emu2',str(ROOT/'commands/genccpm/genccpm.cmd'),
+        input=recipe.replace('osstart=6000','osstart=60').encode(),timeout=30)
+    kernel=gen/'ccpm.sys'
+    assert int.from_bytes(kernel.read_bytes()[3:5],'little')==0x60
+    return kernel
+
+
+def cold_boot(folder, floppy, case, name, system, expected):
+    target=folder/(case+'.img')
+    shutil.copyfile(floppy,target)
+    if system:
+        run(folder,'mcopy','-i',target.name,str(system),'::'+name)
+    session(folder,target.name,'absent.img',['c f000000',f'save "{case}.bin" bin b800:0000 fa0'])
+    output=screen(folder,case)
+    for phrase in expected:
+        assert phrase in output,(case,phrase,output)
+
+
+if __name__=='__main__':
+    work=Path(tempfile.mkdtemp(prefix='cdos-dskmaint-'))
+    print('DSKMAINT diagnostics:',work,flush=True)
+    floppy=format_floppy(work)
+    print('PASS: DSKMAINT formatted a 360 KB FAT12 floppy and wrote the exact 4.11 boot sector',flush=True)
+    cold_boot(work,floppy,'empty','',None,['Not a boot disk','Insert boot disk'])
+    cold_boot(work,floppy,'original','CCPM.SYS',ROOT/'base/ccpm.sys',['25-Nov-85','A>'])
+    cold_boot(work,floppy,'rebuilt','CPM3.SYS',build_low_kernel(work),['Concurrent','A>'])
+    print('PASS: empty-disk recovery, original CCPM.SYS and low-linked rebuilt kernel as CPM3.SYS')
+    shutil.rmtree(work)

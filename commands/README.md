@@ -65,7 +65,7 @@ Only Pending and Known gap entries are active work.
 | SYSTAT | Behavior tested | Compared against the retained 4.1 original; no known fix pending |
 | ERA, REN.CMD | Behavior tested | Import review complete against retained originals; release not established |
 | SUBMIT | No reference | CCP/M-86 3.1 original unavailable. No active work. |
-| DSKMAINT | Known gap | Recover/verify 4.11 DOS boot sector; classify helper/runtime differences |
+| DSKMAINT | Behavior tested | 512-byte loader matches 4.11. Format, cold boot and help navigation pass. See [DSKMAINT](dskmaint/README.md). |
 | PATH.EXE | Behavior tested | Set two directories, display and clear match 4.11. The 314-byte command body matches. LINK86 uses a different startup copy offset. |
 | ERAQ, PIP | Behavior tested | ERAQ confirmation, refusal and missing-file cases match. PIP verified copy, concatenation and missing source match. The interactive banner now identifies 4.1N. |
 | CHSET | Behavior tested | Query and update match 4.11, including combined options, duplicate rejection and the resulting CMD bytes. Fixed the empty-field comparison. |

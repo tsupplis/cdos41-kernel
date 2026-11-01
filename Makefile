@@ -154,3 +154,7 @@ check-pctmp-live: all
 check-release-commands: all
 	python3 tools/release_commands_check.py
 	python3 tools/date_check.py
+
+.PHONY: check-dskmaint-live
+check-dskmaint-live: all
+	python3 tools/dskmaint_live_check.py

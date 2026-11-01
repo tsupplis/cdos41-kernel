@@ -71,3 +71,4 @@ dskmaint.cmd: dskmaint.raw dosboot.bin embed_boot.py Makefile
 check: check-boot
 check-boot: dskmaint.cmd
 	python3 embed_boot.py --check
+	python3 check_release.py

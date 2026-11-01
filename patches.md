@@ -528,3 +528,21 @@ foreground/background change. Both commands use the shared implementation.
 Regression coverage now compares actual text and colour bytes against the
 original for CARDDECK, full/background windows and interactive WMENU colour
 editing, rather than checking only stored colour settings. Syntax is unchanged.
+
+
+## 4.11 command alignment
+
+BATCH now attaches the console before freeing drives and restores priority 200
+before processing the next command. With just these changes, a rebuild of the
+unmodified OEM sources matches the release except for four serial characters.
+The maintained command retains the existing prompt, USER, alias and DIR changes.
+
+CHSET now compares empty option fields as byte values. SHARED=ON previously
+failed on its first occurrence. The paired regression checks updates, duplicate
+rejection and the resulting CMD header bytes. PRINTMGR uses the 4.11 default of
+60 printed lines on a 66-line form and reports that default in help. PIP's
+interactive banner identifies the maintained 4.1N version.
+
+DSKMAINT now embeds the released 360 KB DOS bootstrap. The full sector matches
+4.11. A floppy formatted by the rebuilt utility cold-boots both original and
+locally generated systems linked for segment 0060h. See the DSKMAINT README.
