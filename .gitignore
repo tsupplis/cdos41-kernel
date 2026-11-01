@@ -37,3 +37,8 @@
 /commands/window/hostcheck
 
 /commands/dskmaint/dskmaint.raw
+
+# Historical reference programs are source inputs, not generated outputs.
+!/base/*.cmd
+!/base/*.exe
+!/base/*.com

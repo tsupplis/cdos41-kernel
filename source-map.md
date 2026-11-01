@@ -55,9 +55,10 @@ DSKMAINT, HDMAINT, GENLDR and LOADCCPM on disks 08, 10 and 11.
 | `d` | D.A86 + PATH/DERROR (07) | Shared implementation for CHDIR/MKDIR/RMDIR/SYSDISK; no D executable |
 | `redos` | REDOS.SUB (11) | Blocked: REDOS.A86 missing |
 
-CARDFILE, LOAD6300 and COMPAQ are intentionally excluded from this project.
-Their original archive entries remain in `sources.json` for provenance; no
-local source copies or build targets are retained.
+CARDFILE, LOAD6300 and COMPAQ have reference-only 4.11 binaries in `base/`.
+They remain excluded from source builds and distributions. Their image/file
+provenance is recorded in `base/cdos411.json`; archive source inventory remains
+in `sources.json`.
 
 ## Missing standalone utility sources
 

@@ -10,7 +10,7 @@ Both executables are 29,184 bytes. Exactly 90 bytes differ:
 
 | File offsets | Difference | Meaning |
 | --- | --- | --- |
-| 000Eh, 0012h | MZ SS/checksum | Original SS=06E6h, rebuild SS=06E8h; separate stack placement/header difference |
+| 000Eh, 0012h | MZ SS/checksum | Original SS=06E6h, rebuild SS=06E8h; both 128-byte stacks lie in the zero-filled file reserve |
 | 022Bh–022Eh, 0234h–023Ah | Serial-number text | Original serial versus source placeholder |
 | 023Bh–0258h | Code patch area | 4.11 installs a backslash guard and relocated command-tail copy loop |
 | 029Dh–02A1h | Original loop entry | 4.11 calls the guard, then jumps past the old loop |
@@ -31,6 +31,7 @@ files were copied or deleted. The two header differences and serial text
 are distinct from this confirmed behavioral difference.
 
 Next: port the guard as labelled, commented source; add permanent regression
-coverage for ordinary names, concatenation and rejected paths; reassess the
-remaining header differences. No production COPY code has been changed by
+coverage for ordinary names, concatenation and rejected paths. Stack placement
+and its associated checksum difference require no command-logic change.
+No production COPY code has been changed by
 this assessment.

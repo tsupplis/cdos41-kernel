@@ -474,3 +474,10 @@ closes it with and without writes. It verifies the restored current directory,
 the written file, and an untouched same-named file in the other directory.
 The PCE boot/usability regression also passes. Critical-error fault injection
 remains a routine-level fixture test, not a claim of live faulty-media coverage.
+
+## Boot banner: 4.11 alignment status
+
+The IBM XIOS startup banner now adds `CDOS 4.1 rebuild - 4.11 alignment in
+progress`. The original platform/date and copyright lines remain intact.
+This describes ongoing comparison with the 4.11 release; it does not change
+the BDOS version or claim complete 4.11 parity. The README banner is unchanged.

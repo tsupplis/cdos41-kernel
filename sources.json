@@ -2041,7 +2041,7 @@
     {
       "path": "kernel/con/xinit.lib",
       "origin": "41SRC_05.IMG.DIR/XINIT.LIB",
-      "sha256": "af68b4956470266e47973f388b59055699436ac78577f644c9c38c5dd726a8db",
+      "sha256": "2b5e6d2135bd2dd78672390d7ca8df57462327e24562f824cc0b7cf51fcba035",
       "original_sha256": "cf04ecaf440ada29fcdda1e4a3c208816f299330079dbd6dd3ce03ddb2a74603",
       "modifications": [
         "Detect EGA/VGA text character height for the cursor, preserving legacy defaults and disabling CGA retrace waits on enhanced color adapters."
