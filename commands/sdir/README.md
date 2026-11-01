@@ -1,8 +1,9 @@
 # SDIR: Concurrent DOS 4.1 compatibility
 
-Built from the imported CCP/M-86 3.1 PL/M sources. The original 4.1
-`base/sdir.cmd` is retained as a behavioral reference. It is not used to
-build this command.
+Built from the imported CCP/M-86 3.1 PL/M sources. The independent 4.11
+reference is `base/sdir411.cmd`, extracted from release disk 3. The older
+`base/sdir.cmd` identifies itself as CCP/M-86 2.0 and is preserved separately;
+it is not the 4.11 oracle. Neither binary is a build dependency.
 
 ## Syntax and options
 
@@ -29,7 +30,7 @@ parser's prefix matching. Use `SDIR [HELP]` for the compact option list.
 | HELP | Display the option summary and exit |
 
 `SHORT` and `HELP` were absent from the active parser in both the imported
-source and the OEM 4.1 binary. SHORT's routine and both options' old help
+source and the 4.11 binary. SHORT's routine and both options' old help
 text survived in the source. They are now exposed and documented locally.
 SHORT uses the same buffered search, filters and sorting as FULL/SIZE.
 
@@ -55,13 +56,29 @@ use the same helper.
 
 ## Verification
 
-`make check-sdir` at the project root runs the OEM and rebuilt commands under
+`make check-sdir` at the project root runs the 4.11 and rebuilt commands under
 PCE on disposable CP/M and FAT12 floppy images. It compares ordinary entries
 and legacy options, checks both CP/M users and read-only attributes, verifies
 empty/populated DOS directories and their totals, exercises SHORT/HELP, and
 checks paging, NOPAGE and Ctrl-C. PUT/RDR capture the actual command output.
-Directory markers/counts and SHORT/HELP are intentional differences. Physical
+Directory markers/counts and SHORT/HELP are intentional differences.
+The original formats a 2026 timestamp as `<6`; the maintained command prints
+`26`. Comparison normalizes this specific original year-format defect. Physical
 directory-entry usage differs as each capture creates its own log.
 
 Explicit DOS paths and current-subdirectory traversal are not covered by this
 regression yet; this is not a claim of complete filesystem compatibility.
+
+## 4.11 assessment result
+
+The 27 paired cases on CP/M and FAT12 found no additional legacy-option gap:
+default/FULL, SIZE, DATE, DIR/SYS, RO/RW, ATTRIBUTES, SORT/NOSORT,
+XFCB/NONXFCB, USER/G, DRIVE/DISK, LENGTH/FF, EXCLUDE and invalid options.
+The release command rejects SHORT and HELP; the maintained command implements
+them. PAGE/NOPAGE and Ctrl-C were also exercised on the maintained command.
+
+Directory rendering/counts and year formatting are improvements to retain,
+not regressions to copy from the release binary. This is an assessment of
+those scenarios, not complete binary equivalence. Explicit DOS paths and
+current-subdirectory traversal remain outside the tested scope. No production
+SDIR changes were required by this assessment.

@@ -3,6 +3,7 @@
 
 RASM86=pcdev_rasm86
 LINK86=pcdev_linkexe
+PYTHON=python3
 
 TOOLS=copy.exe
 OBJECTS=pccopy.obj
@@ -11,8 +12,8 @@ OBJECTS=pccopy.obj
 .DELETE_ON_ERROR:
 
 all: $(TOOLS)
-check: all
-	@set -e; for f in $(TOOLS); do test -s $$f; done
+check: all check.py
+	$(PYTHON) check.py
 
 LOCAL_INCLUDES=$(wildcard *.a86 *.lib *.equ *.dat *.def *.h *.dcl)
 $(OBJECTS): $(LOCAL_INCLUDES) Makefile

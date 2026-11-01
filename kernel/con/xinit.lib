@@ -1261,9 +1261,9 @@ pc_pt_bootable	db	0	; 80h if pc partition bootable
 boot_drive	rb	1	; ROS code for the boot drive
 
 banner	db '---------------------------------------------------',cr,lf
-	db 'Concurrent for the IBM PC and XT           04/23/85',cr,lf
+	db 'Concurrent DOS for the IBM PC and XT       04/23/85',cr,lf
 	db 'CDOS 4.1 rebuild - 4.11 alignment in progress',cr,lf
-	db 'Serial No. XXXX-0000-654321     All Rights Reserved',cr,lf
+	db 'Serial No. 0000-0000-000000     All Rights Reserved',cr,lf
 	db 'Copyright (C) 1982,83,84,85   Digital Research Inc.',cr,lf
 	db '---------------------------------------------------',cr,lf,lf
 	db 'Hardware Supported :',cr,lf,0

@@ -54,17 +54,18 @@ fresh pristine-OEM compilation. A binary difference alone is not a defect.
 | CHDIR, MKDIR, SYSDISK, HDMAINT, REN.EXE | Byte-identical | Closed |
 | SETPORT | Only 39 documented equivalent instruction encodings | Closed; existing check |
 | INITDIR | Only an overwritten runtime stack-limit word differs | Closed; new complete-file check and tool README |
-| COPY.EXE | Confirmed missing backslash/path rejection patch | Port guard and test; see tool README |
-| RMDIR, LOADCCPM, DSKMAINT | Binary differences not yet classified | Next priority |
+| COPY.EXE | Path guard aligned; only serial and exact MZ header differences remain | Closed; complete-file check and 18 routine cases |
+| RMDIR | Main/PATH logic matches; three diagnostic improvements in 4.11 | Assessed; diagnostic port pending, see tool README |
+| LOADCCPM, DSKMAINT | Binary differences not yet classified | Next priority |
 | PATH.EXE, ERASE.EXE, FUNCTION, ERAQ | Binary differences not yet classified | Pending |
 | CHSET, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP | Compiler/runtime versus logic differences not yet separated | Pending |
 | BATCH, PIP, HELP, DATE.EXE | Intentional local changes exist; residual differences not yet classified | Pending |
 | TIME.EXE | Reconstruction and formatting correction already tested | Retain regression coverage |
 | WINDOW/WMENU, SHOW, SET, TYPE | Existing parity review used a reference matching 4.11 | Retain coverage; SET has two image variants |
-| SDIR | Existing base differs from the newly identified 4.11 reference | Reassess before replacing reference |
+| SDIR | 27 paired cases against 4.11; no new legacy-option gap found | Assessed; retain directory/date/SHORT/HELP improvements; path coverage pending |
 | GENCCPM, GENLDR | No original in this release-image set | Separate reference needed |
 
-Existing base files were not overwritten. In particular, SDIR still needs
-reference reconciliation. SET's two image variants are both recorded in the
+Existing base files were not overwritten. SDIR uses `base/sdir411.cmd` as
+its independent 4.11 oracle; the older `base/sdir.cmd` is retained separately. SET's two image variants are both recorded in the
 manifest; the current base matches one. Other retained imports without a 4.11
 counterpart are not newly certified by this audit.

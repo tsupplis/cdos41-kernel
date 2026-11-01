@@ -28,16 +28,32 @@ slash	equ	'/'
 	db	'DIGITAL RESEARCH(05/02/84)'
 	db	'XXXX-0000-654321'
 
+; 4.11 fills the reserved patch area with a command-tail guard. Explicit
+; DOS paths are unsupported: require a mapped floating drive instead. Keep
+; the original offsets so the remaining OEM code/data can be compared whole.
 patch_code:
+copy_tail:
+	cmp	byte ptr [si],'\'
+	je	path_rejected
+	cmp	dl,byte ptr [si]
+	jnz	copy_tail_char
+	mov	es:concat,true
+	stosb				; insert a blank before '+' (MOVSB copies it)
+copy_tail_char:
+	movsb
+	loop	copy_tail
+	ret
+path_rejected:
+	mov	ds,bx			; local data segment for diagnostic
+	xor	dx,dx			; path_message is at DATA:0000h
+	call	pmsg
+	jmp	ccpret			; terminate directly; no copy file exists yet
+; Unused remainder of the original 69-byte code patch reserve.
 	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
 	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
 	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
 	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
-	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
-	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
-	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
-	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
-	nop ! nop ! nop ! nop ! nop
+	nop ! nop ! nop ! nop ! nop ! nop ! nop
 	
 start:	mov	bx,dataseg
 
@@ -49,12 +65,16 @@ start:	mov	bx,dataseg
 	mov	cx,80h			;
 	mov	dl,'+'			;
 	mov	al,' '			;
-moveit:	cmp	dl,byte ptr [si]	;
-	jnz	isntpls			;
-	mov	es:concat,true		;
+moveit:
+	call	copy_tail
+	jmps	tail_copied
+; Unreachable remainder of the old loop, retained as in the 4.11 patch.
+; Its ES prefix was overwritten by the five-byte CALL/JMP above.
+	mov	concat,true		;
 	stosb				;
 isntpls:movsb				;
 	loop	moveit			;
+tail_copied:
 					;
 	mov	ds,bx			;set ds to local data segment
 					;
@@ -1203,14 +1223,12 @@ stack_end	rs	0
 
 dataseg		dseg
 
-patch_data	db	'DATA PATCH AREA '
-		db	'DATA PATCH AREA '
-		db	'DATA PATCH AREA '
-		db	'DATA PATCH AREA '
-		db	'DATA PATCH AREA '
-		db	'DATA PATCH AREA '
-		db	'DATA PATCH AREA '
-		db	'DATA PATCH AREA '
+patch_data	rb	0
+path_message	db	'To use a path, map to a floating drive.',cr,lf,'$'
+; Preserve the unused remainder of the original data patch reserve.
+	db	' AREA DATA PATCH AREA '
+	db	'DATA PATCH AREA DATA PATCH AREA '
+	db	'DATA PATCH AREA DATA PATCH AREA '
 
 
 concolon	db	0

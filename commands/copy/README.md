@@ -1,37 +1,34 @@
 # DOS COPY
 
-Built from the CDOS 4.1 OEM PCCOPY.A86 source. The independent reference is
-`../../base/copy.exe`, extracted from `cdos-4.11-1.img`; checksums are in
-`../../base/cdos411.json`.
+Recompiled from CDOS 4.1 OEM PCCOPY.A86 and adapted for parity with 4.11.
+The independent reference is `../../base/copy.exe`, extracted from
+`cdos-4.11-1.img`; its checksum is pinned by `check.py`.
 
-## 4.11 assessment: confirmed gap, not yet ported
+## 4.11 alignment
 
-Both executables are 29,184 bytes. Exactly 90 bytes differ:
+The recovered, labelled command-tail routine in the original patch area
+rejects a backslash in either source or destination before copying files.
+It prints `To use a path, map to a floating drive.` and exits directly through
+CCPRET. It deliberately does not call ABORT, which deletes a temporary file.
+Plain names, drive prefixes and plus-sign concatenation retain their behavior.
+Like 4.11, the routine scans the complete 128-byte tail buffer.
 
-| File offsets | Difference | Meaning |
-| --- | --- | --- |
-| 000Eh, 0012h | MZ SS/checksum | Original SS=06E6h, rebuild SS=06E8h; both 128-byte stacks lie in the zero-filled file reserve |
-| 022Bh–022Eh, 0234h–023Ah | Serial-number text | Original serial versus source placeholder |
-| 023Bh–0258h | Code patch area | 4.11 installs a backslash guard and relocated command-tail copy loop |
-| 029Dh–02A1h | Original loop entry | 4.11 calls the guard, then jumps past the old loop |
-| 0C30h–0C59h | Data patch area | Path-rejection diagnostic |
+The code begins at CODE:003Bh; the old loop entry at CODE:009Dh calls it.
+The message occupies DATA:0000h. Remaining patch reserves and the unreachable
+old loop instructions are retained to preserve the historical layout.
+Instructions are written as assembly, with data declarations only for data.
 
-The code patch starts at CODE:003Bh. It scans the command tail before any
-copy operation, preserves the existing plus-sign/concatenation handling,
-and rejects a backslash in either source or destination. The diagnostic is
-`To use a path, map to a floating drive.` It then enters the existing abort
-path. Our source still has NOPs and placeholder text in the patch areas,
-so it lacks this explicit rejection. This does not imply that the source
-implements DOS pathname support.
+## Verification
 
-An isolated assembled-code comparison tested both executables with plain
-filenames, concatenation, a source path and a destination path. Only 4.11
-rejected the two backslash cases. Output and abort calls were stubbed; no
-files were copied or deleted. The two header differences and serial text
-are distinct from this confirmed behavioral difference.
+`make check` builds COPY and compares the complete 29,184-byte executable
+against the pinned 4.11 reference. All code and data match except source serial
+text. The only other permitted differences are LINK86's exact stack placement
+(SS=06E8h instead of 06E6h) and recalculated MZ checksum. Both 128-byte stacks
+fit inside the checked zero-filled reserve. No arbitrary byte masks are used.
 
-Next: port the guard as labelled, commented source; add permanent regression
-coverage for ordinary names, concatenation and rejected paths. Stack placement
-and its associated checksum difference require no command-logic change.
-No production COPY code has been changed by
-this assessment.
+Eighteen isolated original/rebuilt routine tests cover empty and ordinary
+tails, concatenation, floating-drive names, /V, and source/destination paths.
+They check the prepared tail, concatenation flag, rejection and direct exit,
+and reject accidental use of file-deleting cleanup. Output and exit are
+stubbed; these tests do not perform filesystem copies. The disposable test
+driver uses NASM/emu2; production COPY continues to use RASM86/LINK86.

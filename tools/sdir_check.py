@@ -38,7 +38,7 @@ def check():
         shutil.copyfile(MEDIA / 'diskdefs', folder / 'diskdefs')
         shutil.copyfile(MEDIA / 'cdos86.img', folder / 'cdos86.img')
         command('mformat', '-C', '-i', 'fat.img', '-t', '40', '-h', '2', '-n', '8', '-c', '2', '::')
-        for src, name in [(ROOT / 'base/sdir.cmd', 'OSDIR.CMD'),
+        for src, name in [(ROOT / 'base/sdir411.cmd', 'OSDIR.CMD'),
                           (ROOT / 'commands/sdir/sdir.cmd', 'NSDIR.CMD')]:
             command('mcopy', '-i', 'fat.img', str(src), '::' + name)
         fixtures = {'FZERO.TXT': b'', 'FONE.TXT': b'hello\r\n\x1a',
@@ -113,7 +113,12 @@ def check():
             assert [s for s in lines if s][-1] == 'A>', (label, lines)
             command('mcopy', '-o', '-i', 'fat.img', '::'+label+'.txt', str(folder / (label+'.txt')))
             return (folder / (label+'.txt')).read_bytes().rstrip(b'\x00\x1a').decode('ascii')
-        def normalize(text):
+        def normalize(text, legacy=False):
+            # 4.11 prints year-1900 with a single tens character: 2026 -> <6.
+            # Normalize only that malformed original year, not rebuilt output.
+            if legacy:
+                text = re.sub(r'/([:;<=>?])([0-9])(?= )',
+                              lambda m: '/' + f'{((ord(m[1])-48)*10+int(m[2])) % 100:02d}', text)
             # PUT creates a new log before each scan: physical dir usage differs
             # by one. DOS directory markers/counts are deliberate improvements.
             lines = [s for s in text.splitlines() if 'FDIR1' not in s and 'FDIR2' not in s]
@@ -136,7 +141,7 @@ def check():
                 for name in ('FZERO', 'FONE', 'FRO', 'FSYS', 'FHIDDEN'):
                     assert name in new, new
             else:
-                assert normalize(old) == normalize(new), (option, spec, old, new)
+                assert normalize(old, legacy=True) == normalize(new), (option, spec, old, new)
                 if spec == 'b:f*.*' and option in ('', 'full', 'date', 'dir', 'rw', 'attrib', 'nosort', 'sort', 'user=0', 'user=all', 'g0', 'length=5,ff', 'xfcb'):
                     assert new.count('<DIR>') == 2, (option, new)
                     assert 'Directories Found =    2' in new, (option, new)
@@ -146,7 +151,7 @@ def check():
         assert PROMPT in page and 'P29' in page, page
         assert PROMPT not in nopage and 'P29' in nopage, nopage
         assert PROMPT in stop and 'P29' not in stop, stop
-        print(f'PASS: SDIR {len(cases)} OEM/rebuilt comparisons on CP/M/FAT12, directories, options, SHORT/HELP, paging/disable/Ctrl-C; disposable images only')
+        print(f'PASS: SDIR {len(cases)} 4.11/rebuilt comparisons on CP/M/FAT12, directories, options, SHORT/HELP, paging/disable/Ctrl-C; disposable images only')
 
 
 if __name__ == '__main__':

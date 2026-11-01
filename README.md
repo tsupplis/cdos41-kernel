@@ -1,11 +1,11 @@
-# Concurrent DOS 4.1 Kernel and Tools
+# Concurrent DOS 4.11 Kernel and Tools
 
 **Early work in progress — boots from floppy images.**
 
-This project preserves Digital Research's Concurrent DOS 4.1, multitasking OS (CCP/M-86 follow up),
+This project preserves Digital Research's Concurrent DOS 4.11, multitasking OS (CCP/M-86 follow up),
 including PC-MODE DOS 2.0 Compatibility, as a usable, rebuildable system for running and exploring
 classic 16-bit software. Runnable disks, development tools and patch notes
-accompany the sources, with CP/M-Plus-style usability improvements.
+accompany the sources, with CP/M-Plus-style usability improvements. The assembly is based on partial 4.1 OEM sources corrected to align with European 4.11 and a lot of fixes and enhancements.
 
 | Goal | Distribution |
 | --- | --- |
@@ -165,7 +165,7 @@ recorded in `base/cdos411.json`.
 | `chdir / mkdir / rmdir` | Change, create or remove directories | Original (4.11) | Recompiled from CDOS 4.1; shared D.A86 implementation |
 | `chset` | Inspect or change CMD header flags | Original (4.11) | Recompiled from CDOS 4.1 |
 | `cls` | Clear the terminal screen | — | New; TMP built-in; VT52 ESC-E |
-| `copy.exe` | Copy files | Original (4.11) | Recompiled from CDOS 4.1 |
+| `copy.exe` | Copy files | Original (4.11) | Recompiled from CDOS 4.1 and adapted for parity |
 | `copymenu` | Copy menu definitions | Original (4.11) | Recompiled from CDOS 4.1 |
 | `date` | Display or set the date | — | Recompiled from CCP/M-86 3.1 and adapted, Y2K patched |
 | `date.exe` | Display or set the date through DOS | Original (4.11) | Recompiled from CDOS 4.1 and adapted, short-year fix; commands/datetime |
@@ -198,7 +198,7 @@ recorded in `base/cdos411.json`.
 | `redos.com` | Return from Concurrent to DOS | Original | —; original OEM binary retained, implementation source missing |
 | `ren` | Rename files | Original | Recompiled from CCP/M-86 3.1 and adapted for parity |
 | `ren.exe` | Rename files through DOS | — | Reverse Engineered from CDOS 4.1 |
-| `sdir` | Detailed, sorted directory listing | Original | Recompiled from CCP/M-86 3.1 and adapted for parity |
+| `sdir` | Detailed, sorted directory listing | Original (legacy and 4.11) | Recompiled from CCP/M-86 3.1 and adapted for parity |
 | `set` | Set file and drive attributes | Original | Recompiled from CCP/M-86 3.1 and adapted for parity |
 | `setenv.exe` | Display and edit the 1 KB per-console DOS environment | — | New implementation for CDOS 4.1 |
 | `setport` | Configure serial ports and protocols | Original | Reverse Engineered from CDOS 4.1; |

@@ -4080,7 +4080,11 @@
     {
       "path": "commands/copy/pccopy.a86",
       "origin": "41SRC_07.IMG.DIR/PCCOPY.A86",
-      "sha256": "41db7e8dcf64b867cba166c0e3abc3b270df9c1edc002b9dbd1251232c91325e"
+      "sha256": "de670457b489368c7e6c0d4fad624f6e2f5e9b568667fd42db9788a46f17c6e5",
+      "original_sha256": "41db7e8dcf64b867cba166c0e3abc3b270df9c1edc002b9dbd1251232c91325e",
+      "modifications": [
+        "Port 4.11 command-tail backslash rejection, preserving concatenation and direct CCPRET exit."
+      ]
     },
     {
       "path": "commands/datetime/date.bat",

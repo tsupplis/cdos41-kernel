@@ -481,3 +481,21 @@ The IBM XIOS startup banner now adds `CDOS 4.1 rebuild - 4.11 alignment in
 progress`. The original platform/date and copyright lines remain intact.
 This describes ongoing comparison with the 4.11 release; it does not change
 the BDOS version or claim complete 4.11 parity. The README banner is unchanged.
+
+
+## COPY: 4.11 path rejection
+
+Ported the release COPY command-tail guard into labelled RASM86 source.
+Backslashes in source/destination are rejected with “To use a path, map to a
+floating drive.” before any file operation. Rejection exits directly through
+CCPRET, avoiding ABORT's temporary-file deletion. Concatenation is preserved.
+
+`commands/copy/check.py` checks the whole executable against 4.11, allowing
+only the exact serial text, stack-segment and checksum differences, and runs
+18 original/rebuilt tail-preparation cases with output/exit stubs. No live
+file-copy coverage is claimed by these routine tests. See the command README.
+
+The SDIR regression now uses the separately retained 4.11 release reference,
+not the older CCP/M 2.0 base binary. Its 27 paired cases confirm the documented
+directory, year-format and SHORT/HELP improvements; no SDIR code was changed.
+RMDIR's diagnostic differences are assessed in its README but not yet ported.

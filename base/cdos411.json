@@ -507,7 +507,12 @@
           "sha256": "cfde9821dbe883275e57e92b2d5b7c6f5f0613818940f06bad10f5c3555c3c79",
           "bytes": 13312
         }
-      ]
+      ],
+      "assessment_reference": {
+        "path": "sdir411.cmd",
+        "sha256": "cfde9821dbe883275e57e92b2d5b7c6f5f0613818940f06bad10f5c3555c3c79",
+        "reason": "Existing sdir.cmd is a legacy CCP/M 2.0 binary; preserve it until the 4.11 assessment is complete."
+      }
     },
     {
       "name": "set.cmd",

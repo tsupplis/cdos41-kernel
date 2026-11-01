@@ -506,7 +506,7 @@ if MD
 	jmp	patherror		; had (.) or (..) at end - return error
 endif
 if ZD
-	mov	dx,offset cannotdel	; had (.) or (..) at end - return error
+	mov	dx,offset dotpath	; had (.) or (..) at end - return error
 	jmp	fatal_err
 endif
 if SD or CD
@@ -1341,7 +1341,12 @@ sysdiskoff	db	'The system drive is off',0
 endif
 
 if ZD
-cannotdel	db	'Can''t remove subdirectory',0
+; 4.11 distinguishes forbidden dot paths from a failed directory removal.
+dotpath		db	'Can''t remove subdirectory ',cr,lf
+		db	' . or .. specified in path',0
+cannotdel	db	'Can''t remove subdirectory ',cr,lf
+		db	'Files may exist in it or',cr,lf
+		db	'Floating drives are pointing to it',0
 endif
 
 		end
