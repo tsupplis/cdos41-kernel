@@ -31,6 +31,7 @@ check: all
 	python3 tools/historical_check.py
 	python3 tools/pctmp_recovery_check.py
 	python3 tools/pctmp_io_check.py
+	python3 tools/dos_stamp_check.py
 	python3 tools/fat_recovery_check.py
 	python3 tools/pctmp_context_check.py
 	python3 tools/pctmp_critical_check.py
@@ -140,6 +141,7 @@ check-historical: kernel
 	python3 tools/historical_check.py
 	python3 tools/pctmp_recovery_check.py
 	python3 tools/pctmp_io_check.py
+	python3 tools/dos_stamp_check.py
 	python3 tools/fat_recovery_check.py
 	python3 tools/pctmp_context_check.py
 	python3 tools/pctmp_critical_check.py
@@ -148,6 +150,7 @@ check-historical: kernel
 .PHONY: check-pctmp-live
 check-pctmp-live: all
 	python3 tools/pctmp_live_check.py
+	python3 tools/dos_stamp_live_check.py
 
 # Compare original and rebuilt commands on disposable CP/M and FAT media.
 .PHONY: check-release-commands

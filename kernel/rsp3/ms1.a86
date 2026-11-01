@@ -7080,6 +7080,7 @@ xcheck_extended:
 	mov di,si ! mov dx,si
 	ret
 
+	public check_dos_media_fcb
 check_dos_media_fcb:
 ;	entry:	ds:bx = offset of cpm_fcb
 ;	exit:	al = 0FFH if DOS media FCB

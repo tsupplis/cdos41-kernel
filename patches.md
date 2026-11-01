@@ -597,3 +597,29 @@ wins. The implementation uses the existing PD word at offset 2Ch.
 Ctrl-C termination returns FFFEh. Fatal BDOS disk errors return FFFDh.
 The DOS child-status call and the private shell return-code service keep
 their existing interfaces. Run `make check-retcode` for the PCE regression.
+
+## PCTMP country information and modification timestamps
+
+These are local API extensions beyond stock Concurrent DOS 4.1.
+
+AH=38h returns the complete DOS 2.x US country record with ASCIIZ fields and
+zero-filled reserved bytes. Invalid selectors and the unsupported set request
+return AX=2 with carry set.
+
+AH=57h validates handles and dates/times, preserves FAT two-second precision,
+and propagates failed writes. CP/M uses minute-resolution update stamps and
+rejects disks without enabled, available update stamps. Successful updates
+refresh the shared handle cache. Creation/access stamps are preserved.
+The DOS adapter and BDOS 116 share a tagged DMA format. The first two
+little-endian words are 3854h and FEDDh. On FAT the remaining words are
+packed DOS time and date. On CP/M the remaining four bytes are the native
+update day word and BCD hour/minute bytes. FEDDh cannot be a valid BCD
+hour/minute pair.
+Legacy untagged native timestamp requests retain their original semantics.
+
+The normal check runs assembled handler regressions for FAT/CP/M conversion,
+failed lookup, invalid date/time, failed disk writes, cache updates and DTA/
+drive restoration. CP/M tests cover missing file, disabled stamps, missing
+SFCB and legacy requests. The live PCTMP target also boots disposable media
+to verify country fields and timestamp write/set/duplicate/close/reopen on
+FAT and timestamp-enabled CP/M.

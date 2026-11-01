@@ -26,6 +26,7 @@ pagesize 72					; Apr 29, 1985
 	public	ms2_func_entry		; called from ms1 Int_21
 	public	ms2_terminate		; for memory and handle cleanup
 	extrn	get_data_seg:near	; shared with ms1
+	extrn check_dos_media_fcb:near
 	extrn	convert_date:near	; dos to cpm date
 	extrn	convert_time:near	;   and time conversion
 	extrn	find_fcb_pub:near	; match cpm to dos fcb
@@ -340,21 +341,28 @@ ms2_undoc37:
 ;	*****************************
 
 ms2_get_intnl:
-	cmp	ms2_al,0		; function code must be zero
-	jnz	ms2_get_intnl_done	; skip if not
-
-	les	di,ms2_ds_dx		; point to data area
-	lea	si,intnl_info		; our information
-	push ds ! push cs ! pop ds	; data in the code seg
-	mov	cx,5			; bytes with meaning
+	cmp	ms2_al,0		; DOS 2.x queries the current country
+	jne	intnl_invalid
+	cmp	ms2_dx,0ffffh		; never treat a set request as a pointer
+	je	intnl_invalid
+	les	di,ms2_ds_dx
+	push ds ! push cs ! pop ds
+	mov	si,offset intnl_info
+	mov	cx,32
 	cld
-	rep	movsb			; send to user
+	rep	movsb
 	pop	ds
-
-ms2_get_intnl_done:
 	ret
 
-intnl_info	db	0,0,'$,.'	; USA standard
+intnl_invalid:
+	mov	al,no_file		; DOS country error 02h
+	jmp	ms2_error_ret
+
+intnl_info	dw	0		; US month/day/year
+	db	'$',0,',',0,'.',0
+	db	0,0,0,0,0,0,0,0	; DOS 2.x reserved fields
+	db	0,0,0,0,0,0,0,0
+	db	0,0,0,0,0,0,0,0
 
 
 ;	*****************************
@@ -2143,16 +2151,22 @@ ms2_f_rename_error:
 ms2_f_datetime:
 	mov	al,hf_read + hf_write	; accept either or both
 	call	get_active_handle	; bx -> our hcb
-	call	swap_pdrive		; xchg hds pointers
-	jc	ms2_f_date_error	; if invalid handle
-
+	jnc	date_check_device
+	jmp	ms2_error_ret
+date_check_device:
+	test	hcb_flags[bx],hf_device
+	jz	date_file
+	mov	al,no_h_match
+	jmp	ms2_error_ret
+date_file:
+	call	swap_pdrive
 	mov	al,ms2_al		; get function number
 	cmp	al,0
 	jz	ms2_f_getdate		; func = 0, get date/time
 	cmp	al,1
 	jz	ms2_f_setdate		; func = 1, set date/time
 	mov	al,no_function		; if none of the above then
-	jmps	ms2_f_date_error	;   return invalid function
+	jmp	ms2_f_date_error	;   return invalid function
 
 ms2_f_getdate:
 	mov	si,hcb_fcb_base[bx]	; si -> active fcb
@@ -2169,42 +2183,63 @@ ms2_f_setdate:
 	push	bx
 	call	find_fcb_pub		; look for our cpm fcb
 	pop	bx
-	jc	ms2_f_setdate_done	; if error, then something's funny
-
-	mov	cpm_fcb,si		; save the cpm fcb pointer
-	mov	ax,ms2_dx		; get DOS date code
-	call	get_cpm_date		; dos -> cpm -> dta buf
-	jc	ms2_f_setdate_done	; skip if date is illegal
-
-	lea	si,temp_dta_buf		; stamps go in the dta buffer
-	mov	[si],cx			; save access/create if ok
-	mov	.4[si],cx		;   and update too
-
-	mov	ax,ms2_cx		; get DOS time code
-	call	get_cpm_time		; dos -> cpm -> dta buf
-	jc	ms2_f_setdate_done	; skip if time is illegal
-
-	lea	si,temp_dta_buf		; stamps go in the dta buffer
-	xchg	ch,cl			; switch hours/min
-	mov	.2[si],cx		; if ok, save hours/min only
-	mov	.6[si],cx		;   into both fields
-
-	mov	dx,si
-	call	save_set_dta		; local dta buffer
-	mov	dx,cpm_fcb		; found above
-	mov	cl,f_setdate		; the secret cpm function
+	jnc	$+5
+	jmp	date_invalid
+	mov	cpm_fcb,si
+	mov	ax,ms2_dx
+	call	get_cpm_date
+	jnc	$+5
+	jmp	date_invalid
+	mov	word ptr temp_dta_buf+4,cx
+	mov	ax,ms2_cx
+	mov	dl,al
+	and	dl,1fh
+	cmp	dl,29			; seconds in two-second units
+	ja	date_invalid
+	call	get_cpm_time
+	jnc	$+5
+	jmp	date_invalid
+	xchg	ch,cl
+	mov	word ptr temp_dta_buf+6,cx
+	; Invalid BCD identifies the update-only DOS request to BDOS 116.
+	mov	word ptr temp_dta_buf,3854h
+	mov	word ptr temp_dta_buf+2,0feddh
 	push	bx
-	mov bx,dx
-	mov al,[bx] ! dec al ! and al,0Fh
-	mov ah,5
-	call check_error
+	mov	bx,cpm_fcb
+	call	check_dos_media_fcb
 	pop	bx
-	call	restore_dta		; back to user's dta
-
-ms2_f_setdate_done:
-	call	swap_pdrive		; xchg hds pointers
-	ret				; ignore other errors
-
+	mov	ax,ms2_cx
+	jnz	date_fat
+	and	ax,0ffe0h		; CP/M directory stamps have no seconds
+	jmps	date_write
+date_fat:
+	mov	word ptr temp_dta_buf+4,ax
+	mov	dx,ms2_dx
+	mov	word ptr temp_dta_buf+6,dx
+date_write:
+	push	ax			; effective time for the handle cache
+	push	bx
+	lea	dx,temp_dta_buf
+	call	save_set_dta
+	mov	bx,cpm_fcb
+	mov	dx,bx
+	mov	al,[bx] ! dec al ! and al,0fh
+	mov	ah,5
+	mov	cl,f_setdate
+	call	check_error
+	call	restore_dta
+	pop	bx
+	cmp	al,0ffh
+	pop	ax
+	je	date_invalid
+	mov	si,hcb_fcb_base[bx]
+	mov	fcb_time[si],ax
+	mov	ax,ms2_dx
+	mov	fcb_date[si],ax
+	call	swap_pdrive
+	ret
+date_invalid:
+	mov	al,no_access
 ms2_f_date_error:
 	call	swap_pdrive		; xchg hds pointers
 	jmp	ms2_error_ret		; set cf and exit

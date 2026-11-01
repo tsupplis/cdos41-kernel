@@ -2,7 +2,7 @@
 
 | Scope | Contract |
 | --- | --- |
-| Build | Current CDOS 4.1 PC-MODE build with IBM SQUID XIOS; 31 October 2026 |
+| Build | Current CDOS 4.1 PC-MODE build with IBM SQUID XIOS; 1 November 2026 |
 | Numbers | Hexadecimal unless explicitly labelled decimal |
 | Implemented | Handler present in current code; not exhaustive DOS conformance certification |
 | Partial / stub / missing | Limited contract / no operation / no implementation |
@@ -10,7 +10,7 @@
 | TMP | Native command processor (`kernel/rsp1`); does not provide DOS interrupts |
 | PCTMP | PC-MODE command processor, COM/EXE loader and DOS/BIOS interrupt adapters (`kernel/rsp3`) |
 | XIOS | Shared hardware, console, keyboard, display, disk and printer implementation (`kernel/con`) |
-| Extension column | NEW marks an implemented local addition; — means inherited behaviour, including documented limitations |
+| Extension column | NEW marks an implemented local addition beyond stock CDOS 4.1. European recovery identifies release-binary behaviour recovered into OEM sources. — means inherited behaviour, including documented limitations |
 | Native API | `INT E0h` is provided by the shared kernel; DOS interrupts belong to PCTMP |
 
 ## INT 21h — DOS 1.x services and version/DTA queries
@@ -82,7 +82,7 @@ DOS 1.x FCB AL-status convention. Reserved slots are explicitly listed below.
 | 35 | Get interrupt vector | Implemented | AL=vector, ES:BX=result from interrupt vector table | — |
 | 36 | Free disk space | Implemented | Uses media geometry and native free-space service; invalid drive returns AX=FFFFh | — |
 | 37 | Switch character | Partial | Returns DL=2Fh (`/`); no set-switch-character operation | — |
-| 38 | Country information | Partial | AL=0 copies only five bytes: US date order, dollar currency, comma thousands and period decimal separators; other AL values do nothing | — |
+| 38 | Country information | Implemented | AL=0 returns the full 32-byte US record. Other selectors and DX=FFFFh return CF set, AX=2 | NEW |
 | 39 / 3A / 3B | Make / remove / change directory | Implemented | FAT hierarchical directories; CP/M user areas are not DOS directories | — |
 | 3C / 3D / 3E | Create / open / close handle | Implemented | Shared filesystem via internal FCBs; 20 handle slots, first five reserved for standard devices | — |
 | 3F / 40 | Read / write handle | Implemented | Byte counts and file position; device and file paths | — |
@@ -103,7 +103,7 @@ DOS 1.x FCB AL-status convention. Reserved slots are explicitly listed below.
 | 54 | Get verify flag | Stub | Always returns AL=0; AH=2Eh does not enable verification | — |
 | 55 | Reserved / later DOS internals | Stub | No service; CF clear, AL=0, AH retained | — |
 | 56 | Rename pathname | Implemented | Path preparation and native rename | — |
-| 57 | Get / set handle date/time | Partial | AL=0/1; conversion through native stamps; set path stores hours/minutes and ignores some downstream errors | — |
+| 57 | Get / set handle date/time | Implemented | AL=0/1, disk files, 1980-2099. FAT retains two-second precision. CP/M requires update stamps and stores minutes. Set failures return CF set | NEW |
 | 58–FF | Later services | Missing | CF set, AX=0001h (invalid function) | — |
 
 ## Filesystem and process boundaries
@@ -307,7 +307,7 @@ Sources: [xcon1.lib](kernel/con/xcon1.lib), [xcon2.lib](kernel/con/xcon2.lib),
 | 69 | 105 | Get Date and Time | BDOS | Implemented | — |
 | 6A | 106 | Set Default Password | BDOS | Implemented | — |
 | 6B | 107 | Return Serial Number | SUP | Implemented | — |
-| 6C | 108 | Get/set program return code (CP/M 3 API) | SUP | DX=FFFFh reads the current process word. Other DX values set it. AX=BX returns the word, CX=0 | — |
+| 6C | 108 | Get/set program return code (CP/M 3 API) | SUP | Implemented; DX=FFFFh reads the process return code, otherwise sets it; AX=BX=result, CX=0 | NEW |
 | 6D | 109 | Get/Set Console Mode | CIO | Implemented | — |
 | 6E | 110 | Get/Set Output Delimiter | CIO | Implemented | — |
 | 6F | 111 | Print Block | CIO | Implemented | — |
@@ -315,7 +315,7 @@ Sources: [xcon1.lib](kernel/con/xcon1.lib), [xcon2.lib](kernel/con/xcon2.lib),
 | 71 | 113 | Reserved | SUP | Illegal; error 2 | — |
 | 72 | 114 | Reserved | SUP | Illegal; error 2 | — |
 | 73 | 115 | Reserved | SUP | Illegal; error 2 | — |
-| 74 | 116 | Set File_Date_Time | BDOS | Implemented | — |
+| 74 | 116 | Set File_Date_Time | BDOS | Implemented; native stamp block plus DOS update-only form | NEW (tagged form only) |
 | 75–7F | 117–127 | Unassigned | SUP | Illegal; error 2 | — |
 | 80 | 128 | mem req | MEM | Implemented | — |
 | 81 | 129 | (same function as 128) | MEM | Alias of 128 | — |

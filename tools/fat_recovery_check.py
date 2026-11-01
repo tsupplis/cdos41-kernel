@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Execute recovered FAT and directory ownership code with synthetic dependencies."""
-import re
 from historical_check import CON,symbols,payload,word
 from pctmp_recovery_check import RSP,syms,bases,near,asm
 
@@ -13,8 +12,8 @@ def hook(code,at,source):
 
 def fat():
  data=symbols('pcbdos');bs=symbols('black')
- size=int(re.search(r'CODE\s+([0-9A-F]+)',(CON/'pcbdos.log').read_text()).group(1),16)
- black=(size+1)&~1
+ # LINK86 concatenates code without an implied even-byte boundary.
+ black=symbols('bdos')['PCSEARCH']-bs['PCSEARCH']
  C=lambda n:black+bs[n]
  D=lambda n:data[n]
  base=payload('bdos')

@@ -1950,6 +1950,14 @@ setstamp:
 	jnz stmp1
 	jmp lret_eq_ff
 stmp1:
+	; The tagged DOS request carries the two packed FAT words verbatim.
+	cmp word ptr common_dma,3854h ! jne stmp_native
+	cmp word ptr common_dma+2,0feddh ! jne stmp_native
+	mov bx,dirp
+	mov ax,word ptr common_dma+4 ! mov dtime[bx],ax
+	mov ax,word ptr common_dma+6 ! mov ddate[bx],ax
+	jmps stmp_flush
+stmp_native:
 	mov si,offset common_dma+4	;move(&cpm_tod,&common_dma+4,4);
 	mov di,offset cpm_tod
 	movsw
@@ -1958,7 +1966,7 @@ stmp1:
 	stosb
 	call cnvcpdx			;cnvcpdx();
 	call setpcd			;setpcd();
-	
+stmp_flush:
 	call set_sdcnt			;set_sdcnt();
 	mov ch,5			;if (BX = search_olist(5))
 	call search_olist		;  *(BX+2) |= 0x10;

@@ -1834,7 +1834,10 @@ endif
 	pop ax
 	mov info_fcb+extnum,ah		;restore extent and module number
 	mov info_fcb+modnum,al
-	jz dt_ret
+	jz dt_missing
+	cmp word ptr common_dma,3854h ! jne dt_native
+	cmp word ptr common_dma+2,0feddh ! je file_dt2
+dt_native:
 	mov cl,50h
 	call qstamp			;is create or access stamp enabled
 	jnz file_dt2			; no
@@ -1846,13 +1849,18 @@ endif
 file_dt2:
 	mov cl,20h
 	call qstamp			;is update stamp enabled
-	jnz dt_ret			; no
+	jnz dt_missing			; no
 	mov ch,4
 	call get_dtba
-	or al,al ! jnz dt_ret
+	or al,al ! jnz dt_missing
 	mov dx,offset common_dma+4
 	call stamp45			;set update stamp in sfcb
 	or info_fcb+modnum,40h		;set file write flag, update stamp made
+	ret
+dt_missing:
+	cmp word ptr common_dma,3854h ! jne dt_ret
+	cmp word ptr common_dma+2,0feddh ! jne dt_ret
+	jmp lret_eq_ff			; DOS requires a writable update stamp
 dt_ret:
 	ret
 
