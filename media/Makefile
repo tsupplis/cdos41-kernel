@@ -38,7 +38,7 @@ MENU_COMMANDS = ../commands/print/print.cmd ../commands/dredix/dredix.cmd ../com
 DOS_COMMANDS = ../commands/loadccpm/loadccpm.com ../commands/setenv/setenv.exe ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
     ../commands/copy/copy.exe ../commands/datetime/date.exe ../commands/erase/erase.exe \
     ../commands/path/path.exe ../commands/datetime/time.exe ../commands/rename/ren.exe \
-    ../base/redos.com
+    ../commands/redos/redos.com
 
 OEM1_COMMANDS = ../extra/back.cmd ../extra/rest.cmd ../extra/brinst.cmd \
     ../extra/control.br ../extra/backrest.doc ../base/fm.cmd \

@@ -1,0 +1,337 @@
+; REDOS.COM - install PC DOS system files in the reserved fixed-disk slots.
+; Reconstructed from the CDOS 4.11 release. DOS command: REDOS [drive:]
+; DOS pre-parses the destination in the PSP FCB. Source files are on A:.
+; Assemble and package as in REDOS.SUB: ASM86 $FI, GENCMD NHEAD 8080 CODE[B10].
+
+psp_limit       equ     word ptr .6
+psp_drive       equ     byte ptr .5ch
+; Offsets from the start of an extended DOS FCB, including its 7-byte prefix.
+fcb_drive       equ     7
+fcb_name        equ     8
+fcb_size        equ     23
+fcb_newname     equ     24
+fcb_date        equ     27
+fcb_time        equ     29
+random_record   equ     39
+
+        cseg
+        org     100h
+        jmp     start
+        jmp     patch_area
+        db      'COPYRIGHT (C) 1984 DIGITAL RESEARCH'
+        db      'REDOS 1.0 - CCP/M 3.2 PC 08/28/84'
+patch_area:
+        org     200h
+
+
+start:
+; Check DOS version before using the fixed-disk and extended FCB services.
+        mov     sp,offset stack_top
+        mov     ah,30h                  ; get DOS version
+        int     21h
+        cmp     al,2
+        jnc     get_destination
+        mov     dx,offset need_dos
+        jmp     report_exit
+
+get_destination:
+; Save the initial default drive. FCB drive codes start at 1, DOS drive numbers at 0.
+        mov     ah,19h                  ; get default drive
+        int     21h
+        mov     saved_drive,al
+        mov     al,psp_drive
+        mov     byte ptr dribio+fcb_drive,al
+        mov     byte ptr dridos+fcb_drive,al
+        dec     al
+        jns     save_destination
+        mov     al,saved_drive
+
+save_destination:
+        mov     target_drive,al
+; The release tests PSP:0006h against transfer_buffer + 7000h.
+        cmp     psp_limit,7769h
+        ja      select_disk
+        mov     dx,offset low_memory
+        jmp     report_exit
+
+select_disk:
+        mov     dx,offset banner
+        mov     ah,9                  ; write dollar-terminated string
+        int     21h
+        mov     dl,byte ptr dribio+fcb_drive
+        or      dl,dl
+        jz      check_media
+        dec     dl
+        mov     ah,0eh                  ; select default drive
+        int     21h
+
+check_media:
+; DOS returns DS:BX pointing to the media ID. Restore DS without disturbing flags.
+        mov     ah,1bh                  ; get default drive allocation information
+        int     21h
+        cmp     byte ptr [bx],0f8h
+        push    cs
+        pop     ds
+        jz      check_existing
+        mov     dx,offset not_fixed
+        jmp     report_exit
+
+check_existing:
+; Search the destination for either IBM system file before attempting a transfer.
+        mov     al,0
+        mov     byte ptr ibmbio+fcb_drive,al
+        mov     byte ptr ibmdos+fcb_drive,al
+        mov     dx,offset ibmbio
+        mov     ah,11h                  ; FCB find first
+        int     21h
+        inc     al
+        jnz     already_dos
+        mov     dx,offset ibmdos
+        mov     ah,11h                  ; FCB find first
+        int     21h
+        inc     al
+        jz      check_reserved
+
+already_dos:
+        mov     dx,offset already_system
+        jmp     report_exit
+
+check_reserved:
+; Set source FCBs to A:. The destination needs both placeholders and a BIOS slot of at least 1200h bytes (low size word).
+        mov     al,1
+        mov     byte ptr ibmbio+fcb_drive,al
+        mov     byte ptr ibmdos+fcb_drive,al
+        mov     dx,offset dribio
+        mov     ah,0fh                  ; FCB open
+        int     21h
+        inc     al
+        jnz     bios_size
+        jmp     no_reserve
+
+bios_size:
+        mov     ax,word ptr dribio+fcb_size
+        cmp     ax,1200h
+        jnc     open_dos_slot
+        jmp     no_reserve
+
+open_dos_slot:
+        mov     dx,offset dridos
+        mov     ah,0fh                  ; FCB open
+        int     21h
+        inc     al
+        jnz     prompt_source
+
+no_reserve:
+        mov     dx,offset missing_slots
+        call    print_drive
+        jmp     restore_drive
+
+prompt_source:
+; Wait for the PC DOS system disk. Ctrl-C takes the drive-restoration exit.
+        mov     dx,offset mount_disk
+        call    print_message
+        mov     ah,1                  ; read console with echo
+        int     21h
+        cmp     al,3
+        jnz     open_bios_source
+        jmp     restore_drive
+
+open_bios_source:
+        mov     ah,0fh                  ; FCB open
+        mov     dx,offset ibmbio
+        int     21h
+        inc     al
+        jnz     open_dos_source
+        jmp     retry_source
+
+open_dos_source:
+        mov     ah,0fh                  ; FCB open
+        mov     dx,offset ibmdos
+        int     21h
+        inc     al
+        jnz     transfer_files
+
+retry_source:
+        mov     dx,offset missing_source
+        call    print_message
+        jmps    prompt_source
+
+transfer_files:
+; Save both floppy timestamps before reusing the common transfer buffer.
+        mov     ax,word ptr ibmbio+fcb_date
+        mov     bios_date,ax
+        mov     ax,word ptr ibmbio+fcb_time
+        mov     bios_time,ax
+        mov     ax,word ptr ibmdos+fcb_date
+        mov     dos_date,ax
+        mov     ax,word ptr ibmdos+fcb_time
+        mov     dos_time,ax
+; Read and write IBMBIO, copy its timestamp to the destination FCB, then close.
+        mov     dx,offset transfer_buffer
+        mov     ah,1ah                  ; set disk transfer address
+        int     21h
+        mov     dx,offset ibmbio
+        call    read_source
+        mov     dx,offset dribio
+        call    write_destination
+        mov     ax,bios_date
+        mov     word ptr dribio+fcb_date,ax
+        mov     ax,bios_time
+        mov     word ptr dribio+fcb_time,ax
+        mov     ah,10h                  ; FCB close
+        mov     dx,offset dribio
+        int     21h
+; Repeat for IBMDOS using the same disk transfer area.
+        mov     dx,offset ibmdos
+        call    read_source
+        mov     dx,offset dridos
+        call    write_destination
+        mov     ax,dos_date
+        mov     word ptr dridos+fcb_date,ax
+        mov     ax,dos_time
+        mov     word ptr dridos+fcb_time,ax
+        mov     ah,10h                  ; FCB close
+        mov     dx,offset dridos
+        int     21h
+; DOS rename uses a second 11-byte name inside the destination FCB.
+        cld     
+        mov     si,offset ibmbio+fcb_name
+        mov     di,offset dribio+fcb_newname
+        mov     cx,0bh
+        rep     movsb
+        mov     si,offset ibmdos+fcb_name
+        mov     di,offset dridos+fcb_newname
+        mov     cx,0bh
+        rep     movsb
+        mov     ah,17h                  ; FCB rename
+        mov     dx,offset dribio
+        int     21h
+        inc     al
+        jz      rename_failed
+        mov     ah,17h                  ; FCB rename
+        mov     dx,offset dridos
+        int     21h
+        inc     al
+        jnz     transfer_done
+
+rename_failed:
+        mov     dx,offset rename_error
+        jmp     report_exit
+
+transfer_done:
+        mov     dx,offset complete
+
+report_exit:
+        call    print_message
+
+restore_drive:
+        mov     dl,saved_drive
+        mov     ah,0eh                  ; select default drive
+        int     21h
+        int     20h
+
+read_source:
+; Zero the random record and request up to 1400h records. DOS returns the count in CX.
+        mov     si,dx
+        mov     word ptr random_record[si],0
+        mov     word ptr random_record+2[si],0
+        mov     cx,1400h
+        mov     ah,27h                  ; FCB random block read
+        int     21h
+        ret     
+
+write_destination:
+; Write the CX records returned by the read. A failed write exits the transfer.
+        mov     si,dx
+        mov     word ptr random_record[si],0
+        mov     word ptr random_record+2[si],0
+        mov     ah,28h                  ; FCB random block write
+        int     21h
+        or      al,al
+        jz      write_ok
+        mov     dx,offset no_room
+        call    print_drive
+        jmp     restore_drive
+
+write_ok:
+        ret     
+
+print_message:
+        mov     ah,9                  ; write dollar-terminated string
+        int     21h
+        ret     
+
+print_drive:
+; Print a message followed by the selected drive letter and colon.
+        call    print_message
+        mov     dl,target_drive
+        add     dl,41h
+        mov     ah,2                  ; write character
+        int     21h
+        mov     dl,3ah
+        mov     ah,2                  ; write character
+        int     21h
+        ret     
+
+        dseg
+        org     03d6h
+; DOS function 09 strings retain their original leading CR/LF.
+banner:
+        db      'CONCURRENT PC-DOS REDOS VERSION 1.0$'
+        db      13,10
+need_dos:
+        db      'Requires DOS 2.0.$'
+low_memory:
+        db      'Insufficient memory available for system transfer.$'
+mount_disk:
+        db      13,10
+        db      'Mount a DOS system disk in A: then press any key $'
+already_system:
+        db      13,10
+        db      'The destination is already a PC-DOS system disk.'
+        db      13,10
+        db      'If you need to update it, use the PC-DOS "SYS" command.$'
+missing_slots:
+        db      13,10
+        db      'No space reserved for a system on $'
+no_room:
+        db      13,10
+        db      'Not enough room for a system on $'
+not_fixed:
+        db      13,10
+        db      'Destination is not a hard disk.$'
+missing_source:
+        db      13,10
+        db      'No system files found, try another disk$'
+complete:
+        db      13,10
+        db      'System transfer completed.$'
+rename_error:
+        db      13,10
+        db      'Unable to rename system files$'
+
+; Extended FCBs: FFh signature, five reserved bytes, 27h attributes, then
+; the drive and the FAT 8.3 name. DOS fills the remaining 24 bytes at open.
+ibmbio  db      0ffh,0,0,0,0,0,27h,1
+        db      'IBMBIO  COM'
+        rb      24
+ibmdos  db      0ffh,0,0,0,0,0,27h,1
+        db      'IBMDOS  COM'
+        rb      24
+dribio  db      0ffh,0,0,0,0,0,27h,0
+        db      'DRIBIO  COM'
+        rb      24
+dridos  db      0ffh,0,0,0,0,0,27h,0
+        db      'DRIDOS  COM'
+        rb      24
+
+bios_date       rw      1
+bios_time       rw      1
+dos_date        rw      1
+dos_time        rw      1
+saved_drive     rb      1
+target_drive    rb      1
+                rb      100h
+stack_top       rb      1
+transfer_buffer db      0               ; run-time memory above the stack
+                end

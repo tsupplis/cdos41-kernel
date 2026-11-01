@@ -2,7 +2,7 @@
 SUBDIRS=genccpm pip asm86 gencmd submit batch chdir \
     mkdir rmdir sysdisk chset initdir help ddt86 \
     function dredix copymenu editmenu printmgr dsp dskmaint \
-    genldr loadccpm copy datetime erase path rename setenv \
+    genldr loadccpm redos copy datetime erase path rename setenv \
     asm80 era ren systat window date sdir show hexcom print set type dir ed disk putget setport hdmaint
 
 CMDS=genccpm/genccpm.cmd asm86/asm86.cmd ddt86/ddt86.cmd gencmd/gencmd.cmd submit/submit.cmd batch/batch.cmd \

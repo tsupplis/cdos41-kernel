@@ -4174,6 +4174,11 @@
       "sha256": "5200406acaee0af1bcf809f7c2200340bf680fe093dd54225d0ddc2cb0c2ec66"
     },
     {
+      "path": "commands/redos/redos.a86",
+      "origin": "Reverse engineered from CDOS 4.11 REDOS.COM",
+      "sha256": "e90093d9190d1c03e52578cd6b07cb3699bfdadc7e169c9719efda9ee81c532b"
+    },
+    {
       "path": "commands/rmdir/d.a86",
       "origin": "41SRC_07.IMG.DIR/D.A86",
       "sha256": "4873b4a2fa59d5b11c6b3c896ec1d81f8f670b4b125456e00fe86a6dd43caefd",
@@ -5498,7 +5503,7 @@
     {
       "path": "commands/help/help.dat",
       "origin": "ccpm86-kernel/commands/help/help.dat",
-      "sha256": "f6d0c6491c604a58e6b9c32d62489f1d9cf0e32d5300495d1b4de90fa44b5801",
+      "sha256": "a4288416512c245b1e610d5cb7d1f06a597ef5fbfe895b44f9873ec8e9988438",
       "original_sha256": "be082138ed971b145f4e44678fb8add340002dbdb86a4bbfd640859428cb61c7",
       "modifications": "Reviewed 4.1 help, DIR bracket aliases and TMP/BATCH message consistency; see patches.md."
     },

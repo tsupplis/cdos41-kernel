@@ -216,7 +216,7 @@ release-image provenance. Details are in `base/cdos411.json`.
 | `printmgr` | Manage print spooling | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Behavior tested |
 | `put` | Capture console output into a file | - | New; shared putget.lib engine, imported from the CCP/M project | Additional tool |
 | `rdr` | Redirect console input and output together | - | New; shared putget.lib engine, imported from the CCP/M project | Additional tool |
-| `redos.com` | Return from Concurrent to DOS | 4.11 | —; original OEM binary retained, implementation source missing | Original used |
+| `redos.com` | Install PC DOS system files on a prepared hard disk | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical |
 | `ren` | Rename files | - | Recompiled from CCP/M-86 3.1 and adapted for parity | Additional tool |
 | `ren.exe` | Rename files through DOS | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical |
 | `sdir` | Detailed, sorted directory listing | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |

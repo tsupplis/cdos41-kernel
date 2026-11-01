@@ -332,7 +332,7 @@ Native commands supplied across the seven disks:
   SPL STOP SUBMIT SYSDISK SYSTAT WINDOW WMENU
 
 DOS executables: COPY.EXE DATE.EXE ERASE.EXE PATH.EXE REN.EXE SETENV.EXE TIME.EXE.
-LOADCCPM.COM loads Concurrent from DOS; REDOS.COM returns to DOS.
+LOADCCPM.COM loads Concurrent from DOS; REDOS.COM installs PC DOS system files on a prepared hard disk.
 Use an explicit extension to distinguish DATE.CMD from DATE.EXE.
 
 RSPs:

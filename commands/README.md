@@ -54,7 +54,7 @@ Only Pending and Known gap entries are active work.
 
 | Command/group | Parity | Remaining work |
 | --- | --- | --- |
-| CHDIR, MKDIR, SYSDISK, HDMAINT, REN.EXE, LOADCCPM | Byte-identical | None for release equivalence |
+| CHDIR, MKDIR, SYSDISK, HDMAINT, REN.EXE, LOADCCPM, REDOS.COM | Byte-identical | None for release equivalence |
 | SETPORT | Equivalent | None; 39 equivalent instruction encodings checked |
 | INITDIR | Equivalent | None; overwritten runtime word checked |
 | COPY.EXE, ERASE.EXE | Equivalent | None; exact serial/header/padding exceptions checked |

@@ -53,7 +53,7 @@ DSKMAINT, HDMAINT, GENLDR and LOADCCPM on disks 08, 10 and 11.
 | `erase` | PCERASE/MEDIA.A86, ERASE.BAT (09) | Verified build, enabled; DOS .EXE output |
 | `path` | PATHX.A86, PATH.BAT (11) | Verified build, enabled; DOS .EXE output |
 | `d` | D.A86 + PATH/DERROR (07) | Shared implementation for CHDIR/MKDIR/RMDIR/SYSDISK; no D executable |
-| `redos` | REDOS.SUB (11) | Blocked: REDOS.A86 missing |
+| `redos` | REDOS.SUB (11) | Reconstructed from the 4.11 COM and verified byte-identical |
 
 CARDFILE, LOAD6300 and COMPAQ have reference-only 4.11 binaries in `base/`.
 They remain excluded from source builds and distributions. Their image/file
@@ -110,7 +110,7 @@ its historical recipe needs, following the existing per-command layout.
   remains pending: the recipe requires flat LBDOS.H86, while the supplied
   LBDOS3.A86 is a different relocatable interface. The decision is to leave
   HDMAINT pending rather than substitute the older loader source.
-- REDOS lacks its implementation source and remains disabled.
+- REDOS builds from a labelled reconstruction using the archived REDOS.SUB recipe.
 
 Build/header checks establish compilable local outputs, not OEM byte identity
 or runtime compatibility. GENCMD additionally passes its existing self-host
@@ -159,8 +159,7 @@ Original/current hashes for these source changes are retained in sources.json.
 
 Seven explicit image recipes package every enabled source-built output and
 selected original OEM binaries/data; see media/README.md. System and maintenance
-are bootable. Unrebuilt HDMAINT, REDOS and TIME are preserved as original inputs,
-without changing their source-build status. No old kernel binary is packaged.
+are bootable. HDMAINT, REDOS and TIME are packaged from their command builds. No old kernel binary is packaged.
 HELP's rebuilt baseline and the historical 4.1 text are on separate disks.
 Top-level dist/check-dist produce and check disks.zip with the seven disk
 images and license/project notes. Source distribution stays in Git.
