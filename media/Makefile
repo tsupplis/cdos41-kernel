@@ -40,11 +40,11 @@ DOS_COMMANDS = ../commands/loadccpm/loadccpm.com ../commands/setenv/setenv.exe .
     ../commands/path/path.exe ../commands/datetime/time.exe ../commands/rename/ren.exe \
     ../base/redos.com
 
-OEM1_COMMANDS = ../base/back.cmd ../base/rest.cmd ../base/brinst.cmd \
-    ../base/control.br ../base/backrest.doc ../base/fm.cmd \
+OEM1_COMMANDS = ../extra/back.cmd ../extra/rest.cmd ../extra/brinst.cmd \
+    ../extra/control.br ../extra/backrest.doc ../base/fm.cmd \
     ../base/fm.cfg ../base/spl.cmd
 
-OEM2_COMMANDS = ../commands/function/function.cmd ../commands/help/help.cmd ../base/diskstat.cmd \
+OEM2_COMMANDS = ../commands/function/function.cmd ../commands/help/help.cmd \
     ../base/n.cmd \
     ../commands/setport/setport.cmd ../base/setup.cmd \
     ../base/stop.cmd ../commands/hdmaint/hdmaint.cmd \

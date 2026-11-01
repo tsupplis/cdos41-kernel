@@ -325,8 +325,8 @@ Aliases:
   DEL -> ERA.CMD     DELQ -> ERAQ.CMD   RENAME -> REN.EXE
 
 Native commands supplied across the seven disks:
-  ASM80 ASM86 BACK BATCH BRINST CHDIR CHSET COPYMENU DATE DCOMP DCOPY
-  DIR DISKSTAT DREDIX DSKMAINT DSP ED EDITMENU ERA ERAQ FM FUNCTION
+  ASM80 ASM86 BACK BATCH BRINST CHDIR CHSET COPYMENU DATE DCOMP DCOPY DDT86
+  DIR DREDIX DSKMAINT DSP ED EDITMENU ERA ERAQ FM FUNCTION
   GENCCPM GENCMD GENLDR GET HDMAINT HELP HEXCOM INITDIR MKDIR N PIP
   PRINT PRINTMGR PUT RDR REN REST RMDIR SDIR SET SETPORT SETUP SHOW
   SPL STOP SUBMIT SYSDISK SYSTAT WINDOW WMENU
@@ -535,6 +535,10 @@ See the media README for complete disk contents.
       A>DCOPY A: A:[1]
       A>DCOPY A: B:[1
 
+///1DDT86
+DDT86 is the interactive 8086 debugger on the tools disk. Use it to
+inspect memory and registers and trace program execution.
+
 ///1DEL
 DEL filespec
 Alias for native ERA.CMD in both PCTMP and BATCH. Arguments are preserved.
@@ -570,10 +574,6 @@ Examples:
 Explicit DIR.CMD uses the separately imported native command, with
 its own CP/M [S], [Gn] and [P] options. Those are not a separate DIR RSP.
 Use USER to change the CP/M user number for the built-in DIR.
-
-///1DISKSTAT
-DISKSTAT is the retained OEM disk-allocation display utility. Its menus
-show file, directory and data-block allocation and allow drive selection.
 
 ///1DREDIX
 DREDIX {filename}

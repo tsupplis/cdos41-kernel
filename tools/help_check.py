@@ -12,7 +12,6 @@ topics = {
 removed = {
     "ABORT",
     "CONFIG",
-    "DDT86",
     "DFORM",
     "DOS8087",
     "DOSMEM",
@@ -23,6 +22,8 @@ removed = {
     "DYNAMIC",
     "CARDFILE",
     "DRTALK",
+    "DISKSTAT",
+    "NEAT",
     "CTTY",
     "VERIFY",
     "FORMAT",
@@ -30,7 +31,7 @@ removed = {
 }
 assert not topics & removed, topics & removed
 media = (R / "media/Makefile").read_text()
-files = re.findall(r"\.\./(?:commands|base)/[^\s\\]+\.(?:cmd|exe|com)", media, re.I)
+files = re.findall(r"\.\./(?:commands|base|extra)/[^\s\\]+\.(?:cmd|exe|com)", media, re.I)
 commands = {Path(f).stem.upper() for f in files}
 commands.discard("PIP4")
 commands.add("PIP")

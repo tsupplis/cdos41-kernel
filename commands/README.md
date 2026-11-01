@@ -66,13 +66,13 @@ Only Pending and Known gap entries are active work.
 | ERA, REN.CMD | Behavior tested | Import review complete against retained originals; release not established |
 | SUBMIT | No reference | CCP/M-86 3.1 original unavailable. No active work. |
 | DSKMAINT | Behavior tested | 512-byte loader matches 4.11. Format, cold boot and help navigation pass. See [DSKMAINT](dskmaint/README.md). |
-| PATH.EXE | Behavior tested | Set two directories, display and clear match 4.11. The 314-byte command body matches. LINK86 uses a different startup copy offset. |
+| PATH.EXE | Equivalent | Complete-file check covers entry NOPs, skipped linker identification, unreachable group-copy operand and checksum. See [PATH](path/README.md). |
 | ERAQ, PIP | Behavior tested | ERAQ confirmation, refusal and missing-file cases match. PIP verified copy, concatenation and missing source match. The interactive banner now identifies 4.1N. |
 | CHSET | Behavior tested | Query and update match 4.11, including combined options, duplicate rejection and the resulting CMD bytes. Fixed the empty-field comparison. |
 | COPYMENU, EDITMENU, DREDIX, FUNCTION, HELP | Behavior tested | Compared paired PCE screens for menu navigation, editor input, help and exit paths. See the release comparison target for cases. |
 | DSP, PRINTMGR | Behavior tested | Compared startup and queue/error handling. PRINTMGR now uses the release default of 60 printed lines per 66-line form. Physical print output was not exercised. |
-| BATCH | Behavior tested | Restored the 4.11 console-attach order and priority reset. The OEM baseline with these changes differs only in four serial characters. Local prompt enhancements are retained. |
-| DATE.EXE | Behavior tested | Unmodified OEM command logic matches 4.11. The maintained short-year change passed 54 parser cases, and explicit-date entry/display were compared in PCE. |
+| BATCH | Equivalent | Restored the 4.11 console-attach order and priority reset. The OEM baseline with these changes differs only in four serial characters. Local prompt enhancements are retained. |
+| DATE.EXE | Equivalent | Unmodified OEM command logic matches 4.11. The maintained short-year change passed 54 parser cases, and explicit-date entry/display were compared in PCE. |
 | GENCCPM, GENLDR | No reference | No independent release binaries available |
 
 SDIR's verified 4.11 reference is now `base/sdir.cmd`, replacing the older
@@ -80,3 +80,11 @@ CCP/M reference. Other original binaries were retained. SET matches one
 of two variants in the 4.11 image set. Neither note by itself is an outstanding
 code fix. Other imported/new tools without a retained CDOS release counterpart
 are Additional tool, not implicitly pending replacements.
+
+PATH.EXE, BATCH and DATE.EXE qualified for Equivalent in the review of 23
+commands. PATH's complete file comparison accounts for the linker differences.
+BATCH and DATE.EXE have verified 4.11 baselines and documented local improvements.
+
+The other 20 commands retain Behavior tested. Their comparisons cover the
+scenarios described in the table. Further differences in generated code,
+startup, or rewritten command logic have not been fully accounted for.

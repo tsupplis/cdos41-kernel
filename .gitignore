@@ -49,3 +49,9 @@
 
 # HDMAINT intermediate command images (never runnable distribution tools).
 /commands/hdmaint/*.raw
+
+# Retained supplemental executables.
+!/extra/back.cmd
+!/extra/rest.cmd
+!/extra/brinst.cmd
+!/extra/drtalk.exe

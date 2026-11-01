@@ -5498,7 +5498,7 @@
     {
       "path": "commands/help/help.dat",
       "origin": "ccpm86-kernel/commands/help/help.dat",
-      "sha256": "a810e7107754b072f16979ca9abb2388d9456ab03e1e18db20dab2356c3d32e2",
+      "sha256": "f6d0c6491c604a58e6b9c32d62489f1d9cf0e32d5300495d1b4de90fa44b5801",
       "original_sha256": "be082138ed971b145f4e44678fb8add340002dbdb86a4bbfd640859428cb61c7",
       "modifications": "Reviewed 4.1 help, DIR bracket aliases and TMP/BATCH message consistency; see patches.md."
     },
@@ -5744,10 +5744,10 @@
       "DATE",
       "DCOMP",
       "DCOPY",
+      "DDT86",
       "DEL",
       "DELQ",
       "DIR",
-      "DISKSTAT",
       "DREDIX",
       "DSKMAINT",
       "DSP",

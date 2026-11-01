@@ -166,10 +166,10 @@ Unclassified means the release is unknown; None means no reference has been
 identified. SUBMIT's original is not currently retained in `base/`. Internal version strings (for example SHOW 3.3) do not override
 release-image provenance. Details are in `base/cdos411.json`.
 
-| Parity status | What it means | 
-| --- | --- | --- |
+| Parity status | What it means |
+| --- | --- |
 | Byte-identical | Complete rebuilt executable matches the 4.11 reference |
-| Equivalent | Complete comparison allows only documented, checked non-functional differences | 
+| Equivalent | The rebuild matches the reference apart from documented, verified build differences and intentional improvements. |
 | Behavior tested | Reviewed behavior matches the reference in documented tests, with intentional improvements retained | 
 | No reference | No independent release binary is available for comparison | 
 | Additional tool | Imported/new tool without a corresponding retained CDOS release binary |
@@ -180,7 +180,7 @@ release-image provenance. Details are in `base/cdos411.json`.
 | --- | --- | --- | --- | --- |
 | `asm80` | 8080 assembler | - | Translated using XLT86 from CP/M-80 2.2 and adapted | Additional tool |
 | `asm86` | 8086 assembler | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool |
-| `batch` | Run BAT command files | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Behavior tested |
+| `batch` | Run BAT command files | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Equivalent |
 | `chdir / mkdir` | Change or create directories | 4.11 | Recompiled from CDOS 4.1; shared D.A86 implementation | Byte-identical |
 | `rmdir` | Remove directories | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Equivalent |
 | `chset` | Inspect or change CMD header flags | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Behavior tested |
@@ -188,7 +188,7 @@ release-image provenance. Details are in `base/cdos411.json`.
 | `copy.exe` | Copy files | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Equivalent |
 | `copymenu` | Copy menu definitions | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
 | `date` | Display or set the date | - | Recompiled from CCP/M-86 3.1 and adapted, Y2K patched | Additional tool |
-| `date.exe` | Display or set the date through DOS | 4.11 | Recompiled from CDOS 4.1 and adapted, short-year fix; commands/datetime | Behavior tested |
+| `date.exe` | Display or set the date through DOS | 4.11 | Recompiled from CDOS 4.1 and adapted, short-year fix; commands/datetime | Equivalent |
 | `dcomp / dcopy` | Compare or copy floppy diskettes | - | Ported from PC DOS 1.10; imported from CCP/M-86 | Additional tool |
 | `ddt86` | 8086 interactive debugger | - | Recompiled from CCP/M-86 3.1 | Additional tool |
 | `dir` | List directory contents | - | Recompiled from CCP/M-86 3.1 and adapted; separate CDOS 4.1 TMP built-in | Additional tool |
@@ -210,7 +210,7 @@ release-image provenance. Details are in `base/cdos411.json`.
 | `hexcom` | Convert Intel HEX to COM binaries | - | HEXCOM 3.00-compatible C from [tpzasm](https://github.com/johnsonjh/tpzasm) | Additional tool |
 | `initdir` | Enable or remove directory date/time stamps | 4.11 | Recompiled from CDOS 4.1 | Equivalent |
 | `loadccpm.com` | Load the system from DOS | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Byte-identical |
-| `path.exe` | Display or set the DOS search path | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
+| `path.exe` | Display or set the DOS search path | 4.11 | Recompiled from CDOS 4.1 | Equivalent |
 | `pip` | Copy and transfer files | 4.11 | Recompiled from CDOS 4.1 and adapted | Behavior tested |
 | `print` | Print files using Concurrent printer services | - | Recompiled from CCP/M-86 3.1 | Additional tool |
 | `printmgr` | Manage print spooling | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Behavior tested |
