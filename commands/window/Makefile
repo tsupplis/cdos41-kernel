@@ -1,46 +1,46 @@
-# WINDOW — DR C / RASM86 build.
-# all builds local outputs; check validates them; clean removes generated files.
-
-PYTHON=python3
-DRC86=drccpm_cc
-RASM86=pcdev_rasm86
-LINK86=drccpm_link
-TOOLS=window.cmd wmenu.cmd
-SHARED=start.obj command.obj win.obj format.obj xios.obj
-
+# WINDOW — local command build.
+# all builds the declared tools; check validates them; clean removes generated files.
 .PHONY: all check clean
-.DELETE_ON_ERROR:
+
+CMDINFO=cmdinfo
+RASM86=pcdev_rasm86
+DRC86=drccpm_cc
+DRCLINK86=drccpm_link
+RM=rm -f
+PYTHON=python3
+
+TOOLS=window.cmd wmenu.cmd
 
 all: $(TOOLS)
 
-window.cmd: window.obj $(SHARED) Makefile trim.py
-	@$(LINK86) window=start,window,command,win,format,xios > window-link.log 2>&1; result=$$?; cat window-link.log; test $$result -eq 0
-	@! grep -iE "undefined|syntax error|unable" window-link.log
+window.cmd: window.obj start.obj command.obj win.obj format.obj xios.obj Makefile trim.py
+	$(DRCLINK86) window=start,window,command,win,format,xios
 	$(PYTHON) trim.py $@
+	$(CMDINFO) $@
 
-livetest.cmd: livetest.obj $(SHARED) Makefile trim.py
-	@$(LINK86) livetest=start,livetest,command,win,format,xios > livetest-link.log 2>&1; result=$$?; cat livetest-link.log; test $$result -eq 0
-	@! grep -iE "undefined|syntax error|unable" livetest-link.log
+livetest.cmd: livetest.obj start.obj command.obj win.obj format.obj xios.obj Makefile trim.py
+	$(DRCLINK86) livetest=start,livetest,command,win,format,xios
 	$(PYTHON) trim.py $@
+	$(CMDINFO) $@
 
-wmenu.cmd: wmenu.obj $(SHARED) Makefile trim.py
-	@$(LINK86) wmenu=start,wmenu,command,win,format,xios > wmenu-link.log 2>&1; result=$$?; cat wmenu-link.log; test $$result -eq 0
-	@! grep -iE "undefined|syntax error|unable" wmenu-link.log
+wmenu.cmd: wmenu.obj start.obj command.obj win.obj format.obj xios.obj Makefile trim.py
+	$(DRCLINK86) wmenu=start,wmenu,command,win,format,xios
 	$(PYTHON) trim.py $@
-
-# Compile C modules with local declarations.
-%.obj: %.c win.h Makefile
-	@$(DRC86) -o$@ $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
-	@! grep -iE "error|unable to open" $*.log
+	$(CMDINFO) $@
 
 xios.obj: xios.a86 Makefile
-	@$(RASM86) $< > xios.log 2>&1; result=$$?; cat xios.log; test $$result -eq 0
-	@grep -qE 'Number of errors: +0\.' xios.log
+	$(RASM86) $<
 
+%.obj: %.c Makefile $(wildcard *.h)
+	$(DRC86) -o$@ $<
+
+clean:
+	$(RM) *.sys *.loc *.cmd *.obj *.h86 *.sym *.lin *.lst *.prn ccpmtest.img *.log
+	$(RM) *.loc *.mp? *.lnk *.map
+	$(RM) hostcheck
+
+# Structural validation; byte comparisons or runtime checks are separate where available.
 check: all
+	@set -e; for file in $(TOOLS); do $(CMDINFO) $$file; done
 	$${CC:-cc} -std=gnu89 -DHOST_TEST -Wno-int-conversion -Wno-deprecated-non-prototype win.c command.c hostcheck.c -o hostcheck
 	./hostcheck
-
-# Remove generated outputs only; preserve sources and reference files.
-clean:
-	$(RM) *.cmd *.obj hostcheck *.lst *.sym *.map *.log

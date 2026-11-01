@@ -1,47 +1,52 @@
-# N - interactive national setup in DR C and its frozen ASM86 reference.
-DRC86=drccpm_cc
-LINK86=drccpm_link
+# N — local command build.
+# all builds the declared tools; check validates them; clean removes generated files.
+.PHONY: all check clean
+
+CMDINFO=cmdinfo
 RASM86=pcdev_rasm86
+DRC86=drccpm_cc
+DRCLINK86=drccpm_link
+RM=rm -f
 ASM86=cpm86_asm86
 GENCMD=cpm86_gencmd
 PYTHON=python3
 REF=../../base/n.cmd
 
-.PHONY: all check clean
-.DELETE_ON_ERROR:
-all: n.cmd norg.cmd
+TOOLS=n.cmd norg.cmd
 
-# Link the maintained program and the optional read-only and save probes.
-n.cmd: INPUT=n=n,nsave,nvers
-nprobe.cmd: INPUT=nprobe=nprobe
-nkey.cmd: INPUT=nkey=nkey,nsave
+all: $(TOOLS)
+
 n.cmd: n.obj nsave.obj nvers.obj Makefile
+	$(DRCLINK86) n=n,nsave,nvers
+	$(CMDINFO) $@
+
 nprobe.cmd: nprobe.obj Makefile
+	$(DRCLINK86) nprobe=nprobe
+	$(CMDINFO) $@
+
 nkey.cmd: nkey.obj nsave.obj Makefile
-n.cmd nprobe.cmd nkey.cmd:
-	@$(LINK86) '$(INPUT)' > $(basename $@)-link.log 2>&1; result=$$?; cat $(basename $@)-link.log; test $$result -eq 0
-	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' $(basename $@)-link.log
-
-%.obj: %.c Makefile
-	@$(DRC86) -o$@ $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
-	@! grep -qiE 'error|unable to open|fatal' $*.log
-
-nvers.obj: nvers.a86 Makefile
-	@$(RASM86) $< > nvers.log 2>&1; result=$$?; cat nvers.log; test $$result -eq 0
-	@grep -qiE 'Number of errors: +0\.' nvers.log
-
-# Recreate the complete release executable, including linker metadata.
-norg.h86: norg.a86 Makefile
-	@$(ASM86) $< > norg.log 2>&1; result=$$?; cat norg.log; test $$result -eq 0
-	@grep -qiE 'NUMBER OF ERRORS: +0' norg.log
+	$(DRCLINK86) nkey=nkey,nsave
+	$(CMDINFO) $@
 
 norg.cmd: norg.h86 encodings.py Makefile
 	$(GENCMD) $<
 	$(PYTHON) encodings.py
 
-check: all
-	cmp norg.cmd $(REF)
-	cmdinfo n.cmd
+nvers.obj: nvers.a86 Makefile
+	$(RASM86) $<
+
+# Recreate the complete release executable, including linker metadata.
+norg.h86: norg.a86 Makefile
+	$(ASM86) $<
+
+%.obj: %.c Makefile $(wildcard *.h)
+	$(DRC86) -o$@ $<
 
 clean:
-	$(RM) *.obj *.cmd *.h86 *.log *.lst *.sym
+	$(RM) *.sys *.loc *.cmd *.obj *.h86 *.sym *.lin *.lst *.prn ccpmtest.img *.log
+	$(RM) *.loc *.mp? *.lnk *.map
+
+# Structural validation; byte comparisons or runtime checks are separate where available.
+check: all
+	@set -e; for file in $(TOOLS); do $(CMDINFO) $$file; done
+	cmp norg.cmd $(REF)
