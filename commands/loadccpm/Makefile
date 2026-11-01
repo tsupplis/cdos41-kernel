@@ -1,6 +1,7 @@
 # LOADCCPM — ASM86 Intel HEX, then headerless GENCMD COM packaging.
 # all builds local outputs; check validates them; clean removes generated files.
 
+PYTHON=python3
 ASM86=cpm86_asm86
 GENCMD=cpm86_gencmd
 
@@ -10,8 +11,8 @@ TOOLS=loadccpm.com
 .DELETE_ON_ERROR:
 
 all: $(TOOLS)
-check: all
-	@set -e; for f in $(TOOLS); do test -s $$f; done
+check: all check.py
+	$(PYTHON) check.py
 
 # Remove generated outputs only; preserve sources and reference files.
 clean:

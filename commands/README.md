@@ -55,14 +55,17 @@ fresh pristine-OEM compilation. A binary difference alone is not a defect.
 | SETPORT | Only 39 documented equivalent instruction encodings | Closed; existing check |
 | INITDIR | Only an overwritten runtime stack-limit word differs | Closed; new complete-file check and tool README |
 | COPY.EXE | Path guard aligned; only serial and exact MZ header differences remain | Closed; complete-file check and 18 routine cases |
-| RMDIR | Main/PATH logic matches; three diagnostic improvements in 4.11 | Assessed; diagnostic port pending, see tool README |
-| LOADCCPM, DSKMAINT | Binary differences not yet classified | Next priority |
-| PATH.EXE, ERASE.EXE, FUNCTION, ERAQ | Binary differences not yet classified | Pending |
+| RMDIR | 4.11 diagnostics ported; code/data match after copyright relocation | Closed; complete comparison and 12 error-path cases |
+| LOADCCPM | 4.11 messages and vector preservation ported; byte-identical | Closed; complete-file check |
+| DSKMAINT | Main command code matches after 316 data relocations; helper/runtime and embedded boot differences remain | In progress |
+| ERASE.EXE | Executable logic identical; exact serial/header/zero-padding differences checked | Closed |
+| PATH.EXE, FUNCTION, ERAQ | Binary differences not yet classified | Pending |
 | CHSET, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP | Compiler/runtime versus logic differences not yet separated | Pending |
 | BATCH, PIP, HELP, DATE.EXE | Intentional local changes exist; residual differences not yet classified | Pending |
 | TIME.EXE | Reconstruction and formatting correction already tested | Retain regression coverage |
-| WINDOW/WMENU, SHOW, SET, TYPE | Existing parity review used a reference matching 4.11 | Retain coverage; SET has two image variants |
-| SDIR | 27 paired cases against 4.11; no new legacy-option gap found | Assessed; retain directory/date/SHORT/HELP improvements; path coverage pending |
+| WINDOW/WMENU | Immediate colour repaint restored; stored-state checks extended to actual screen attributes | Closed for the reported colour bug; live WINDOW/WMENU coverage passes |
+| SHOW, SET, TYPE | Prior parity comparison already used matching 4.11 binaries | Closed for identified gaps |
+| SDIR | 27 option cases plus 7 explicit-path/current-directory cases pass | Closed for identified gaps; retain intentional improvements |
 | GENCCPM, GENLDR | No original in this release-image set | Separate reference needed |
 
 Existing base files were not overwritten. SDIR uses `base/sdir411.cmd` as

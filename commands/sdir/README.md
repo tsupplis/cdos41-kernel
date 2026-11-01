@@ -66,8 +66,12 @@ The original formats a 2026 timestamp as `<6`; the maintained command prints
 `26`. Comparison normalizes this specific original year-format defect. Physical
 directory-entry usage differs as each capture creates its own log.
 
-Explicit DOS paths and current-subdirectory traversal are not covered by this
-regression yet; this is not a claim of complete filesystem compatibility.
+The companion `tools/sdir_paths_check.py` covers seven paired path/current-
+subdirectory cases. Both versions reject backslash paths with “Illegal command
+tail.” Both correctly list a plain filename or wildcard on a FAT drive after
+CHDIR changes that drive's current directory. SIZE is checked there as well.
+Use CHDIR first (or a mapped drive), then SDIR with a drive/filespec; SDIR does
+not acquire DOS pathname syntax through this alignment.
 
 ## 4.11 assessment result
 
@@ -79,6 +83,5 @@ them. PAGE/NOPAGE and Ctrl-C were also exercised on the maintained command.
 
 Directory rendering/counts and year formatting are improvements to retain,
 not regressions to copy from the release binary. This is an assessment of
-those scenarios, not complete binary equivalence. Explicit DOS paths and
-current-subdirectory traversal remain outside the tested scope. No production
+those scenarios, not complete binary equivalence. The seven additional path/subdirectory cases also pass. No production
 SDIR changes were required by this assessment.

@@ -51,7 +51,7 @@ w_read(n,w) int n; struct window *w;
  * the public interface; XIOS remains responsible for overlap and clipping. */
 w_apply(w) struct window *w;
 {
-    int p,a;
+    int p,a,old;
     if (w->prow<1 || w->prow>24 || w->pcol<1 || w->pcol>80 ||
         w->nrows<1 || w->nrows>24 || w->ncols<1 || w->ncols>80 ||
         w->vrow<1 || w->vrow>24 || w->vcol<1 || w->vcol>80) return 0;
@@ -61,13 +61,20 @@ w_apply(w) struct window *w;
     if(w->pcol+w->ncols-1>80) w->ncols=81-w->pcol;
     xcall(24,0,w->display,w->number);
     p=xcall(16,0,0,w->number);
-    a=farword(xdata,p+28);
-    a=(a&0xff00)|(w->foreground&7)|((w->background&7)<<4);
+    old=farword(xdata,p+28);
+    a=(old&0xff88)|(w->foreground&7)|((w->background&7)<<4);
     farput(xdata,p+28,a);
     xcall(21,0,((w->vrow-1)<<8)|(w->vcol-1),
           (w->tracking<<8)|w->number);
     xcall(20,((w->prow+w->nrows-2)<<8)|(w->pcol+w->ncols-2),
           ((w->prow-1)<<8)|(w->pcol-1),w->number);
+    if (a!=old) {
+        /* Service 24 above synchronizes a full foreground console via
+         * copy_full_top before geometry changes. Repaint the image, then
+         * redraw the same rectangle without clearing text or cursor. */
+        recolor(xdata,p,a);
+        xcall(20,farword(xdata,p+4),farword(xdata,p+2),w->number);
+    }
     return 1;
 }
 w_top(n) int n; { return xcall(19,0,3,n); }

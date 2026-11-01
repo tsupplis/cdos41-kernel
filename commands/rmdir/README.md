@@ -1,10 +1,9 @@
-# RMDIR: 4.11 assessment
+# RMDIR: 4.11 alignment
 
 Built from the CDOS 4.1 OEM RMDIR, PATH and DERROR assembly modules.
-`../../base/rmdir.cmd` is the independent 4.11 reference. This assessment
-changes no production code.
+`../../base/rmdir.cmd` is the independent 4.11 reference. The three 4.11 diagnostics are now ported.
 
-## Findings
+## Recovered differences
 
 | Area | OEM rebuild versus 4.11 |
 | --- | --- |
@@ -20,8 +19,10 @@ routine adds a ten-byte AH=03h branch selecting “Subdirectory set to Read
 Only - Can't remove” (message number 9 rather than fallback 5).
 The shared error mappings otherwise remain unchanged.
 
-These are diagnostic improvements, not evidence of new pathname syntax or
-new deletion rules. The assessment is based on instruction/data comparison;
-it does not claim live coverage of every filesystem error. Recommended next
-step: port the three clearer diagnostics and the AH=03h branch, with focused
-error-path checks. No kernel changes are indicated.
+Command syntax and deletion rules are unchanged. No kernel changes are needed.
+
+`make check` verifies the complete header/data and all executable code against
+4.11, allowing only the exact longer OEM copyright header, entry displacement
+and consequent 14-byte code relocation. Twelve original/rebuilt routine tests
+exercise extended-error messages, including AH=03h. This does not claim live
+coverage of every physical filesystem error.

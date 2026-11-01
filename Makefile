@@ -73,6 +73,7 @@ check-redirection: all
 
 check-sdir: all
 	python3 tools/sdir_check.py
+	python3 tools/sdir_paths_check.py
 
 check-type: all
 	python3 tools/type_check.py
@@ -105,6 +106,7 @@ check-systat: all
 check-window: all
 	$(MAKE) -C commands/window check livetest.cmd
 	python3 tools/window_check.py
+	python3 tools/window_color_check.py
 
 check-help: all
 	python3 tools/help_check.py

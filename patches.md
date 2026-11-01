@@ -499,3 +499,32 @@ The SDIR regression now uses the separately retained 4.11 release reference,
 not the older CCP/M 2.0 base binary. Its 27 paired cases confirm the documented
 directory, year-format and SHORT/HELP improvements; no SDIR code was changed.
 RMDIR's diagnostic differences are assessed in its README but not yet ported.
+
+
+## RMDIR and LOADCCPM: 4.11 alignment
+
+RMDIR now explains forbidden dot paths, failed removals caused by files or
+floating drives, and read-only directories (extended error 03h). Command
+syntax and deletion logic are unchanged. Whole-code/data comparison and
+12 original/rebuilt error-mapping tests are part of its `make check`.
+
+LOADCCPM now preserves INT 1Fh and the existing AT INT 41h parameter-table
+offset during vector restoration, as 4.11 does. Release messages are also
+aligned. Its complete COM file matches the independent 4.11 original.
+
+SDIR's seven additional path tests confirm matching rejection of explicit
+backslash paths and correct filename/wildcard/SIZE operation in a current FAT
+subdirectory. No SDIR production changes were necessary.
+
+
+## WINDOW/WMENU: repaint existing contents after colour changes
+
+Restored the 4.11 colour operation omitted from the C rewrite: repaint all
+24x80 backing-image attribute bytes under the per-console mutex and redraw
+immediately. Full foreground screens are synchronized first; text, cursor
+and status line are preserved. The current intensity/blink bits survive a
+foreground/background change. Both commands use the shared implementation.
+
+Regression coverage now compares actual text and colour bytes against the
+original for CARDDECK, full/background windows and interactive WMENU colour
+editing, rather than checking only stored colour settings. Syntax is unchanged.

@@ -118,7 +118,7 @@ patch:	jmps patch_area			;in case of emergency
 ;
 	     db	'COPYRIGHT 1984 (C) '
 match_string db	'DIGITAL RESEARCH'
-	     db	'LOADCCPM 2.0 for Concurrent DOS 3.2 04-Sep-84'
+	     db	'LOADCCPM for Concurrent DOS 4.1 07-Nov-85'
 
 patch_area:
 	org 180h		;leave some room for emergency use
@@ -260,7 +260,10 @@ approval:
 	  cmp al,'y' ! je go_load				;ignore case
 	  cmp al,'Y' ! je go_load
 	    mov ax,-1 ! jmps approval_ret		;stay in DOS
-go_load: xor ax,ax					;load ccpm
+; 4.11 announces the transfer before loading, including without ASK.
+go_load:
+	mov ah,PRINT_F ! mov dx,offset loading_msg ! int DOS
+	xor ax,ax					;load ccpm
 approval_ret:
 	ret
 
@@ -390,7 +393,7 @@ iv_1:	cld
 	mov dx,mover_ptr_seg				;get fake rom segment
 	mov si,offset iv_table
 	PUSHF ! CLI					;CRITICAL REGION START
-	mov cx,64 ! rep movsw				;move in vectors
+	mov cx,62 ! rep movsw				;4.11: restore INT 00h..1Eh; preserve INT 1Fh
 ;
 	cmp hw_id,1 ! jne iv_9				;fixup vectors if AT
 	  mov ax,ROMBIOSSEG				;rom bios segment
@@ -407,7 +410,7 @@ iv_1:	cld
 	    mov es:word ptr .4eh,ax
 	  mov es:word ptr .100h,0ec59h			;diskette swi
 	    mov es:word ptr .102h,ax
-	  mov es:word ptr .104h,0e411h			;disk parms
+	  ; 4.11 preserves INT 41h offset selected for the installed hard disk.
 	    mov es:word ptr .106h,ax
 iv_9:	POPF						;CRITICAL REGION END
 	call i_attach					;now attach any io roms
@@ -472,8 +475,10 @@ end_code:
 	DSEG
 	org offset end_code		;8080 model
 
-prompt_msg	db	'Load Concurrent PC-DOS? (Y or N)? $'
-not_again	db	'Concurrent PC-DOS is already loaded.$'
+prompt_msg	db	'Concurrent Loader supporting standard fixed disks',CR,LF
+		db	'Load Concurrent PC DOS? (Y or N)? $'
+loading_msg	db	CR,LF,'Loading Concurrent PC DOS ..... ',CR,LF,'$'
+not_again	db	'Concurrent PC DOS is already loaded.$'
 nofile_msg	db	BEL,CR,LF,'Can''t find DOS file: CCPM.SYS$'
 badfile_msg	db	BEL,CR,LF,'Defective DOS file: CCPM.SYS$'
 toobig_msg	db	BEL,CR,LF,'Not Enough Memory for DOS file: CCPM.SYS$'

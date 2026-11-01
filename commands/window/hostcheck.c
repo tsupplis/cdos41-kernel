@@ -6,6 +6,8 @@
 #include "win.h"
 static unsigned char mem[8192];
 static int calls;
+static int paints;
+int RECOLOR(seg,p,a) int seg,p,a; { ++paints; assert((a&255)==mem[p+28]); return 0; }
 static int version=0x1431;
 int XINIT() { XDATA=1; return 0; }
 int FARWORD(seg,p) int seg,p; { return mem[p]|(mem[p+1]<<8); }
@@ -47,6 +49,7 @@ int main()
     assert(w.prow==4 && w.pcol==5 && w.nrows==10 && w.ncols==20);
     assert(w.vrow==2 && w.vcol==3 && w.tracking==1 && w.display==0);
     assert(w.foreground==4 && w.background==1);
+    assert(paints==1);
     before=w; old=calls;
     assert(!command("change n=2 pr=25"));
     assert(w_read(1,&w) && !memcmp(&before,&w,sizeof(w)));

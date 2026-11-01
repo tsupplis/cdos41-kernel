@@ -1,6 +1,6 @@
 # Concurrent DOS 4.11 Kernel and Tools
 
-**Early work in progress — boots from floppy images.**
+**Disk Images are now available as part of the project releases, ready to use ! Full Source Build in Progress**
 
 This project preserves Digital Research's Concurrent DOS 4.11, multitasking OS (CCP/M-86 follow up),
 including PC-MODE DOS 2.0 Compatibility, as a usable, rebuildable system for running and exploring
@@ -14,6 +14,15 @@ accompany the sources, with CP/M-Plus-style usability improvements. The assembly
 | Additional tools | ASM80, HEXCOM, DREDIX, WINDOW/WMENU and floppy copy/compare commands |
 | Date fixes | Patched native date/reporting utilities and corrected short-year input in DATE.EXE |
 | OEM preservation | Original utilities and support data retained where a rebuilt replacement is pending |
+
+<p align="center">
+<img src="images/ccpm86.png" alt="Concurrent DOS 4.11 running in PCE" width="48%">
+<img src="images/windows.png" alt="Overlapping console windows" width="48%">
+<br><sub>Concurrent CP/M-86 3.1 &nbsp;·&nbsp; Console windows</sub><br>
+<img src="images/setup.png" alt="XIOS configuration menu" width="48%">
+<img src="images/basic.png" alt="Microsoft BASIC 5.50A" width="48%">
+<br><sub>System setup &nbsp;·&nbsp; Microsoft BASIC 5.50A</sub>
+</p>
 
 The build follows the CCP/M project's source organization and toolchain.
 All build inputs are local to this repository. [Source pedigree and component
@@ -188,7 +197,7 @@ recorded in `base/cdos411.json`.
 | `help / help.hlp` | Browse indexed command help | CMD 4.11; HLP retained | Recompiled from CDOS 4.1; help.dat reviewed against the 4.1 reference and maintained imports |
 | `hexcom` | Convert Intel HEX to COM binaries | — | HEXCOM 3.00-compatible C from [tpzasm](https://github.com/johnsonjh/tpzasm) |
 | `initdir` | Enable or remove directory date/time stamps | Original (4.11) | Recompiled from CDOS 4.1 |
-| `loadccpm.com` | Load the system from DOS | Original (4.11) | Recompiled from CDOS 4.1 |
+| `loadccpm.com` | Load the system from DOS | Original (4.11) | Recompiled from CDOS 4.1 and adapted for parity |
 | `path.exe` | Display or set the DOS search path | Original (4.11) | Recompiled from CDOS 4.1 |
 | `pip` | Copy and transfer files | Original (4.11) | Recompiled from CDOS 4.1 and adapted |
 | `print` | Print files using Concurrent printer services | — | Recompiled from CCP/M-86 3.1 |

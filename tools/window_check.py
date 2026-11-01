@@ -192,6 +192,10 @@ for label, _ in actions:
         "abort",
     ]:
         assert a == b, (label, a[::2], b[::2])
+    if label == "color-change":
+        old = (F / "o" / (label + ".bin")).read_bytes()[1:3840:2]
+        new = (F / "n" / (label + ".bin")).read_bytes()[1:3840:2]
+        assert old == new, "WMENU must repaint existing screen attributes immediately"
     if label == "size-change":
         assert b"NRows=23" in b[::2], b[::2]
     if label == "tracking-change":

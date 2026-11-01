@@ -41,3 +41,13 @@ This covers partition creation, both loader-installation paths, loading the
 current kernel and reaching the command processor. It does not claim physical
 hardware validation, bad-sector recovery or every partition geometry.
 
+
+## Build artifacts
+
+`hdmaint.cmd` is the only final command. Headerless loader fragments are
+`pcboot1.bin`, `cpmboot2.bin`, `hsetup.bin`, `label.bin`, `cpmlod.bin`,
+`pcboot2.bin` and `pcboot3.bin`. The main command before loader insertion is
+`h70.raw`; the optional relocatable LBDOS build is `lbdos3.raw`.
+GENCMD/LINK86 force temporary `.cmd` output names, which each recipe immediately
+renames. No partial `.cmd` files remain after a successful build. The final
+byte-for-byte and FAT-loader checks are unchanged.

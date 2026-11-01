@@ -29,7 +29,7 @@ def disposable_workspace():
 
 
 def check():
-    for tool in ('pce-ibmpc', 'mformat', 'mcopy', 'mmd', 'mattrib', 'cpmcp'):
+    for tool in ('pce-ibmpc', 'mformat', 'mcopy', 'mmd', 'mattrib', 'cpmcp', 'cpmrm'):
         assert shutil.which(tool), f'{tool} is required'
     with disposable_workspace() as td:
         folder = Path(td)
@@ -59,6 +59,9 @@ def check():
         logical = folder / 'logical.img'
         twist = str(ROOT / 'tools/cpm86twist.py')
         command('python3', twist, 'untwist', 'cdos86.img', str(logical))
+        # Leave room for three fixture files on the disposable boot copy.
+        # ED is not used by this regression; distributed images are untouched.
+        command('cpmrm', '-f', 'ccpm86-320', str(logical), '0:ED.CMD')
         for name, user in [('FONE.TXT', 0), ('FRO.TXT', 0), ('FONE.TXT', 1)]:
             command('cpmcp', '-f', 'ccpm86-320', str(logical), str(folder / name), f'{user}:' + name)
         disk = bytearray(logical.read_bytes())

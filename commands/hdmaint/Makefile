@@ -19,6 +19,7 @@ all: $(TOOLS)
 check: all check-fat
 	@set -e; for f in $(TOOLS); do $(CMDINFO) $$f; done
 	cmp hdmaint.cmd ../../base/hdmaint.cmd
+	@python3 -c "from pathlib import Path; assert sorted(p.name for p in Path('.').glob('*.cmd')) == ['hdmaint.cmd'], 'Partial CMD artifact left in HDMAINT build'"
 
 LOCAL_INCLUDES=$(wildcard *.a86 *.lib *.equ *.dat *.def *.h *.dcl)
 $(OBJECTS): $(LOCAL_INCLUDES) Makefile
@@ -36,33 +37,36 @@ $(OBJECTS): $(LOCAL_INCLUDES) Makefile
 # Remove generated outputs only; preserve sources and reference files.
 clean:
 	rm -f *.sys *.loc *.cmd *.obj *.h86 *.hex *.sym *.lin *.lst *.prn *.log
-	rm -f *.mp? *.lnk *.map *.exe *.com pcboot3.bin
+	rm -f *.mp? *.lnk *.map *.exe *.com *.bin *.raw
 
 # Recreate the original SID loader insertion with checked boundaries.
-LOADERS=pcboot1.cmd cpmboot2.cmd hsetup.cmd label.cmd cpmlod.cmd pcboot2.cmd pcboot3.bin
-hdmaint.cmd: h70.cmd $(LOADERS) rebuild.py
+# GENCMD/LINK86 force .CMD filenames; rename them within each recipe.
+# Headerless loader fragments use .bin; the unfilled command uses .raw.
+LOADERS=pcboot1.bin cpmboot2.bin hsetup.bin label.bin cpmlod.bin pcboot2.bin pcboot3.bin
+hdmaint.cmd: h70.raw $(LOADERS) rebuild.py
 	python3 rebuild.py assemble
 	$(CMDINFO) $@
 
-pcboot1.cmd cpmboot2.cmd hsetup.cmd label.cmd: %.cmd: %.h86 Makefile
+pcboot1.bin cpmboot2.bin hsetup.bin label.bin cpmlod.bin: %.bin: %.h86 Makefile
 	$(GENCMD) $< 8080 nhead
+	mv $*.cmd $@
 
-pcboot2.cmd: pcboot2.h86 Makefile
+pcboot2.bin: pcboot2.h86 Makefile
 	$(GENCMD) $< nhead 'code[b7c0]'
+	mv pcboot2.cmd $@
 
 cpmlod.h86: lbdos.h86 cpmboot3.h86 rebuild.py
 	python3 rebuild.py merge
 
-cpmlod.cmd: cpmlod.h86 Makefile
-	$(GENCMD) $< 8080 nhead
-
-h70.cmd: h70.h86 Makefile
+h70.raw: h70.h86 Makefile
 	$(GENCMD) $< 'data[m800]' 'extra[m800]'
+	mv h70.cmd $@
 	$(CMDINFO) $@
 
-lbdos3.cmd: lbdos3.obj Makefile
+lbdos3.raw: lbdos3.obj Makefile
 	@$(LINK86) 'lbdos3=lbdos3[data[ori[0],max[0]]]' > lbdos3-link.log 2>&1; result=$$?; cat lbdos3-link.log; test $$result -eq 0
 	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' lbdos3-link.log
+	mv lbdos3.cmd $@
 	$(CMDINFO) $@
 
 # Verify the FAT stage independently against the OEM DRIBIO reference.

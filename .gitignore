@@ -42,3 +42,9 @@
 !/base/*.cmd
 !/base/*.exe
 !/base/*.com
+
+**/.*.swp
+**/.DS_Store
+
+# HDMAINT intermediate command images (never runnable distribution tools).
+/commands/hdmaint/*.raw

@@ -1,6 +1,7 @@
 # WINDOW — DR C / RASM86 build.
 # all builds local outputs; check validates them; clean removes generated files.
 
+PYTHON=python3
 DRC86=drccpm_cc
 RASM86=pcdev_rasm86
 LINK86=drccpm_link
@@ -12,17 +13,20 @@ SHARED=start.obj command.obj win.obj format.obj xios.obj
 
 all: $(TOOLS)
 
-window.cmd: window.obj $(SHARED) Makefile
+window.cmd: window.obj $(SHARED) Makefile trim.py
 	@$(LINK86) window=start,window,command,win,format,xios > window-link.log 2>&1; result=$$?; cat window-link.log; test $$result -eq 0
 	@! grep -iE "undefined|syntax error|unable" window-link.log
+	$(PYTHON) trim.py $@
 
-livetest.cmd: livetest.obj $(SHARED) Makefile
+livetest.cmd: livetest.obj $(SHARED) Makefile trim.py
 	@$(LINK86) livetest=start,livetest,command,win,format,xios > livetest-link.log 2>&1; result=$$?; cat livetest-link.log; test $$result -eq 0
 	@! grep -iE "undefined|syntax error|unable" livetest-link.log
+	$(PYTHON) trim.py $@
 
-wmenu.cmd: wmenu.obj $(SHARED) Makefile
+wmenu.cmd: wmenu.obj $(SHARED) Makefile trim.py
 	@$(LINK86) wmenu=start,wmenu,command,win,format,xios > wmenu-link.log 2>&1; result=$$?; cat wmenu-link.log; test $$result -eq 0
 	@! grep -iE "undefined|syntax error|unable" wmenu-link.log
+	$(PYTHON) trim.py $@
 
 # Compile C modules with local declarations.
 %.obj: %.c win.h Makefile

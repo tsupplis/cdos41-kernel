@@ -3785,7 +3785,11 @@
     {
       "path": "commands/loadccpm/loadccpm.a86",
       "origin": "41SRC_11.IMG.DIR/LOADCCPM.A86",
-      "sha256": "34c69e496c0eb73ef74f95fc3a714324ff66a14a43ded63bcdd5927aa4c61524"
+      "sha256": "1d784ae37e18a308d2b2d1ba074bc63e3eedadcbc32fcb8f97292eb492e51e78",
+      "original_sha256": "34c69e496c0eb73ef74f95fc3a714324ff66a14a43ded63bcdd5927aa4c61524",
+      "modifications": [
+        "Align with independent 4.11 release; see tool README and patches.md."
+      ]
     },
     {
       "path": "commands/printmgr/printmgr.sub",
@@ -4148,7 +4152,11 @@
     {
       "path": "commands/rmdir/d.a86",
       "origin": "41SRC_07.IMG.DIR/D.A86",
-      "sha256": "534dae07ef0088f3018b202c44ff211de9a82684cb0f377b9f9cec624b76b992"
+      "sha256": "4873b4a2fa59d5b11c6b3c896ec1d81f8f670b4b125456e00fe86a6dd43caefd",
+      "original_sha256": "534dae07ef0088f3018b202c44ff211de9a82684cb0f377b9f9cec624b76b992",
+      "modifications": [
+        "Align with independent 4.11 release; see tool README and patches.md."
+      ]
     },
     {
       "path": "commands/rmdir/path.a86",
@@ -4158,7 +4166,11 @@
     {
       "path": "commands/rmdir/derror.a86",
       "origin": "41SRC_07.IMG.DIR/DERROR.A86",
-      "sha256": "deb4cb7739af116e30b9eccd0177d443d78731d368285c0f746fe9183d3b32db"
+      "sha256": "f2bab723d51aee73270ac72901b1e8358bc122ec081a9ad6be44436f82a9b4ad",
+      "original_sha256": "deb4cb7739af116e30b9eccd0177d443d78731d368285c0f746fe9183d3b32db",
+      "modifications": [
+        "Align with independent 4.11 release; see tool README and patches.md."
+      ]
     },
     {
       "path": "commands/sysdisk/d.a86",
@@ -4811,14 +4823,18 @@
     {
       "path": "commands/window/Makefile",
       "origin": "ccpm86-kernel/commands/window/Makefile",
-      "sha256": "4908282ac5d4d5c1b15163c9d5a34f624b8dd1d078c2e93090f46da69fe6dab4"
+      "sha256": "b09472c74e12eb4201d2c590e6aba47a6837216563cc0d748dc02675afc86599",
+      "original_sha256": "4908282ac5d4d5c1b15163c9d5a34f624b8dd1d078c2e93090f46da69fe6dab4"
     },
     {
       "path": "commands/window/README.md",
       "origin": "ccpm86-kernel/commands/window/README.md",
-      "sha256": "6a2587aff0d9bd432363403a782cebd708ca85d7572208c8961992b944bdc651",
+      "sha256": "b0c1c4980b798f2a77bced3fb777cc48423302a612135a0a48bfa4f6f2d368aa",
       "original_sha256": "4114a28d7acc3baf467c380cd099a2271de5237bc69d9eefce281b9f65f8de44",
-      "modifications": "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md."
+      "modifications": [
+        "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md.",
+        "Restore 4.11 immediate colour repaint; compare actual screen attributes as well as stored state."
+      ]
     },
     {
       "path": "commands/window/command.c",
@@ -4837,9 +4853,12 @@
     {
       "path": "commands/window/hostcheck.c",
       "origin": "ccpm86-kernel/commands/window/hostcheck.c",
-      "sha256": "af7166e594bc756b6bbb47432bc333e26b65a2339e839f13affe9f026a1752fd",
+      "sha256": "d45964f8b037483af90596d344522c790ae34590b8d48ef25412c6bd86c38981",
       "original_sha256": "076bfcbcc3466ea71acf0731922efdb34a96c891f864a940584aa08e6befd889",
-      "modifications": "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md."
+      "modifications": [
+        "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md.",
+        "Restore 4.11 immediate colour repaint; compare actual screen attributes as well as stored state."
+      ]
     },
     {
       "path": "commands/window/livetest.c",
@@ -4856,16 +4875,22 @@
     {
       "path": "commands/window/win.c",
       "origin": "ccpm86-kernel/commands/window/win.c",
-      "sha256": "556c064aff09599d22cc04f36448c74f36cb2799cd623d4ec1439c8b0c3418f2",
+      "sha256": "7e44d47a5173a40c43a8ce8bbf245df200f86f466c37fb0118a9d047caff489d",
       "original_sha256": "ebec4c99073d9161c1ccaf4acf856079e08c9ce06caa2ff687e4b4ad8e015f1b",
-      "modifications": "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md."
+      "modifications": [
+        "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md.",
+        "Restore 4.11 immediate colour repaint; compare actual screen attributes as well as stored state."
+      ]
     },
     {
       "path": "commands/window/win.h",
       "origin": "ccpm86-kernel/commands/window/win.h",
-      "sha256": "6cc75b4df0aac4039676785873b8082efc5e1251ff61c85880492da9bedbfe6e",
+      "sha256": "44c7f92e991b16536c8bdf45225ad8b45f6c63c463cd22eab7b0919e904c3477",
       "original_sha256": "0b8ccb22d5865dacf1f49ccbd93614aa819da2af5238eac27ece0b9bc4fbe97f",
-      "modifications": "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md."
+      "modifications": [
+        "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md.",
+        "Restore 4.11 immediate colour repaint; compare actual screen attributes as well as stored state."
+      ]
     },
     {
       "path": "commands/window/window.c",
@@ -4882,7 +4907,11 @@
     {
       "path": "commands/window/xios.a86",
       "origin": "ccpm86-kernel/commands/window/xios.a86",
-      "sha256": "6e96b6128e87edeac52ffd2fd99c24b17831f9c201c4af5a9032442ca5afa508"
+      "sha256": "e44e596bf58abfdaa3491c8f83a3006b8466d5c2c01c113ac131f32da17ca6dd",
+      "original_sha256": "6e96b6128e87edeac52ffd2fd99c24b17831f9c201c4af5a9032442ca5afa508",
+      "modifications": [
+        "Restore 4.11 immediate colour repaint; compare actual screen attributes as well as stored state."
+      ]
     },
     {
       "path": "commands/date/Makefile",

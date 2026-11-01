@@ -75,3 +75,25 @@ Ctrl-Z can contain stale runtime-buffer data and are deliberately ignored.
 This establishes the exercised command/menu paths, not exhaustive equivalence
 for every filename-editing sequence, video adapter, asynchronous switch or
 error path. Original programs remain in `base/` for further comparisons.
+
+## Immediate colour repaint
+
+The 4.11 colour operation changes both the current output attribute and every
+existing attribute byte in the 24x80 virtual console. The rewrite initially
+changed only the former, leaving old characters and blank cells unchanged
+until rewritten or cleared. Shared WINDOW/WMENU code now repaints the backing
+image under the original per-console mutex, synchronizes a full foreground
+console first, and asks XIOS to redraw the rectangle. Characters and cursor
+are preserved; the status line is excluded. Existing intensity/blink bits in
+the current attribute are preserved when foreground/background change.
+
+`tools/window_color_check.py` compares actual character **and attribute** bytes
+against 4.11 for all four CARDDECK stages, a full-screen colour change and a
+background-console change, without clearing between operations. The WMENU
+comparison also checks the screen attributes after an interactive colour edit.
+This fixes an omitted repaint operation; no command-line syntax changes.
+
+The linker can append an unnecessary zero record after the declared CODE/DATA
+groups. `trim.py` validates this simple CMD layout and removes only zero bytes
+beyond the last required 128-byte record. This avoids an extra 2 KB allocation
+for WMENU on the tools floppy without changing any loaded code or data.

@@ -1,6 +1,7 @@
 # RMDIR — RASM86 build.
 # all builds local outputs; check validates them; clean removes generated files.
 
+PYTHON=python3
 CMDINFO=cmdinfo
 RASM86=pcdev_rasm86
 LINK86=pcdev_linkcmd
@@ -28,8 +29,9 @@ derror.obj: derror.a86 Makefile
 	@$(RASM86) $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
 	@grep -qiE 'Number of errors: +0\.' $*.log
 
-check: all
+check: all check.py
 	$(CMDINFO) $(TOOLS)
+	$(PYTHON) check.py
 
 # Remove generated outputs only; preserve sources and reference files.
 clean:

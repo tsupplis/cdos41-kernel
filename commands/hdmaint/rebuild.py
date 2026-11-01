@@ -8,7 +8,7 @@ if sys.argv[1] == 'merge':
         records.append(data.split(b':00000001FF', 1)[0])
     Path('cpmlod.h86').write_bytes(b''.join(records) + b':00000001FF\r\n')
 else:
-    def raw(name): return Path(name + '.cmd').read_bytes()
+    def raw(name): return Path(name + '.bin').read_bytes()
     primary = raw('pcboot1')
     secondary = raw('cpmboot2')
     fat = raw('pcboot2')
@@ -21,7 +21,7 @@ else:
     assert len(tertiary) == 1280
     bundle = primary[:512] + cpm + fat[0x7c00:] + tertiary.ljust(2048, b'\0')
     assert len(bundle) == 0x2c80
-    output = bytearray(raw('h70'))
+    output = bytearray(Path('h70.raw').read_bytes())
     start = output.index(b'XTLBL DEFAULT FILE GOES HERE')
     assert output[start+len(bundle):].startswith(b'CPM/DOS SYSTEM TRACKS SHOULD HAVE ENDED BY NOW!')
     output[start:start+len(bundle)] = bundle

@@ -1,6 +1,7 @@
 # ERASE — RASM86 build.
 # all builds local outputs; check validates them; clean removes generated files.
 
+PYTHON=python3
 RASM86=pcdev_rasm86
 LINK86=pcdev_linkexe
 
@@ -11,8 +12,9 @@ OBJECTS=pcerase.obj media.obj
 .DELETE_ON_ERROR:
 
 all: $(TOOLS)
-check: all
+check: all check.py
 	@set -e; for f in $(TOOLS); do test -s $$f; done
+	$(PYTHON) check.py
 
 LOCAL_INCLUDES=$(wildcard *.a86 *.lib *.equ *.dat *.def *.h *.dcl)
 $(OBJECTS): $(LOCAL_INCLUDES) Makefile
