@@ -2624,12 +2624,12 @@
     {
       "path": "kernel/rsp3/ms2.a86",
       "origin": "41SRC_03.IMG.DIR/MS2.A86",
-      "sha256": "e639f1cfcd0e9a622376489fd54015d6172a50f9d5e1573f54f5e81b570df1b1"
+      "sha256": "ccf4505e1114022fa92ce405d064ef6b20b19503cc94600fd54bf78b4e857ccf"
     },
     {
       "path": "kernel/rsp3/ms1.a86",
       "origin": "41SRC_03.IMG.DIR/MS1.A86",
-      "sha256": "35c2514a1515a4b540486ca1d746d6df48c0ffe2334b5294015d44ee7aaf0558"
+      "sha256": "a88512e696d39124689cb42ca085a208a545bcf2ee486932062ee690673fa020"
     },
     {
       "path": "kernel/rsp3/wwcall.a86",

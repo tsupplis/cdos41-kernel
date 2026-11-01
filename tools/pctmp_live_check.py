@@ -33,6 +33,10 @@ def check():
         (folder / 'child.exe').write_bytes(header + signature)
         for name in ['recover.com', 'child.com', 'child.exe']:
             run('mcopy', '-i', 'fat.img', name, '::')
+        run('mmd', '-i', 'fat.img', '::OPENED', '::OTHER')
+        (folder / 'saved.dat').write_bytes(b'Q')
+        for directory in ['OPENED', 'OTHER']:
+            run('mcopy', '-i', 'fat.img', 'saved.dat', '::'+directory+'/SAVED.DAT')
         cfg = (ROOT / 'media/cdos86.cfg').read_text()
         cfg = cfg.replace('driver = "sdl"', 'driver = "null"')
         cfg = cfg.replace('driver      = "sdl:lowpass=5000"', 'driver      = "null"')
@@ -57,7 +61,10 @@ def check():
         for name, content in [('growa.dat', b'Z'), ('growb.dat', b'Y')]:
             run('mcopy', '-i', 'fat.img', '::'+name, name)
             assert (folder / name).read_bytes() == content * (64 * 512), name
-    print('PASS: PCE DOS PSP stub, 50h/51h, real COM/EXE 4B01h loads, entry-point contents, child memory release return to shell; FAT12/CPM geometry, drive restoration, volume-label masks/find-next, zero/bounded console input; interleaved 32-KiB FAT file growth verified byte-for-byte')
+        for directory, expected in [('OPENED', b'K'*128), ('OTHER', b'Q')]:
+            run('mcopy', '-o', '-i', 'fat.img', '::'+directory+'/SAVED.DAT', 'saved.dat')
+            assert (folder / 'saved.dat').read_bytes() == expected, directory
+    print('PASS: PCE DOS PSP stub, 50h/51h, real COM/EXE 4B01h loads, entry-point contents, child memory release return to shell; FAT12/CPM geometry, drive restoration, volume-label masks/find-next, zero/bounded console input; interleaved 32-KiB FAT file growth; FCB close after CHDIR (written/unwritten), restored directory and both files verified byte-for-byte')
 
 
 if __name__ == '__main__':

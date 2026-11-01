@@ -18,6 +18,11 @@ pagesize 72					; Apr 29, 1985
 ;	***  Shared Routines  ***
 
 	cseg
+	public ms2_critical_error,restore_dta_state,restore_pdrive_state
+	extrn check_error:near,check_error_again:near,critical_cleanup:near
+	extrn in_int24_flag:byte,dos1_call:byte
+	extrn critical_ss:word,critical_sp:word,ms_ss:word,ms_sp:word,RET_AX:word
+	public	get_fcb_directory,set_fcb_directory
 	public	ms2_func_entry		; called from ms1 Int_21
 	public	ms2_terminate		; for memory and handle cleanup
 	extrn	get_data_seg:near	; shared with ms1
@@ -111,6 +116,7 @@ cat_count	equ	word ptr .20h	; cat's owner process count
 cat_nwm		equ	word ptr .22h	; cat's network mask
 
 hds_size	equ	10		; bytes per hds
+hds_directory	equ	word ptr .06h	; current directory first cluster
 hds_count	equ	word ptr .08h	; hds's owner process count
 
 
@@ -179,6 +185,10 @@ ms2_func_entry:
 	les	di,ms2_ss_sp		; clear return carry on stack
 	and	es:st_flags[di],not cf_bit
 
+	cmp	in_int24_flag,0FFh
+	jne	ms2_not_critical
+	call	critical_cleanup
+ms2_not_critical:
 	cmp	ah,ms2f_top		; make sure func is in bounds
 	jbe	ms2_func_ok		; skip if below the top
 
@@ -187,7 +197,9 @@ ms2_func_ok:
 	sub	ah,ms2f_first		; reference to our table
 	mov bl,ah ! mov bh,0 ! shl bx,1	; index into our table
 
+	mov	dos1_call,0		; select DOS 2.x critical-error frame
 	call	cs:ms2_func_table[bx]	; call our function
+	mov	dos1_call,0FFh
 
 	pop ax ! pop bx ! pop cx ! pop bp
 	pop si ! pop di ! pop es ! pop dx
@@ -491,6 +503,45 @@ dskfree_ok:
 ;	entry:	ax,bx,cx,dx,si,di,es,ds = depending upon function
 ;	exit:	ax = return value, others preserved
 
+; DOS 2.x critical errors must expose the caller's handle-function frame,
+; not the nested DOS 1.x FCB frame. Save both stack pairs and return values
+; on our internal stack while INT 24h runs on the application's stack.
+ms2_critical_error:
+	push bp ! push si ! push bx ! push ds ! push es
+	call get_data_seg
+	push ms2_ret_ax ! push ms2_ss ! push ms2_sp
+	push RET_AX ! push ms_ss ! push ms_sp
+	cli
+	mov critical_ss,ss ! mov critical_sp,sp
+	mov ss,ms2_ss ! mov sp,ms2_sp
+	sti
+	push ms2_es ! push ms2_ds ! push ms2_bp
+	push ms2_di ! push ms2_si ! push ms2_dx
+	push ms2_cx ! push ms2_bx ! push ms2_ax
+	mov in_int24_flag,0FFh
+	int 24h
+	call get_data_seg
+	mov in_int24_flag,0
+	pop ms2_ax ! pop ms2_bx ! pop ms2_cx
+	pop ms2_dx ! pop ms2_si ! pop ms2_di
+	pop ms2_bp ! pop ms2_ds ! pop ms2_es
+	cli
+	mov ss,critical_ss ! mov sp,critical_sp
+	sti
+	pop ms_sp ! pop ms_ss ! pop RET_AX
+	pop ms2_sp ! pop ms2_ss ! pop ms2_ret_ax
+	pop es ! pop ds ! pop bx ! pop si ! pop bp
+	or al,al ! jnz ms2_critical_action
+	mov ah,al			; ignore returns success for DOS 2.x
+	pop di
+	ret
+ms2_critical_action:
+	cmp al,2 ! je ms2_critical_abort
+	pop di
+	jmp check_error_again		; retry only at the interrupted BDOS call
+ms2_critical_abort:
+	int 22h				; terminate, not Ctrl-C processing
+
 ms1_func:
 	int	21h			; right back in
 	ret
@@ -509,6 +560,37 @@ ms2_bdos:				; label for path.a86 linkage
 
 ;	This is a quick and dirty routine to get our process descriptor
 ;	exit:	es:bx -> our pd
+
+; Preserve the directory of an opened DOS FCB (European PCTMP 31F6h).
+; CL is the zero-based logical drive. AX=FFFFh reads, other values set
+; the HDS first-cluster word. Missing CAT/HDS returns zero. ES/BX survive;
+; CH and flags are scratch. FFFFh also lets rename close in its current
+; directory without installing an uninitialised FCB reserved word.
+get_fcb_directory:
+	mov	ax,0FFFFh
+set_fcb_directory:
+	push	es ! push bx
+	call	get_pd
+	mov	bx,es:pd_cat[bx]
+	or	bx,bx
+	jz	fcb_directory_absent
+	xor	ch,ch
+	add	bx,cx ! add bx,cx
+	mov	bx,es:[bx]
+	or	bx,bx
+	jz	fcb_directory_absent
+	cmp	ax,0FFFFh
+	jne	fcb_directory_set
+	mov	ax,es:hds_directory[bx]
+	jmps	fcb_directory_done
+fcb_directory_set:
+	mov	es:hds_directory[bx],ax
+	jmps	fcb_directory_done
+fcb_directory_absent:
+	xor	ax,ax
+fcb_directory_done:
+	pop	bx ! pop es
+	ret
 
 get_pd:
 	mov	es,cs:sysdat		; point to system data
@@ -1041,12 +1123,16 @@ open_directory:
 	jz	open_dir_root		;   then do a close
 
 	mov	cl,f_open		; else do an open
-	call	ccpm			; here goes
+	mov al,[di] ! dec al ! and al,0Fh
+	mov ah,4
+	call check_error
 	jmps	open_dir_check		; check error return
 
 open_dir_root:
 	mov	cl,f_close		; if blank, then close it
-	call	ccpm			; here goes
+	mov al,[di] ! dec al ! and al,0Fh
+	mov ah,5
+	call check_error
 	cmp	ah,06h			; allow 06 errors through
 	jz	open_dir_done		;   to let ccpm roots work
 
@@ -1092,7 +1178,9 @@ make_dir:
 
 	or	byte ptr [si],fcb_dir_flag
 	mov	cl,f_make
-	call	ccpm			; create a new directory
+	mov al,[si] ! dec al ! and al,0Fh
+	mov ah,5
+	call check_error
 	test	al,al			; check error return
 	jz	make_dir_done		; skip if all is well
 
@@ -1124,7 +1212,10 @@ remove_dir:
 
 	pop dx ! push dx		; recover fcb pointer
 	mov	cl,f_sfirst
-	call	ccpm			; search for dir entry
+	mov bx,dx
+	mov al,[bx] ! dec al ! and al,0Fh
+	mov ah,4
+	call check_error
 	pop	dx
 	cmp	al,0FFh			; if file not found,
 	jz	remove_dir_error	;   then quit
@@ -1139,7 +1230,9 @@ remove_dir:
 	mov	si,dx			; si -> fcb
 	or	byte ptr [si],fcb_dir_flag
 	mov	cl,f_delete
-	call	ccpm			; create a new directory
+	mov al,[si] ! dec al ! and al,0Fh
+	mov ah,5
+	call check_error
 	test	al,al			; check error return
 	jz	remove_dir_done		; skip if all is well
 
@@ -1535,7 +1628,10 @@ fpath_open:	mov cl,f_open	!  jmps fpath_bdos
 fpath_sfirst:	mov cl,f_sfirst	!  jmps fpath_bdos
 fpath_snext:	mov cl,f_snext	! ;jmps fpath_bdos
 
-fpath_bdos:	jmp ms2_bdos
+fpath_bdos:
+	mov al,[bx] ! dec al ! and al,0Fh
+	mov ah,4
+	jmp check_error
 
 
 eject
@@ -1880,7 +1976,10 @@ ms2_chgmode_set2:
 	or	[bx],al			; else set the bit
 ms2_chgmode_set3:
 	mov	cl,f_attrib
-	call	ccpm			; use ccpm set attrib call
+	mov bx,dx
+	mov al,[bx] ! dec al ! and al,0Fh
+	mov ah,5
+	call check_error
 	test	al,al
 	jnz	ms2_chgmode_nofile	; skip if file not found
 	ret				; else return success
@@ -2095,7 +2194,10 @@ ms2_f_setdate:
 	mov	dx,cpm_fcb		; found above
 	mov	cl,f_setdate		; the secret cpm function
 	push	bx
-	call	ccpm			; set date if possible
+	mov bx,dx
+	mov al,[bx] ! dec al ! and al,0Fh
+	mov ah,5
+	call check_error
 	pop	bx
 	call	restore_dta		; back to user's dta
 
@@ -2421,6 +2523,16 @@ delete_fcb_error:
 ;	entry:	bx -> hcb
 ;	save:	all registers and flags
 
+restore_pdrive_state:
+	cmp pdrive_state,2
+	jne restore_pdrive_done
+	push bx
+	mov bx,pdrive_hcb		; handler may supply a different BX
+	call swap_pdrive
+	pop bx
+restore_pdrive_done:
+	ret
+
 swap_pdrive:
 	push es ! push si ! push ax ! pushf
 
@@ -2435,6 +2547,10 @@ swap_pdrive:
 	cmp	es:cat_count[si],1	; if we aren't the sole owner
 	jnz	swap_pdrive_done	;   then skip the swap
 
+	; States 1=normal, 2=borrowed. Historical XOR 1 could never reach 2;
+	; XOR 3 gives a matching pair and lets abandonment restore P: once.
+	mov	pdrive_hcb,bx		; remember owner for INT 24h abandonment
+	xor	pdrive_state,3
 	mov	ax,hcb_path_ptr[bx]	; fetch our path pointer
 	xchg	ax,es:cat_pdrive[si]	;   give it to P:
 	xchg	ax,hcb_path_ptr[bx]	;   and save the old one
@@ -2479,6 +2595,7 @@ save_set_dta_far:
 	mov	save_dta_off,ax		; save the offset
 	mov	ax,ms_dmabase
 	mov	save_dta_seg,ax		; save the segment
+	mov dta_state,2		; borrowed until normal return or abandonment
 
 	push ds ! push es ! pop ds	; ds = target segment
 	mov	ah,ms_setdta
@@ -2490,7 +2607,19 @@ save_set_dta_far:
 ;	Restore the original data transfer address
 ;	save:	ax may contain function return code
 
+; Restore only the saved DOS DTA variables while abandoning an operation;
+; the next BDOS transfer sets its own DMA, so do not reenter INT 21h here.
+restore_dta_state:
+	cmp dta_state,2
+	jne restore_dta_done
+	mov ax,save_dta_off ! mov ms_dmaadr,ax
+	mov ax,save_dta_seg ! mov ms_dmabase,ax
+	mov dta_state,1
+restore_dta_done:
+	ret
+
 restore_dta:
+	mov dta_state,1
 	push ds ! push ax
 	lds	dx,save_dta_dword	; user's original
 	mov	ah,ms_setdta
@@ -2664,6 +2793,9 @@ cpm_fcb		rw	1		; saves pointer to cpm fcb
 match_caller	rb	1		; caller identification byte
 		rb	1		; pad
 
+dta_state	db	1		; 1=normal, 2=temporary DTA installed
+pdrive_state	db	1		; 1=normal, 2=handle P: installed
+pdrive_hcb	dw	0		; handle that lent its P: context
 save_dta_off	rw	1		; This saves the user's dta so that
 save_dta_seg	rw	1		;   we can use another for Search.
 save_dta_dword	equ	dword ptr save_dta_off

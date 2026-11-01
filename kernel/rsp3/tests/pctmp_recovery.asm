@@ -136,6 +136,58 @@ write_pair:
  mov ah,3eh
  int 21h
  jc failed
+; Close an FCB after CHDIR, first unwritten, then written. The reserved
+; opening-directory word must select OPENED for close and restore OTHER.
+ mov byte [stage],'D'
+ xor bp,bp
+fcb_context_test:
+ mov dx,opened_dir
+ mov ah,3bh
+ int 21h
+ jc failed
+ mov dx,context_fcb
+ mov ah,0fh
+ int 21h
+ or al,al
+ jnz failed
+ or bp,bp
+ jz fcb_change_dir
+ mov dx,context_data
+ mov ah,1ah
+ int 21h
+ mov dx,context_fcb
+ mov ah,15h
+ int 21h
+ or al,al
+ jnz failed
+fcb_change_dir:
+ mov dx,other_dir
+ mov ah,3bh
+ int 21h
+ jc failed
+ mov dx,context_fcb
+ mov ah,10h
+ int 21h
+ or al,al
+ jnz failed
+ mov dl,2
+ mov si,directory_buf
+ mov ah,47h
+ int 21h
+ jc failed
+ cmp word [directory_buf],'OT'
+ jne failed
+ cmp word [directory_buf+2],'HE'
+ jne failed
+ cmp word [directory_buf+4],'R'
+ jne failed
+ inc bp
+ cmp bp,2
+ jb fcb_context_test
+ mov dx,root_dir
+ mov ah,3bh
+ int 21h
+ jc failed
  ; Zero capacity must not consume input or touch the following byte.
  mov byte [stage],'A'
  mov dx,zero_buf
@@ -200,6 +252,13 @@ failed:
  mov ah,9
  int 21h
  int 20h
+opened_dir db 'B:\OPENED',0
+other_dir db 'B:\OTHER',0
+root_dir db 'B:\',0
+context_fcb db 2,'SAVED   DAT'
+ times 25 db 0
+context_data times 128 db 'K'
+directory_buf times 64 db 0
 grow_a db 'B:GROWA.DAT',0
 grow_b db 'B:GROWB.DAT',0
 handle_a dw 0

@@ -33,7 +33,7 @@
 | 0D | Disk reset | DOS 1.x | Implemented | — | — |
 | 0E | Select default drive | DOS 1.x | Implemented | — | — |
 | 0F | FCB open | DOS 1.x | Implemented | FCB adapter → shared CP/M/FAT filesystem | — |
-| 10 | FCB close | DOS 1.x | Implemented | FCB adapter → shared CP/M/FAT filesystem | — |
+| 10 | FCB close | DOS 1.x | Implemented | Uses the opening directory saved in reserved FCB word 1Ch, then restores the current directory | — |
 | 11 | FCB find first | DOS 1.x | Implemented | FCB adapter → shared CP/M/FAT filesystem | — |
 | 12 | FCB find next | DOS 1.x | Implemented | FCB adapter → shared CP/M/FAT filesystem | — |
 | 13 | FCB delete | DOS 1.x | Implemented | FCB adapter → shared CP/M/FAT filesystem | — |
@@ -198,7 +198,7 @@ Sources: [xcon1.lib](kernel/con/xcon1.lib), [xcon2.lib](kernel/con/xcon2.lib),
 | 21 | AH | DOS service dispatch | See tables above | PCTMP | — |
 | 22 | — | Termination continuation | Installed return/cleanup handler; callback, not ordinary service | PCTMP | — |
 | 23 | — | Ctrl-C callback | Installed handler; checked-input unwind supported | PCTMP | — |
-| 24 | — | Critical-error callback | Installed abort/retry path | PCTMP | — |
+| 24 | — | Critical-error callback | DOS 1.x/2.x caller frames; retry, abort through INT 22h; DOS 2.x ignore returns success, DOS 1.x ignore retries | PCTMP | — |
 | 25 / 26 | — | Absolute disk read / write | Enabled raw-disk path through BDOS/XIOS with cache flush/invalidation; legacy sector/count fields, original flags left on caller stack | PCTMP → BDOS | — |
 | 27 | — | Stay resident | IRET only; does not retain a program | PCTMP | — |
 | Other | — | Unlisted interrupts | No additional PCTMP-installed handler; existing firmware/kernel ownership applies | — | — |

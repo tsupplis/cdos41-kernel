@@ -1,0 +1,662 @@
+{
+  "release": "4.11",
+  "policy": "Reference binaries only; packaging continues to use maintained command builds. Existing base files are not overwritten. Image-set membership does not establish OEM authorship for supplemental files.",
+  "images": {
+    "cdos-4.11-2.img": "238eedd9ab93c1528759e9718a9520bbae8541b6b63a91cd16048213aa347a7c",
+    "cdos-4.11-1.img": "8f3222ca4f789fd94b5c2dbcb126500bbbde076f0fa80d563b2f5d20e8e4cbab",
+    "cdos-4.11-3.img": "8ceefb46e644a04491cf3d766722fa6e3ccbea39b3830a2286b4f4bfc115e29c",
+    "cdos-4.11-4.img": "61c277e4e0e323e03b8c7da0ebe92c25135625359bcbf4c66146bc638f6878bf",
+    "cdos-4.11-5.img": "eea5c2eaa7351dff2f2580cff5409f140d4bf63985c76ba3a70049a62f822775"
+  },
+  "files": [
+    {
+      "name": "back.cmd",
+      "status": "existing base retained",
+      "base_sha256": "d7b9e8dc9a13766d30a0bd4b826e94f6e0e3ca733bb25df94f21f8f2edca3818",
+      "references": [
+        {
+          "image": "cdos-4.11-2.img",
+          "path": "BACK.CMD",
+          "sha256": "d7b9e8dc9a13766d30a0bd4b826e94f6e0e3ca733bb25df94f21f8f2edca3818",
+          "bytes": 22528
+        }
+      ]
+    },
+    {
+      "name": "batch.cmd",
+      "status": "restored from 4.11 image",
+      "base_sha256": "2708c980a587c72da8dbb43b0488f707301c01c9ae01f9810ddd9e50d3c7461e",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "BATCH.CMD",
+          "sha256": "2708c980a587c72da8dbb43b0488f707301c01c9ae01f9810ddd9e50d3c7461e",
+          "bytes": 10240
+        }
+      ]
+    },
+    {
+      "name": "brinst.cmd",
+      "status": "existing base retained",
+      "base_sha256": "c977c1bddd7265a548e5bd7043715dc66e94c6e7ff595035e4aea1eb63183298",
+      "references": [
+        {
+          "image": "cdos-4.11-3.img",
+          "path": "BRINST.CMD",
+          "sha256": "c977c1bddd7265a548e5bd7043715dc66e94c6e7ff595035e4aea1eb63183298",
+          "bytes": 28800
+        }
+      ]
+    },
+    {
+      "name": "cardfile.cmd",
+      "status": "restored as reference only; excluded from distribution",
+      "base_sha256": "5d4b9ee78041ccc1247b2e455ee7250bbc8d253068fb0d0ea24535f11c2932e5",
+      "references": [
+        {
+          "image": "cdos-4.11-4.img",
+          "path": "CARDFILE.CMD",
+          "sha256": "5d4b9ee78041ccc1247b2e455ee7250bbc8d253068fb0d0ea24535f11c2932e5",
+          "bytes": 52864
+        }
+      ]
+    },
+    {
+      "name": "chdir.cmd",
+      "status": "restored from 4.11 image",
+      "base_sha256": "0771f485ef104e11c34157a706368f3fe73e1fb284c940bde11cba658592d434",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "CHDIR.CMD",
+          "sha256": "0771f485ef104e11c34157a706368f3fe73e1fb284c940bde11cba658592d434",
+          "bytes": 2432
+        }
+      ]
+    },
+    {
+      "name": "chset.cmd",
+      "status": "restored from 4.11 image",
+      "base_sha256": "cc23f3506ef40c9d4fb78918169c315bc65a5e10971d516b3ee9ed54dc4beafc",
+      "references": [
+        {
+          "image": "cdos-4.11-4.img",
+          "path": "CHSET.CMD",
+          "sha256": "cc23f3506ef40c9d4fb78918169c315bc65a5e10971d516b3ee9ed54dc4beafc",
+          "bytes": 21760
+        }
+      ]
+    },
+    {
+      "name": "compaq.cmd",
+      "status": "restored as reference only; excluded from distribution",
+      "base_sha256": "20a45a36c3a7b9cd979e7cf7bb0c47bea8a24c92ba06371d7d67ecd45faf5386",
+      "references": [
+        {
+          "image": "cdos-4.11-5.img",
+          "path": "COMPAQ.CMD",
+          "sha256": "20a45a36c3a7b9cd979e7cf7bb0c47bea8a24c92ba06371d7d67ecd45faf5386",
+          "bytes": 768
+        }
+      ]
+    },
+    {
+      "name": "copy.exe",
+      "status": "restored from 4.11 image",
+      "base_sha256": "29d0917a45cea17040dea5ba991ce706db3876f0ced13724bb687551bb4ddf5b",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "COPY.EXE",
+          "sha256": "29d0917a45cea17040dea5ba991ce706db3876f0ced13724bb687551bb4ddf5b",
+          "bytes": 29184
+        }
+      ]
+    },
+    {
+      "name": "copymenu.cmd",
+      "status": "restored from 4.11 image",
+      "base_sha256": "1a05eafe170d8c4bacaffbcaf838d9d7ba62fae67864baf5cae8da42348e6255",
+      "references": [
+        {
+          "image": "cdos-4.11-4.img",
+          "path": "COPYMENU.CMD",
+          "sha256": "1a05eafe170d8c4bacaffbcaf838d9d7ba62fae67864baf5cae8da42348e6255",
+          "bytes": 37120
+        }
+      ]
+    },
+    {
+      "name": "date.exe",
+      "status": "restored from 4.11 image",
+      "base_sha256": "c2ff20e9e6d11c81fababe0aab48ea00298eb2d4665d327528a56ab233e69b7c",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "DATE.EXE",
+          "sha256": "c2ff20e9e6d11c81fababe0aab48ea00298eb2d4665d327528a56ab233e69b7c",
+          "bytes": 2560
+        }
+      ]
+    },
+    {
+      "name": "dredix.cmd",
+      "status": "restored from 4.11 image",
+      "base_sha256": "338be5c24ec6ceb4882a2d0b6a5c1a8c591e5660b8a70b75df13bf7fc4f4c93e",
+      "references": [
+        {
+          "image": "cdos-4.11-2.img",
+          "path": "DREDIX.CMD",
+          "sha256": "338be5c24ec6ceb4882a2d0b6a5c1a8c591e5660b8a70b75df13bf7fc4f4c93e",
+          "bytes": 49408
+        }
+      ]
+    },
+    {
+      "name": "drtalk.exe",
+      "status": "restored from 4.11 image",
+      "base_sha256": "ab6ccfd5337f9fbd4191b163ce1eeeb53d03e3ffc4b318b1ba91cbbe2c6f40a6",
+      "references": [
+        {
+          "image": "cdos-4.11-4.img",
+          "path": "DRTALK.EXE",
+          "sha256": "ab6ccfd5337f9fbd4191b163ce1eeeb53d03e3ffc4b318b1ba91cbbe2c6f40a6",
+          "bytes": 79616
+        }
+      ]
+    },
+    {
+      "name": "dskmaint.cmd",
+      "status": "restored from 4.11 image",
+      "base_sha256": "e70332946f5325d7a85b31accf4dec8361f07610a91f61fc60aa3326e4c3c3b8",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "DSKMAINT.CMD",
+          "sha256": "e70332946f5325d7a85b31accf4dec8361f07610a91f61fc60aa3326e4c3c3b8",
+          "bytes": 21504
+        },
+        {
+          "image": "cdos-4.11-2.img",
+          "path": "DSKMAINT.CMD",
+          "sha256": "e70332946f5325d7a85b31accf4dec8361f07610a91f61fc60aa3326e4c3c3b8",
+          "bytes": 21504
+        }
+      ]
+    },
+    {
+      "name": "dsp.cmd",
+      "status": "restored from 4.11 image",
+      "base_sha256": "7818cc55e963d8ac7687c5720679c049f7d38871c5254103fca5f0bb5e9d1607",
+      "references": [
+        {
+          "image": "cdos-4.11-3.img",
+          "path": "DSP.CMD",
+          "sha256": "7818cc55e963d8ac7687c5720679c049f7d38871c5254103fca5f0bb5e9d1607",
+          "bytes": 4608
+        }
+      ]
+    },
+    {
+      "name": "editmenu.cmd",
+      "status": "restored from 4.11 image",
+      "base_sha256": "0222eb0a8484c9b26c4326e7a9ffc814c30b8a207e29c847d937c3f5870d0877",
+      "references": [
+        {
+          "image": "cdos-4.11-4.img",
+          "path": "EDITMENU.CMD",
+          "sha256": "0222eb0a8484c9b26c4326e7a9ffc814c30b8a207e29c847d937c3f5870d0877",
+          "bytes": 55680
+        }
+      ]
+    },
+    {
+      "name": "eraq.cmd",
+      "status": "restored from 4.11 image",
+      "base_sha256": "33a891ac207a2f916c2e13923a10e167a4329a9f57c1795c2ca71741d307d16f",
+      "references": [
+        {
+          "image": "cdos-4.11-3.img",
+          "path": "ERAQ.CMD",
+          "sha256": "33a891ac207a2f916c2e13923a10e167a4329a9f57c1795c2ca71741d307d16f",
+          "bytes": 3968
+        }
+      ]
+    },
+    {
+      "name": "erase.exe",
+      "status": "restored from 4.11 image",
+      "base_sha256": "952abb7ecad67b91b1c890a626b593240ef960b9aed517504bbb99d099019a89",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "ERASE.EXE",
+          "sha256": "952abb7ecad67b91b1c890a626b593240ef960b9aed517504bbb99d099019a89",
+          "bytes": 1536
+        }
+      ]
+    },
+    {
+      "name": "fm.cmd",
+      "status": "existing base retained",
+      "base_sha256": "c895d3c29537fc861a4a4c41809a0e7aba62da1153c2fe01bdef6a00ca215c10",
+      "references": [
+        {
+          "image": "cdos-4.11-2.img",
+          "path": "FM.CMD",
+          "sha256": "c895d3c29537fc861a4a4c41809a0e7aba62da1153c2fe01bdef6a00ca215c10",
+          "bytes": 73856
+        }
+      ]
+    },
+    {
+      "name": "function.cmd",
+      "status": "restored from 4.11 image",
+      "base_sha256": "5d826a2ab22a074969fe1744359793009336400f29db35b4bdd6772450daae34",
+      "references": [
+        {
+          "image": "cdos-4.11-2.img",
+          "path": "FUNCTION.CMD",
+          "sha256": "5d826a2ab22a074969fe1744359793009336400f29db35b4bdd6772450daae34",
+          "bytes": 25216
+        }
+      ]
+    },
+    {
+      "name": "hdmaint.cmd",
+      "status": "existing base retained",
+      "base_sha256": "c92ae0527b655fdb560bb515c299c19f59a244c285ffd0abf7283235f9d2b1f7",
+      "references": [
+        {
+          "image": "cdos-4.11-2.img",
+          "path": "HDMAINT.CMD",
+          "sha256": "c92ae0527b655fdb560bb515c299c19f59a244c285ffd0abf7283235f9d2b1f7",
+          "bytes": 32768
+        }
+      ]
+    },
+    {
+      "name": "help.cmd",
+      "status": "restored from 4.11 image",
+      "base_sha256": "839ed1af41a8e64b9f415eaf78b338ad8866e2fffc420fe865c041911a22b4bf",
+      "references": [
+        {
+          "image": "cdos-4.11-2.img",
+          "path": "HELP.CMD",
+          "sha256": "839ed1af41a8e64b9f415eaf78b338ad8866e2fffc420fe865c041911a22b4bf",
+          "bytes": 7680
+        }
+      ]
+    },
+    {
+      "name": "initdir.cmd",
+      "status": "restored from 4.11 image",
+      "base_sha256": "e8b36210b48f0abdb400ab9a9e5f8577fb546b48033fbd5ff764add6bd9a2a1d",
+      "references": [
+        {
+          "image": "cdos-4.11-4.img",
+          "path": "INITDIR.CMD",
+          "sha256": "e8b36210b48f0abdb400ab9a9e5f8577fb546b48033fbd5ff764add6bd9a2a1d",
+          "bytes": 36992
+        }
+      ]
+    },
+    {
+      "name": "load6300.com",
+      "status": "restored as reference only; excluded from distribution",
+      "base_sha256": "55f160ef557698319ee576095458819a4bf801893807d27b1cc0938acd944858",
+      "references": [
+        {
+          "image": "cdos-4.11-5.img",
+          "path": "LOAD6300.COM",
+          "sha256": "55f160ef557698319ee576095458819a4bf801893807d27b1cc0938acd944858",
+          "bytes": 1536
+        }
+      ]
+    },
+    {
+      "name": "loadccpm.com",
+      "status": "restored from 4.11 image",
+      "base_sha256": "f4a72b60115ebfef88fc28c3d3c73e34b057b638751066d265091f7b3d327967",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "LOADCCPM.COM",
+          "sha256": "f4a72b60115ebfef88fc28c3d3c73e34b057b638751066d265091f7b3d327967",
+          "bytes": 1536
+        }
+      ]
+    },
+    {
+      "name": "mkdir.cmd",
+      "status": "restored from 4.11 image",
+      "base_sha256": "44cba90dc9176713001b58a364a7e6d384cdd7282dd198d8cb8dd1ad70a043c9",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "MKDIR.CMD",
+          "sha256": "44cba90dc9176713001b58a364a7e6d384cdd7282dd198d8cb8dd1ad70a043c9",
+          "bytes": 2304
+        }
+      ]
+    },
+    {
+      "name": "n.cmd",
+      "status": "existing base retained",
+      "base_sha256": "4a47452157dd652cade919bbd10862200a3e6f6aaef770d825e9269b2c72223d",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "N.CMD",
+          "sha256": "4a47452157dd652cade919bbd10862200a3e6f6aaef770d825e9269b2c72223d",
+          "bytes": 8704
+        }
+      ]
+    },
+    {
+      "name": "neat.cmd",
+      "status": "restored from 4.11 image",
+      "base_sha256": "02ee2b7f92c4de94bfbee381dc239b9ef7e516ed0d1f767f7e10fde463a14efd",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "NEAT.CMD",
+          "sha256": "02ee2b7f92c4de94bfbee381dc239b9ef7e516ed0d1f767f7e10fde463a14efd",
+          "bytes": 3968
+        }
+      ]
+    },
+    {
+      "name": "off.cmd",
+      "status": "restored from 4.11 image",
+      "base_sha256": "dd5fc4df5565cdc7468043e65c836ff663438fed0136a81189ba8aaf83eb1974",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "OFF.CMD",
+          "sha256": "dd5fc4df5565cdc7468043e65c836ff663438fed0136a81189ba8aaf83eb1974",
+          "bytes": 640
+        }
+      ]
+    },
+    {
+      "name": "patcher.cmd",
+      "status": "restored from 4.11 image",
+      "base_sha256": "13a3ff60650384123b883315b77213380c9d80fdc2de25a0c8b415f370304b3e",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "PATCHER.CMD",
+          "sha256": "13a3ff60650384123b883315b77213380c9d80fdc2de25a0c8b415f370304b3e",
+          "bytes": 1792
+        }
+      ]
+    },
+    {
+      "name": "path.exe",
+      "status": "restored from 4.11 image",
+      "base_sha256": "e69ce810865ca8134b7a1ecb4def68b77033c7bab17f75dfe8964389e769bf3a",
+      "references": [
+        {
+          "image": "cdos-4.11-3.img",
+          "path": "PATH.EXE",
+          "sha256": "e69ce810865ca8134b7a1ecb4def68b77033c7bab17f75dfe8964389e769bf3a",
+          "bytes": 2560
+        }
+      ]
+    },
+    {
+      "name": "pip.cmd",
+      "status": "restored from 4.11 image",
+      "base_sha256": "f0e3618ad44aba886cdeda1926e2324d0014288301ec153989a4a261d5c420e0",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "PIP.CMD",
+          "sha256": "f0e3618ad44aba886cdeda1926e2324d0014288301ec153989a4a261d5c420e0",
+          "bytes": 9344
+        }
+      ]
+    },
+    {
+      "name": "printmgr.cmd",
+      "status": "restored from 4.11 image",
+      "base_sha256": "5460b1e46f6d169fbd27bde3532f31e9300c84d36e032210a622ee92549b327c",
+      "references": [
+        {
+          "image": "cdos-4.11-3.img",
+          "path": "PRINTMGR.CMD",
+          "sha256": "5460b1e46f6d169fbd27bde3532f31e9300c84d36e032210a622ee92549b327c",
+          "bytes": 30848
+        }
+      ]
+    },
+    {
+      "name": "redos.com",
+      "status": "existing base retained",
+      "base_sha256": "986b79c2a435e35a82f61c2484a87966af8cca919681e63f48214d70378620b7",
+      "references": [
+        {
+          "image": "cdos-4.11-3.img",
+          "path": "REDOS.COM",
+          "sha256": "986b79c2a435e35a82f61c2484a87966af8cca919681e63f48214d70378620b7",
+          "bytes": 1664
+        }
+      ]
+    },
+    {
+      "name": "ren.exe",
+      "status": "existing base retained",
+      "base_sha256": "21072eff5a230c9dfb64dccbc09c36e4ca3dab3572fe1eb25cb49ad522dc7bad",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "REN.EXE",
+          "sha256": "21072eff5a230c9dfb64dccbc09c36e4ca3dab3572fe1eb25cb49ad522dc7bad",
+          "bytes": 2048
+        }
+      ]
+    },
+    {
+      "name": "res86.cmd",
+      "status": "restored from 4.11 image",
+      "base_sha256": "264a608d868cb5928b0a28945c3e4de67d0fa9382b54bdc9c38d149b7ab31c74",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "RES86.CMD",
+          "sha256": "264a608d868cb5928b0a28945c3e4de67d0fa9382b54bdc9c38d149b7ab31c74",
+          "bytes": 17152
+        }
+      ]
+    },
+    {
+      "name": "rest.cmd",
+      "status": "existing base retained",
+      "base_sha256": "771272b0e879eaec0e8e623a6694755e8760c508173261478efb52999bae95fd",
+      "references": [
+        {
+          "image": "cdos-4.11-2.img",
+          "path": "REST.CMD",
+          "sha256": "771272b0e879eaec0e8e623a6694755e8760c508173261478efb52999bae95fd",
+          "bytes": 18944
+        }
+      ]
+    },
+    {
+      "name": "rmdir.cmd",
+      "status": "restored from 4.11 image",
+      "base_sha256": "2385e819a48878e65034af0cd2ecfa2361ba0ddca7eb5dc18851fa6f95450086",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "RMDIR.CMD",
+          "sha256": "2385e819a48878e65034af0cd2ecfa2361ba0ddca7eb5dc18851fa6f95450086",
+          "bytes": 2176
+        }
+      ]
+    },
+    {
+      "name": "sdir.cmd",
+      "status": "existing base retained",
+      "base_sha256": "d51187d2d0d8e588787c3fcbbbd7ad4ca8625bcb8cb19b8c962223accb189945",
+      "references": [
+        {
+          "image": "cdos-4.11-3.img",
+          "path": "SDIR.CMD",
+          "sha256": "cfde9821dbe883275e57e92b2d5b7c6f5f0613818940f06bad10f5c3555c3c79",
+          "bytes": 13312
+        }
+      ]
+    },
+    {
+      "name": "set.cmd",
+      "status": "existing base retained",
+      "base_sha256": "e4ec4cdefafe7cd1793c3bc2fbbe5429046e87df8fd53ca720d72c5633616123",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "SET.CMD",
+          "sha256": "31f84c5997b6d6fbff360638562a996352fe835978261eb7078b59d8f60d26a9",
+          "bytes": 7680
+        },
+        {
+          "image": "cdos-4.11-2.img",
+          "path": "SET.CMD",
+          "sha256": "e4ec4cdefafe7cd1793c3bc2fbbe5429046e87df8fd53ca720d72c5633616123",
+          "bytes": 7680
+        }
+      ]
+    },
+    {
+      "name": "setport.cmd",
+      "status": "existing base retained",
+      "base_sha256": "0facfea0a25a91a5182799fec4612a0f5f1eb9e2cdffe362b39ff5ff2efcde01",
+      "references": [
+        {
+          "image": "cdos-4.11-2.img",
+          "path": "SETPORT.CMD",
+          "sha256": "0facfea0a25a91a5182799fec4612a0f5f1eb9e2cdffe362b39ff5ff2efcde01",
+          "bytes": 18048
+        }
+      ]
+    },
+    {
+      "name": "setup.cmd",
+      "status": "existing base retained",
+      "base_sha256": "fd6c44ab4ae9a3925bce728211e97b7e3c756c8a6d4598af3590cb244379e2dc",
+      "references": [
+        {
+          "image": "cdos-4.11-2.img",
+          "path": "SETUP.CMD",
+          "sha256": "fd6c44ab4ae9a3925bce728211e97b7e3c756c8a6d4598af3590cb244379e2dc",
+          "bytes": 16256
+        }
+      ]
+    },
+    {
+      "name": "show.cmd",
+      "status": "existing base retained",
+      "base_sha256": "0295f31a30830ab50e4e344175fe8ee44578b4d8cf71c92f2a153ddb7e7940b0",
+      "references": [
+        {
+          "image": "cdos-4.11-3.img",
+          "path": "SHOW.CMD",
+          "sha256": "0295f31a30830ab50e4e344175fe8ee44578b4d8cf71c92f2a153ddb7e7940b0",
+          "bytes": 7424
+        }
+      ]
+    },
+    {
+      "name": "spl.cmd",
+      "status": "existing base retained",
+      "base_sha256": "8794d39b6ce382ef924515ae5823b282de01b3daafa3471f492b88b5913af4ad",
+      "references": [
+        {
+          "image": "cdos-4.11-3.img",
+          "path": "SPL.CMD",
+          "sha256": "8794d39b6ce382ef924515ae5823b282de01b3daafa3471f492b88b5913af4ad",
+          "bytes": 12160
+        }
+      ]
+    },
+    {
+      "name": "stop.cmd",
+      "status": "existing base retained",
+      "base_sha256": "6447f640ae9bf0d9fd8cdc8728dd5e77d18ab83fafb0a521f2e4a94f5a445e19",
+      "references": [
+        {
+          "image": "cdos-4.11-2.img",
+          "path": "STOP.CMD",
+          "sha256": "6447f640ae9bf0d9fd8cdc8728dd5e77d18ab83fafb0a521f2e4a94f5a445e19",
+          "bytes": 7168
+        }
+      ]
+    },
+    {
+      "name": "sysdisk.cmd",
+      "status": "restored from 4.11 image",
+      "base_sha256": "14720b3601d9269f370082519966c5ee021470ce6ad6414539baa7f2d6ac7614",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "SYSDISK.CMD",
+          "sha256": "14720b3601d9269f370082519966c5ee021470ce6ad6414539baa7f2d6ac7614",
+          "bytes": 2304
+        }
+      ]
+    },
+    {
+      "name": "time.exe",
+      "status": "existing base retained",
+      "base_sha256": "2ed798f33a1b031c08a8f3bb8da829c4cdcd6ba6922960e237dc9c4380808da8",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "TIME.EXE",
+          "sha256": "2ed798f33a1b031c08a8f3bb8da829c4cdcd6ba6922960e237dc9c4380808da8",
+          "bytes": 2048
+        }
+      ]
+    },
+    {
+      "name": "type.cmd",
+      "status": "existing base retained",
+      "base_sha256": "a372b945ef0b54544469e803a55d94f92a384b88b7afe983a1cc22232f49e0b3",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "TYPE.CMD",
+          "sha256": "a372b945ef0b54544469e803a55d94f92a384b88b7afe983a1cc22232f49e0b3",
+          "bytes": 2048
+        }
+      ]
+    },
+    {
+      "name": "window.cmd",
+      "status": "existing base retained",
+      "base_sha256": "a3dd440566b0dcfe49c6e87dcc1907d3f60acf6b6c6e264aa9f79ab633feecd3",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "WINDOW.CMD",
+          "sha256": "a3dd440566b0dcfe49c6e87dcc1907d3f60acf6b6c6e264aa9f79ab633feecd3",
+          "bytes": 13312
+        }
+      ]
+    },
+    {
+      "name": "wmenu.cmd",
+      "status": "existing base retained",
+      "base_sha256": "7409adf02cde0c9676a2ad88d2e64dafca64836d98c61a414bb4e630857f79ab",
+      "references": [
+        {
+          "image": "cdos-4.11-4.img",
+          "path": "WMENU.CMD",
+          "sha256": "7409adf02cde0c9676a2ad88d2e64dafca64836d98c61a414bb4e630857f79ab",
+          "bytes": 13056
+        }
+      ]
+    }
+  ]
+}

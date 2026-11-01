@@ -371,9 +371,8 @@ PSP/DTA and returns to the shell. This live test passes.
 `tools/historical_check.py`. Like the RTC tests, NASM builds only disposable
 test drivers; production components retain ASM86/RASM86 and LINK86.
 
-Remaining candidates have not been ported: DOS critical-error and
-FCB directory-context changes. They require separate
-validation; this entry does not claim completion of that recovery work.
+DOS critical-error/temporary-state and FCB directory-context recovery are
+now implemented and tested as described below.
 
 The boot regression now reserves scratch space by removing HELP.HLP only
 from its disposable tools-disk copy. The distributed tools image is full;
@@ -434,3 +433,44 @@ from the resulting image. This PCE test and the full `make check` pass.
 The archived-source build fails the FAT-boundary and ownership regressions.
 FAT16 boundary and shared-CAT cases are routine-level tests; the live disk
 stress test uses FAT12.
+
+### DOS FCB directory context
+
+Recover the opening-directory first cluster into DOS FCB reserved word 1Ch,
+then select it while closing and restore the caller's current directory.
+Reference PCTMP offsets: 31F6h (HDS access), 571Bh (open), 586Fh/58F0h
+(close), 5925h (context exchange), 5D6Ch (rename sentinel). Rename supplies
+FFFFh to keep its current directory. Unlike the historical binary, the
+unwritten-file close path also restores the directory before purging its FCB.
+
+### DOS critical errors and temporary state
+
+Recover the European PCTMP DOS 2.x critical-error frame (2DD2h), logical to
+physical drive mapping (4EA7h), select-error mapping and unbounded explicit
+retry (4ED5h), DOS 1.x stack/register restoration (4F4Eh), and temporary
+DTA/P: cleanup (4E68h). Disk operations in MS2 now use the common error
+mapper. INT 21h clears DF on entry. Ignore retains the historical DOS 1.x
+retry behavior; DOS 2.x ignore returns success. Abort invokes INT 22h.
+
+Two deliberate corrections to historical cleanup: P: state toggles between
+1 and 2 with XOR 3 (the binary used XOR 1 but tested for state 2), and the
+borrowed handle pointer is saved rather than relying on the handler's BX.
+These changes apply to abandonment of an interrupted operation when the
+INT 24h handler calls disk services; they do not promise arbitrary recursive
+DOS disk calls returning into the interrupted operation.
+
+New assembled-code regression drivers test FCB capture/close context,
+critical-error frames and register/stack preservation, drive/error mapping,
+ignore/retry/abort, more than ten retries, and idempotent temporary-state
+cleanup. BDOS failures and interrupt handlers are synthetic; physical error
+injection on live disks is not part of these tests.
+
+Termination cleanup also releases borrowed state and resets the dispatch
+flag, including an INT 24h abort that bypasses the normal DOS 2.x return.
+
+Validation: `make check` passes, including the new routine tests. The live
+PCE recovery test opens an FCB in one FAT directory, changes directory, then
+closes it with and without writes. It verifies the restored current directory,
+the written file, and an untouched same-named file in the other directory.
+The PCE boot/usability regression also passes. Critical-error fault injection
+remains a routine-level fixture test, not a claim of live faulty-media coverage.

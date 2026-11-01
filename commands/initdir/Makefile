@@ -6,6 +6,7 @@ RASM86=pcdev_rasm86
 PLI86=drplicpm_pc
 PLILINK86=drplicpm_link
 PLIOBJFIX=drpli_objfix
+PYTHON=python3
 
 TOOLS=initdir.cmd
 
@@ -14,9 +15,10 @@ TOOLS=initdir.cmd
 
 all: $(TOOLS)
 
-# Build/header validation; the 3.1 media boot harness is not applicable here.
-check: all
+# Compare the entire 4.11 reference, allowing only the documented runtime word.
+check: all check.py
 	$(CMDINFO) $(TOOLS)
+	$(PYTHON) check.py
 
 initdir.cmd: initdir.obj initdira.obj diomod.obj Makefile
 	$(PLILINK86) initdir [locals],initdira,diomod

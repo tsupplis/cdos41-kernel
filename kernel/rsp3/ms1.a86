@@ -79,6 +79,11 @@ FALSE		EQU	0
 TRUE		EQU	NOT FALSE
 
 
+	public check_error,check_error_again,critical_cleanup
+	public in_int24_flag,critical_ss,critical_sp,dos1_call
+	public ms_ss,ms_sp,RET_AX
+	extrn ms2_critical_error:near,restore_dta_state:near,restore_pdrive_state:near
+	extrn	get_fcb_directory:near,set_fcb_directory:near
 	extrn	ms2_func_entry:near	; entry for all DOS 2.x functions
 	extrn	ms2_terminate:near	; cleans up ms2 variables
 	public	get_data_seg		; shared with ms2
@@ -277,6 +282,7 @@ MS_REC_SIZE		equ	0EH
 MS_FILE_SIZE		equ	10H
 MS_DATE			equ	14H
 MS_DEVICE_CODE		equ	18H
+MS_DIRECTORY		equ	word ptr 1CH ; saved HDS directory first cluster
 MS_CURRENT_RECORD 	equ	20H
 MS_RAN_REC 		equ	21H
 
@@ -616,6 +622,7 @@ ms_cleanup:
 
 dont_free_mem:
 ms_cleanup1:
+	call critical_cleanup		; release borrowed state on exit/abort too
 	cmp pcmode,TRUE ! jne not_in_pcmode
 	    cld
 	    xor cx,cx			;restore origional interrupt vector
@@ -2419,6 +2426,7 @@ int_21:
 ;	exit:	Varies with function number
 ;
 
+	cld				; DOS string operations must not inherit DF
 	or ah,ah ! jnz not_terminate	;SEE IF TERMINATE
 	    jmp int_20
 
@@ -2449,7 +2457,7 @@ not_dos2:
 		jmps cont_int21
 
 above_12:
-		mov in_int24_flag,FALSE
+		call critical_cleanup	; handler abandons interrupted disk operation
 
 cont_int21:
 	mov ds,ms_ds_save	;restore ds
@@ -2523,46 +2531,77 @@ int_23:
 
 eject
 
+; A handler issuing a disk function abandons the interrupted operation.
+; Put borrowed DTA/P: state back before dispatching that new function.
+critical_cleanup:
+	push ax
+	mov dos1_call,TRUE
+	call restore_dta_state
+	call restore_pdrive_state
+	pop ax
+	mov in_int24_flag,FALSE
+	ret
+
+; Translate a logical drive (notably P:) to its backing drive for INT 24h.
+; Unbound N:/O:/P: use the system drive, as in European PCTMP 4EA7h.
+critical_drive:
+	push bx ! push si ! push ds
+	mov ds,cs:sysdat
+	mov si,RLR
+	mov si,PD_CAT[si]
+	or si,si ! jz critical_drive_default
+	mov bl,al ! xor bh,bh ! shl bx,1
+	mov si,[bx+si]
+	or si,si ! jz critical_drive_default
+	mov al,[si]
+critical_drive_done:
+	pop ds ! pop si ! pop bx
+	ret
+critical_drive_default:
+	cmp al,13 ! jb critical_drive_done
+	mov al,byte ptr .9Dh		; SYSDAT system-drive number
+	jmps critical_drive_done
+
 check_error:
+	and al,7Fh			; remove directory-operation flag
+	cmp al,15 ! jbe critical_drive_valid
+	mov al,cur_dsk
+critical_drive_valid:
 	mov check_error_parm,ax
-	mov	count_error,10
 
 check_error_again:
 	push di
 	call bdos
 	cmp al,0FFH ! jne xcheck_error
-	  cmp ah,1 ! je check_phs_error
-	    cmp ah,2 ! jne xcheck_error
-	      push si ! push bx
-	      push cx
-	      mov ah,0			;write protect disk error
-	      jmps found_err_code
-
+	cmp ah,4 ! je critical_select_error
+	cmp ah,1 ! je check_phs_error
+	cmp ah,2 ! jne xcheck_error
+	mov ah,0			; write-protected disk
+	jmps found_err_code
+critical_select_error:
+	mov ah,2			; drive not ready
+	jmps found_err_code
 check_phs_error:
-	    push si ! push bx
-	    push cx ! push es
-	    mov es,sysdat
-	    mov si,es:RLR
-	    mov es,es:PD_UDA[si]
-	    mov bl,es:U_IOEXERR		;get physical error code
-	    pop es
-	    mov si,offset error_tab
-	    mov cx,10
-
+	push si ! push bx ! push cx ! push es
+	mov es,sysdat
+	mov si,es:RLR
+	mov es,es:PD_UDA[si]
+	mov bl,es:U_IOEXERR
+	pop es
+	mov si,offset error_tab
+	mov cx,10
 error_loop:
-	    lods cs:ax
-	    cmp bl,al ! je found_err_code
-	      loop error_loop
-
+	lods cs:ax
+	cmp bl,al ! je physical_error_found
+	loop error_loop
+physical_error_found:
+	pop cx ! pop bx ! pop si
 found_err_code:
-	    pop cx ! pop bx ! pop si
-	    mov al,ah ! xor ah,ah
-	    dec	count_error
-	    je	xcheck_error		; After 10 retrys give up
-	    mov di,ax
-	    mov ax,check_error_parm	;drive and read/write flag
-	    jmp do_critical_error ;do critical error
-	
+	mov al,ah ! xor ah,ah
+	mov di,ax			; DOS critical-error code
+	mov ax,check_error_parm		; read/write flags and logical drive
+	call critical_drive
+	jmp do_critical_error
 xcheck_error:
 	pop di
 	ret
@@ -2572,7 +2611,7 @@ eject
 
 error_tab	rw	0
 		db	3,0
-		db	80h,1
+		db	80h,2
 		db	20h,2
 		db	1,3
 		db	10h,4
@@ -2586,6 +2625,10 @@ error_tab	rw	0
 eject
 
 do_critical_error:
+	cmp dos1_call,TRUE
+	je critical_dos1
+	jmp ms2_critical_error		; handle calls use their own saved frame
+critical_dos1:
 ;
 ;	entry: ERROR CODE IN ah,al
 ;
@@ -2596,6 +2639,7 @@ do_critical_error:
 	call get_data_seg
 
 	push RET_AX		;preserved initialized return code
+	push ms_ss ! push ms_sp	; preserve outer stack across console reentry
 
 	cli
 	mov critical_ss,ss ! mov critical_sp,sp
@@ -2603,8 +2647,6 @@ do_critical_error:
 
 	sti
 
-	mov bx,ms_ss ! mov critical_ss_save,bx
-	mov bx,ms_sp ! mov critical_sp_save,bx
 
 	pop bx				;throw away user ds
 
@@ -2624,10 +2666,7 @@ do_critical_error:
 
 	pop MS_AX ! pop MS_BX ! pop MS_CX
 	pop MS_DX ! pop ms_si ! pop ms_di
-	pop ms_bp ! pop ms_ds
-
-	mov bx,critical_ss_save ! mov ms_ss,bx
-	mov bx,critical_sp_save ! mov ms_sp,bx
+	pop ms_bp ! pop ms_ds ! pop ms_es
 
 	cli
 	mov ss,ms_ss ! mov sp,ms_sp
@@ -2639,6 +2678,7 @@ do_critical_error:
 	mov ss,critical_ss ! mov sp,critical_sp
 	sti
 
+	pop ms_sp ! pop ms_ss
 	pop RET_AX
 
 	pop es ! pop ds
@@ -2648,8 +2688,7 @@ do_critical_error:
 	    pop di			;ignore is mapped into re-try
 	    jmp check_error_again		;retry the operation
 dont_retry:
-	    int 23h				;terminate the program
-	    jmp int_21
+	    int 22h			; abort through the termination vector
 
 
 eject
@@ -3958,6 +3997,16 @@ not_hidden:
 	  mov CPM_CR[si],0			;zero the cpm_fcb current record
 	  mov es:MS_FILE_SIZE[di],ax		;set low order word of filesize
 	  mov es:MS_FILE_SIZE+2[di],dx		;set high order word of filesize
+	  call save_fcb_directory		; close must use the opening directory
+	  jmps xms_open
+
+; ES:DI points to the successfully opened DOS FCB. Its reserved word
+; at 1Ch records the directory even if CHDIR subsequently changes the HDS.
+save_fcb_directory:
+	mov cl,es:[di] ! dec cl
+	call get_fcb_directory
+	mov es:MS_DIRECTORY[di],ax
+	ret
 
 xms_open:
 	ret
@@ -4152,13 +4201,14 @@ ms_close2:
 	call check_file_device ! JMPNZ auxclose	;exit if device specified
 	  call find_fcb ! JMPNZ xms_close2	;exit if fcb not in table return success
 	    mov bx,cpm_fcb			;bx = offset of cpm fcb
+	    call enter_fcb_directory		; temporarily restore opening directory
 	    cmp bx,buffer_fcb ! jne skip_flush2
 	      push bx ! push di !push es
 	      call flush_buffer
 	      pop es ! pop di ! pop bx
 skip_flush2:
 	    test cpm_written[bx],0FFH		;if file hasn't been written
-	    jz file_not_written_to		;  then skip this stuff
+	    JMPZ file_not_written_to		;  then skip this stuff
 	      mov ax,es:word ptr MS_FILE_SIZE[di];di = offset of dos fcb
 	      mov dx,es:word ptr MS_FILE_SIZE+2[di]
 	      call rddiv128 ! or ch,ch ! jz skip_1a_set
@@ -4195,6 +4245,9 @@ skip_set_attr:
 xms_close_error:
 	    mov ret_al,0FFH			;signal error
 xms_close:
+	  les di,ms_fcb_ptr
+	  mov bx,cpm_fcb
+	  call leave_fcb_directory		; success and failure both restore CHDIR
 	  jmp kill_fcb				;delete fcb from FCB table
 auxclose:
 	cmp	es:byte ptr MS_DEVICE_CODE[si],0FEH ; Is this an OX?
@@ -4208,7 +4261,22 @@ xms_close2:
 file_not_written_to:
 	 call close_file
 	 cmp al,0FFH ! je xms_close_error
-	   jmp kill_fcb
+	   jmp xms_close			; unwritten files need restoration too
+
+; BX is the local CP/M FCB, ES:DI the caller's DOS FCB. The saved context
+; is used only during this close operation; other FCBs retain their own
+; opening-directory words. Rename supplies FFFFh to keep its current HDS.
+enter_fcb_directory:
+	mov cl,[bx] ! dec cl
+	call get_fcb_directory
+	mov close_directory,ax
+	mov ax,es:MS_DIRECTORY[di]
+	jmps select_fcb_directory
+leave_fcb_directory:
+	mov ax,close_directory
+select_fcb_directory:
+	mov cl,[bx] ! dec cl
+	jmp set_fcb_directory
 
 close_file:
 	mov dx,bx				;move cpm fcb offset into dx
@@ -4763,6 +4831,7 @@ name_found:
 	pop es
 	mov ms_fcb+2,ds
 	mov si,offset fcb
+	mov MS_DIRECTORY[si],0FFFFh	; rename closes in the current directory
 	mov di,si
 	mov ms_fcb,si
 	call ms_close2		;close file - in case file being renamed
@@ -7777,11 +7846,11 @@ ms_ax_save		dw	0
 
 in_int24_flag		db	FALSE
 
-critical_ss_save	dw	0
-critical_sp_save	dw	0
+dos1_call		db	TRUE	; FALSE while dispatching a DOS 2.x call
 critical_ss		dw	0
 critical_sp		dw	0
 check_error_parm	dw	0
+close_directory	dw	0	; HDS context saved while closing a DOS FCB
 
 ms_sp			dw	0
 ms_ss			dw	0
@@ -7984,7 +8053,6 @@ chcb_off	rw	1
 chcb_seg	rw	1
 chcb_cnt	rw	1
 
-count_error	rb	1	; For Critical error handling
 
 		extrn fcb:byte		;open command fcb
 		extrn clicb:byte	;command line

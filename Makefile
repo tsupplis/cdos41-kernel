@@ -32,6 +32,8 @@ check: all
 	python3 tools/pctmp_recovery_check.py
 	python3 tools/pctmp_io_check.py
 	python3 tools/fat_recovery_check.py
+	python3 tools/pctmp_context_check.py
+	python3 tools/pctmp_critical_check.py
 	$(MAKE) -C boot check
 	$(MAKE) -C media check
 
@@ -137,6 +139,8 @@ check-historical: kernel
 	python3 tools/pctmp_recovery_check.py
 	python3 tools/pctmp_io_check.py
 	python3 tools/fat_recovery_check.py
+	python3 tools/pctmp_context_check.py
+	python3 tools/pctmp_critical_check.py
 
 # Real DOS loaders and PSP services in a disposable PCE boot.
 .PHONY: check-pctmp-live
