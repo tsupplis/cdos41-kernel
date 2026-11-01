@@ -54,15 +54,7 @@ ADMIN_COMMANDS = ../commands/function/function.cmd ../commands/disk/dcomp.cmd \
 
 all: $(IMAGES)
 
-# Locally generated filesystem, then the source-built reserved boot track.
-# Packaging follows CCP/M: untwist, populate, twist to physical CHS.
-base.img: diskdefs Makefile
-	mkfs.cpm -f $(FORMAT) $@.logical.tmp
-	$(PYTHON) -c "from pathlib import Path; p=Path('$@.logical.tmp'); b=p.read_bytes(); assert len(b)<=327680; p.write_bytes(b.ljust(327680,b'\xe5'))"
-	$(TWIST) twist $@.logical.tmp $@.tmp
-	mv $@.tmp $@
-	$(RM) $@.logical.tmp
-
+# Keep the empty filesystem template, but always install the source-built boot.
 cdos86base.img: base.img ../boot/boottrack.bin diskdefs ../tools/cpm86twist.py Makefile
 	cp base.img $@
 	dd if=../boot/boottrack.bin of=$@ bs=4096 count=1 conv=notrunc 2>/dev/null
@@ -138,11 +130,11 @@ cdosadmin.img: cdos86base.img $(ADMIN_COMMANDS) $(PIP) Makefile
 
 # Compare all payload bytes. CP/M may append only record-alignment padding.
 check check-media: all
-	@set -e; tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT HUP INT TERM; \
-	for image in $(IMAGES); do \
-	    $(TWIST) untwist $$image "$$tmp/logical.img"; \
-	    dd if="$$tmp/logical.img" bs=4096 count=1 2>/dev/null | cmp ../boot/boottrack.bin -; \
-	    $(PYTHON) -c "from pathlib import Path; assert Path('$$image').stat().st_size==327680"; \
+	@set -e; for image in $(IMAGES); do \
+	    $(TWIST) untwist $$image $$image.verify.tmp; \
+	    dd if=$$image of=$$image.boot.tmp bs=4096 count=1 2>/dev/null; \
+	    cmp $$image.boot.tmp ../boot/boottrack.bin; \
+	    test "$$(wc -c < $$image)" -eq 327680; \
 	    case $$image in \
 	      cdos86.img) sources='../kernel/sysgen/ccpm.sys $(SYSTEM_COMMANDS)' ;; \
 	      cdostools.img) sources='$(TOOLS_COMMANDS)' ;; \
@@ -154,9 +146,10 @@ check check-media: all
 	    esac; \
 	    for source in $$sources $(PIP); do \
 	        name=$${source##*/}; if test "$$source" = "$(PIP)"; then name=PIP.CMD; fi; \
-	        $(CPMCP) "$$tmp/logical.img" 0:$$name "$$tmp/file"; \
-	        $(PYTHON) -c "from pathlib import Path; a=Path('$$source').read_bytes(); b=Path('$$tmp/file').read_bytes(); assert b[:len(a)]==a and all(c in (0,26) for c in b[len(a):]), '$$image: $$name differs'"; \
+	        $(CPMCP) $$image.verify.tmp 0:$$name $$image.file.tmp; \
+	        $(PYTHON) -c "from pathlib import Path; a=Path('$$source').read_bytes(); b=Path('$$image.file.tmp').read_bytes(); assert b[:len(a)]==a and all(c in (0,26) for c in b[len(a):]), '$$image: $$name differs'"; \
 	    done; \
+	    $(RM) $$image.verify.tmp $$image.file.tmp $$image.boot.tmp; \
 	    echo "$$image: every payload, boot track and size verified"; \
 	done
 
@@ -169,4 +162,4 @@ test: cdos86.img cdostools.img cdos86 cdos86.cfg
 
 # Remove generated outputs only; preserve sources and reference files.
 clean:
-	$(RM) $(IMAGES) base.img cdos86base.img *.tmp
+	$(RM) cdos86base.img $(IMAGES) *.img.*.tmp *.img.tmp

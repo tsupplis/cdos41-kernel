@@ -1,7 +1,7 @@
 # Concurrent DOS 4.1 media
 
 Seven physical-CHS 320 KB images are built locally. The layout follows the
-CCP/M media workflow: generated base.img, source-built boot track in
+CCP/M media workflow: the checked-in base.img template, source-built boot track in
 cdos86base.img, then untwist / populate / twist for each distribution disk.
 All disks include the rebuilt PIP4 as PIP.CMD. Only the system and maintenance
 disks contain CCPM.SYS; the remaining disks are data-only.
