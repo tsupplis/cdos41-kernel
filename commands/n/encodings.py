@@ -1,7 +1,7 @@
 """Restore the 4.11 linker's DATA maximum and alternate register encodings."""
 from pathlib import Path
 
-path = Path('n.cmd')
+path = Path('norg.cmd')
 image = bytearray(path.read_bytes())
 if len(image) != 8704 or image[:18] != bytes.fromhex('01b6010000b6010000025c0000005c000000'):
     raise ValueError('Unexpected GENCMD group descriptors')

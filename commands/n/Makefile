@@ -1,6 +1,7 @@
-# N - assemble the labelled 8086 source and restore the release encodings.
+# N - interactive national setup in DR C and its frozen ASM86 reference.
 DRC86=drccpm_cc
 LINK86=drccpm_link
+RASM86=pcdev_rasm86
 ASM86=cpm86_asm86
 GENCMD=cpm86_gencmd
 PYTHON=python3
@@ -8,28 +9,39 @@ REF=../../base/n.cmd
 
 .PHONY: all check clean
 .DELETE_ON_ERROR:
+all: n.cmd norg.cmd
 
-all: n.cmd
+# Link the maintained program and the optional read-only and save probes.
+n.cmd: INPUT=n=n,nsave,nvers
+nprobe.cmd: INPUT=nprobe=nprobe
+nkey.cmd: INPUT=nkey=nkey,nsave
+n.cmd: n.obj nsave.obj nvers.obj Makefile
+nprobe.cmd: nprobe.obj Makefile
+nkey.cmd: nkey.obj nsave.obj Makefile
+n.cmd nprobe.cmd nkey.cmd:
+	@$(LINK86) '$(INPUT)' > $(basename $@)-link.log 2>&1; result=$$?; cat $(basename $@)-link.log; test $$result -eq 0
+	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' $(basename $@)-link.log
 
-n.h86: n.a86 Makefile
-	@$(ASM86) $< > n.log 2>&1; result=$$?; cat n.log; test $$result -eq 0
-	@grep -qiE 'NUMBER OF ERRORS: +0' n.log
+%.obj: %.c Makefile
+	@$(DRC86) -o$@ $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
+	@! grep -qiE 'error|unable to open|fatal' $*.log
 
-n.cmd: n.h86 Makefile encodings.py
+nvers.obj: nvers.a86 Makefile
+	@$(RASM86) $< > nvers.log 2>&1; result=$$?; cat nvers.log; test $$result -eq 0
+	@grep -qiE 'Number of errors: +0\.' nvers.log
+
+# Recreate the complete release executable, including linker metadata.
+norg.h86: norg.a86 Makefile
+	@$(ASM86) $< > norg.log 2>&1; result=$$?; cat norg.log; test $$result -eq 0
+	@grep -qiE 'NUMBER OF ERRORS: +0' norg.log
+
+norg.cmd: norg.h86 encodings.py Makefile
 	$(GENCMD) $<
 	$(PYTHON) encodings.py
 
 check: all
-	cmp n.cmd $(REF)
+	cmp norg.cmd $(REF)
+	cmdinfo n.cmd
 
 clean:
-	$(RM) nkey.obj nkey.cmd nkey.log nkey-link.log nkey.sym nprobe.obj nprobe.cmd nprobe.log nprobe-link.log probe-link.log nprobe.sym n.cmd n.h86 n.log n.lst n.sym
-
-# Optional read-only C probe. The distribution continues to build n.cmd.
-nprobe.obj nkey.obj: %.obj: %.c Makefile
-	@$(DRC86) -o$@ $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
-	@! grep -qiE 'error|unable to open|fatal' $*.log
-
-nprobe.cmd nkey.cmd: %.cmd: %.obj Makefile
-	@$(LINK86) $*=$* > $*-link.log 2>&1; result=$$?; cat $*-link.log; test $$result -eq 0
-	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' $*-link.log
+	$(RM) *.obj *.cmd *.h86 *.log *.lst *.sym

@@ -1,9 +1,53 @@
 ;*****************************************************
-;*   N - Concurrent DOS national setup for the IBM PC
+;*
+;*   NORG - Concurrent PC DOS National Setup Utility
+;*   IBM PC release 4.11 (utility banner 4.1)
+;*
 ;*****************************************************
-; Interactive setup reads NATIONAL.MSG and edits tables in CCPM.SYS.
+;
+; Usage: N opens the interactive national installation menus.
+; NATIONAL.MSG supplies nine language catalogs and the translation tables.
+; Save updates CCPM.SYS through its JW directory. Discard closes the menu.
+;
+; Frozen disassembly of the release command, including the linked small-model
+; Digital Research C startup, terminal I/O, allocator and string library.
+; Stack arguments follow the C calling convention. DS addresses program data.
+; make check compares the complete 8,704-byte NORG.CMD against base/n.cmd.
+; encodings.py verifies and restores 21 equivalent register encodings and
+; the release data growth limit. The maintained C implementation is n.c.
+
+; Absolute DATA aliases keep the original small-model addressing. The 128-byte
+; command tail occupies the loader base page below the C globals.
+keyboard_mode_flags      equ 0106h
+device_index             equ 0112h
+printer_capabilities     equ 0117h
+model_message_ids        equ 011dh
+frame_row                equ 019ch
+language_order           equ 01a1h
+catalog_record           equ 01c5h
+records_remaining        equ 01c7h
+message_filename         equ 0449h
+os_result                equ 048ah
+language_index           equ 048ch
+messages_ready           equ 048eh
+system_fcb               equ 0490h
+fcb_random_record        equ 04b1h
+cache_pointer            equ 04b8h
+cache_dirty              equ 04bah
+cached_block             equ 04bch
+catalog_pointer          equ 04f2h
+selected_printers        equ 04f4h
+keyboard_index           equ 04feh
+alternate_keyboard       equ 0500h
+utility_banner           equ 053ch
+runtime_ax               equ 0582h
+free_list                equ 058ah
+runtime_features         equ 05b6h
+runtime_version          equ 05b8h
+
 	cseg
 
+; Initialize the small-model runtime, dispatch the CP/M command tail and exit through BDOS.
 start:
 	call	init_stack
 	call	align_heap
@@ -18,7 +62,7 @@ start:
 	push	si
 	call	call_main
 
-branch_1d:
+exit_to_bdos:
 	mov	cl,0h
 	push	es
 	int	0e0h
@@ -33,11 +77,12 @@ fatal_inline:
 	push	es
 	int	0e0h
 	pop	es
-	jmps	branch_1d
+	jmps	exit_to_bdos
 	ret
 	db	'CP/M V1.11 8/27/84 SMALL Model CLEAR library. Copyright '
 	db	'1983,1984 Digital Research.$'
 
+; C interface to INT E0h. Preserve ES and capture the full AX and CX results.
 bdos:
 	push	bp
 	mov	bp,sp
@@ -48,7 +93,7 @@ bdos:
 	push	es
 	int	0e0h
 	pop	es
-	mov	word ptr .582h,ax
+	mov	word ptr .runtime_ax,ax
 	mov	word ptr .5a6h,cx
 	sub	ah,ah
 	pop	si
@@ -62,24 +107,24 @@ get_drive:
 	int	0e0h
 	pop	es
 	cmp	ah,11h
-	jnz	branch_b1
+	jnz	check_launch_drive
 	inc	byte ptr .50h
 
-branch_b1:
+check_launch_drive:
 	mov	al,byte ptr .50h
 	test	al,al
-	jz	branch_be
+	jz	query_current_drive
 	dec	al
 	cmp	al,0fh
-	jna	branch_c4
+	jna	remember_drive
 
-branch_be:
+query_current_drive:
 	mov	cl,19h
 	push	es
 	int	0e0h
 	pop	es
 
-branch_c4:
+remember_drive:
 	mov	byte ptr .5ach,al
 	add	al,41h
 	mov	byte ptr .5aeh,al
@@ -119,23 +164,23 @@ grow_heap:
 	and	bl,0feh
 	mov	ax,word ptr .104h
 	add	bx,ax
-	jc	branch_11e
-	jmps	branch_12a
+	jc	heap_full
+	jmps	check_stack_margin
 
-branch_11e:
+heap_full:
 	mov	ax,0ffffh
 	ret
 	mov	bx,sp
 	mov	bx,ss:word ptr 2h[bx]
 	sub	ax,ax
 
-branch_12a:
+check_stack_margin:
 	mov	cx,sp
 	sub	cx,100h
 	cmp	bx,cx
-	jnc	branch_11e
+	jnc	heap_full
 	cmp	bx,word ptr .104h
-	jc	branch_11e
+	jc	heap_full
 	mov	word ptr .104h,bx
 	ret
 
@@ -148,11 +193,11 @@ init_runtime_buffers:
 	pop	es
 	add	sp,4h
 	inc	ax
-	jz	branch_155
+	jz	query_runtime_version
 	sub	ax,ax
 	or	ax,1000h
 
-branch_155:
+query_runtime_version:
 	push	ax
 	mov	cl,0ch
 	push	es
@@ -160,29 +205,29 @@ branch_155:
 	pop	es
 	pop	ax
 	cmp	bx,22h
-	jc	branch_190
+	jc	save_runtime_flags
 	test	bh,2h
-	jz	branch_16d
+	jz	use_legacy_buffers
 	or	ax,800h
 	xor	bh,2h
 
-branch_16d:
+use_legacy_buffers:
 	mov	cx,22h
 	or	ax,400h
 	test	bh,bh
-	jz	branch_190
+	jz	save_runtime_flags
 	xor	ax,400h
 	inc	cl
 	or	ax,0e000h
 	cmp	bh,1h
-	jz	branch_190
+	jz	save_runtime_flags
 	inc	cl
 	xor	ax,8000h
 	cmp	bh,14h
-	jz	branch_190
+	jz	save_runtime_flags
 	sub	cx,cx
 
-branch_190:
+save_runtime_flags:
 	mov	byte ptr .5b2h,cl
 	mov	word ptr .5b0h,ax
 	ret
@@ -221,7 +266,7 @@ init_stack:
 	mov	ax,dx
 	add	ax,word ptr .104h
 	cmp	ax,sp
-	jna	branch_1e6
+	jna	grow_stack
 	call	fatal_inline
 	db	0dh
 	db	0ah
@@ -230,7 +275,7 @@ init_stack:
 	db	0ah
 	db	24h
 
-branch_1e6:
+grow_stack:
 	sub	sp,dx
 	mov	ax,sp
 	push	dx
@@ -240,11 +285,12 @@ branch_1e6:
 
 national_main:
 	call	check_platform
-	call	installation_loop
+	call	choose_ui_language
 	call	configure_system
 	call	restore_console
 	ret
 
+; Select the correct system-file signature offset for the reported Concurrent release.
 check_platform:
 	push	bp
 	mov	bp,sp
@@ -255,7 +301,7 @@ check_platform:
 	call	bdos_result
 	inc	sp
 	inc	sp
-	mov	ax,word ptr .48ah
+	mov	ax,word ptr .os_result
 	mov	cl,8h
 	sar	ax,cl
 	cmp	ax,14h
@@ -267,14 +313,14 @@ unsupported_release:
 
 use_31_layout:
 	mov	word ptr signature_offset,0c3bh
-	jmps	branch_23a
+	jmps	platform_accepted
 
 use_41_layout:
 	mov	word ptr signature_offset,0c3ch
-	jmps	branch_23a
+	jmps	platform_accepted
 
 select_system_layout:
-	mov	ax,word ptr .48ah
+	mov	ax,word ptr .os_result
 	xor	ah,ah
 	cmp	ax,31h
 	jz	use_31_layout
@@ -282,8 +328,8 @@ select_system_layout:
 	jz	unsupported_release
 	jmps	use_41_layout
 
-branch_23a:
-	jmps	branch_254
+platform_accepted:
+	jmps	start_terminal
 
 reject_platform:
 	mov	ax,1f6h
@@ -298,7 +344,7 @@ reject_platform:
 	call	bdos_result
 	add	sp,4h
 
-branch_254:
+start_terminal:
 	sub	ax,ax
 	push	ax
 	mov	al,6eh
@@ -338,7 +384,7 @@ copy_bytes:
 	mov	si,word ptr 4h[bp]
 	mov	di,word ptr 6h[bp]
 
-branch_29d:
+copy_next_byte:
 	mov	ax,di
 	inc	di
 	push	ax
@@ -350,7 +396,7 @@ branch_29d:
 	mov	byte ptr [bx],al
 	dec	word ptr 8h[bp]
 	cmp	word ptr 8h[bp],0h
-	jnz	branch_29d
+	jnz	copy_next_byte
 	pop	di
 	pop	si
 	pop	bp
@@ -363,7 +409,7 @@ fill_bytes:
 	push	di
 	mov	si,word ptr 4h[bp]
 
-branch_2bf:
+fill_next_byte:
 	mov	ax,si
 	inc	si
 	push	ax
@@ -372,40 +418,41 @@ branch_2bf:
 	mov	byte ptr [bx],al
 	dec	word ptr 8h[bp]
 	cmp	word ptr 8h[bp],0h
-	jnz	branch_2bf
+	jnz	fill_next_byte
 	pop	di
 	pop	si
 	pop	bp
 	ret
 
-read_console_key:
+; Send supported control characters through BDOS; paint other bytes in the virtual screen.
+output_character:
 	push	bp
 	mov	bp,sp
 	cmp	word ptr 4h[bp],20h
-	jnl	branch_300
+	jnl	fill_one_cell
 	cmp	word ptr 4h[bp],0dh
-	jz	branch_2f1
+	jz	write_control
 	cmp	word ptr 4h[bp],0ah
-	jz	branch_2f1
+	jz	write_control
 	cmp	word ptr 4h[bp],8h
-	jnz	branch_300
+	jnz	fill_one_cell
 
-branch_2f1:
+write_control:
 	push	word ptr 4h[bp]
 	mov	ax,6h
 	push	ax
 	call	bdos
 	add	sp,4h
-	jmps	branch_30d
+	jmps	char_done
 
-branch_300:
+fill_one_cell:
 	mov	ax,1h
 	push	ax
 	push	word ptr 4h[bp]
 	call	fill_video_cells
 	add	sp,4h
 
-branch_30d:
+char_done:
 	pop	bp
 	ret
 
@@ -420,7 +467,7 @@ display_string:
 	ret
 	mov	ax,20h
 	push	ax
-	call	read_console_key
+	call	output_character
 	inc	sp
 	inc	sp
 	ret
@@ -612,14 +659,15 @@ show_heading:
 	pop	bp
 	ret
 
-initialize_console:
+; Read direct input with BDOS 6 (FDh). Redraw the banner for the reserved key.
+read_menu_key:
 	push	bp
 	mov	bp,sp
 	sub	sp,6h
 	call	query_console
-	jmps	branch_47f
+	jmps	retry_key
 
-branch_460:
+read_direct_key:
 	mov	ax,0fdh
 	push	ax
 	mov	al,6h
@@ -628,23 +676,23 @@ branch_460:
 	add	sp,4h
 	mov	word ptr (0-6h)[bp],ax
 	cmp	ax,6ah
-	jnz	branch_47a
-	call	select_language
-	jmps	branch_47f
+	jnz	return_key
+	call	paint_banner
+	jmps	retry_key
 
-branch_47a:
+return_key:
 	mov	ax,word ptr (0-6h)[bp]
-	jmps	branch_481
+	jmps	key_done
 
-branch_47f:
-	jmps	branch_460
+retry_key:
+	jmps	read_direct_key
 
-branch_481:
+key_done:
 	mov	sp,bp
 	pop	bp
 	ret
 
-select_language:
+paint_banner:
 	push	bp
 	mov	bp,sp
 	push	si
@@ -664,17 +712,17 @@ select_language:
 	add	sp,4h
 	mov	ax,153h
 	mov	word ptr (0-6h)[bp],ax
-	jmps	branch_4bb
+	jmps	read_banner_char
 
-branch_4b0:
+paint_banner_char:
 	mov	ax,word ptr (0-8h)[bp]
 	neg	ax
 	push	ax
-	call	read_console_key
+	call	output_character
 	inc	sp
 	inc	sp
 
-branch_4bb:
+read_banner_char:
 	mov	ax,word ptr (0-6h)[bp]
 	inc	word ptr (0-6h)[bp]
 	xchg	ax,bx
@@ -682,7 +730,7 @@ branch_4bb:
 	xor	ah,ah
 	mov	word ptr (0-8h)[bp],ax
 	or	ax,ax
-	jnz	branch_4b0
+	jnz	paint_banner_char
 	lea	sp,word ptr (0-4h)[bp]
 	pop	di
 	pop	si
@@ -710,36 +758,36 @@ restore_console:
 	add	sp,4h
 	ret
 
-menu_select:
+show_menu_title:
 	push	bp
 	mov	bp,sp
 	push	si
 	push	di
 	mov	ax,word ptr .19ah
 	or	ax,ax
-	jz	branch_512
+	jz	first_clear_row
 	call	draw_menu
 	mov	word ptr .19ah,0h
-	jmps	branch_52e
+	jmps	draw_heading
 
-branch_512:
-	mov	word ptr .19ch,3h
-	jmps	branch_527
+first_clear_row:
+	mov	word ptr .frame_row,3h
+	jmps	test_clear_row
 
-branch_51a:
-	mov	ax,word ptr .19ch
+clear_next_row:
+	mov	ax,word ptr .frame_row
 	push	ax
 	call	clear_line
 	inc	sp
 	inc	sp
-	inc	word ptr .19ch
+	inc	word ptr .frame_row
 
-branch_527:
-	cmp	word ptr .19ch,17h
-	jl	branch_51a
+test_clear_row:
+	cmp	word ptr .frame_row,17h
+	jl	clear_next_row
 
-branch_52e:
-	mov	ax,53ch
+draw_heading:
+	mov	ax,utility_banner
 	push	ax
 	mov	ax,1h
 	push	ax
@@ -763,9 +811,9 @@ draw_menu:
 	call	normal_video
 	call	cursor_off
 	mov	byte ptr .19eh,0h
-	jmps	branch_599
+	jmps	test_frame_row
 
-branch_55f:
+paint_frame_row:
 	sub	ax,ax
 	push	ax
 	mov	al,byte ptr .19eh
@@ -793,9 +841,9 @@ branch_55f:
 	add	sp,4h
 	inc	byte ptr .19eh
 
-branch_599:
+test_frame_row:
 	cmp	byte ptr .19eh,17h
-	jc	branch_55f
+	jc	paint_frame_row
 	sub	ax,ax
 	push	ax
 	mov	al,17h
@@ -869,26 +917,28 @@ branch_599:
 	add	sp,4h
 	ret
 
+; Allocate 20 KiB for NATIONAL.MSG and a 4 KiB read/write cache for CCPM.SYS.
 configure_system:
 	mov	ax,5000h
 	push	ax
 	call	allocate
 	inc	sp
 	inc	sp
-	mov	word ptr .4f2h,ax
+	mov	word ptr .catalog_pointer,ax
 	mov	ax,1000h
 	push	ax
 	call	allocate
 	inc	sp
 	inc	sp
-	mov	word ptr .4b8h,ax
+	mov	word ptr .cache_pointer,ax
 	call	load_messages
 	call	load_national_tables
 	call	installation_menu
 	call	save_national_settings
 	ret
 
-installation_loop:
+; Map the displayed language order to the catalog index used on disk.
+choose_ui_language:
 	push	bp
 	mov	bp,sp
 	push	si
@@ -897,7 +947,7 @@ installation_loop:
 	dec	sp
 	mov	ax,214h
 	push	ax
-	call	menu_select
+	call	show_menu_title
 	inc	sp
 	inc	sp
 	mov	ax,22ah
@@ -928,45 +978,47 @@ installation_loop:
 	add	sp,18h
 	mov	word ptr (0-6h)[bp],ax
 	cmp	word ptr (0-6h)[bp],9h
-	jnz	branch_6ad
+	jnz	choose_language
 	call	restore_console
 
-branch_6ad:
-	mov	ax,1a1h
+choose_language:
+	mov	ax,language_order
 	push	ax
 	mov	ax,word ptr (0-6h)[bp]
 	shl	ax,1
 	pop	bx
 	add	bx,ax
 	mov	ax,word ptr [bx]
-	mov	word ptr .48ch,ax
+	mov	word ptr .language_index,ax
 	lea	sp,word ptr (0-4h)[bp]
 	pop	di
 	pop	si
 	pop	bp
 	ret
 
+; Each language has 100 little-endian offsets following the 128-byte header.
 message_address:
 	push	bp
 	mov	bp,sp
 	sub	sp,6h
 	mov	ax,64h
-	mul	word ptr .48ch
+	mul	word ptr .language_index
 	add	word ptr 4h[bp],ax
 	mov	ax,word ptr 4h[bp]
 	shl	ax,1
-	add	ax,word ptr .4f2h
+	add	ax,word ptr .catalog_pointer
 	add	ax,80h
 	mov	word ptr (0-6h)[bp],ax
 	mov	bx,word ptr (0-6h)[bp]
 	mov	ax,word ptr [bx]
-	add	ax,word ptr .4f2h
+	add	ax,word ptr .catalog_pointer
 	add	ax,80h
 	mov	sp,bp
 	pop	bp
 	ret
 
-display_message:
+; The binary translation payloads start at catalog entry 50.
+translation_address:
 	push	bp
 	mov	bp,sp
 	mov	ax,word ptr 4h[bp]
@@ -984,12 +1036,12 @@ fatal_message:
 	push	si
 	push	di
 	push	word ptr 4h[bp]
-	call	menu_select
+	call	show_menu_title
 	inc	sp
 	inc	sp
 	mov	ax,1b3h
 	push	ax
-	mov	ax,word ptr .48ch
+	mov	ax,word ptr .language_index
 	shl	ax,1
 	pop	bx
 	add	bx,ax
@@ -1006,21 +1058,22 @@ fatal_message:
 	pop	bp
 	ret
 
+; Read up to 160 CP/M records using multi-sector BDOS operations.
 load_messages:
 	push	bp
 	mov	bp,sp
 	push	si
 	push	di
-	mov	ax,449h
+	mov	ax,message_filename
 	push	ax
 	call	open_fcb
 	inc	sp
 	inc	sp
 	or	ax,ax
-	jz	branch_757
+	jz	allocate_message_dma
 	mov	ax,1c9h
 	push	ax
-	mov	ax,word ptr .48ch
+	mov	ax,word ptr .language_index
 	shl	ax,1
 	pop	bx
 	add	bx,ax
@@ -1029,66 +1082,67 @@ load_messages:
 	inc	sp
 	inc	sp
 
-branch_757:
-	mov	word ptr .1c7h,0a0h
-	mov	word ptr .1c5h,0h
-	jmps	branch_7c0
+allocate_message_dma:
+	mov	word ptr .records_remaining,0a0h
+	mov	word ptr .catalog_record,0h
+	jmps	test_records_left
 
-branch_765:
-	mov	ax,word ptr .1c5h
+read_message_chunk:
+	mov	ax,word ptr .catalog_record
 	mov	cl,7h
 	shl	ax,cl
-	add	ax,word ptr .4f2h
+	add	ax,word ptr .catalog_pointer
 	push	ax
 	mov	ax,1ah
 	push	ax
 	call	file_bdos_result
 	add	sp,4h
-	cmp	word ptr .1c7h,80h
-	jng	branch_79e
+	cmp	word ptr .records_remaining,80h
+	jng	set_last_chunk
 	mov	ax,80h
 	push	ax
 	mov	al,2ch
 	push	ax
 	call	bdos_result
 	add	sp,4h
-	sub	word ptr .1c7h,80h
-	add	word ptr .1c5h,80h
-	jmps	branch_7b2
+	sub	word ptr .records_remaining,80h
+	add	word ptr .catalog_record,80h
+	jmps	read_message_records
 
-branch_79e:
-	mov	ax,word ptr .1c7h
+set_last_chunk:
+	mov	ax,word ptr .records_remaining
 	push	ax
 	mov	ax,2ch
 	push	ax
 	call	bdos_result
 	add	sp,4h
-	mov	word ptr .1c7h,0h
+	mov	word ptr .records_remaining,0h
 
-branch_7b2:
-	mov	ax,490h
+read_message_records:
+	mov	ax,system_fcb
 	push	ax
 	mov	ax,14h
 	push	ax
 	call	file_bdos_result
 	add	sp,4h
 
-branch_7c0:
-	mov	ax,word ptr .1c7h
+test_records_left:
+	mov	ax,word ptr .records_remaining
 	or	ax,ax
-	jnz	branch_765
-	mov	ax,490h
+	jnz	read_message_chunk
+	mov	ax,system_fcb
 	push	ax
 	mov	ax,10h
 	push	ax
 	call	file_bdos_result
 	add	sp,4h
-	mov	word ptr .48eh,1h
+	mov	word ptr .messages_ready,1h
 	pop	di
 	pop	si
 	pop	bp
 	ret
 
+; Expand the packed filename into the FCB. Try current, launch and system drives.
 open_fcb:
 	push	bp
 	mov	bp,sp
@@ -1097,7 +1151,7 @@ open_fcb:
 	push	ax
 	sub	ax,ax
 	push	ax
-	mov	ax,490h
+	mov	ax,system_fcb
 	push	ax
 	call	fill_bytes
 	add	sp,6h
@@ -1108,61 +1162,62 @@ open_fcb:
 	push	word ptr 4h[bp]
 	call	copy_bytes
 	add	sp,6h
-	mov	ax,490h
+	mov	ax,system_fcb
 	push	ax
 	mov	ax,0fh
 	push	ax
 	call	file_bdos_result
 	add	sp,4h
 	cmp	ax,0ffh
-	jz	branch_81e
+	jz	try_launch_drive
 	sub	ax,ax
-	jmps	branch_861
+	jmps	open_done
 
-branch_81e:
+try_launch_drive:
 	mov	word ptr (0-6h)[bp],50h
 	mov	bx,word ptr (0-6h)[bp]
 	mov	al,byte ptr [bx]
-	mov	byte ptr .490h,al
-	mov	ax,490h
+	mov	byte ptr .system_fcb,al
+	mov	ax,system_fcb
 	push	ax
 	mov	ax,0fh
 	push	ax
 	call	file_bdos_result
 	add	sp,4h
 	cmp	ax,0ffh
-	jz	branch_842
+	jz	try_system_drive
 	sub	ax,ax
-	jmps	branch_861
+	jmps	open_done
 
-branch_842:
-	mov	byte ptr .490h,10h
-	mov	ax,490h
+try_system_drive:
+	mov	byte ptr .system_fcb,10h
+	mov	ax,system_fcb
 	push	ax
 	mov	ax,0fh
 	push	ax
 	call	file_bdos_result
 	add	sp,4h
 	cmp	ax,0ffh
-	jz	branch_85e
+	jz	open_failed
 	sub	ax,ax
-	jmps	branch_861
+	jmps	open_done
 
-branch_85e:
+open_failed:
 	mov	ax,1h
 
-branch_861:
+open_done:
 	mov	sp,bp
 	pop	bp
 	ret
 
 ; Split a transfer at 4 KiB buffer boundaries, preserving the surrounding file bytes.
+; Split transfers at 4 KiB boundaries and flush the dirty block before replacing it.
 transfer_bytes:
 	push	bp
 	mov	bp,sp
 	sub	sp,8h
 
-branch_86b:
+next_chunk:
 	mov	ax,1000h
 	push	ax
 	mov	ax,word ptr 6h[bp]
@@ -1172,37 +1227,37 @@ branch_86b:
 	sub	ax,bx
 	mov	word ptr (0-8h)[bp],ax
 	cmp	word ptr 0ah[bp],ax
-	jnl	branch_887
+	jnl	chunk_ready
 	mov	ax,word ptr 0ah[bp]
 	mov	word ptr (0-8h)[bp],ax
 
-branch_887:
+chunk_ready:
 	push	word ptr 6h[bp]
 	call	select_file_block
 	inc	sp
 	inc	sp
 	mov	ax,word ptr 6h[bp]
 	and	ax,0fffh
-	add	ax,word ptr .4b8h
+	add	ax,word ptr .cache_pointer
 	mov	word ptr (0-6h)[bp],ax
 	cmp	word ptr 4h[bp],77h
-	jnz	branch_8b9
+	jnz	copy_from_cache
 	push	word ptr (0-8h)[bp]
 	push	word ptr (0-6h)[bp]
 	push	word ptr 8h[bp]
 	call	copy_bytes
 	add	sp,6h
-	mov	word ptr .4bah,1h
-	jmps	branch_8c8
+	mov	word ptr .cache_dirty,1h
+	jmps	advance_transfer
 
-branch_8b9:
+copy_from_cache:
 	push	word ptr (0-8h)[bp]
 	push	word ptr 8h[bp]
 	push	word ptr (0-6h)[bp]
 	call	copy_bytes
 	add	sp,6h
 
-branch_8c8:
+advance_transfer:
 	mov	ax,word ptr (0-8h)[bp]
 	add	word ptr 6h[bp],ax
 	mov	ax,word ptr (0-8h)[bp]
@@ -1210,7 +1265,7 @@ branch_8c8:
 	mov	ax,word ptr (0-8h)[bp]
 	add	word ptr 8h[bp],ax
 	cmp	word ptr 0ah[bp],0h
-	jg	branch_86b
+	jg	next_chunk
 	mov	sp,bp
 	pop	bp
 	ret
@@ -1249,16 +1304,16 @@ select_file_block:
 	mov	cl,0ch
 	shr	ax,cl
 	mov	word ptr (0-6h)[bp],ax
-	mov	ax,word ptr .4bch
+	mov	ax,word ptr .cached_block
 	cmp	word ptr (0-6h)[bp],ax
-	jz	branch_937
+	jz	cache_ready
 	call	flush_dirty_block
 	push	word ptr (0-6h)[bp]
 	call	read_file_block
 	inc	sp
 	inc	sp
 
-branch_937:
+cache_ready:
 	mov	sp,bp
 	pop	bp
 	ret
@@ -1271,8 +1326,8 @@ read_file_block:
 	inc	sp
 	inc	sp
 	mov	ax,word ptr 4h[bp]
-	mov	word ptr .4bch,ax
-	mov	ax,490h
+	mov	word ptr .cached_block,ax
+	mov	ax,system_fcb
 	push	ax
 	mov	ax,21h
 	push	ax
@@ -1282,16 +1337,16 @@ read_file_block:
 	ret
 
 flush_dirty_block:
-	mov	ax,word ptr .4bah
+	mov	ax,word ptr .cache_dirty
 	or	ax,ax
 	jz	buffer_clean
-	mov	word ptr .4bah,0h
-	mov	ax,word ptr .4bch
+	mov	word ptr .cache_dirty,0h
+	mov	ax,word ptr .cached_block
 	push	ax
 	call	set_block_dma
 	inc	sp
 	inc	sp
-	mov	ax,490h
+	mov	ax,system_fcb
 	push	ax
 	mov	ax,22h
 	push	ax
@@ -1305,7 +1360,7 @@ set_block_dma:
 	push	bp
 	mov	bp,sp
 	sub	sp,6h
-	mov	ax,word ptr .4b8h
+	mov	ax,word ptr .cache_pointer
 	push	ax
 	mov	ax,1ah
 	push	ax
@@ -1326,7 +1381,7 @@ set_block_dma:
 	mov	byte ptr .4b3h,0h
 	mov	ax,2h
 	push	ax
-	mov	ax,4b1h
+	mov	ax,fcb_random_record
 	push	ax
 	lea	ax,word ptr (0-6h)[bp]
 	push	ax
@@ -1460,14 +1515,14 @@ test_slot_count:
 	push	ax
 	call	read_bytes
 	add	sp,6h
-	mov	word ptr .112h,0h
+	mov	word ptr .device_index,0h
 	jmps	test_device_count
 
 ; Read five 11-byte device descriptions from slot 10.
 load_device:
-	mov	ax,4f4h
+	mov	ax,selected_printers
 	push	ax
-	mov	ax,word ptr .112h
+	mov	ax,word ptr .device_index
 	shl	ax,1
 	pop	bx
 	add	ax,bx
@@ -1475,7 +1530,7 @@ load_device:
 	mov	ax,offset device_records
 	push	ax
 	mov	ax,0bh
-	mul	word ptr .112h
+	mul	word ptr .device_index
 	pop	bx
 	add	bx,ax
 	mov	al,byte ptr 1h[bx]
@@ -1485,28 +1540,28 @@ load_device:
 	mov	ax,offset device_records
 	push	ax
 	mov	ax,0bh
-	mul	word ptr .112h
+	mul	word ptr .device_index
 	pop	bx
 	add	bx,ax
 	mov	byte ptr 8h[bx],0ffh
-	inc	word ptr .112h
+	inc	word ptr .device_index
 
 test_device_count:
-	cmp	word ptr .112h,5h
+	cmp	word ptr .device_index,5h
 	jl	load_device
-	mov	word ptr .4feh,0h
+	mov	word ptr .keyboard_index,0h
 	mov	ax,1h
 	push	ax
-	mov	ax,4feh
+	mov	ax,keyboard_index
 	push	ax
 	mov	ax,word ptr .4c2h
 	push	ax
 	call	read_bytes
 	add	sp,6h
-	mov	word ptr .500h,0h
+	mov	word ptr .alternate_keyboard,0h
 	mov	ax,1h
 	push	ax
-	mov	ax,500h
+	mov	ax,alternate_keyboard
 	push	ax
 	mov	ax,word ptr .4e2h
 	push	ax
@@ -1514,45 +1569,46 @@ test_device_count:
 	add	sp,6h
 	ret
 
+; Dispatch keyboard, printer and summary menus. Saving is confirmed separately.
 installation_menu:
 	push	bp
 	mov	bp,sp
 	sub	sp,6h
 	mov	word ptr (0-6h)[bp],0h
-	jmp	branch_bba
+	jmp	repeat_main
 
-branch_b41:
+main_heading:
 	mov	ax,1h
 	push	ax
 	call	message_address
 	inc	sp
 	inc	sp
 	push	ax
-	call	menu_select
+	call	show_menu_title
 	inc	sp
 	inc	sp
-	jmps	branch_b74
+	jmps	show_main_choices
 
-branch_b52:
+edit_keyboard:
 	call	keyboard_menu
 	mov	word ptr (0-6h)[bp],1h
-	jmps	branch_bba
+	jmps	repeat_main
 
-branch_b5c:
+edit_printers:
 	call	printer_menu
 	mov	word ptr (0-6h)[bp],2h
-	jmps	branch_bba
+	jmps	repeat_main
 
-branch_b66:
+list_settings:
 	call	display_settings
 	mov	word ptr (0-6h)[bp],3h
-	jmps	branch_bba
+	jmps	repeat_main
 
-branch_b70:
-	jmps	branch_bbc
-	jmps	branch_bba
+leave_main:
+	jmps	main_done
+	jmps	repeat_main
 
-branch_b74:
+show_main_choices:
 	mov	ax,5h
 	push	ax
 	call	message_address
@@ -1583,21 +1639,22 @@ branch_b74:
 	call	draw_options
 	add	sp,0ch
 	cmp	ax,2h
-	jz	branch_b66
+	jz	list_settings
 	cmp	ax,1h
-	jz	branch_b5c
+	jz	edit_printers
 	cmp	ax,0h
-	jz	branch_b52
-	jmps	branch_b70
+	jz	edit_keyboard
+	jmps	leave_main
 
-branch_bba:
-	jmps	branch_b41
+repeat_main:
+	jmps	main_heading
 
-branch_bbc:
+main_done:
 	mov	sp,bp
 	pop	bp
 	ret
 
+; Retain the keyboard selection on Back; otherwise store the new menu index.
 keyboard_menu:
 	push	bp
 	mov	bp,sp
@@ -1608,7 +1665,7 @@ keyboard_menu:
 	inc	sp
 	inc	sp
 	push	ax
-	call	menu_select
+	call	show_menu_title
 	inc	sp
 	inc	sp
 	mov	ax,1ah
@@ -1621,7 +1678,7 @@ keyboard_menu:
 	push	ax
 	call	copy_string
 	add	sp,4h
-	mov	ax,word ptr .4feh
+	mov	ax,word ptr .keyboard_index
 	add	ax,7h
 	push	ax
 	call	message_address
@@ -1674,7 +1731,7 @@ keyboard_menu:
 	inc	sp
 	inc	sp
 	push	ax
-	mov	ax,word ptr .4feh
+	mov	ax,word ptr .keyboard_index
 	push	ax
 	mov	ax,6h
 	push	ax
@@ -1682,30 +1739,31 @@ keyboard_menu:
 	add	sp,10h
 	mov	word ptr (0-6h)[bp],ax
 	cmp	word ptr (0-6h)[bp],5h
-	jz	branch_c67
+	jz	keyboard_done
 	mov	ax,word ptr (0-6h)[bp]
-	mov	word ptr .4feh,ax
+	mov	word ptr .keyboard_index,ax
 
-branch_c67:
+keyboard_done:
 	mov	sp,bp
 	pop	bp
 	ret
 
+; Select one of three parallel and two serial devices before choosing its model.
 printer_menu:
 	push	bp
 	mov	bp,sp
 	sub	sp,6h
 	mov	word ptr (0-6h)[bp],0h
-	jmps	branch_ce9
+	jmps	repeat_devices
 
-branch_c78:
+list_devices:
 	mov	ax,0ch
 	push	ax
 	call	message_address
 	inc	sp
 	inc	sp
 	push	ax
-	call	menu_select
+	call	show_menu_title
 	inc	sp
 	inc	sp
 	mov	ax,12h
@@ -1751,26 +1809,27 @@ branch_c78:
 	add	sp,10h
 	mov	word ptr (0-6h)[bp],ax
 	cmp	word ptr (0-6h)[bp],5h
-	jz	branch_ce7
+	jz	leave_devices
 	mov	ax,word ptr (0-6h)[bp]
 	inc	word ptr (0-6h)[bp]
 	push	ax
 	call	select_printer_option
 	inc	sp
 	inc	sp
-	jmps	branch_ce9
+	jmps	repeat_devices
 
-branch_ce7:
-	jmps	branch_ceb
+leave_devices:
+	jmps	devices_done
 
-branch_ce9:
-	jmps	branch_c78
+repeat_devices:
+	jmps	list_devices
 
-branch_ceb:
+devices_done:
 	mov	sp,bp
 	pop	bp
 	ret
 
+; Translate the model index through the catalog lookup table for this printer.
 select_printer_option:
 	push	bp
 	mov	bp,sp
@@ -1798,10 +1857,10 @@ select_printer_option:
 	add	sp,4h
 	lea	ax,word ptr (0-42h)[bp]
 	push	ax
-	call	menu_select
+	call	show_menu_title
 	inc	sp
 	inc	sp
-	mov	ax,4f4h
+	mov	ax,selected_printers
 	push	ax
 	mov	ax,word ptr 4h[bp]
 	shl	ax,1
@@ -1819,7 +1878,7 @@ select_printer_option:
 	push	ax
 	call	copy_string
 	add	sp,4h
-	mov	ax,11dh
+	mov	ax,model_message_ids
 	push	ax
 	mov	ax,word ptr (0-6h)[bp]
 	shl	ax,1
@@ -1876,7 +1935,7 @@ select_printer_option:
 	inc	sp
 	inc	sp
 	push	ax
-	mov	ax,word ptr .11dh
+	mov	ax,word ptr .model_message_ids
 	push	ax
 	call	message_address
 	inc	sp
@@ -1889,8 +1948,8 @@ select_printer_option:
 	add	sp,12h
 	mov	word ptr (0-6h)[bp],ax
 	cmp	word ptr (0-6h)[bp],6h
-	jz	branch_de7
-	mov	ax,4f4h
+	jz	model_done
+	mov	ax,selected_printers
 	push	ax
 	mov	ax,word ptr 4h[bp]
 	shl	ax,1
@@ -1899,7 +1958,7 @@ select_printer_option:
 	mov	ax,word ptr (0-6h)[bp]
 	mov	word ptr [bx],ax
 
-branch_de7:
+model_done:
 	mov	sp,bp
 	pop	bp
 	ret
@@ -1914,7 +1973,7 @@ display_settings:
 	inc	sp
 	inc	sp
 	push	ax
-	call	menu_select
+	call	show_menu_title
 	inc	sp
 	inc	sp
 	mov	ax,18h
@@ -1927,7 +1986,7 @@ display_settings:
 	push	ax
 	call	copy_string
 	add	sp,4h
-	mov	ax,word ptr .4feh
+	mov	ax,word ptr .keyboard_index
 	add	ax,7h
 	push	ax
 	call	message_address
@@ -1955,9 +2014,9 @@ display_settings:
 	call	print_centered
 	add	sp,4h
 	mov	word ptr (0-6h)[bp],0h
-	jmps	branch_ebe
+	jmps	test_printer_number
 
-branch_e54:
+show_one_printer:
 	mov	ax,23h
 	push	ax
 	mov	ax,word ptr (0-6h)[bp]
@@ -1994,9 +2053,9 @@ branch_e54:
 	call	display_string
 	inc	sp
 	inc	sp
-	mov	ax,11dh
+	mov	ax,model_message_ids
 	push	ax
-	mov	ax,4f4h
+	mov	ax,selected_printers
 	push	ax
 	mov	ax,word ptr (0-6h)[bp]
 	shl	ax,1
@@ -2016,9 +2075,9 @@ branch_e54:
 	inc	sp
 	inc	word ptr (0-6h)[bp]
 
-branch_ebe:
+test_printer_number:
 	cmp	word ptr (0-6h)[bp],5h
-	jl	branch_e54
+	jl	show_one_printer
 	mov	ax,12h
 	push	ax
 	call	message_address
@@ -2040,33 +2099,34 @@ wrap_selection:
 	mov	bp,sp
 	mov	ax,word ptr 4h[bp]
 	cmp	word ptr 6h[bp],ax
-	jnl	branch_eed
+	jnl	check_upper_bound
 	mov	ax,word ptr 8h[bp]
-	jmps	branch_efd
+	jmps	wrapped_selection
 
-branch_eed:
+check_upper_bound:
 	mov	ax,word ptr 8h[bp]
 	cmp	word ptr 6h[bp],ax
-	jng	branch_efa
+	jng	keep_selection
 	mov	ax,word ptr 4h[bp]
-	jmps	branch_efd
+	jmps	wrapped_selection
 
-branch_efa:
+keep_selection:
 	mov	ax,word ptr 6h[bp]
 
-branch_efd:
+wrapped_selection:
 	pop	bp
 	ret
 
+; Measure option widths, paint the active row, and wrap navigation at either end.
 draw_options:
 	push	bp
 	mov	bp,sp
 	sub	sp,12h
 	cmp	word ptr 4h[bp],1h
-	jng	branch_f3a
-	mov	ax,word ptr .48eh
+	jng	prepare_options
+	mov	ax,word ptr .messages_ready
 	or	ax,ax
-	jz	branch_f3a
+	jz	prepare_options
 	mov	ax,24h
 	push	ax
 	call	message_address
@@ -2088,23 +2148,23 @@ draw_options:
 	call	print_centered
 	add	sp,4h
 
-branch_f3a:
+prepare_options:
 	lea	ax,word ptr 8h[bp]
 	mov	word ptr (0-6h)[bp],ax
 	cmp	word ptr 4h[bp],1h
-	jng	branch_f4d
+	jng	single_option_row
 	mov	word ptr (0-12h)[bp],0bh
-	jmps	branch_f52
+	jmps	start_width_scan
 
-branch_f4d:
+single_option_row:
 	mov	word ptr (0-12h)[bp],14h
 
-branch_f52:
+start_width_scan:
 	mov	word ptr (0-0eh)[bp],0h
 	mov	word ptr (0-8h)[bp],0h
-	jmps	branch_f82
+	jmps	test_width
 
-branch_f5e:
+measure_option:
 	mov	ax,word ptr (0-8h)[bp]
 	shl	ax,1
 	add	ax,word ptr (0-6h)[bp]
@@ -2116,29 +2176,29 @@ branch_f5e:
 	mov	word ptr (0-0ch)[bp],ax
 	mov	ax,word ptr (0-0eh)[bp]
 	cmp	word ptr (0-0ch)[bp],ax
-	jng	branch_f7f
+	jng	next_width
 	mov	ax,word ptr (0-0ch)[bp]
 	mov	word ptr (0-0eh)[bp],ax
 
-branch_f7f:
+next_width:
 	inc	word ptr (0-8h)[bp]
 
-branch_f82:
+test_width:
 	mov	ax,word ptr 4h[bp]
 	cmp	word ptr (0-8h)[bp],ax
-	jl	branch_f5e
+	jl	measure_option
 	mov	word ptr (0-8h)[bp],0h
-	jmps	branch_fbc
+	jmps	test_option_row
 
-branch_f91:
+start_option_row:
 	push	word ptr (0-0eh)[bp]
 	mov	ax,word ptr 6h[bp]
 	cmp	word ptr (0-8h)[bp],ax
 	mov	ax,0h
-	jnz	branch_fa0
+	jnz	paint_option_row
 	inc	ax
 
-branch_fa0:
+paint_option_row:
 	push	ax
 	mov	ax,word ptr (0-8h)[bp]
 	shl	ax,1
@@ -2152,18 +2212,18 @@ branch_fa0:
 	add	sp,8h
 	inc	word ptr (0-8h)[bp]
 
-branch_fbc:
+test_option_row:
 	mov	ax,word ptr 4h[bp]
 	cmp	word ptr (0-8h)[bp],ax
-	jl	branch_f91
+	jl	start_option_row
 	mov	ax,word ptr 6h[bp]
 	mov	word ptr (0-0ah)[bp],ax
-	jmp	branch_1098
+	jmp	repaint_selection
 
-branch_fcd:
+update_highlight:
 	mov	ax,word ptr 6h[bp]
 	cmp	word ptr (0-0ah)[bp],ax
-	jz	branch_1018
+	jz	check_single_option
 	push	word ptr (0-0eh)[bp]
 	sub	ax,ax
 	push	ax
@@ -2193,17 +2253,17 @@ branch_fcd:
 	mov	ax,word ptr 6h[bp]
 	mov	word ptr (0-0ah)[bp],ax
 
-branch_1018:
+check_single_option:
 	cmp	word ptr 4h[bp],1h
-	jnz	branch_1026
-	call	initialize_console
+	jnz	await_menu_key
+	call	read_menu_key
 	sub	ax,ax
-	jmp	branch_109b
+	jmp	menu_done
 
-branch_1026:
-	jmps	branch_1070
+await_menu_key:
+	jmps	dispatch_menu_key
 
-branch_1028:
+select_previous:
 	mov	ax,word ptr 4h[bp]
 	dec	ax
 	push	ax
@@ -2215,22 +2275,22 @@ branch_1028:
 	call	wrap_selection
 	add	sp,6h
 	mov	word ptr 6h[bp],ax
-	jmp	branch_1098
+	jmp	repaint_selection
 
-branch_1041:
+cancel_menu:
 	mov	ax,word ptr 4h[bp]
 	dec	ax
 	mov	word ptr 6h[bp],ax
 
-branch_1048:
+accept_menu:
 	mov	ax,word ptr 6h[bp]
-	jmp	branch_109b
+	jmp	menu_done
 
-branch_104e:
-	call	select_language
-	jmp	branch_1098
+redraw_banner:
+	call	paint_banner
+	jmp	repaint_selection
 
-branch_1054:
+select_next:
 	mov	ax,word ptr 4h[bp]
 	dec	ax
 	push	ax
@@ -2242,31 +2302,31 @@ branch_1054:
 	call	wrap_selection
 	add	sp,6h
 	mov	word ptr 6h[bp],ax
-	jmp	branch_1098
-	jmp	branch_1098
+	jmp	repaint_selection
+	jmp	repaint_selection
 
-branch_1070:
-	call	initialize_console
+dispatch_menu_key:
+	call	read_menu_key
 	cmp	ax,6ah
-	jz	branch_104e
+	jz	redraw_banner
 	cmp	ax,0dh
-	jz	branch_1048
+	jz	accept_menu
 	cmp	ax,1bh
-	jz	branch_1041
+	jz	cancel_menu
 	cmp	ax,38h
-	jz	branch_1028
+	jz	select_previous
 	cmp	ax,34h
-	jz	branch_1028
+	jz	select_previous
 	cmp	ax,0c8h
-	jz	branch_1028
+	jz	select_previous
 	cmp	ax,0cbh
-	jz	branch_1028
-	jmps	branch_1054
+	jz	select_previous
+	jmps	select_next
 
-branch_1098:
-	jmp	branch_fcd
+repaint_selection:
+	jmp	update_highlight
 
-branch_109b:
+menu_done:
 	mov	sp,bp
 	pop	bp
 	ret
@@ -2293,10 +2353,10 @@ show_field:
 	call	set_cursor
 	add	sp,4h
 	cmp	word ptr 8h[bp],0h
-	jz	branch_10da
+	jz	draw_plain_field
 	call	highlight_on
 
-branch_10da:
+draw_plain_field:
 	mov	ax,467h
 	push	ax
 	call	display_string
@@ -2323,10 +2383,10 @@ branch_10da:
 	call	repeat_char
 	add	sp,4h
 	cmp	word ptr 8h[bp],0h
-	jz	branch_111c
+	jz	field_done
 	call	highlight_off
 
-branch_111c:
+field_done:
 	mov	sp,bp
 	pop	bp
 	ret
@@ -2336,18 +2396,18 @@ require_slot:
 	push	bp
 	mov	bp,sp
 	cmp	word ptr 4h[bp],0ffffh
-	jnz	branch_1134
+	jnz	slot_present
 	mov	ax,offset missing_table_msg
 	push	ax
 	call	fatal_message
 	inc	sp
 	inc	sp
-	jmps	branch_1137
+	jmps	slot_checked
 
-branch_1134:
+slot_present:
 	mov	ax,word ptr 4h[bp]
 
-branch_1137:
+slot_checked:
 	pop	bp
 	ret
 
@@ -2399,6 +2459,7 @@ write_block_slot:
 	pop	bp
 	ret
 
+; Confirm installation, then write the language, console mappings and five printer records.
 save_national_settings:
 	push	bp
 	mov	bp,sp
@@ -2408,7 +2469,7 @@ save_national_settings:
 	inc	sp
 	inc	sp
 	push	ax
-	call	menu_select
+	call	show_menu_title
 	inc	sp
 	inc	sp
 	mov	ax,20h
@@ -2430,17 +2491,17 @@ save_national_settings:
 	call	draw_options
 	add	sp,8h
 	cmp	ax,1h
-	jnz	branch_11c4
-	jmp	branch_1494
+	jnz	confirm_install
+	jmp	install_done
 
-branch_11c4:
+confirm_install:
 	mov	ax,1bh
 	push	ax
 	call	message_address
 	inc	sp
 	inc	sp
 	push	ax
-	call	menu_select
+	call	show_menu_title
 	inc	sp
 	inc	sp
 	sub	ax,ax
@@ -2455,7 +2516,7 @@ branch_11c4:
 	add	sp,4h
 	mov	ax,1h
 	push	ax
-	mov	ax,48ch
+	mov	ax,language_index
 	push	ax
 	sub	ax,ax
 	push	ax
@@ -2463,9 +2524,9 @@ branch_11c4:
 	add	sp,6h
 	mov	ax,1h
 	push	ax
-	mov	ax,106h
+	mov	ax,keyboard_mode_flags
 	push	ax
-	mov	ax,word ptr .4feh
+	mov	ax,word ptr .keyboard_index
 	shl	ax,1
 	pop	bx
 	add	ax,bx
@@ -2476,19 +2537,19 @@ branch_11c4:
 	add	sp,6h
 	mov	ax,1h
 	push	ax
-	mov	ax,4feh
+	mov	ax,keyboard_index
 	push	ax
 	mov	ax,2h
 	push	ax
 	call	write_block_slot
 	add	sp,6h
-	cmp	word ptr .500h,0h
-	jnz	branch_1286
+	cmp	word ptr .alternate_keyboard,0h
+	jnz	save_alt_keyboard
 	mov	ax,36h
 	push	ax
 	sub	ax,ax
 	push	ax
-	call	display_message
+	call	translation_address
 	inc	sp
 	inc	sp
 	push	ax
@@ -2500,7 +2561,7 @@ branch_11c4:
 	push	ax
 	mov	al,1h
 	push	ax
-	call	display_message
+	call	translation_address
 	inc	sp
 	inc	sp
 	push	ax
@@ -2512,7 +2573,7 @@ branch_11c4:
 	push	ax
 	mov	al,2h
 	push	ax
-	call	display_message
+	call	translation_address
 	inc	sp
 	inc	sp
 	push	ax
@@ -2522,7 +2583,7 @@ branch_11c4:
 	add	sp,6h
 	mov	ax,6h
 	push	ax
-	call	display_message
+	call	translation_address
 	inc	sp
 	inc	sp
 	push	ax
@@ -2530,14 +2591,14 @@ branch_11c4:
 	push	ax
 	call	write_string_slot
 	add	sp,4h
-	jmps	branch_12df
+	jmps	save_case_tables
 
-branch_1286:
+save_alt_keyboard:
 	mov	ax,36h
 	push	ax
 	mov	al,0dh
 	push	ax
-	call	display_message
+	call	translation_address
 	inc	sp
 	inc	sp
 	push	ax
@@ -2549,7 +2610,7 @@ branch_1286:
 	push	ax
 	mov	al,0eh
 	push	ax
-	call	display_message
+	call	translation_address
 	inc	sp
 	inc	sp
 	push	ax
@@ -2561,7 +2622,7 @@ branch_1286:
 	push	ax
 	mov	al,0fh
 	push	ax
-	call	display_message
+	call	translation_address
 	inc	sp
 	inc	sp
 	push	ax
@@ -2571,7 +2632,7 @@ branch_1286:
 	add	sp,6h
 	mov	ax,10h
 	push	ax
-	call	display_message
+	call	translation_address
 	inc	sp
 	inc	sp
 	push	ax
@@ -2580,10 +2641,10 @@ branch_1286:
 	call	write_string_slot
 	add	sp,4h
 
-branch_12df:
+save_case_tables:
 	mov	ax,3h
 	push	ax
-	call	display_message
+	call	translation_address
 	inc	sp
 	inc	sp
 	push	ax
@@ -2593,7 +2654,7 @@ branch_12df:
 	add	sp,4h
 	mov	ax,4h
 	push	ax
-	call	display_message
+	call	translation_address
 	inc	sp
 	inc	sp
 	push	ax
@@ -2603,7 +2664,7 @@ branch_12df:
 	add	sp,4h
 	mov	ax,5h
 	push	ax
-	call	display_message
+	call	translation_address
 	inc	sp
 	inc	sp
 	push	ax
@@ -2611,20 +2672,21 @@ branch_12df:
 	push	ax
 	call	write_string_slot
 	add	sp,4h
-	mov	word ptr .112h,0h
-	jmp	branch_1375
+	mov	word ptr .device_index,0h
+	jmp	test_printer_record
 
-branch_1324:
+; Keep the physical device and handler; reset the model flags and cached character set.
+prepare_printer_record:
 	mov	ax,offset device_records
 	push	ax
 	mov	ax,0bh
-	mul	word ptr .112h
+	mul	word ptr .device_index
 	pop	bx
 	add	ax,bx
 	push	ax
-	mov	ax,4f4h
+	mov	ax,selected_printers
 	push	ax
-	mov	ax,word ptr .112h
+	mov	ax,word ptr .device_index
 	shl	ax,1
 	pop	bx
 	add	bx,ax
@@ -2634,15 +2696,15 @@ branch_1324:
 	mov	ax,offset device_records
 	push	ax
 	mov	ax,0bh
-	mul	word ptr .112h
+	mul	word ptr .device_index
 	pop	bx
 	add	ax,bx
 	push	ax
-	mov	ax,117h
+	mov	ax,printer_capabilities
 	push	ax
-	mov	ax,4f4h
+	mov	ax,selected_printers
 	push	ax
-	mov	ax,word ptr .112h
+	mov	ax,word ptr .device_index
 	shl	ax,1
 	pop	bx
 	add	bx,ax
@@ -2653,11 +2715,11 @@ branch_1324:
 	xor	ah,ah
 	pop	bx
 	mov	word ptr 2h[bx],ax
-	inc	word ptr .112h
+	inc	word ptr .device_index
 
-branch_1375:
-	cmp	word ptr .112h,5h
-	jl	branch_1324
+test_printer_record:
+	cmp	word ptr .device_index,5h
+	jl	prepare_printer_record
 	mov	ax,37h
 	push	ax
 	mov	ax,offset device_records
@@ -2670,7 +2732,7 @@ branch_1375:
 	push	ax
 	mov	al,7h
 	push	ax
-	call	display_message
+	call	translation_address
 	inc	sp
 	inc	sp
 	push	ax
@@ -2682,7 +2744,7 @@ branch_1375:
 	push	ax
 	mov	al,8h
 	push	ax
-	call	display_message
+	call	translation_address
 	inc	sp
 	inc	sp
 	push	ax
@@ -2694,7 +2756,7 @@ branch_1375:
 	push	ax
 	mov	al,9h
 	push	ax
-	call	display_message
+	call	translation_address
 	inc	sp
 	inc	sp
 	push	ax
@@ -2706,7 +2768,7 @@ branch_1375:
 	push	ax
 	mov	al,0ah
 	push	ax
-	call	display_message
+	call	translation_address
 	inc	sp
 	inc	sp
 	push	ax
@@ -2718,7 +2780,7 @@ branch_1375:
 	push	ax
 	mov	al,0bh
 	push	ax
-	call	display_message
+	call	translation_address
 	inc	sp
 	inc	sp
 	push	ax
@@ -2730,7 +2792,7 @@ branch_1375:
 	push	ax
 	mov	al,0ch
 	push	ax
-	call	display_message
+	call	translation_address
 	inc	sp
 	inc	sp
 	push	ax
@@ -2740,17 +2802,17 @@ branch_1375:
 	add	sp,6h
 	mov	ax,1h
 	push	ax
-	mov	ax,500h
+	mov	ax,alternate_keyboard
 	push	ax
 	mov	ax,12h
 	push	ax
 	call	write_block_slot
 	add	sp,6h
-	cmp	word ptr .500h,0h
-	jnz	branch_145b
+	cmp	word ptr .alternate_keyboard,0h
+	jnz	save_alt_overrides
 	mov	ax,11h
 	push	ax
-	call	display_message
+	call	translation_address
 	inc	sp
 	inc	sp
 	push	ax
@@ -2760,7 +2822,7 @@ branch_1375:
 	add	sp,4h
 	mov	ax,12h
 	push	ax
-	call	display_message
+	call	translation_address
 	inc	sp
 	inc	sp
 	push	ax
@@ -2768,12 +2830,12 @@ branch_1375:
 	push	ax
 	call	write_string_slot
 	add	sp,4h
-	jmps	branch_1483
+	jmps	flush_install
 
-branch_145b:
+save_alt_overrides:
 	mov	ax,13h
 	push	ax
-	call	display_message
+	call	translation_address
 	inc	sp
 	inc	sp
 	push	ax
@@ -2783,7 +2845,7 @@ branch_145b:
 	add	sp,4h
 	mov	ax,14h
 	push	ax
-	call	display_message
+	call	translation_address
 	inc	sp
 	inc	sp
 	push	ax
@@ -2792,16 +2854,17 @@ branch_145b:
 	call	write_string_slot
 	add	sp,4h
 
-branch_1483:
+; Commit the final dirty block and close the system FCB.
+flush_install:
 	call	flush_dirty_block
-	mov	ax,490h
+	mov	ax,system_fcb
 	push	ax
 	mov	ax,10h
 	push	ax
 	call	file_bdos_result
 	add	sp,4h
 
-branch_1494:
+install_done:
 	pop	bp
 	ret
 
@@ -2814,8 +2877,8 @@ bdos_result:
 	call	bdos
 	add	sp,4h
 	mov	word ptr (0-6h)[bp],ax
-	mov	ax,word ptr .582h
-	mov	word ptr .48ah,ax
+	mov	ax,word ptr .runtime_ax
+	mov	word ptr .os_result,ax
 	mov	sp,bp
 	pop	bp
 	ret
@@ -2829,8 +2892,8 @@ file_bdos_result:
 	call	bdos
 	add	sp,4h
 	mov	word ptr (0-6h)[bp],ax
-	mov	ax,word ptr .582h
-	mov	word ptr .48ah,ax
+	mov	ax,word ptr .runtime_ax
+	mov	word ptr .os_result,ax
 	mov	sp,bp
 	pop	bp
 	ret
@@ -2853,15 +2916,15 @@ initialize_video:
 	call	xios_call
 	mov	word ptr .1e4h,ax
 	cmp	ax,0ffffh
-	jz	branch_14fc
+	jz	no_direct_video
 	cmp	ax,0c00h
-	jnc	branch_1504
+	jnc	use_direct_video
 
-branch_14fc:
+no_direct_video:
 	mov	word ptr .1e2h,0h
-	jmps	branch_154b
+	jmps	video_init_done
 
-branch_1504:
+use_direct_video:
 	mov	word ptr .1e2h,1h
 	mov	cl,99h
 	int	0e0h
@@ -2869,23 +2932,23 @@ branch_1504:
 	call	get_console_pointer
 	mov	al,byte ptr .1ech
 	cmp	al,byte ptr .1e8h
-	jnc	branch_14fc
+	jnc	no_direct_video
 	call	get_window_data
 	mov	ax,es:word ptr 16h[bx]
 	mov	word ptr .1eah,ax
 	cmp	ax,es:word ptr 18h[bx]
-	jnz	branch_1533
+	jnz	load_video_pointers
 	mov	word ptr .1e2h,3h
 
-branch_1533:
+load_video_pointers:
 	call	refresh_window_data
 	call	get_window_data
 	mov	es,es:word ptr 16h[bx]
 	cmp	es:byte ptr .0h,20h
-	jz	branch_154b
+	jz	video_init_done
 	mov	word ptr .1e2h,0h
 
-branch_154b:
+video_init_done:
 	pop	es
 	pop	di
 	pop	si
@@ -2900,10 +2963,10 @@ refresh_console:
 	push	di
 	push	es
 	cmp	word ptr .1e2h,3h
-	jz	branch_1562
+	jz	refresh_done
 	call	refresh_window_data
 
-branch_1562:
+refresh_done:
 	pop	es
 	pop	di
 	pop	si
@@ -2919,14 +2982,14 @@ write_video_string:
 	call	video_cell_address
 	mov	si,word ptr 4h[bp]
 
-branch_1573:
+next_video_char:
 	lodsb
 	test	al,al
-	jz	branch_157b
+	jz	advance_video_cursor
 	stosw
-	jmps	branch_1573
+	jmps	next_video_char
 
-branch_157b:
+advance_video_cursor:
 	dec	si
 	sub	si,word ptr 4h[bp]
 	mov	ax,si
@@ -3001,6 +3064,7 @@ refresh_window_data:
 	mov	ax,7h
 	jmp	xios_call
 
+; Map the current console cursor to its character/attribute word in video memory.
 video_cell_address:
 	call	get_window_data
 	mov	dx,es:word ptr [bx]
@@ -3033,6 +3097,7 @@ update_cursor:
 	ret
 	db	0h
 
+; Round requests to six-byte allocation units and obtain a checked free-list block.
 allocate:
 	push	bp
 	mov	bp,sp
@@ -3052,17 +3117,17 @@ allocate:
 	inc	sp
 	mov	di,ax
 	or	ax,ax
-	jnz	branch_166a
+	jnz	allocate_from_block
 	sub	ax,ax
-	jmps	branch_1672
+	jmps	allocate_done
 
-branch_166a:
+allocate_from_block:
 	push	si
 	push	di
 	call	split_block
 	add	sp,4h
 
-branch_1672:
+allocate_done:
 	pop	di
 	pop	si
 	pop	bp
@@ -3073,12 +3138,12 @@ find_free_block:
 	mov	bp,sp
 	push	si
 	push	di
-	mov	ax,word ptr .58ah
+	mov	ax,word ptr .free_list
 	mov	di,ax
 	mov	ax,word ptr [di]
 	mov	si,ax
 
-branch_1684:
+examine_free_block:
 	mov	ax,word ptr 2h[si]
 	push	ax
 	mov	bx,word ptr 4h[si]
@@ -3086,47 +3151,47 @@ branch_1684:
 	xor	ax,bx
 	not	ax
 	or	ax,ax
-	jz	branch_16a1
+	jz	check_capacity
 	mov	ax,1h
 	push	ax
 	call	heap_error_hook
 	inc	sp
 	inc	sp
 	sub	ax,ax
-	jmps	branch_16d6
+	jmps	find_block_done
 
-branch_16a1:
+check_capacity:
 	mov	ax,word ptr 2h[si]
 	cmp	ax,word ptr 4h[bp]
-	jc	branch_16ad
+	jc	test_arena_end
 	mov	ax,di
-	jmps	branch_16d6
+	jmps	find_block_done
 
-branch_16ad:
-	cmp	si,word ptr .58ah
-	jnz	branch_16ce
+test_arena_end:
+	cmp	si,word ptr .free_list
+	jnz	next_free_block
 	push	word ptr 4h[bp]
 	call	extend_arena
 	inc	sp
 	inc	sp
 	mov	si,ax
 	or	ax,ax
-	jnz	branch_16ce
+	jnz	next_free_block
 	mov	ax,2h
 	push	ax
 	call	heap_error_hook
 	inc	sp
 	inc	sp
 	sub	ax,ax
-	jmps	branch_16d6
+	jmps	find_block_done
 
-branch_16ce:
+next_free_block:
 	mov	di,si
 	mov	ax,word ptr [si]
 	mov	si,ax
-	jmps	branch_1684
+	jmps	examine_free_block
 
-branch_16d6:
+find_block_done:
 	pop	di
 	pop	si
 	pop	bp
@@ -3146,14 +3211,14 @@ split_block:
 	add	ax,4h
 	pop	bx
 	cmp	bx,ax
-	ja	branch_16ff
+	ja	split_tail
 	push	word ptr 4h[bp]
 	mov	ax,word ptr [si]
 	pop	bx
 	mov	word ptr [bx],ax
-	jmps	branch_173e
+	jmps	remember_allocated
 
-branch_16ff:
+split_tail:
 	mov	ax,6h
 	mul	word ptr 6h[bp]
 	xchg	ax,bx
@@ -3185,9 +3250,9 @@ branch_16ff:
 	pop	bx
 	mov	word ptr 4h[bx],ax
 
-branch_173e:
+remember_allocated:
 	mov	ax,word ptr 4h[bp]
-	mov	word ptr .58ah,ax
+	mov	word ptr .free_list,ax
 	lea	ax,word ptr 6h[si]
 	pop	di
 	pop	si
@@ -3216,11 +3281,11 @@ extend_arena:
 	inc	sp
 	mov	si,ax
 	cmp	si,0ffffh
-	jnz	branch_177a
+	jnz	initialize_extent
 	sub	ax,ax
-	jmps	branch_17af
+	jmps	extend_done
 
-branch_177a:
+initialize_extent:
 	mov	ax,si
 	inc	ax
 	cwd
@@ -3249,15 +3314,16 @@ branch_177a:
 	call	free_block
 	inc	sp
 	inc	sp
-	mov	ax,word ptr .58ah
+	mov	ax,word ptr .free_list
 
-branch_17af:
+extend_done:
 	lea	sp,word ptr (0-4h)[bp]
 	pop	di
 	pop	si
 	pop	bp
 	ret
 
+; Validate the size complement and coalesce neighboring free blocks in address order.
 free_block:
 	push	bp
 	mov	bp,sp
@@ -3273,50 +3339,50 @@ free_block:
 	xor	ax,bx
 	not	ax
 	or	ax,ax
-	jz	branch_17e2
+	jz	start_free_search
 	mov	ax,3h
 	push	ax
 	call	heap_error_hook
 	inc	sp
 	inc	sp
 	mov	ax,0ffffh
-	jmp	branch_18a3
+	jmp	free_done
 
-branch_17e2:
-	mov	ax,word ptr .58ah
+start_free_search:
+	mov	ax,word ptr .free_list
 	mov	di,ax
-	jmps	branch_1809
+	jmps	repeat_free_search
 
-branch_17e9:
+scan_neighbors:
 	cmp	si,di
-	jc	branch_17f3
+	jc	test_list_wrap
 	mov	ax,word ptr [di]
 	cmp	si,ax
-	jc	branch_180b
+	jc	check_overlap
 
-branch_17f3:
+test_list_wrap:
 	mov	ax,word ptr [di]
 	cmp	di,ax
-	jc	branch_1805
+	jc	next_interval
 	mov	ax,word ptr [di]
 	cmp	si,ax
-	jna	branch_1803
+	jna	found_interval
 	cmp	si,di
-	jc	branch_1805
+	jc	next_interval
 
-branch_1803:
-	jmps	branch_180b
+found_interval:
+	jmps	check_overlap
 
-branch_1805:
+next_interval:
 	mov	ax,word ptr [di]
 	mov	di,ax
 
-branch_1809:
-	jmps	branch_17e9
+repeat_free_search:
+	jmps	scan_neighbors
 
-branch_180b:
+check_overlap:
 	cmp	si,di
-	jc	branch_1837
+	jc	merge_upper
 	mov	ax,word ptr 2h[si]
 	mov	dx,6h
 	mul	dx
@@ -3332,12 +3398,12 @@ branch_180b:
 	add	ax,bx
 	pop	bx
 	cmp	bx,ax
-	ja	branch_1837
-	mov	word ptr .58ah,di
+	ja	merge_upper
+	mov	word ptr .free_list,di
 	sub	ax,ax
-	jmps	branch_18a3
+	jmps	free_done
 
-branch_1837:
+merge_upper:
 	mov	ax,word ptr 2h[si]
 	mov	dx,6h
 	mul	dx
@@ -3348,7 +3414,7 @@ branch_1837:
 	mov	ax,word ptr [di]
 	pop	bx
 	cmp	bx,ax
-	jnz	branch_186a
+	jnz	link_upper
 	push	si
 	mov	bx,word ptr [di]
 	mov	ax,word ptr 2h[bx]
@@ -3364,15 +3430,15 @@ branch_1837:
 	mov	ax,word ptr [bx]
 	pop	bx
 	mov	word ptr [bx],ax
-	jmps	branch_1870
+	jmps	merge_lower
 
-branch_186a:
+link_upper:
 	push	si
 	mov	ax,word ptr [di]
 	pop	bx
 	mov	word ptr [bx],ax
 
-branch_1870:
+merge_lower:
 	mov	ax,word ptr 2h[di]
 	mov	dx,6h
 	mul	dx
@@ -3380,7 +3446,7 @@ branch_1870:
 	mov	ax,di
 	add	ax,bx
 	cmp	ax,si
-	jnz	branch_189b
+	jnz	link_lower
 	push	di
 	mov	ax,word ptr 2h[si]
 	pop	bx
@@ -3394,21 +3460,22 @@ branch_1870:
 	mov	ax,word ptr [si]
 	pop	bx
 	mov	word ptr [bx],ax
-	jmps	branch_189d
+	jmps	finish_free
 
-branch_189b:
+link_lower:
 	mov	word ptr [di],si
 
-branch_189d:
-	mov	word ptr .58ah,di
+finish_free:
+	mov	word ptr .free_list,di
 	sub	ax,ax
 
-branch_18a3:
+free_done:
 	pop	di
 	pop	si
 	pop	bp
 	ret
 
+; Copy forward or backward according to overlap, then finish the resized allocation.
 resize_block:
 	push	bp
 	mov	bp,sp
@@ -3434,22 +3501,22 @@ resize_block:
 	inc	sp
 	mov	word ptr (0-8h)[bp],ax
 	or	ax,ax
-	jnz	branch_18db
+	jnz	move_resized_data
 	sub	ax,ax
-	jmps	branch_1932
+	jmps	resize_done
 
-branch_18db:
+move_resized_data:
 	mov	bx,word ptr (0-8h)[bp]
 	mov	ax,word ptr [bx]
 	add	ax,6h
 	mov	di,ax
 	cmp	si,di
-	jz	branch_1926
+	jz	finish_resize
 	cmp	di,si
-	jnc	branch_1907
-	jmps	branch_18ff
+	jnc	prepare_backward
+	jmps	test_forward
 
-branch_18ef:
+copy_forward:
 	mov	ax,di
 	inc	di
 	push	ax
@@ -3461,19 +3528,19 @@ branch_18ef:
 	mov	byte ptr [bx],al
 	dec	word ptr 6h[bp]
 
-branch_18ff:
+test_forward:
 	cmp	word ptr 6h[bp],0h
-	jnz	branch_18ef
-	jmps	branch_1926
+	jnz	copy_forward
+	jmps	finish_resize
 
-branch_1907:
+prepare_backward:
 	mov	ax,word ptr 6h[bp]
 	add	di,ax
 	mov	ax,word ptr 6h[bp]
 	add	si,ax
-	jmps	branch_1920
+	jmps	test_backward
 
-branch_1913:
+copy_backward:
 	dec	di
 	mov	ax,di
 	push	ax
@@ -3483,17 +3550,17 @@ branch_1913:
 	mov	byte ptr [bx],al
 	dec	word ptr 6h[bp]
 
-branch_1920:
+test_backward:
 	cmp	word ptr 6h[bp],0h
-	jnz	branch_1913
+	jnz	copy_backward
 
-branch_1926:
+finish_resize:
 	push	word ptr (0-6h)[bp]
 	push	word ptr (0-8h)[bp]
 	call	split_block
 	add	sp,4h
 
-branch_1932:
+resize_done:
 	lea	sp,word ptr (0-4h)[bp]
 	pop	di
 	pop	si
@@ -3511,12 +3578,12 @@ long_complement:
 	mov	bp,sp
 	sub	ax,ax
 	test	word ptr 4h[bp],0ffffh
-	jnz	branch_1958
+	jnz	store_long_boolean
 	test	word ptr 6h[bp],0ffffh
-	jnz	branch_1958
+	jnz	store_long_boolean
 	inc	ax
 
-branch_1958:
+store_long_boolean:
 	mov	word ptr 4h[bp],ax
 	mov	word ptr 6h[bp],0h
 	pop	bp
@@ -3550,35 +3617,35 @@ long_and:
 	push	bp
 	mov	bp,sp
 	mov	cx,word ptr 4h[bp]
-	jcxz	branch_19b5
+	jcxz	left_done
 	mov	bx,word ptr 0ah[bp]
 	mov	ax,word ptr 8h[bp]
 
-branch_19a9:
+shift_long_left:
 	shl	ax,1
 	rcl	bx,1
-	loop	branch_19a9
+	loop	shift_long_left
 	mov	word ptr 0ah[bp],bx
 	mov	word ptr 8h[bp],ax
 
-branch_19b5:
+left_done:
 	pop	bp
 	ret	04h
 	push	bp
 	mov	bp,sp
 	mov	cx,word ptr 4h[bp]
-	jcxz	branch_19d3
+	jcxz	right_done
 	mov	bx,word ptr 0ah[bp]
 	mov	ax,word ptr 8h[bp]
 
-branch_19c7:
+shift_long_right:
 	shr	bx,1
 	rcr	ax,1
-	loop	branch_19c7
+	loop	shift_long_right
 	mov	word ptr 0ah[bp],bx
 	mov	word ptr 8h[bp],ax
 
-branch_19d3:
+right_done:
 	pop	bp
 	ret	04h
 	db	0h
@@ -3587,6 +3654,7 @@ branch_19d3:
 heap_error_hook:
 	ret
 
+; Classify the BDOS release for the runtime feature mask.
 identify_os:
 	sub	ax,ax
 	push	ax
@@ -3594,83 +3662,83 @@ identify_os:
 	push	ax
 	call	bdos
 	add	sp,4h
-	mov	ax,word ptr .582h
-	mov	word ptr .5b8h,ax
-	jmps	branch_1a4b
+	mov	ax,word ptr .runtime_ax
+	mov	word ptr .runtime_version,ax
+	jmps	classify_version
 
-branch_19ee:
-	or	word ptr .5b6h,25h
-	jmp	branch_1a76
+legacy_os_flags:
+	or	word ptr .runtime_features,25h
+	jmp	os_done
 
-branch_19f7:
+query_os_release:
 	sub	ax,ax
 	push	ax
 	mov	al,0a3h
 	push	ax
 	call	bdos
 	add	sp,4h
-	jmps	branch_1a21
+	jmps	dispatch_release
 
-branch_1a05:
-	or	word ptr .5b6h,0h
+plain_release:
+	or	word ptr .runtime_features,0h
 
-branch_1a0b:
-	or	word ptr .5b6h,40h
-	jmps	branch_1a3a
+flag_multiuser:
+	or	word ptr .runtime_features,40h
+	jmps	check_optional_calls
 
-branch_1a13:
-	or	word ptr .5b6h,0h
+concurrent_release:
+	or	word ptr .runtime_features,0h
 
-branch_1a19:
-	or	word ptr .5b6h,0c5h
-	jmps	branch_1a3a
+flag_concurrent:
+	or	word ptr .runtime_features,0c5h
+	jmps	check_optional_calls
 
-branch_1a21:
-	mov	ax,word ptr .582h
+dispatch_release:
+	mov	ax,word ptr .runtime_ax
 	cmp	ax,1420h
-	jz	branch_1a19
+	jz	flag_concurrent
 	cmp	ax,1431h
-	jz	branch_1a13
+	jz	concurrent_release
 	cmp	ax,22h
-	jz	branch_1a0b
+	jz	flag_multiuser
 	cmp	ax,1031h
-	jz	branch_1a05
-	jmps	branch_1a13
+	jz	plain_release
+	jmps	concurrent_release
 
-branch_1a3a:
+check_optional_calls:
 	call	probe_bdos_mode
-	jmps	branch_1a76
+	jmps	os_done
 
-branch_1a3f:
-	or	word ptr .5b6h,0c5h
-	jmps	branch_1a76
+native_concurrent_flags:
+	or	word ptr .runtime_features,0c5h
+	jmps	os_done
 
-branch_1a47:
-	jmps	branch_1a76
-	jmps	branch_1a76
+os_flags_ready:
+	jmps	os_done
+	jmps	os_done
 
-branch_1a4b:
-	mov	ax,word ptr .5b8h
+classify_version:
+	mov	ax,word ptr .runtime_version
 	cmp	ax,3022h
-	jz	branch_1a47
+	jz	os_flags_ready
 	cmp	ax,2022h
-	jz	branch_1a47
+	jz	os_flags_ready
 	cmp	ax,22h
-	jz	branch_1a47
+	jz	os_flags_ready
 	cmp	ax,1031h
-	jz	branch_1a3f
+	jz	native_concurrent_flags
 	cmp	ax,1431h
-	jz	branch_19f7
+	jz	query_os_release
 	cmp	ax,1130h
-	jz	branch_19ee
+	jz	legacy_os_flags
 	cmp	ax,1430h
-	jnz	branch_1a74
-	jmp	branch_19ee
+	jnz	query_extended_version
+	jmp	legacy_os_flags
 
-branch_1a74:
-	jmps	branch_19f7
+query_extended_version:
+	jmps	query_os_release
 
-branch_1a76:
+os_done:
 	ret
 
 probe_bdos_mode:
@@ -3680,28 +3748,28 @@ probe_bdos_mode:
 	push	ax
 	call	bdos
 	add	sp,4h
-	cmp	word ptr .582h,0ffffh
-	jz	branch_1a9b
-	cmp	word ptr .582h,0h
-	jz	branch_1a9b
-	or	word ptr .5b6h,2h
+	cmp	word ptr .runtime_ax,0ffffh
+	jz	mode_unavailable
+	cmp	word ptr .runtime_ax,0h
+	jz	mode_unavailable
+	or	word ptr .runtime_features,2h
 	sub	ax,ax
-	jmps	branch_1a9e
+	jmps	mode_done
 
-branch_1a9b:
+mode_unavailable:
 	mov	ax,0ffffh
 
-branch_1a9e:
+mode_done:
 	ret
 
 append_string:
 	mov	dx,0ffffh
-	jmp	branch_1aa8
+	jmp	string_copy_common
 
 copy_string:
 	mov	dx,1h
 
-branch_1aa8:
+string_copy_common:
 	push	bp
 	mov	bp,sp
 	push	si
@@ -3721,13 +3789,13 @@ branch_1aa8:
 	mov	cx,dx
 	shr	cx,1
 	rep	movsw
-	jnc	branch_1ad1
+	jnc	return_dest
 	movsb
 
-branch_1ad1:
+return_dest:
 	mov	ax,word ptr 4h[bp]
 
-branch_1ad4:
+string_done:
 	pop	di
 	pop	si
 	pop	bp
@@ -3746,16 +3814,16 @@ branch_1ad4:
 	mov	si,word ptr 4h[bp]
 	mov	di,word ptr 6h[bp]
 	repe	cmpsb
-	jz	branch_1ad4
+	jz	string_done
 
-branch_1af7:
-	jg	branch_1afc
+compare_mismatch:
+	jg	compare_greater
 	dec	ax
-	jmps	branch_1ad4
+	jmps	string_done
 
-branch_1afc:
+compare_greater:
 	inc	ax
-	jmps	branch_1ad4
+	jmps	string_done
 	push	bp
 	mov	bp,sp
 	push	si
@@ -3770,28 +3838,28 @@ branch_1afc:
 	mov	si,word ptr 4h[bp]
 	mov	di,word ptr 6h[bp]
 
-branch_1b1a:
+compare_next:
 	repe	cmpsb
-	jz	branch_1ad4
+	jz	string_done
 	mov	bh,byte ptr (0-1h)[si]
 	mov	bl,es:byte ptr (0-1h)[di]
 	sub	bh,61h
 	cmp	bh,19h
-	ja	branch_1b30
+	ja	fold_first
 	add	bh,0e0h
 
-branch_1b30:
+fold_first:
 	add	bh,61h
 	sub	bl,61h
 	cmp	bl,19h
-	ja	branch_1b3e
+	ja	fold_second
 	add	bl,0e0h
 
-branch_1b3e:
+fold_second:
 	add	bl,61h
 	cmp	bh,bl
-	jz	branch_1b1a
-	jmps	branch_1af7
+	jz	compare_next
+	jmps	compare_mismatch
 
 string_length:
 	mov	bx,sp
@@ -3808,6 +3876,7 @@ string_length:
 	pop	di
 	ret
 
+; DATA begins with the CP/M base page and runtime state.
 	dseg
 	rb	258
 	db	0bfh
@@ -4056,18 +4125,13 @@ missing_table_msg rb 0
 	rb	51
 	db	0ffh
 	db	0ffh
-slot_offsets rb 0
-	rb	48
-code_paragraphs rb 0
-	db	0h
-	db	0h
+slot_offsets rw 24	; DATA-relative entries become absolute file offsets
+code_paragraphs dw 0
 data_file_base rb 0
 	rb	18
-device_records rb 0
-	rb	56
-signature_offset rb 0
-	db	0h
-	db	0h
+device_records rb 55	; five 11-byte printer records
+	rb 1	; align next word
+signature_offset dw 0
 	db	'Concurrent PC DOS National Setup Utility for the IBM PC  '
 	db	'version 4.1'
 	rb	4

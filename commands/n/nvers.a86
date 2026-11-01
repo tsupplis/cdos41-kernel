@@ -1,0 +1,10 @@
+; DR C's byte-valued BDOS wrapper drops AH. N needs the entire version word.
+        public osvers
+        cseg
+osvers:
+        push es
+        mov cx,12
+        int 0e0h
+        pop es
+        ret
+        end

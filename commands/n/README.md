@@ -20,12 +20,17 @@ address range. Slots 21–23 are zero.
 
 ## Build and verification
 
-The source contains the application and the linked Digital Research
-small-model C runtime. ASM86 assembles the instructions. GENCMD supplies
-the two-group executable, and encodings.py restores the DATA growth limit
-and 21 alternate register-to-register encodings. The checker compares the
-complete 8,704-byte result with the retained 4.11 disk 1 reference.
-Run `make check` in this directory.
+The distributed N.CMD is built with Digital Research C 1.11. The menus in
+n.c read the selected language from NATIONAL.MSG, display and edit keyboard
+and per-port printer selections, and ask whether to save or discard them.
+nsave.c implements the directory-based writes and nvers.a86 returns the
+complete BDOS version word to C. The menu uses a compact text layout.
+
+norg.a86 freezes the release disassembly, including the linked C runtime.
+ASM86 and GENCMD rebuild NORG.CMD. encodings.py restores the release DATA
+growth limit and 21 equivalent register encodings. Run `make check` to
+compare NORG.CMD with the entire 8,704-byte release command and validate
+the C executable.
 
 ## Read-only C probe
 
