@@ -1,4008 +1,4074 @@
-;*****************************************************
+;*****************************************************************************
 ;*
-;*   SPL - Concurrent DOS spool queue server
-;*   IBM PC release 4.11
+;*   SPL.CMD  -  Concurrent DOS print spooler
+;*   Digital Research, IBM PC release 4.11
 ;*
-;*****************************************************
+;*****************************************************************************
 ;
-; PRINTMGR submits requests through SPLIN. DSP consumes jobs and reports
-; progress to SPL. The 160-byte queue message carries a 32-byte header
-; and up to 128 data bytes. The server detaches its console after startup.
-; The startup and library routines use the DR C 1.11 small-model ABI.
-; make check compares every byte of the complete CMD with release disk 3.
-; No command-tail options are parsed by the server.
+; Invocation     PRINTMGR START launches DSP workers and chains to SPL.
+;                SPL does not parse the command tail. Once it has created
+;                its queues, it detaches the console and serves requests.
+;
+; Interface      MXSPL serializes clients. SPLIN and SPLOUT transfer a
+;                32-byte header and 128-byte payload per message. DSP reports
+;                device events on SPLIN. INDEX.DSP holds two jobs per record.
+;
+; Organization   DR C 1.11 small-model startup, spool server, UTLASM system
+;                interfaces, runtime OS detection, then a separate DATA group.
+;                Arguments to XDOS are two stack words: function and parameter.
+;                AX holds the result and the caller removes the arguments.
+;
+; Verification   make check compares all 12,160 bytes with the disk 3 CMD.
+;                encodings.py checks seven register MOVs and restores their
+;                release encodings and the linker's DATA allocation limit.
+;*****************************************************************************
 
-spool_buffers equ 078ch
-spool_fcbs equ 0b8ch
-current_dma equ 078ah
-ready_head equ 072eh
-request_status equ 0cc5h
-request_priority equ 0cc7h
-request_flags equ 0cc8h
-request_copies equ 0cc9h
-request_length equ 0ccfh
-index_active equ 0100ch
-index_random_record equ 0102fh
+; Values shared with PRINTMGR and DSP (see their SPLDEF.H message layout).
+
+spool_slot_bytes        equ     24
+device_slot_bytes       equ     13
+fcb_bytes               equ     36
+record_bytes            equ     128
+index_entry_bytes       equ     64
+spool_slot_count        equ     8
+device_slot_count       equ     16
+job_number_count        equ     254
+
+; SPLIN command byte. The same message buffer carries the reply.
+cmd_submit              equ     0
+cmd_append              equ     1
+cmd_abort               equ     2
+cmd_status              equ     3
+cmd_finish              equ     7
+cmd_terminate           equ     10
+cmd_event               equ     16
+cmd_report              equ     17
+
+; Base-page fields supplied by the loader.
+launch_drive            equ     50h
+command_tail            equ     80h
+
+; Shared stack frame in start_spooler. Other library procedures use their own frames.
+local_system_drive      equ     -5
+local_job_no            equ     -6
+local_spool_slot        equ     -7
+local_command_word      equ     -9
+local_previous_job      equ     -10
+local_next_job          equ     -11
+local_work_record       equ     -13
+local_index_entry       equ     -15
+local_work_index        equ     -19
+local_result_word       equ     -21
+
         cseg
 
 startup:
-	call	initialize_stack
-	call	align_heap
-	call	get_default_drive
-	call	install_divide_handler
-	call	runtime_buffers
-	call	identify_os
-	mov	si,80h
-	lodsb
-	xor	ah,ah
-	push	ax
-	push	si
-	call	run_command
+        call    initialize_stack
+        call    align_heap
+        call    get_default_drive
+        call    install_divide_handler
+        call    runtime_buffers
+        call    identify_os
+        mov     si,command_tail
+        lodsb
+        xor     ah,ah
+        push    ax
+        push    si
+        call    run_command
 
 exit_process:
-	mov	cl,0h
-	push	es
-	int	0e0h
-	pop	es
-	jmp	spool_main
+        mov     cl,0h
+        push    es
+        int     0e0h
+        pop     es
+        jmp     spool_main
 
+; CALL leaves the address of the inline dollar-terminated diagnostic on the stack.
 fatal_inline:
-	pop	dx
-	push	cs
-	pop	ds
-	mov	cl,9h
-	push	es
-	int	0e0h
-	pop	es
-	jmps	exit_process
-	ret
+        pop     dx
+        push    cs
+        pop     ds
+        mov     cl,9h
+        push    es
+        int     0e0h
+        pop     es
+        jmps    exit_process
+        ret
 
 get_default_drive:
-	mov	cl,0ch
-	push	es
-	int	0e0h
-	pop	es
-	cmp	ah,11h
-	jnz	test_launch_drive
-	inc	byte ptr .50h
+        mov     cl,0ch
+        push    es
+        int     0e0h
+        pop     es
+        cmp     ah,11h
+        jnz     test_launch_drive
+        inc     byte ptr .launch_drive
 
 test_launch_drive:
-	mov	al,byte ptr .50h
-	test	al,al
-	jz	query_drive
-	dec	al
-	cmp	al,0fh
-	jna	remember_drive
+        mov     al,byte ptr .launch_drive
+        test    al,al
+        jz      query_drive
+        dec     al
+        cmp     al,0fh
+        jna     remember_drive
 
 query_drive:
-	mov	cl,19h
-	push	es
-	int	0e0h
-	pop	es
+        mov     cl,19h
+        push    es
+        int     0e0h
+        pop     es
 
 remember_drive:
-	mov	byte ptr .1032h,al
-	add	al,41h
-	mov	byte ptr .1034h,al
-	ret
+        mov     byte ptr default_drive,al
+        add     al,41h
+        mov     byte ptr drive_letter,al
+        ret
 
 install_divide_handler:
-	push	ds
-	sub	bx,bx
-	mov	ds,bx
-	mov	word ptr [bx],6bh
-	mov	word ptr 2h[bx],cs
-	pop	ds
-	ret
+        push    ds
+        sub     bx,bx
+        mov     ds,bx
+        mov     word ptr [bx],offset divide_error
+        mov     word ptr 2h[bx],cs
+        pop     ds
+        ret
 
 divide_error:
-	call	fatal_inline
-	db	'Zero divide error$'
+        call    fatal_inline
+                        db      'Zero divide error$'
 
 align_heap:
-	push	ds
-	pop	es
-	mov	ax,word ptr .102h
-	add	ax,0fh
-	and	ax,0fff0h
-	mov	word ptr .104h,ax
-	ret
+        push    ds
+        pop     es
+        mov     ax,word ptr initial_data_end
+        add     ax,0fh
+        and     ax,0fff0h
+        mov     word ptr heap_break,ax
+        ret
 
 available_stack:
-	mov	ax,sp
-	sub	ax,100h
-	sub	ax,word ptr .104h
-	sub	bx,bx
-	ret
+        mov     ax,sp
+        sub     ax,100h
+        sub     ax,word ptr heap_break
+        sub     bx,bx
+        ret
 
 grow_heap:
-	mov	bx,sp
-	mov	bx,ss:word ptr 2h[bx]
-	inc	bx
-	and	bl,0feh
-	mov	ax,word ptr .104h
-	add	bx,ax
-	jc	heap_error
-	jmps	check_stack_room
+        mov     bx,sp
+        mov     bx,ss:word ptr 2h[bx]
+        inc     bx
+        and     bl,0feh
+        mov     ax,word ptr heap_break
+        add     bx,ax
+        jc      heap_error
+        jmps    check_stack_room
 
 heap_error:
-	mov	ax,0ffffh
-	ret
-	mov	bx,sp
-	mov	bx,ss:word ptr 2h[bx]
-	sub	ax,ax
+        mov     ax,0ffffh
+        ret
+
+set_heap_break:
+        mov     bx,sp
+        mov     bx,ss:word ptr 2h[bx]
+        sub     ax,ax
 
 check_stack_room:
-	mov	cx,sp
-	sub	cx,100h
-	cmp	bx,cx
-	jnc	heap_error
-	cmp	bx,word ptr .104h
-	jc	heap_error
-	mov	word ptr .104h,bx
-	ret
+        mov     cx,sp
+        sub     cx,100h
+        cmp     bx,cx
+        jnc     heap_error
+        cmp     bx,word ptr heap_break
+        jc      heap_error
+        mov     word ptr heap_break,bx
+        ret
 
 runtime_buffers:
-	sub	sp,4h
-	mov	dx,sp
-	mov	cl,69h
-	push	es
-	int	0e0h
-	pop	es
-	add	sp,4h
-	inc	ax
-	jz	query_runtime_family
-	sub	ax,ax
-	or	ax,1000h
+        sub     sp,4h
+        mov     dx,sp
+        mov     cl,69h
+        push    es
+        int     0e0h
+        pop     es
+        add     sp,4h
+        inc     ax
+        jz      query_runtime_family
+        sub     ax,ax
+        or      ax,1000h
 
 query_runtime_family:
-	push	ax
-	mov	cl,0ch
-	push	es
-	int	0e0h
-	pop	es
-	pop	ax
-	cmp	bx,22h
-	jc	store_buffer_flags
-	test	bh,2h
-	jz	set_buffer_flags
-	or	ax,800h
-	xor	bh,2h
+        push    ax
+        mov     cl,0ch
+        push    es
+        int     0e0h
+        pop     es
+        pop     ax
+        cmp     bx,22h
+        jc      store_buffer_flags
+        test    bh,2h
+        jz      set_buffer_flags
+        or      ax,800h
+        xor     bh,2h
 
 set_buffer_flags:
-	mov	cx,22h
-	or	ax,400h
-	test	bh,bh
-	jz	store_buffer_flags
-	xor	ax,400h
-	inc	cl
-	or	ax,0e000h
-	cmp	bh,1h
-	jz	store_buffer_flags
-	inc	cl
-	xor	ax,8000h
-	cmp	bh,14h
-	jz	store_buffer_flags
-	sub	cx,cx
+        mov     cx,22h
+        or      ax,400h
+        test    bh,bh
+        jz      store_buffer_flags
+        xor     ax,400h
+        inc     cl
+        or      ax,0e000h
+        cmp     bh,1h
+        jz      store_buffer_flags
+        inc     cl
+        xor     ax,8000h
+        cmp     bh,14h
+        jz      store_buffer_flags
+        sub     cx,cx
 
 store_buffer_flags:
-	mov	byte ptr .1038h,cl
-	mov	word ptr .1036h,ax
-	ret
+        mov     byte ptr runtime_os_class,cl
+        mov     word ptr runtime_buffer_flags,ax
+        ret
 
 initialize_stack:
-	pop	ax
-	pop	cx
-	pop	dx
-	sub	bx,bx
-	push	ds
-	pushf
-	pop	si
-	cli
-	pop	ss
-	mov	sp,word ptr 6h[bx]
-	push	si
-	popf
-	inc	sp
-	and	sp,0fffeh
-	push	dx
-	push	cx
-	push	bx
-	mov	bp,sp
-	lea	dx,word ptr (0-8h)[bp]
-	push	dx
-	push	bx
-	push	bx
-	push	bx
-	push	ax
-	mov	ss:word ptr .9h,ds
-	ret
+        pop     ax
+        pop     cx
+        pop     dx
+        sub     bx,bx
+        push    ds
+        pushf
+        pop     si
+        cli
+        pop     ss
+        mov     sp,word ptr 6h[bx]
+        push    si
+        popf
+        inc     sp
+        and     sp,0fffeh
+        push    dx
+        push    cx
+        push    bx
+        mov     bp,sp
+        lea     dx,word ptr (0-8h)[bp]
+        push    dx
+        push    bx
+        push    bx
+        push    bx
+        push    ax
+        mov     ss:word ptr .9h,ds
+        ret
 
 allocate_stack:
-	pop	bx
-	pop	dx
-	inc	dx
-	and	dl,0feh
-	mov	ax,dx
-	add	ax,word ptr .104h
-	cmp	ax,sp
-	jna	reserve_stack
-	call	fatal_inline
-	db	0dh
-	db	0ah
-	db	'Stack overflow.'
-	db	0dh
-	db	0ah
-	db	24h
+        pop     bx
+        pop     dx
+        inc     dx
+        and     dl,0feh
+        mov     ax,dx
+        add     ax,word ptr heap_break
+        cmp     ax,sp
+        jna     reserve_stack
+        call    fatal_inline
+                        db      0dh
+                        db      0ah
+                        db      'Stack overflow.'
+                        db      0dh
+                        db      0ah
+                        db      24h
 
 reserve_stack:
-	sub	sp,dx
-	mov	ax,sp
-	push	dx
-	push	bx
-	ret
-	db	'CP/M V1.11 8/27/84 SMALL Model CLEAR library. Copyright '
-	db	'1983,1984 Digital Research.$'
+        sub     sp,dx
+        mov     ax,sp
+        push    dx
+        push    bx
+        ret
+                        db      'CP/M V1.11 8/27/84 SMALL Model CLEAR library. Copyright '
+                        db      '1983,1984 Digital Research.$'
 
 runtime_bdos:
-	push	bp
-	mov	bp,sp
-	push	di
-	push	si
-	mov	dx,word ptr 6h[bp]
-	mov	cl,byte ptr 4h[bp]
-	push	es
-	int	0e0h
-	pop	es
-	mov	word ptr bdos_saved_ax,ax
-	mov	word ptr .105eh,cx
-	sub	ah,ah
-	pop	si
-	pop	di
-	pop	bp
-	ret
-	db	0h
+        push    bp
+        mov     bp,sp
+        push    di
+        push    si
+        mov     dx,word ptr 6h[bp]
+        mov     cl,byte ptr 4h[bp]
+        push    es
+        int     0e0h
+        pop     es
+        mov     word ptr bdos_saved_ax,ax
+        mov     word ptr bdos_saved_cx,cx
+        sub     ah,ah
+        pop     si
+        pop     di
+        pop     bp
+        ret
+                        db      0h
 
 run_command:
-	call	spool_main
-	sub	ax,ax
-	push	ax
-	push	ax
-	call	xdos
-	add	sp,4h
-	ret
+        call    spool_main
+        sub     ax,ax
+        push    ax
+        push    ax
+        call    xdos
+        add     sp,4h
+        ret
 
 spool_main:
-	call	start_spooler
-	ret
+        call    start_spooler
+        ret
 
 ; Create SPLOUT, MXSPL and SPLIN. Delete any partially created set on failure.
-
 start_spooler:
-	push	bp
-	mov	bp,sp
-	push	si
-	push	di
-	sub	sp,12h
-	mov	ax,offset output_descriptor
-	push	ax
-	mov	ax,86h	; Q_MAKE
-	push	ax
-	call	xdos
-	add	sp,4h
-	or	ax,ax
-	jnz	remove_partial_queues
-	mov	ax,offset mutex_descriptor
-	push	ax
-	mov	ax,86h	; Q_MAKE
-	push	ax
-	call	xdos
-	add	sp,4h
-	or	ax,ax
-	jnz	remove_partial_queues
-	mov	ax,offset input_descriptor
-	push	ax
-	mov	ax,86h	; Q_MAKE
-	push	ax
-	call	xdos
-	add	sp,4h
-	or	ax,ax
-	jnz	remove_partial_queues
-	jmp	detach_console
+        push    bp
+        mov     bp,sp
+        push    si
+        push    di
+        sub     sp,12h
+        mov     ax,offset output_descriptor
+        push    ax
+        mov     ax,86h  ; Q_MAKE
+        push    ax
+        call    xdos
+        add     sp,4h
+        or      ax,ax
+        jnz     remove_partial_queues
+        mov     ax,offset mutex_descriptor
+        push    ax
+        mov     ax,86h  ; Q_MAKE
+        push    ax
+        call    xdos
+        add     sp,4h
+        or      ax,ax
+        jnz     remove_partial_queues
+        mov     ax,offset input_descriptor
+        push    ax
+        mov     ax,86h  ; Q_MAKE
+        push    ax
+        call    xdos
+        add     sp,4h
+        or      ax,ax
+        jnz     remove_partial_queues
+        jmp     detach_console
 
 remove_partial_queues:
-	mov	ax,offset mutex_queue
-	push	ax
-	mov	ax,87h	; Q_OPEN
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset input_queue
-	push	ax
-	mov	ax,87h	; Q_OPEN
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset output_queue
-	push	ax
-	mov	ax,87h	; Q_OPEN
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset mutex_queue
-	push	ax
-	mov	ax,88h	; Q_DELETE
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset input_queue
-	push	ax
-	mov	ax,88h	; Q_DELETE
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset output_queue
-	push	ax
-	mov	ax,88h	; Q_DELETE
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	word ptr (0-15h)[bp],0h
-	jmps	check_error_char
+        mov     ax,offset mutex_queue
+        push    ax
+        mov     ax,87h  ; Q_OPEN
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset input_queue
+        push    ax
+        mov     ax,87h  ; Q_OPEN
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset output_queue
+        push    ax
+        mov     ax,87h  ; Q_OPEN
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset mutex_queue
+        push    ax
+        mov     ax,88h  ; Q_DELETE
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset input_queue
+        push    ax
+        mov     ax,88h  ; Q_DELETE
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset output_queue
+        push    ax
+        mov     ax,88h  ; Q_DELETE
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     word ptr local_result_word[bp],0h
+        jmps    check_error_char
 
 print_queue_error:
-	mov	ax,offset error_text
-	push	ax
-	mov	ax,word ptr (0-15h)[bp]
-	inc	word ptr (0-15h)[bp]
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr [bx]
-	xor	ah,ah
-	push	ax
-	mov	ax,2h	; C_WRITE
-	push	ax
-	call	xdos
-	add	sp,4h
+        mov     ax,offset error_text
+        push    ax
+        mov     ax,word ptr local_result_word[bp]
+        inc     word ptr local_result_word[bp]
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr [bx]
+        xor     ah,ah
+        push    ax
+        mov     ax,2h  ; C_WRITE
+        push    ax
+        call    xdos
+        add     sp,4h
 
 check_error_char:
-	mov	bx,offset error_text
-	add	bx,word ptr (0-15h)[bp]
-	cmp	byte ptr [bx],0h
-	jnz	print_queue_error
-	jmp	leave_spooler
+        mov     bx,offset error_text
+        add     bx,word ptr local_result_word[bp]
+        cmp     byte ptr [bx],0h
+        jnz     print_queue_error
+        jmp     leave_spooler
 
 ; Detach from the console, open the queues and seed the mutex.
 
 detach_console:
-	mov	ax,93h	; C_DETACH
-	push	ax
-	call	xdos
-	inc	sp
-	inc	sp
-	mov	ax,offset mutex_queue
-	push	ax
-	mov	ax,87h	; Q_OPEN
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset input_queue
-	push	ax
-	mov	ax,87h	; Q_OPEN
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset output_queue
-	push	ax
-	mov	ax,87h	; Q_OPEN
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset mutex_queue
-	push	ax
-	mov	ax,8bh	; Q_WRITE
-	push	ax
-	call	xdos
-	add	sp,4h
-	sub	ax,ax
-	push	ax
-	mov	al,20h	; F_USERNUM
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,0ffh
-	push	ax
-	mov	al,2dh	; F_ERRMODE
-	push	ax
-	call	xdos
-	add	sp,4h
-	call	g_sysdsk
-	inc	ax
-	mov	byte ptr (0-5h)[bp],al
-	mov	byte ptr (0-6h)[bp],0h
-	mov	byte ptr (0-7h)[bp],0h
-	sub	si,si
-	jmps	test_spool_slot_count
+        mov     ax,93h  ; C_DETACH
+        push    ax
+        call    xdos
+        inc     sp
+        inc     sp
+        mov     ax,offset mutex_queue
+        push    ax
+        mov     ax,87h  ; Q_OPEN
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset input_queue
+        push    ax
+        mov     ax,87h  ; Q_OPEN
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset output_queue
+        push    ax
+        mov     ax,87h  ; Q_OPEN
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset mutex_queue
+        push    ax
+        mov     ax,8bh  ; Q_WRITE
+        push    ax
+        call    xdos
+        add     sp,4h
+        sub     ax,ax
+        push    ax
+        mov     al,20h  ; F_USERNUM
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,0ffh
+        push    ax
+        mov     al,2dh  ; F_ERRMODE
+        push    ax
+        call    xdos
+        add     sp,4h
+        call    g_sysdsk
+        inc     ax
+        mov     byte ptr local_system_drive[bp],al
+        mov     byte ptr local_job_no[bp],0h
+        mov     byte ptr local_spool_slot[bp],0h
+        sub     si,si
+        jmps    test_spool_slot_count
 
+; Clear the eight client submission records before accepting the first job.
 clear_spool_status:
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	byte ptr [bx],0ffh
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 0ch[bx],0h
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	word ptr 16h[bx],0h
-	inc	si
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     byte ptr [bx],0ffh
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 0ch[bx],0h
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     word ptr 16h[bx],0h
+        inc     si
 
 test_spool_slot_count:
-	cmp	si,8h
-	jc	clear_spool_status
-	sub	si,si
-	jmp	test_device_count
+        cmp     si,spool_slot_count
+        jc      clear_spool_status
+        sub     si,si
+        jmp     test_device_count
 
 clear_despool_status:
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,0dh
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	byte ptr [bx],0ffh
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,0dh
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 9h[bx],0h
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,0dh
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	word ptr 0bh[bx],1h
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,0dh
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 0ah[bx],0h
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,0dh
-	mul	si
-	pop	bx
-	add	ax,bx
-	inc	ax
-	xchg	ax,bx
-	mov	al,byte ptr queue_error
-	mov	byte ptr [bx],al
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,0dh
-	mul	si
-	pop	bx
-	add	ax,bx
-	inc	ax
-	inc	ax
-	xchg	ax,bx
-	mov	al,byte ptr .733h
-	mov	byte ptr [bx],al
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,0dh
-	mul	si
-	pop	bx
-	add	ax,bx
-	add	ax,3h
-	xchg	ax,bx
-	mov	al,byte ptr .734h
-	mov	byte ptr [bx],al
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,0dh
-	mul	si
-	pop	bx
-	add	ax,bx
-	add	ax,4h
-	push	ax
-	mov	ax,si
-	mov	bx,64h
-	sub	dx,dx
-	div	bx
-	push	ax
-	mov	al,byte ptr .735h
-	xor	ah,ah
-	pop	bx
-	add	ax,bx
-	pop	bx
-	mov	byte ptr [bx],al
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,0dh
-	mul	si
-	pop	bx
-	add	ax,bx
-	add	ax,5h
-	push	ax
-	mov	ax,si
-	mov	bx,64h
-	sub	dx,dx
-	div	bx
-	xchg	ax,dx
-	mov	bx,0ah
-	sub	dx,dx
-	div	bx
-	push	ax
-	mov	al,byte ptr .736h
-	xor	ah,ah
-	pop	bx
-	add	ax,bx
-	pop	bx
-	mov	byte ptr [bx],al
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,0dh
-	mul	si
-	pop	bx
-	add	ax,bx
-	add	ax,6h
-	push	ax
-	mov	ax,si
-	mov	bx,0ah
-	sub	dx,dx
-	div	bx
-	xchg	ax,dx
-	push	ax
-	mov	al,byte ptr .737h
-	xor	ah,ah
-	pop	bx
-	add	ax,bx
-	pop	bx
-	mov	byte ptr [bx],al
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,0dh
-	mul	si
-	pop	bx
-	add	ax,bx
-	add	ax,7h
-	xchg	ax,bx
-	mov	al,byte ptr .738h
-	mov	byte ptr [bx],al
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,0dh
-	mul	si
-	pop	bx
-	add	ax,bx
-	add	ax,8h
-	xchg	ax,bx
-	mov	al,byte ptr .739h
-	mov	byte ptr [bx],al
-	inc	si
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,device_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     byte ptr [bx],0ffh
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,device_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 9h[bx],0h
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,device_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     word ptr 0bh[bx],1h
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,device_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 0ah[bx],0h
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,device_slot_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        inc     ax
+        xchg    ax,bx
+        mov     al,byte ptr queue_error
+        mov     byte ptr [bx],al
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,device_slot_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        inc     ax
+        inc     ax
+        xchg    ax,bx
+        mov     al,byte ptr queue_error+1
+        mov     byte ptr [bx],al
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,device_slot_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        add     ax,3h
+        xchg    ax,bx
+        mov     al,byte ptr queue_error+2
+        mov     byte ptr [bx],al
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,device_slot_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        add     ax,4h
+        push    ax
+        mov     ax,si
+        mov     bx,64h
+        sub     dx,dx
+        div     bx
+        push    ax
+        mov     al,byte ptr queue_error+3
+        xor     ah,ah
+        pop     bx
+        add     ax,bx
+        pop     bx
+        mov     byte ptr [bx],al
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,device_slot_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        add     ax,5h
+        push    ax
+        mov     ax,si
+        mov     bx,64h
+        sub     dx,dx
+        div     bx
+        xchg    ax,dx
+        mov     bx,0ah
+        sub     dx,dx
+        div     bx
+        push    ax
+        mov     al,byte ptr queue_error+4
+        xor     ah,ah
+        pop     bx
+        add     ax,bx
+        pop     bx
+        mov     byte ptr [bx],al
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,device_slot_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        add     ax,6h
+        push    ax
+        mov     ax,si
+        mov     bx,0ah
+        sub     dx,dx
+        div     bx
+        xchg    ax,dx
+        push    ax
+        mov     al,byte ptr queue_error+5
+        xor     ah,ah
+        pop     bx
+        add     ax,bx
+        pop     bx
+        mov     byte ptr [bx],al
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,device_slot_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        add     ax,7h
+        xchg    ax,bx
+        mov     al,byte ptr queue_error+6
+        mov     byte ptr [bx],al
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,device_slot_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        add     ax,8h
+        xchg    ax,bx
+        mov     al,byte ptr queue_error+7
+        mov     byte ptr [bx],al
+        inc     si
 
 test_device_count:
-	cmp	si,10h
-	jnc	begin_device_queues
-	jmp	clear_despool_status
+        cmp     si,device_slot_count
+        jnc     begin_device_queues
+        jmp     clear_despool_status
 
 begin_device_queues:
-	sub	si,si
-	jmp	test_queue_count
+        sub     si,si
+        jmp     test_queue_count
 
+; Build a queue parameter block for each device from the DSP queue template.
 initialize_device_queue:
-	mov	ax,offset device_queues
-	push	ax
-	mov	ax,si
-	mov	cl,4h
-	shl	ax,cl
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr .0f7ch
-	mov	byte ptr [bx],al
-	mov	ax,offset device_queues
-	push	ax
-	mov	ax,si
-	mov	cl,4h
-	shl	ax,cl
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr .0f7dh
-	mov	byte ptr 1h[bx],al
-	mov	ax,offset device_queues
-	push	ax
-	mov	ax,si
-	mov	cl,4h
-	shl	ax,cl
-	pop	bx
-	add	bx,ax
-	mov	ax,word ptr .0f7eh
-	mov	word ptr 2h[bx],ax
-	mov	ax,offset device_queues
-	push	ax
-	mov	ax,si
-	mov	cl,4h
-	shl	ax,cl
-	pop	bx
-	add	bx,ax
-	mov	ax,word ptr .0f80h
-	mov	word ptr 4h[bx],ax
-	mov	ax,offset device_queues
-	push	ax
-	mov	ax,si
-	mov	cl,4h
-	shl	ax,cl
-	pop	bx
-	add	bx,ax
-	mov	ax,word ptr .0f82h
-	mov	word ptr 6h[bx],ax
-	sub	di,di
-	jmps	test_device_name
+        mov     ax,offset device_queues
+        push    ax
+        mov     ax,si
+        mov     cl,4h
+        shl     ax,cl
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr device_queue_template
+        mov     byte ptr [bx],al
+        mov     ax,offset device_queues
+        push    ax
+        mov     ax,si
+        mov     cl,4h
+        shl     ax,cl
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr device_queue_template+1
+        mov     byte ptr 1h[bx],al
+        mov     ax,offset device_queues
+        push    ax
+        mov     ax,si
+        mov     cl,4h
+        shl     ax,cl
+        pop     bx
+        add     bx,ax
+        mov     ax,word ptr device_queue_template+2
+        mov     word ptr 2h[bx],ax
+        mov     ax,offset device_queues
+        push    ax
+        mov     ax,si
+        mov     cl,4h
+        shl     ax,cl
+        pop     bx
+        add     bx,ax
+        mov     ax,word ptr device_queue_template+4
+        mov     word ptr 4h[bx],ax
+        mov     ax,offset device_queues
+        push    ax
+        mov     ax,si
+        mov     cl,4h
+        shl     ax,cl
+        pop     bx
+        add     bx,ax
+        mov     ax,word ptr device_queue_template+6
+        mov     word ptr 6h[bx],ax
+        sub     di,di
+        jmps    test_device_name
 
 copy_device_name:
-	mov	ax,offset device_queues
-	push	ax
-	mov	ax,si
-	mov	cl,4h
-	shl	ax,cl
-	pop	bx
-	add	ax,bx
-	add	ax,8h
-	add	ax,di
-	push	ax
-	mov	ax,0f84h
-	add	ax,di
-	xchg	ax,bx
-	mov	al,byte ptr [bx]
-	pop	bx
-	mov	byte ptr [bx],al
-	inc	di
+        mov     ax,offset device_queues
+        push    ax
+        mov     ax,si
+        mov     cl,4h
+        shl     ax,cl
+        pop     bx
+        add     ax,bx
+        add     ax,8h
+        add     ax,di
+        push    ax
+        mov     ax,0f84h
+        add     ax,di
+        xchg    ax,bx
+        mov     al,byte ptr [bx]
+        pop     bx
+        mov     byte ptr [bx],al
+        inc     di
 
 test_device_name:
-	cmp	di,8h
-	jc	copy_device_name
-	mov	ax,offset device_queues
-	push	ax
-	mov	ax,si
-	mov	cl,4h
-	shl	ax,cl
-	pop	bx
-	add	ax,bx
-	add	ax,0bh
-	push	ax
-	mov	ax,si
-	mov	bx,64h
-	sub	dx,dx
-	div	bx
-	add	ax,30h
-	pop	bx
-	mov	byte ptr [bx],al
-	mov	ax,offset device_queues
-	push	ax
-	mov	ax,si
-	mov	cl,4h
-	shl	ax,cl
-	pop	bx
-	add	ax,bx
-	add	ax,0ch
-	push	ax
-	mov	ax,si
-	mov	bx,64h
-	sub	dx,dx
-	div	bx
-	xchg	ax,dx
-	mov	bx,0ah
-	sub	dx,dx
-	div	bx
-	add	ax,30h
-	pop	bx
-	mov	byte ptr [bx],al
-	mov	ax,offset device_queues
-	push	ax
-	mov	ax,si
-	mov	cl,4h
-	shl	ax,cl
-	pop	bx
-	add	ax,bx
-	add	ax,0dh
-	push	ax
-	mov	ax,si
-	mov	bx,0ah
-	sub	dx,dx
-	div	bx
-	xchg	ax,dx
-	add	ax,30h
-	pop	bx
-	mov	byte ptr [bx],al
-	mov	ax,offset device_queues
-	push	ax
-	mov	ax,si
-	mov	cl,4h
-	shl	ax,cl
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,87h	; Q_OPEN
-	push	ax
-	call	xdos
-	add	sp,4h
-	or	ax,ax
-	jnz	advance_device_queue
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,0dh
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	byte ptr [bx],0h
+        cmp     di,8h
+        jc      copy_device_name
+        mov     ax,offset device_queues
+        push    ax
+        mov     ax,si
+        mov     cl,4h
+        shl     ax,cl
+        pop     bx
+        add     ax,bx
+        add     ax,0bh
+        push    ax
+        mov     ax,si
+        mov     bx,64h
+        sub     dx,dx
+        div     bx
+        add     ax,30h
+        pop     bx
+        mov     byte ptr [bx],al
+        mov     ax,offset device_queues
+        push    ax
+        mov     ax,si
+        mov     cl,4h
+        shl     ax,cl
+        pop     bx
+        add     ax,bx
+        add     ax,0ch
+        push    ax
+        mov     ax,si
+        mov     bx,64h
+        sub     dx,dx
+        div     bx
+        xchg    ax,dx
+        mov     bx,0ah
+        sub     dx,dx
+        div     bx
+        add     ax,30h
+        pop     bx
+        mov     byte ptr [bx],al
+        mov     ax,offset device_queues
+        push    ax
+        mov     ax,si
+        mov     cl,4h
+        shl     ax,cl
+        pop     bx
+        add     ax,bx
+        add     ax,0dh
+        push    ax
+        mov     ax,si
+        mov     bx,0ah
+        sub     dx,dx
+        div     bx
+        xchg    ax,dx
+        add     ax,30h
+        pop     bx
+        mov     byte ptr [bx],al
+        mov     ax,offset device_queues
+        push    ax
+        mov     ax,si
+        mov     cl,4h
+        shl     ax,cl
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,87h  ; Q_OPEN
+        push    ax
+        call    xdos
+        add     sp,4h
+        or      ax,ax
+        jnz     advance_device_queue
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,device_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     byte ptr [bx],0h
 
 advance_device_queue:
-	inc	si
+        inc     si
 
 test_queue_count:
-	cmp	si,10h
-	jnc	open_index_file
-	jmp	initialize_device_queue
+        cmp     si,device_slot_count
+        jnc     open_index_file
+        jmp     initialize_device_queue
 
+; Create INDEX.DSP, or reopen and recover it if it already exists.
 open_index_file:
-	mov	word ptr (0-13h)[bp],0ffffh
-	or	byte ptr .1013h,80h
-	mov	al,byte ptr (0-5h)[bp]
-	mov	byte ptr index_fcb,al
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,16h	; F_MAKE
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	word ptr (0-15h)[bp],ax
-	or	ax,ax
-	jz	initialize_job_table
-	cmp	word ptr (0-15h)[bp],8ffh
-	jnz	exit_index_create_error
-	or	byte ptr .1013h,80h
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,0fh	; F_OPEN
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	word ptr (0-13h)[bp],ax
-	or	ax,ax
-	jz	index_ready
-	cmp	word ptr (0-13h)[bp],4h
-	jnc	exit_index_error
-	mov	word ptr (0-13h)[bp],0h
-	jmps	index_ready
+        mov     word ptr local_work_index[bp],0ffffh
+        or      byte ptr index_fcb+5,80h
+        mov     al,byte ptr local_system_drive[bp]
+        mov     byte ptr index_fcb,al
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,16h  ; F_MAKE
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     word ptr local_result_word[bp],ax
+        or      ax,ax
+        jz      initialize_job_table
+        cmp     word ptr local_result_word[bp],8ffh
+        jnz     exit_index_create_error
+        or      byte ptr index_fcb+5,80h
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,0fh  ; F_OPEN
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     word ptr local_work_index[bp],ax
+        or      ax,ax
+        jz      index_ready
+        cmp     word ptr local_work_index[bp],4h
+        jnc     exit_index_error
+        mov     word ptr local_work_index[bp],0h
+        jmps    index_ready
 
 exit_index_error:
-	jmp	leave_spooler
+        jmp     leave_spooler
 
 index_ready:
-	jmps	initialize_job_table
+        jmps    initialize_job_table
 
 exit_index_create_error:
-	jmp	leave_spooler
+        jmp     leave_spooler
 
 ; Build the job-number table before reading saved jobs from INDEX.DSP.
 initialize_job_table:
-	sub	si,si
-	jmps	test_job_count
+        sub     si,si
+        jmps    test_job_count
 
 clear_job_slot:
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,si
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	byte ptr [bx],0ffh
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,si
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 1h[bx],0h
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,si
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 2h[bx],0ffh
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,si
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 3h[bx],0ffh
-	inc	si
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,si
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     byte ptr [bx],0ffh
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,si
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 1h[bx],0h
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,si
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 2h[bx],0ffh
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,si
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 3h[bx],0ffh
+        inc     si
 
 test_job_count:
-	cmp	si,0ffh
-	jc	clear_job_slot
-	mov	ax,offset index_record
-	mov	word ptr .current_dma,ax
-	mov	ax,offset index_record
-	push	ax
-	mov	ax,1ah	; F_DMAOFF
-	push	ax
-	call	xdos
-	add	sp,4h
-	cmp	word ptr (0-15h)[bp],0h
-	jnz	check_index_open
-	sub	si,si
-	jmps	test_blank_count
+        cmp     si,0ffh
+        jc      clear_job_slot
+        mov     ax,offset index_record
+        mov     word ptr current_dma,ax
+        mov     ax,offset index_record
+        push    ax
+        mov     ax,1ah  ; F_DMAOFF
+        push    ax
+        call    xdos
+        add     sp,4h
+        cmp     word ptr local_result_word[bp],0h
+        jnz     check_index_open
+        sub     si,si
+        jmps    test_blank_count
 
 blank_index_byte:
-	mov	byte ptr index_record[si],20h
-	inc	si
+        mov     byte ptr index_record[si],20h
+        inc     si
 
 test_blank_count:
-	cmp	si,80h
-	jc	blank_index_byte
-	sub	si,si
-	jmps	test_format_count
+        cmp     si,record_bytes
+        jc      blank_index_byte
+        sub     si,si
+        jmps    test_format_count
 
 format_index_record:
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,15h	; F_WRITE
-	push	ax
-	call	xdos
-	add	sp,4h
-	inc	si
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,15h  ; F_WRITE
+        push    ax
+        call    xdos
+        add     sp,4h
+        inc     si
 
 test_format_count:
-	cmp	si,7fh
-	jc	format_index_record
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,10h	; F_CLOSE
-	push	ax
-	call	xdos
-	add	sp,4h
-	or	byte ptr .1018h,80h
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,1eh	; F_ATTRIB
-	push	ax
-	call	xdos
-	add	sp,4h
-	or	byte ptr .1013h,80h
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,0fh	; F_OPEN
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	byte ptr (0-6h)[bp],0h
-	jmp	finish_recovery
+        cmp     si,7fh
+        jc      format_index_record
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,10h  ; F_CLOSE
+        push    ax
+        call    xdos
+        add     sp,4h
+        or      byte ptr index_fcb+10,80h
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,1eh  ; F_ATTRIB
+        push    ax
+        call    xdos
+        add     sp,4h
+        or      byte ptr index_fcb+5,80h
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,0fh  ; F_OPEN
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     byte ptr local_job_no[bp],0h
+        jmp     finish_recovery
 
 check_index_open:
-	cmp	word ptr (0-13h)[bp],0h
-	jz	begin_index_scan
-	jmp	finish_recovery
+        cmp     word ptr local_work_index[bp],0h
+        jz      begin_index_scan
+        jmp     finish_recovery
 
 begin_index_scan:
-	sub	si,si
-	jmp	test_index_entries
+        sub     si,si
+        jmp     test_index_entries
 
+; Each 128-byte random record holds two 64-byte entries. Job parity selects the half.
 read_index_half:
-	mov	ax,si
-	and	ax,1h
-	or	ax,ax
-	jnz	copy_index_entry
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,14h	; F_READ
-	push	ax
-	call	xdos
-	add	sp,4h
-	or	ax,ax
-	jz	copy_index_entry
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,10h	; F_CLOSE
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,13h	; F_DELETE
-	push	ax
-	call	xdos
-	add	sp,4h
-	jmp	open_index_file
+        mov     ax,si
+        and     ax,1h
+        or      ax,ax
+        jnz     copy_index_entry
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,14h  ; F_READ
+        push    ax
+        call    xdos
+        add     sp,4h
+        or      ax,ax
+        jz      copy_index_entry
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,10h  ; F_CLOSE
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,13h  ; F_DELETE
+        push    ax
+        call    xdos
+        add     sp,4h
+        jmp     open_index_file
 
 copy_index_entry:
-	mov	ax,offset index_record
-	push	ax
-	mov	ax,si
-	and	ax,1h
-	mov	cl,6h
-	shl	ax,cl
-	pop	bx
-	add	ax,bx
-	mov	word ptr (0-0fh)[bp],ax
-	mov	bx,word ptr (0-0fh)[bp]
-	cmp	byte ptr 0ch[bx],5h
-	jc	check_entry_state
-	jmp	advance_index_entry
+        mov     ax,offset index_record
+        push    ax
+        mov     ax,si
+        and     ax,1h
+        mov     cl,6h
+        shl     ax,cl
+        pop     bx
+        add     ax,bx
+        mov     word ptr local_index_entry[bp],ax
+        mov     bx,word ptr local_index_entry[bp]
+        cmp     byte ptr 0ch[bx],5h
+        jc      check_entry_state
+        jmp     advance_index_entry
 
 check_entry_state:
-	mov	bx,word ptr (0-0fh)[bp]
-	cmp	byte ptr 0ch[bx],1h
-	ja	recover_next_job
-	jmp	advance_index_entry
+        mov     bx,word ptr local_index_entry[bp]
+        cmp     byte ptr 0ch[bx],1h
+        ja      recover_next_job
+        jmp     advance_index_entry
 
 recover_next_job:
-	mov	ax,si
-	inc	ax
-	mov	bx,0feh
-	sub	dx,dx
-	div	bx
-	xchg	ax,dx
-	mov	byte ptr (0-6h)[bp],al
-	mov	bx,word ptr (0-0fh)[bp]
-	mov	byte ptr 0ch[bx],2h
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,si
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	bx,word ptr (0-0fh)[bp]
-	mov	al,byte ptr 0eh[bx]
-	pop	bx
-	mov	byte ptr 1h[bx],al
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,si
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 2h[bx],0ffh
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,si
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	bx,word ptr (0-0fh)[bp]
-	mov	al,byte ptr 0dh[bx]
-	pop	bx
-	mov	byte ptr 3h[bx],al
-	mov	byte ptr (0-0ah)[bp],0feh
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr (0-0ah)[bp]
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr [bx]
-	mov	byte ptr (0-0bh)[bp],al
-	sub	di,di
-	jmps	test_saved_chain
+        mov     ax,si
+        inc     ax
+        mov     bx,0feh
+        sub     dx,dx
+        div     bx
+        xchg    ax,dx
+        mov     byte ptr local_job_no[bp],al
+        mov     bx,word ptr local_index_entry[bp]
+        mov     byte ptr 0ch[bx],2h
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,si
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     bx,word ptr local_index_entry[bp]
+        mov     al,byte ptr 0eh[bx]
+        pop     bx
+        mov     byte ptr 1h[bx],al
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,si
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 2h[bx],0ffh
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,si
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     bx,word ptr local_index_entry[bp]
+        mov     al,byte ptr 0dh[bx]
+        pop     bx
+        mov     byte ptr 3h[bx],al
+        mov     byte ptr local_previous_job[bp],0feh
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr local_previous_job[bp]
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr [bx]
+        mov     byte ptr local_next_job[bp],al
+        sub     di,di
+        jmps    test_saved_chain
 
 follow_saved_link:
-	cmp	byte ptr (0-0bh)[bp],0ffh
-	jz	insert_recovered_job
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,si
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr 1h[bx]
-	push	ax
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr (0-0bh)[bp]
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr 1h[bx]
-	pop	bx
-	cmp	bl,al
-	jnc	advance_saved_link
+        cmp     byte ptr local_next_job[bp],0ffh
+        jz      insert_recovered_job
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,si
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr 1h[bx]
+        push    ax
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr local_next_job[bp]
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr 1h[bx]
+        pop     bx
+        cmp     bl,al
+        jnc     advance_saved_link
 
 insert_recovered_job:
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr (0-0ah)[bp]
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,si
-	pop	bx
-	mov	byte ptr [bx],al
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,si
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr (0-0bh)[bp]
-	mov	byte ptr [bx],al
-	jmps	advance_index_entry
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr local_previous_job[bp]
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,si
+        pop     bx
+        mov     byte ptr [bx],al
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,si
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr local_next_job[bp]
+        mov     byte ptr [bx],al
+        jmps    advance_index_entry
 
 advance_saved_link:
-	mov	al,byte ptr (0-0bh)[bp]
-	mov	byte ptr (0-0ah)[bp],al
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr (0-0bh)[bp]
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr [bx]
-	mov	byte ptr (0-0bh)[bp],al
-	inc	di
+        mov     al,byte ptr local_next_job[bp]
+        mov     byte ptr local_previous_job[bp],al
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr local_next_job[bp]
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr [bx]
+        mov     byte ptr local_next_job[bp],al
+        inc     di
 
 test_saved_chain:
-	cmp	di,0feh
-	jc	follow_saved_link
+        cmp     di,job_number_count
+        jc      follow_saved_link
 
 advance_index_entry:
-	inc	si
+        inc     si
 
 test_index_entries:
-	cmp	si,0feh
-	jnc	finish_recovery
-	jmp	read_index_half
+        cmp     si,job_number_count
+        jnc     finish_recovery
+        jmp     read_index_half
 
 finish_recovery:
-	mov	byte ptr .index_active,1h
-	mov	ax,0c8h
-	push	ax
-	mov	al,91h	; P_PRIORITY
-	push	ax
-	call	xdos
-	add	sp,4h
-	jmp	schedule_ready_jobs
+        mov     byte ptr index_active,1h
+        mov     ax,0c8h
+        push    ax
+        mov     al,91h  ; P_PRIORITY
+        push    ax
+        call    xdos
+        add     sp,4h
+        jmp     schedule_ready_jobs
 
 ; Block on SPLIN, then dispatch the first byte of the received message.
 
 receive_request:
-	mov	ax,offset input_queue
-	push	ax
-	mov	ax,89h	; Q_READ
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	al,byte ptr request
-	xor	ah,ah
-	mov	word ptr (0-9h)[bp],ax
-	jmp	dispatch_request
+        mov     ax,offset input_queue
+        push    ax
+        mov     ax,89h  ; Q_READ
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     al,byte ptr request
+        xor     ah,ah
+        mov     word ptr local_command_word[bp],ax
+        jmp     dispatch_request
 
 ; Allocate a spool entry for the requested device, filename and copy count.
 
 start_job:
-	mov	ax,offset despool_status
-	push	ax
-	mov	al,byte ptr request_device
-	xor	ah,ah
-	mov	dx,0dh
-	mul	dx
-	pop	bx
-	add	bx,ax
-	cmp	byte ptr [bx],0ffh
-	jnz	search_spool_slots
-	mov	byte ptr request,1h
-	jmp	send_reply
+        mov     ax,offset despool_status
+        push    ax
+        mov     al,byte ptr request_device
+        xor     ah,ah
+        mov     dx,0dh
+        mul     dx
+        pop     bx
+        add     bx,ax
+        cmp     byte ptr [bx],0ffh
+        jnz     search_spool_slots
+        mov     byte ptr request,1h
+        jmp     send_reply
 
 search_spool_slots:
-	sub	si,si
-	jmps	test_spool_slots
+        sub     si,si
+        jmps    test_spool_slots
 
 inspect_spool_slot:
-	mov	ax,offset spool_status
-	push	ax
-	mov	al,byte ptr (0-7h)[bp]
-	xor	ah,ah
-	add	ax,si
-	and	ax,7h
-	mov	dx,18h
-	mul	dx
-	pop	bx
-	add	bx,ax
-	cmp	byte ptr [bx],0ffh
-	jz	check_spool_capacity
-	inc	si
+        mov     ax,offset spool_status
+        push    ax
+        mov     al,byte ptr local_spool_slot[bp]
+        xor     ah,ah
+        add     ax,si
+        and     ax,7h
+        mov     dx,18h
+        mul     dx
+        pop     bx
+        add     bx,ax
+        cmp     byte ptr [bx],0ffh
+        jz      check_spool_capacity
+        inc     si
 
 test_spool_slots:
-	cmp	si,8h
-	jc	inspect_spool_slot
+        cmp     si,spool_slot_count
+        jc      inspect_spool_slot
 
 check_spool_capacity:
-	cmp	si,8h
-	jnz	reserve_spool_slot
-	mov	byte ptr request,3h
-	jmp	send_reply
+        cmp     si,spool_slot_count
+        jnz     reserve_spool_slot
+        mov     byte ptr request,3h
+        jmp     send_reply
 
 reserve_spool_slot:
-	mov	al,byte ptr (0-7h)[bp]
-	xor	ah,ah
-	add	ax,si
-	inc	ax
-	and	ax,7h
-	mov	byte ptr (0-7h)[bp],al
-	sub	si,si
-	jmps	test_job_slots
+        mov     al,byte ptr local_spool_slot[bp]
+        xor     ah,ah
+        add     ax,si
+        inc     ax
+        and     ax,7h
+        mov     byte ptr local_spool_slot[bp],al
+        sub     si,si
+        jmps    test_job_slots
 
 inspect_job_slot:
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr (0-6h)[bp]
-	xor	ah,ah
-	add	ax,si
-	mov	bx,0feh
-	sub	dx,dx
-	div	bx
-	xchg	ax,dx
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	cmp	byte ptr 1h[bx],0h
-	jz	check_job_capacity
-	inc	si
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr local_job_no[bp]
+        xor     ah,ah
+        add     ax,si
+        mov     bx,0feh
+        sub     dx,dx
+        div     bx
+        xchg    ax,dx
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        cmp     byte ptr 1h[bx],0h
+        jz      check_job_capacity
+        inc     si
 
 test_job_slots:
-	cmp	si,0feh
-	jc	inspect_job_slot
+        cmp     si,job_number_count
+        jc      inspect_job_slot
 
 check_job_capacity:
-	cmp	si,0feh
-	jnz	assign_job_number
-	mov	byte ptr request,4h
-	jmp	send_reply
+        cmp     si,job_number_count
+        jnz     assign_job_number
+        mov     byte ptr request,4h
+        jmp     send_reply
 
 assign_job_number:
-	mov	al,byte ptr (0-6h)[bp]
-	xor	ah,ah
-	add	ax,si
-	inc	ax
-	mov	bx,0feh
-	sub	dx,dx
-	div	bx
-	xchg	ax,dx
-	mov	byte ptr (0-6h)[bp],al
-	cmp	byte ptr (0-7h)[bp],0h
-	jnz	normalize_spool_number
-	mov	si,7h
-	jmps	check_first_job
+        mov     al,byte ptr local_job_no[bp]
+        xor     ah,ah
+        add     ax,si
+        inc     ax
+        mov     bx,0feh
+        sub     dx,dx
+        div     bx
+        xchg    ax,dx
+        mov     byte ptr local_job_no[bp],al
+        cmp     byte ptr local_spool_slot[bp],0h
+        jnz     normalize_spool_number
+        mov     si,7h
+        jmps    check_first_job
 
 normalize_spool_number:
-	mov	al,byte ptr (0-7h)[bp]
-	xor	ah,ah
-	dec	ax
-	mov	si,ax
+        mov     al,byte ptr local_spool_slot[bp]
+        xor     ah,ah
+        dec     ax
+        mov     si,ax
 
 check_first_job:
-	cmp	byte ptr (0-6h)[bp],0h
-	jnz	update_job_number
-	mov	di,0fdh
-	jmps	select_spool_fcb
+        cmp     byte ptr local_job_no[bp],0h
+        jnz     update_job_number
+        mov     di,0fdh
+        jmps    select_spool_fcb
 
 update_job_number:
-	mov	al,byte ptr (0-6h)[bp]
-	xor	ah,ah
-	dec	ax
-	mov	di,ax
+        mov     al,byte ptr local_job_no[bp]
+        xor     ah,ah
+        dec     ax
+        mov     di,ax
 
+; Each submission slot owns a 36-byte FCB and a 128-byte accumulation buffer.
 select_spool_fcb:
-	mov	ax,spool_fcbs
-	push	ax
-	mov	ax,24h
-	mul	si
-	pop	bx
-	add	ax,bx
-	mov	word ptr (0-0dh)[bp],ax
-	mov	word ptr (0-13h)[bp],0h
-	jmps	test_fcb_length
+        mov     ax,offset spool_fcbs
+        push    ax
+        mov     ax,fcb_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        mov     word ptr local_work_record[bp],ax
+        mov     word ptr local_work_index[bp],0h
+        jmps    test_fcb_length
 
 clear_fcb_byte:
-	mov	ax,word ptr (0-0dh)[bp]
-	add	ax,word ptr (0-13h)[bp]
-	xchg	ax,bx
-	mov	byte ptr [bx],0h
-	inc	word ptr (0-13h)[bp]
+        mov     ax,word ptr local_work_record[bp]
+        add     ax,word ptr local_work_index[bp]
+        xchg    ax,bx
+        mov     byte ptr [bx],0h
+        inc     word ptr local_work_index[bp]
 
 test_fcb_length:
-	cmp	word ptr (0-13h)[bp],24h
-	jc	clear_fcb_byte
-	mov	ax,offset spool_filename
-	mov	word ptr .0cb4h,ax
-	mov	ax,spool_fcbs
-	push	ax
-	mov	ax,24h
-	mul	si
-	pop	bx
-	add	ax,bx
-	mov	word ptr .0cb6h,ax
-	mov	ax,0cb4h
-	push	ax
-	mov	ax,98h	; F_PARSE
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	word ptr (0-13h)[bp],ax
-	or	ax,ax
-	jz	prepare_spool_file
-	mov	byte ptr request,2h
-	jmp	send_reply
+        cmp     word ptr local_work_index[bp],24h
+        jc      clear_fcb_byte
+        mov     ax,offset spool_filename
+        mov     word ptr parse_args,ax
+        mov     ax,offset spool_fcbs
+        push    ax
+        mov     ax,fcb_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        mov     word ptr parse_target,ax
+        mov     ax,offset parse_args
+        push    ax
+        mov     ax,98h  ; F_PARSE
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     word ptr local_work_index[bp],ax
+        or      ax,ax
+        jz      prepare_spool_file
+        mov     byte ptr request,2h
+        jmp     send_reply
 
 prepare_spool_file:
-	mov	ax,spool_fcbs
-	push	ax
-	mov	ax,24h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr (0-5h)[bp]
-	mov	byte ptr [bx],al
-	mov	ax,spool_fcbs
-	push	ax
-	mov	ax,24h
-	mul	si
-	pop	bx
-	add	ax,bx
-	add	ax,4h
-	push	ax
-	mov	ax,di
-	mov	cl,4h
-	shr	ax,cl
-	and	ax,0fh
-	add	ax,41h
-	pop	bx
-	mov	byte ptr [bx],al
-	mov	ax,spool_fcbs
-	push	ax
-	mov	ax,24h
-	mul	si
-	pop	bx
-	add	ax,bx
-	add	ax,5h
-	push	ax
-	mov	ax,di
-	and	ax,0fh
-	add	ax,41h
-	pop	bx
-	mov	byte ptr [bx],al
-	mov	ax,spool_fcbs
-	push	ax
-	mov	ax,24h
-	mul	si
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,13h	; F_DELETE
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,spool_fcbs
-	push	ax
-	mov	ax,24h
-	mul	si
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,16h	; F_MAKE
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	word ptr (0-13h)[bp],ax
-	or	ax,ax
-	jz	fill_submission_status
-	mov	byte ptr request,2h
-	jmp	send_reply
+        mov     ax,offset spool_fcbs
+        push    ax
+        mov     ax,fcb_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr local_system_drive[bp]
+        mov     byte ptr [bx],al
+        mov     ax,offset spool_fcbs
+        push    ax
+        mov     ax,fcb_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        add     ax,4h
+        push    ax
+        mov     ax,di
+        mov     cl,4h
+        shr     ax,cl
+        and     ax,0fh
+        add     ax,41h
+        pop     bx
+        mov     byte ptr [bx],al
+        mov     ax,offset spool_fcbs
+        push    ax
+        mov     ax,fcb_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        add     ax,5h
+        push    ax
+        mov     ax,di
+        and     ax,0fh
+        add     ax,41h
+        pop     bx
+        mov     byte ptr [bx],al
+        mov     ax,offset spool_fcbs
+        push    ax
+        mov     ax,fcb_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,13h  ; F_DELETE
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset spool_fcbs
+        push    ax
+        mov     ax,fcb_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,16h  ; F_MAKE
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     word ptr local_work_index[bp],ax
+        or      ax,ax
+        jz      fill_submission_status
+        mov     byte ptr request,2h
+        jmp     send_reply
 
 fill_submission_status:
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,di
-	pop	bx
-	mov	byte ptr [bx],al
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	word ptr 16h[bx],0h
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 0ch[bx],1h
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr request_device
-	mov	byte ptr 0dh[bx],al
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 0fh[bx],0h
-	cmp	byte ptr request_name,0h
-	jnz	use_request_name
-	mov	word ptr (0-13h)[bp],0h
-	jmps	test_name_stem
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,di
+        pop     bx
+        mov     byte ptr [bx],al
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     word ptr 16h[bx],0h
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 0ch[bx],1h
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr request_device
+        mov     byte ptr 0dh[bx],al
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 0fh[bx],0h
+        cmp     byte ptr request_name,0h
+        jnz     use_request_name
+        mov     word ptr local_work_index[bp],0h
+        jmps    test_name_stem
 
 copy_name_stem:
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	ax,bx
-	inc	ax
-	add	ax,word ptr (0-13h)[bp]
-	push	ax
-	mov	ax,spool_fcbs
-	push	ax
-	mov	ax,24h
-	mul	si
-	pop	bx
-	add	ax,bx
-	inc	ax
-	add	ax,word ptr (0-13h)[bp]
-	xchg	ax,bx
-	mov	al,byte ptr [bx]
-	pop	bx
-	mov	byte ptr [bx],al
-	inc	word ptr (0-13h)[bp]
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        inc     ax
+        add     ax,word ptr local_work_index[bp]
+        push    ax
+        mov     ax,offset spool_fcbs
+        push    ax
+        mov     ax,fcb_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        inc     ax
+        add     ax,word ptr local_work_index[bp]
+        xchg    ax,bx
+        mov     al,byte ptr [bx]
+        pop     bx
+        mov     byte ptr [bx],al
+        inc     word ptr local_work_index[bp]
 
 test_name_stem:
-	cmp	word ptr (0-13h)[bp],8h
-	jc	copy_name_stem
-	mov	word ptr (0-13h)[bp],0h
-	jmps	test_extension
+        cmp     word ptr local_work_index[bp],8h
+        jc      copy_name_stem
+        mov     word ptr local_work_index[bp],0h
+        jmps    test_extension
 
 copy_extension:
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	ax,bx
-	inc	ax
-	push	ax
-	mov	ax,word ptr (0-13h)[bp]
-	add	ax,8h
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,spool_fcbs
-	push	ax
-	mov	ax,24h
-	mul	si
-	pop	bx
-	add	ax,bx
-	add	ax,9h
-	add	ax,word ptr (0-13h)[bp]
-	xchg	ax,bx
-	mov	al,byte ptr [bx]
-	pop	bx
-	mov	byte ptr [bx],al
-	inc	word ptr (0-13h)[bp]
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        inc     ax
+        push    ax
+        mov     ax,word ptr local_work_index[bp]
+        add     ax,8h
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,offset spool_fcbs
+        push    ax
+        mov     ax,fcb_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        add     ax,9h
+        add     ax,word ptr local_work_index[bp]
+        xchg    ax,bx
+        mov     al,byte ptr [bx]
+        pop     bx
+        mov     byte ptr [bx],al
+        inc     word ptr local_work_index[bp]
 
 test_extension:
-	cmp	word ptr (0-13h)[bp],3h
-	jc	copy_extension
-	jmps	select_priority
+        cmp     word ptr local_work_index[bp],3h
+        jc      copy_extension
+        jmps    select_priority
 
 use_request_name:
-	mov	word ptr (0-13h)[bp],0h
-	jmps	test_name_length
+        mov     word ptr local_work_index[bp],0h
+        jmps    test_name_length
 
 copy_request_name:
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	ax,bx
-	inc	ax
-	add	ax,word ptr (0-13h)[bp]
-	push	ax
-	mov	bx,offset request_name
-	add	bx,word ptr (0-13h)[bp]
-	mov	al,byte ptr [bx]
-	pop	bx
-	mov	byte ptr [bx],al
-	inc	word ptr (0-13h)[bp]
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        inc     ax
+        add     ax,word ptr local_work_index[bp]
+        push    ax
+        mov     bx,offset request_name
+        add     bx,word ptr local_work_index[bp]
+        mov     al,byte ptr [bx]
+        pop     bx
+        mov     byte ptr [bx],al
+        inc     word ptr local_work_index[bp]
 
 test_name_length:
-	cmp	word ptr (0-13h)[bp],0bh
-	jc	copy_request_name
+        cmp     word ptr local_work_index[bp],0bh
+        jc      copy_request_name
 
 select_priority:
-	cmp	byte ptr .0cc7h,0h
-	jnz	default_priority
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 0eh[bx],80h
-	jmps	set_job_priority
+        cmp     byte ptr request_priority,0h
+        jnz     default_priority
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 0eh[bx],80h
+        jmps    set_job_priority
 
 default_priority:
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr .0cc7h
-	mov	byte ptr 0eh[bx],al
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr request_priority
+        mov     byte ptr 0eh[bx],al
 
 set_job_priority:
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr .0cc8h
-	mov	byte ptr 0fh[bx],al
-	mov	al,byte ptr .0cc9h
-	or	al,al
-	jnz	select_flags
-	jmp	store_job_flags
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr request_flags
+        mov     byte ptr 0fh[bx],al
+        mov     al,byte ptr request_copies
+        or      al,al
+        jnz     select_flags
+        jmp     store_job_flags
 
 select_flags:
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr .0cc9h
-	mov	byte ptr 10h[bx],al
-	jmps	set_copy_counts
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr request_copies
+        mov     byte ptr 10h[bx],al
+        jmps    set_copy_counts
 
 store_job_flags:
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 10h[bx],1h
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 10h[bx],1h
 
 set_copy_counts:
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr 10h[bx]
-	pop	bx
-	mov	byte ptr 11h[bx],al
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	word ptr 12h[bx],0h
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	word ptr 14h[bx],0h
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr [bx]
-	mov	byte ptr request_job,al
-	mov	word ptr (0-13h)[bp],0h
-	jmps	test_export_name
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr 10h[bx]
+        pop     bx
+        mov     byte ptr 11h[bx],al
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     word ptr 12h[bx],0h
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     word ptr 14h[bx],0h
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr [bx]
+        mov     byte ptr request_job,al
+        mov     word ptr local_work_index[bp],0h
+        jmps    test_export_name
 
 export_job_name:
-	mov	ax,offset request_name
-	add	ax,word ptr (0-13h)[bp]
-	push	ax
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	ax,bx
-	inc	ax
-	add	ax,word ptr (0-13h)[bp]
-	xchg	ax,bx
-	mov	al,byte ptr [bx]
-	pop	bx
-	mov	byte ptr [bx],al
-	inc	word ptr (0-13h)[bp]
+        mov     ax,offset request_name
+        add     ax,word ptr local_work_index[bp]
+        push    ax
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        inc     ax
+        add     ax,word ptr local_work_index[bp]
+        xchg    ax,bx
+        mov     al,byte ptr [bx]
+        pop     bx
+        mov     byte ptr [bx],al
+        inc     word ptr local_work_index[bp]
 
 test_export_name:
-	cmp	word ptr (0-13h)[bp],0bh
-	jc	export_job_name
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr 0ch[bx]
-	mov	byte ptr .0cc5h,al
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr 0dh[bx]
-	mov	byte ptr request_device,al
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr 0eh[bx]
-	mov	byte ptr .0cc7h,al
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr 10h[bx]
-	mov	byte ptr .0cc9h,al
-	mov	al,byte ptr .0cc9h
-	mov	byte ptr .0ccah,al
-	mov	byte ptr request,0h
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr 0fh[bx]
-	mov	byte ptr .0cc8h,al
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,di
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr 0eh[bx]
-	pop	bx
-	mov	byte ptr 1h[bx],al
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,di
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,si
-	pop	bx
-	mov	byte ptr 2h[bx],al
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,di
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr 0dh[bx]
-	pop	bx
-	mov	byte ptr 3h[bx],al
-	jmp	send_reply
+        cmp     word ptr local_work_index[bp],0bh
+        jc      export_job_name
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr 0ch[bx]
+        mov     byte ptr request_job_status,al
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr 0dh[bx]
+        mov     byte ptr request_device,al
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr 0eh[bx]
+        mov     byte ptr request_priority,al
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr 10h[bx]
+        mov     byte ptr request_copies,al
+        mov     al,byte ptr request_copies
+        mov     byte ptr copies_left,al
+        mov     byte ptr request,0h
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr 0fh[bx]
+        mov     byte ptr request_flags,al
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,di
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr 0eh[bx]
+        pop     bx
+        mov     byte ptr 1h[bx],al
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,di
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,si
+        pop     bx
+        mov     byte ptr 2h[bx],al
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,di
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr 0dh[bx]
+        pop     bx
+        mov     byte ptr 3h[bx],al
+        jmp     send_reply
 
 ; Accept file data from the submitter.
 
 append_job_data:
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr request_job
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	cmp	byte ptr 1h[bx],0h
-	jnz	lookup_data_job
-	jmp	receive_request
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr request_job
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        cmp     byte ptr 1h[bx],0h
+        jnz     lookup_data_job
+        jmp     receive_request
 
 lookup_data_job:
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr request_job
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr 2h[bx]
-	xor	ah,ah
-	mov	di,ax
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	di
-	pop	bx
-	add	bx,ax
-	cmp	byte ptr 0ch[bx],1h
-	jz	prepare_data_buffer
-	jmp	receive_request
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr request_job
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr 2h[bx]
+        xor     ah,ah
+        mov     di,ax
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     di
+        pop     bx
+        add     bx,ax
+        cmp     byte ptr 0ch[bx],1h
+        jz      prepare_data_buffer
+        jmp     receive_request
 
 prepare_data_buffer:
-	mov	ax,spool_buffers
-	push	ax
-	mov	ax,di
-	mov	cl,7h
-	shl	ax,cl
-	pop	bx
-	add	ax,bx
-	cmp	word ptr .current_dma,ax
-	jz	limit_data_length
-	mov	ax,spool_buffers
-	push	ax
-	mov	ax,di
-	mov	cl,7h
-	shl	ax,cl
-	pop	bx
-	add	ax,bx
-	mov	word ptr .current_dma,ax
-	mov	ax,spool_buffers
-	push	ax
-	mov	ax,di
-	mov	cl,7h
-	shl	ax,cl
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,1ah	; F_DMAOFF
-	push	ax
-	call	xdos
-	add	sp,4h
+        mov     ax,offset spool_buffers
+        push    ax
+        mov     ax,di
+        mov     cl,7h
+        shl     ax,cl
+        pop     bx
+        add     ax,bx
+        cmp     word ptr current_dma,ax
+        jz      limit_data_length
+        mov     ax,offset spool_buffers
+        push    ax
+        mov     ax,di
+        mov     cl,7h
+        shl     ax,cl
+        pop     bx
+        add     ax,bx
+        mov     word ptr current_dma,ax
+        mov     ax,offset spool_buffers
+        push    ax
+        mov     ax,di
+        mov     cl,7h
+        shl     ax,cl
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,1ah  ; F_DMAOFF
+        push    ax
+        call    xdos
+        add     sp,4h
 
 limit_data_length:
-	cmp	word ptr .0ccfh,80h
-	jnc	full_record
-	mov	ax,word ptr .0ccfh
-	jmps	check_record_length
+        cmp     word ptr request_length,80h
+        jnc     full_record
+        mov     ax,word ptr request_length
+        jmps    check_record_length
 
 full_record:
-	mov	ax,80h
+        mov     ax,80h
 
 check_record_length:
-	or	ax,ax
-	jna	empty_payload
-	cmp	word ptr .0ccfh,80h
-	jnc	clamp_payload
-	mov	ax,word ptr .0ccfh
-	jmps	use_payload_length
+        or      ax,ax
+        jna     empty_payload
+        cmp     word ptr request_length,80h
+        jnc     clamp_payload
+        mov     ax,word ptr request_length
+        jmps    use_payload_length
 
 clamp_payload:
-	mov	ax,80h
+        mov     ax,80h
 
 use_payload_length:
-	jmps	store_payload_length
+        jmps    store_payload_length
 
 empty_payload:
-	sub	ax,ax
+        sub     ax,ax
 
 store_payload_length:
-	mov	word ptr .0ccfh,ax
-	sub	si,si
-	mov	word ptr (0-15h)[bp],0h
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	di
-	pop	bx
-	add	bx,ax
-	mov	ax,word ptr 16h[bx]
-	mov	word ptr (0-15h)[bp],ax
-	jmp	test_payload_bytes
+        mov     word ptr request_length,ax
+        sub     si,si
+        mov     word ptr local_result_word[bp],0h
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     di
+        pop     bx
+        add     bx,ax
+        mov     ax,word ptr 16h[bx]
+        mov     word ptr local_result_word[bp],ax
+        jmp     test_payload_bytes
 
 append_byte:
-	mov	ax,spool_buffers
-	push	ax
-	mov	ax,di
-	mov	cl,7h
-	shl	ax,cl
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	di
-	pop	bx
-	add	ax,bx
-	add	ax,16h
-	xchg	ax,bx
-	mov	ax,word ptr [bx]
-	inc	word ptr [bx]
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,offset request_data
-	push	ax
-	mov	ax,si
-	inc	si
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr [bx]
-	pop	bx
-	mov	byte ptr [bx],al
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	di
-	pop	bx
-	add	bx,ax
-	cmp	word ptr 16h[bx],80h
-	jnz	test_payload_bytes
-	mov	ax,spool_fcbs
-	push	ax
-	mov	ax,24h
-	mul	di
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,15h	; F_WRITE
-	push	ax
-	call	xdos
-	add	sp,4h
-	or	ax,ax
-	jz	flush_spool_record
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	di
-	pop	bx
-	add	bx,ax
-	or	byte ptr 0fh[bx],2h
+        mov     ax,offset spool_buffers
+        push    ax
+        mov     ax,di
+        mov     cl,7h
+        shl     ax,cl
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     di
+        pop     bx
+        add     ax,bx
+        add     ax,16h
+        xchg    ax,bx
+        mov     ax,word ptr [bx]
+        inc     word ptr [bx]
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,offset request_data
+        push    ax
+        mov     ax,si
+        inc     si
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr [bx]
+        pop     bx
+        mov     byte ptr [bx],al
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     di
+        pop     bx
+        add     bx,ax
+        cmp     word ptr 16h[bx],80h
+        jnz     test_payload_bytes
+        mov     ax,offset spool_fcbs
+        push    ax
+        mov     ax,fcb_bytes
+        mul     di
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,15h  ; F_WRITE
+        push    ax
+        call    xdos
+        add     sp,4h
+        or      ax,ax
+        jz      flush_spool_record
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     di
+        pop     bx
+        add     bx,ax
+        or      byte ptr 0fh[bx],2h
 
 flush_spool_record:
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	di
-	pop	bx
-	add	bx,ax
-	mov	word ptr 16h[bx],0h
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	di
-	pop	bx
-	add	ax,bx
-	add	ax,12h
-	xchg	ax,bx
-	inc	word ptr [bx]
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	di
-	pop	bx
-	add	ax,bx
-	add	ax,14h
-	xchg	ax,bx
-	inc	word ptr [bx]
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     di
+        pop     bx
+        add     bx,ax
+        mov     word ptr 16h[bx],0h
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     di
+        pop     bx
+        add     ax,bx
+        add     ax,12h
+        xchg    ax,bx
+        inc     word ptr [bx]
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     di
+        pop     bx
+        add     ax,bx
+        add     ax,14h
+        xchg    ax,bx
+        inc     word ptr [bx]
 
 test_payload_bytes:
-	cmp	si,word ptr .0ccfh
-	jnc	data_done
-	jmp	append_byte
+        cmp     si,word ptr request_length
+        jnc     data_done
+        jmp     append_byte
 
 data_done:
-	jmp	receive_request
+        jmp     receive_request
 
 ; Finish submission and make the job available for despooling.
 
 finish_job:
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr request_job
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	cmp	byte ptr 1h[bx],0h
-	jnz	lookup_finished_job
-	mov	byte ptr request,1h
-	jmp	send_reply
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr request_job
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        cmp     byte ptr 1h[bx],0h
+        jnz     lookup_finished_job
+        mov     byte ptr request,1h
+        jmp     send_reply
 
 lookup_finished_job:
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr request_job
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr 2h[bx]
-	xor	ah,ah
-	mov	word ptr (0-13h)[bp],ax
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	bx,ax
-	cmp	byte ptr 0ch[bx],1h
-	jz	finalize_buffer
-	mov	byte ptr request,1h
-	jmp	send_reply
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr request_job
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr 2h[bx]
+        xor     ah,ah
+        mov     word ptr local_work_index[bp],ax
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     bx,ax
+        cmp     byte ptr 0ch[bx],1h
+        jz      finalize_buffer
+        mov     byte ptr request,1h
+        jmp     send_reply
 
 finalize_buffer:
-	mov	ax,spool_buffers
-	push	ax
-	mov	ax,word ptr (0-13h)[bp]
-	mov	cl,7h
-	shl	ax,cl
-	pop	bx
-	add	ax,bx
-	mov	word ptr .current_dma,ax
-	mov	ax,spool_buffers
-	push	ax
-	mov	ax,word ptr (0-13h)[bp]
-	mov	cl,7h
-	shl	ax,cl
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,1ah	; F_DMAOFF
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	bx,ax
-	cmp	word ptr 16h[bx],0h
-	jna	close_spool_file
-	mov	ax,spool_fcbs
-	push	ax
-	mov	ax,24h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,15h	; F_WRITE
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	ax,bx
-	add	ax,12h
-	xchg	ax,bx
-	inc	word ptr [bx]
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	ax,bx
-	add	ax,14h
-	xchg	ax,bx
-	inc	word ptr [bx]
+        mov     ax,offset spool_buffers
+        push    ax
+        mov     ax,word ptr local_work_index[bp]
+        mov     cl,7h
+        shl     ax,cl
+        pop     bx
+        add     ax,bx
+        mov     word ptr current_dma,ax
+        mov     ax,offset spool_buffers
+        push    ax
+        mov     ax,word ptr local_work_index[bp]
+        mov     cl,7h
+        shl     ax,cl
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,1ah  ; F_DMAOFF
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     bx,ax
+        cmp     word ptr 16h[bx],0h
+        jna     close_spool_file
+        mov     ax,offset spool_fcbs
+        push    ax
+        mov     ax,fcb_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,15h  ; F_WRITE
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     ax,bx
+        add     ax,12h
+        xchg    ax,bx
+        inc     word ptr [bx]
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     ax,bx
+        add     ax,14h
+        xchg    ax,bx
+        inc     word ptr [bx]
 
 close_spool_file:
-	mov	ax,spool_fcbs
-	push	ax
-	mov	ax,24h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,10h	; F_CLOSE
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,spool_fcbs
-	push	ax
-	mov	ax,24h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	ax,bx
-	add	ax,0ah
-	xchg	ax,bx
-	or	byte ptr [bx],80h
-	mov	ax,spool_fcbs
-	push	ax
-	mov	ax,24h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,1eh	; F_ATTRIB
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 0ch[bx],2h
-	cmp	byte ptr .index_active,1h
-	jz	load_job_index
-	or	byte ptr .1013h,80h
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,0fh	; F_OPEN
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	byte ptr .index_active,1h
+        mov     ax,offset spool_fcbs
+        push    ax
+        mov     ax,fcb_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,10h  ; F_CLOSE
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset spool_fcbs
+        push    ax
+        mov     ax,fcb_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     ax,bx
+        add     ax,0ah
+        xchg    ax,bx
+        or      byte ptr [bx],80h
+        mov     ax,offset spool_fcbs
+        push    ax
+        mov     ax,fcb_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,1eh  ; F_ATTRIB
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 0ch[bx],2h
+        cmp     byte ptr index_active,1h
+        jz      load_job_index
+        or      byte ptr index_fcb+5,80h
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,0fh  ; F_OPEN
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     byte ptr index_active,1h
 
 load_job_index:
-	mov	ax,offset index_record
-	mov	word ptr .current_dma,ax
-	mov	ax,offset index_record
-	push	ax
-	mov	ax,1ah	; F_DMAOFF
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr [bx]
-	xor	ah,ah
-	mov	bx,2h
-	cwd
-	idiv	bx
-	mov	byte ptr .index_random_record,al
-	mov	byte ptr .1031h,0h
-	mov	byte ptr .1030h,0h
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,21h	; F_READRAND
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr [bx]
-	xor	ah,ah
-	mov	bx,2h
-	cwd
-	idiv	bx
-	xchg	ax,dx
-	mov	cl,6h
-	shl	ax,cl
-	mov	word ptr (0-15h)[bp],ax
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	ax,bx
-	mov	word ptr (0-0dh)[bp],ax
-	sub	di,di
-	jmps	test_status_bytes
+        mov     ax,offset index_record
+        mov     word ptr current_dma,ax
+        mov     ax,offset index_record
+        push    ax
+        mov     ax,1ah  ; F_DMAOFF
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr [bx]
+        xor     ah,ah
+        mov     bx,2h
+        cwd
+        idiv    bx
+        mov     byte ptr index_random_record,al
+        mov     byte ptr index_random_record+2,0h
+        mov     byte ptr index_random_record+1,0h
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,21h  ; F_READRAND
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr [bx]
+        xor     ah,ah
+        mov     bx,2h
+        cwd
+        idiv    bx
+        xchg    ax,dx
+        mov     cl,6h
+        shl     ax,cl
+        mov     word ptr local_result_word[bp],ax
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     ax,bx
+        mov     word ptr local_work_record[bp],ax
+        sub     di,di
+        jmps    test_status_bytes
 
 copy_status_to_index:
-	mov	ax,offset index_record
-	push	ax
-	mov	ax,di
-	add	ax,word ptr (0-15h)[bp]
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,word ptr (0-0dh)[bp]
-	add	ax,di
-	xchg	ax,bx
-	mov	al,byte ptr [bx]
-	pop	bx
-	mov	byte ptr [bx],al
-	inc	di
+        mov     ax,offset index_record
+        push    ax
+        mov     ax,di
+        add     ax,word ptr local_result_word[bp]
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,word ptr local_work_record[bp]
+        add     ax,di
+        xchg    ax,bx
+        mov     al,byte ptr [bx]
+        pop     bx
+        mov     byte ptr [bx],al
+        inc     di
 
 test_status_bytes:
-	cmp	di,18h
-	jc	copy_status_to_index
-	mov	ax,spool_fcbs
-	push	ax
-	mov	ax,24h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	ax,bx
-	mov	word ptr (0-0dh)[bp],ax
-	sub	di,di
-	jmp	test_fcb_bytes
+        cmp     di,18h
+        jc      copy_status_to_index
+        mov     ax,offset spool_fcbs
+        push    ax
+        mov     ax,fcb_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     ax,bx
+        mov     word ptr local_work_record[bp],ax
+        sub     di,di
+        jmp     test_fcb_bytes
 
 copy_fcb_to_index:
-	mov	ax,offset index_record
-	push	ax
-	mov	ax,di
-	add	ax,word ptr (0-15h)[bp]
-	add	ax,18h
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,word ptr (0-0dh)[bp]
-	add	ax,di
-	xchg	ax,bx
-	mov	al,byte ptr [bx]
-	pop	bx
-	mov	byte ptr [bx],al
-	inc	di
+        mov     ax,offset index_record
+        push    ax
+        mov     ax,di
+        add     ax,word ptr local_result_word[bp]
+        add     ax,18h
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,word ptr local_work_record[bp]
+        add     ax,di
+        xchg    ax,bx
+        mov     al,byte ptr [bx]
+        pop     bx
+        mov     byte ptr [bx],al
+        inc     di
 
 test_fcb_bytes:
-	cmp	di,24h
-	jc	copy_fcb_to_index
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,22h	; F_WRITERAND
-	push	ax
-	call	xdos
-	add	sp,4h
-	or	byte ptr .1013h,80h
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,10h	; F_CLOSE
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr [bx]
-	xor	ah,ah
-	mov	si,ax
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	bx,ax
-	mov	byte ptr [bx],0ffh
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 0ch[bx],0h
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	bx,ax
-	mov	word ptr 16h[bx],0h
-	mov	byte ptr (0-0ah)[bp],0feh
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr (0-0ah)[bp]
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr [bx]
-	mov	byte ptr (0-0bh)[bp],al
+        cmp     di,24h
+        jc      copy_fcb_to_index
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,22h  ; F_WRITERAND
+        push    ax
+        call    xdos
+        add     sp,4h
+        or      byte ptr index_fcb+5,80h
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,10h  ; F_CLOSE
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr [bx]
+        xor     ah,ah
+        mov     si,ax
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     bx,ax
+        mov     byte ptr [bx],0ffh
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 0ch[bx],0h
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     bx,ax
+        mov     word ptr 16h[bx],0h
+        mov     byte ptr local_previous_job[bp],0feh
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr local_previous_job[bp]
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr [bx]
+        mov     byte ptr local_next_job[bp],al
 
 find_ready_position:
-	cmp	byte ptr (0-0bh)[bp],0ffh
-	jz	link_ready_job
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,si
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr 1h[bx]
-	push	ax
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr (0-0bh)[bp]
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr 1h[bx]
-	pop	bx
-	cmp	bl,al
-	jnc	advance_ready_link
+        cmp     byte ptr local_next_job[bp],0ffh
+        jz      link_ready_job
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,si
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr 1h[bx]
+        push    ax
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr local_next_job[bp]
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr 1h[bx]
+        pop     bx
+        cmp     bl,al
+        jnc     advance_ready_link
 
 link_ready_job:
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr (0-0ah)[bp]
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,si
-	pop	bx
-	mov	byte ptr [bx],al
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,si
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr (0-0bh)[bp]
-	mov	byte ptr [bx],al
-	jmps	assign_ready_job
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr local_previous_job[bp]
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,si
+        pop     bx
+        mov     byte ptr [bx],al
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,si
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr local_next_job[bp]
+        mov     byte ptr [bx],al
+        jmps    assign_ready_job
 
 advance_ready_link:
-	mov	al,byte ptr (0-0bh)[bp]
-	mov	byte ptr (0-0ah)[bp],al
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr (0-0bh)[bp]
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr [bx]
-	mov	byte ptr (0-0bh)[bp],al
-	jmps	find_ready_position
+        mov     al,byte ptr local_next_job[bp]
+        mov     byte ptr local_previous_job[bp],al
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr local_next_job[bp]
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr [bx]
+        mov     byte ptr local_next_job[bp],al
+        jmps    find_ready_position
 
 assign_ready_job:
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,si
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 2h[bx],0ffh
-	mov	ax,si
-	mov	byte ptr request_job,al
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr 0fh[bx]
-	xor	ah,ah
-	and	ax,2h
-	or	ax,ax
-	jz	completion_ok
-	mov	byte ptr request,2h
-	jmps	completion_reply
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,si
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 2h[bx],0ffh
+        mov     ax,si
+        mov     byte ptr request_job,al
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr 0fh[bx]
+        xor     ah,ah
+        and     ax,2h
+        or      ax,ax
+        jz      completion_ok
+        mov     byte ptr request,2h
+        jmps    completion_reply
 
 completion_ok:
-	mov	byte ptr request,0h
+        mov     byte ptr request,0h
 
 completion_reply:
-	jmp	send_reply
+        jmp     send_reply
 
 ; Cancel the selected job and update queue state.
 
 abort_job:
-	mov	al,byte ptr request_job
-	xor	ah,ah
-	mov	di,ax
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,di
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	cmp	byte ptr 1h[bx],0h
-	jnz	lookup_aborted_job
-	mov	byte ptr request,1h
-	jmp	send_reply
+        mov     al,byte ptr request_job
+        xor     ah,ah
+        mov     di,ax
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,di
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        cmp     byte ptr 1h[bx],0h
+        jnz     lookup_aborted_job
+        mov     byte ptr request,1h
+        jmp     send_reply
 
 lookup_aborted_job:
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,di
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr 2h[bx]
-	xor	ah,ah
-	mov	word ptr (0-13h)[bp],ax
-	cmp	ax,0ffh
-	jnz	abort_spool_file
-	jmp	find_aborted_link
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,di
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr 2h[bx]
+        xor     ah,ah
+        mov     word ptr local_work_index[bp],ax
+        cmp     ax,0ffh
+        jnz     abort_spool_file
+        jmp     find_aborted_link
 
 abort_spool_file:
-	mov	ax,spool_fcbs
-	push	ax
-	mov	ax,24h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,10h	; F_CLOSE
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,spool_fcbs
-	push	ax
-	mov	ax,24h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,13h	; F_DELETE
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	bx,ax
-	mov	byte ptr [bx],0ffh
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 0ch[bx],0h
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	bx,ax
-	mov	word ptr 16h[bx],0h
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,di
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	byte ptr [bx],0ffh
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,di
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 1h[bx],0h
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,di
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 2h[bx],0ffh
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,di
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 3h[bx],0ffh
-	jmp	abort_ok
+        mov     ax,offset spool_fcbs
+        push    ax
+        mov     ax,fcb_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,10h  ; F_CLOSE
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset spool_fcbs
+        push    ax
+        mov     ax,fcb_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,13h  ; F_DELETE
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     bx,ax
+        mov     byte ptr [bx],0ffh
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 0ch[bx],0h
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     bx,ax
+        mov     word ptr 16h[bx],0h
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,di
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     byte ptr [bx],0ffh
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,di
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 1h[bx],0h
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,di
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 2h[bx],0ffh
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,di
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 3h[bx],0ffh
+        jmp     abort_ok
 
 find_aborted_link:
-	mov	byte ptr (0-0ah)[bp],0feh
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr (0-0ah)[bp]
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr [bx]
-	mov	byte ptr (0-0bh)[bp],al
-	mov	word ptr (0-13h)[bp],0h
-	sub	si,si
-	jmps	test_abort_chain
+        mov     byte ptr local_previous_job[bp],0feh
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr local_previous_job[bp]
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr [bx]
+        mov     byte ptr local_next_job[bp],al
+        mov     word ptr local_work_index[bp],0h
+        sub     si,si
+        jmps    test_abort_chain
 
 compare_abort_link:
-	mov	al,byte ptr (0-0bh)[bp]
-	xor	ah,ah
-	cmp	ax,di
-	jnz	advance_abort_link
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr (0-0bh)[bp]
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr [bx]
-	mov	byte ptr (0-0bh)[bp],al
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,di
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	byte ptr [bx],0ffh
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr (0-0ah)[bp]
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr (0-0bh)[bp]
-	mov	byte ptr [bx],al
-	mov	word ptr (0-13h)[bp],1h
-	jmps	check_abort_result
+        mov     al,byte ptr local_next_job[bp]
+        xor     ah,ah
+        cmp     ax,di
+        jnz     advance_abort_link
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr local_next_job[bp]
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr [bx]
+        mov     byte ptr local_next_job[bp],al
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,di
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     byte ptr [bx],0ffh
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr local_previous_job[bp]
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr local_next_job[bp]
+        mov     byte ptr [bx],al
+        mov     word ptr local_work_index[bp],1h
+        jmps    check_abort_result
 
 advance_abort_link:
-	mov	al,byte ptr (0-0bh)[bp]
-	mov	byte ptr (0-0ah)[bp],al
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr (0-0bh)[bp]
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr [bx]
-	mov	byte ptr (0-0bh)[bp],al
-	inc	si
+        mov     al,byte ptr local_next_job[bp]
+        mov     byte ptr local_previous_job[bp],al
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr local_next_job[bp]
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr [bx]
+        mov     byte ptr local_next_job[bp],al
+        inc     si
 
 test_abort_chain:
-	cmp	si,0feh
-	jc	compare_abort_link
+        cmp     si,job_number_count
+        jc      compare_abort_link
 
 check_abort_result:
-	cmp	word ptr (0-13h)[bp],0h
-	jz	unlink_job
-	jmp	read_abort_index
+        cmp     word ptr local_work_index[bp],0h
+        jz      unlink_job
+        jmp     read_abort_index
 
 unlink_job:
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,di
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr 3h[bx]
-	xor	ah,ah
-	mov	dx,0dh
-	mul	dx
-	pop	bx
-	add	bx,ax
-	mov	byte ptr [bx],4h
-	mov	ax,offset index_record
-	mov	word ptr .current_dma,ax
-	mov	ax,offset index_record
-	push	ax
-	mov	ax,1ah	; F_DMAOFF
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	byte ptr .1031h,0h
-	mov	byte ptr .1030h,0h
-	mov	ax,di
-	shr	ax,1
-	mov	byte ptr .index_random_record,al
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,21h	; F_READRAND
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset index_record
-	push	ax
-	mov	ax,di
-	and	ax,1h
-	mov	cl,6h
-	shl	ax,cl
-	pop	bx
-	add	ax,bx
-	mov	word ptr (0-0fh)[bp],ax
-	mov	bx,word ptr (0-0fh)[bp]
-	mov	byte ptr 0ch[bx],5h
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,22h	; F_WRITERAND
-	push	ax
-	call	xdos
-	add	sp,4h
-	or	byte ptr .1013h,80h
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,10h	; F_CLOSE
-	push	ax
-	call	xdos
-	add	sp,4h
-	jmp	abort_ok
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,di
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr 3h[bx]
+        xor     ah,ah
+        mov     dx,0dh
+        mul     dx
+        pop     bx
+        add     bx,ax
+        mov     byte ptr [bx],4h
+        mov     ax,offset index_record
+        mov     word ptr current_dma,ax
+        mov     ax,offset index_record
+        push    ax
+        mov     ax,1ah  ; F_DMAOFF
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     byte ptr index_random_record+2,0h
+        mov     byte ptr index_random_record+1,0h
+        mov     ax,di
+        shr     ax,1
+        mov     byte ptr index_random_record,al
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,21h  ; F_READRAND
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset index_record
+        push    ax
+        mov     ax,di
+        and     ax,1h
+        mov     cl,6h
+        shl     ax,cl
+        pop     bx
+        add     ax,bx
+        mov     word ptr local_index_entry[bp],ax
+        mov     bx,word ptr local_index_entry[bp]
+        mov     byte ptr 0ch[bx],5h
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,22h  ; F_WRITERAND
+        push    ax
+        call    xdos
+        add     sp,4h
+        or      byte ptr index_fcb+5,80h
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,10h  ; F_CLOSE
+        push    ax
+        call    xdos
+        add     sp,4h
+        jmp     abort_ok
 
 read_abort_index:
-	mov	ax,offset index_record
-	mov	word ptr .current_dma,ax
-	mov	ax,offset index_record
-	push	ax
-	mov	ax,1ah	; F_DMAOFF
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	byte ptr .1031h,0h
-	mov	byte ptr .1030h,0h
-	mov	ax,di
-	shr	ax,1
-	mov	byte ptr .index_random_record,al
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,21h	; F_READRAND
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset index_record
-	push	ax
-	mov	ax,di
-	and	ax,1h
-	mov	cl,6h
-	shl	ax,cl
-	add	ax,18h
-	pop	bx
-	add	ax,bx
-	mov	word ptr (0-11h)[bp],ax
-	push	ax
-	mov	ax,13h	; F_DELETE
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	si,1h
-	jmps	test_abort_bytes
+        mov     ax,offset index_record
+        mov     word ptr current_dma,ax
+        mov     ax,offset index_record
+        push    ax
+        mov     ax,1ah  ; F_DMAOFF
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     byte ptr index_random_record+2,0h
+        mov     byte ptr index_random_record+1,0h
+        mov     ax,di
+        shr     ax,1
+        mov     byte ptr index_random_record,al
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,21h  ; F_READRAND
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset index_record
+        push    ax
+        mov     ax,di
+        and     ax,1h
+        mov     cl,6h
+        shl     ax,cl
+        add     ax,18h
+        pop     bx
+        add     ax,bx
+        mov     word ptr (0-11h)[bp],ax
+        push    ax
+        mov     ax,13h  ; F_DELETE
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     si,1h
+        jmps    test_abort_bytes
 
 clear_abort_byte:
-	mov	ax,offset index_record
-	push	ax
-	mov	ax,di
-	and	ax,1h
-	mov	cl,6h
-	shl	ax,cl
-	add	ax,si
-	pop	bx
-	add	bx,ax
-	mov	byte ptr [bx],20h
-	inc	si
+        mov     ax,offset index_record
+        push    ax
+        mov     ax,di
+        and     ax,1h
+        mov     cl,6h
+        shl     ax,cl
+        add     ax,si
+        pop     bx
+        add     bx,ax
+        mov     byte ptr [bx],20h
+        inc     si
 
 test_abort_bytes:
-	cmp	si,40h
-	jc	clear_abort_byte
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,22h	; F_WRITERAND
-	push	ax
-	call	xdos
-	add	sp,4h
-	or	byte ptr .1013h,80h
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,10h	; F_CLOSE
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,di
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	byte ptr [bx],0ffh
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,di
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 1h[bx],0h
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,di
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 2h[bx],0ffh
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,di
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 3h[bx],0ffh
+        cmp     si,index_entry_bytes
+        jc      clear_abort_byte
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,22h  ; F_WRITERAND
+        push    ax
+        call    xdos
+        add     sp,4h
+        or      byte ptr index_fcb+5,80h
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,10h  ; F_CLOSE
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,di
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     byte ptr [bx],0ffh
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,di
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 1h[bx],0h
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,di
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 2h[bx],0ffh
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,di
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 3h[bx],0ffh
 
 abort_ok:
-	mov	byte ptr request,0h
-	jmp	send_reply
+        mov     byte ptr request,0h
+        jmp     send_reply
 
 ; Assemble the status reply for the control client.
 
 report_status:
-	cmp	byte ptr .index_active,0h
-	jnz	begin_status_scan
-	mov	byte ptr request,0h
-	mov	byte ptr request_job,0ffh
-	jmp	send_reply
+        cmp     byte ptr index_active,0h
+        jnz     begin_status_scan
+        mov     byte ptr request,0h
+        mov     byte ptr request_job,0ffh
+        jmp     send_reply
 
 begin_status_scan:
-	mov	word ptr (0-13h)[bp],0h
-	mov	ax,offset index_record
-	mov	word ptr .current_dma,ax
-	mov	ax,offset index_record
-	push	ax
-	mov	ax,1ah	; F_DMAOFF
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	al,byte ptr request_job
-	xor	ah,ah
-	mov	bx,2h
-	cwd
-	idiv	bx
-	mov	byte ptr .index_random_record,al
-	mov	byte ptr .1030h,0h
-	mov	byte ptr .1031h,0h
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,21h	; F_READRAND
-	push	ax
-	call	xdos
-	add	sp,4h
-	or	al,al
-	jz	continue_status_scan
-	mov	byte ptr request,1h
-	jmp	send_reply
+        mov     word ptr local_work_index[bp],0h
+        mov     ax,offset index_record
+        mov     word ptr current_dma,ax
+        mov     ax,offset index_record
+        push    ax
+        mov     ax,1ah  ; F_DMAOFF
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     al,byte ptr request_job
+        xor     ah,ah
+        mov     bx,2h
+        cwd
+        idiv    bx
+        mov     byte ptr index_random_record,al
+        mov     byte ptr index_random_record+1,0h
+        mov     byte ptr index_random_record+2,0h
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,21h  ; F_READRAND
+        push    ax
+        call    xdos
+        add     sp,4h
+        or      al,al
+        jz      continue_status_scan
+        mov     byte ptr request,1h
+        jmp     send_reply
 
 continue_status_scan:
-	jmp	test_status_job
+        jmp     test_status_job
 
 select_status_job:
-	mov	al,byte ptr request_job
-	xor	ah,ah
-	mov	bx,2h
-	cwd
-	idiv	bx
-	xchg	ax,dx
-	or	ax,ax
-	jz	check_status_device
-	jmp	get_status_record
+        mov     al,byte ptr request_job
+        xor     ah,ah
+        mov     bx,2h
+        cwd
+        idiv    bx
+        xchg    ax,dx
+        or      ax,ax
+        jz      check_status_device
+        jmp     get_status_record
 
 check_status_device:
-	mov	al,byte ptr request_job
-	xor	ah,ah
-	mov	bx,2h
-	cwd
-	idiv	bx
-	push	ax
-	mov	al,byte ptr .index_random_record
-	xor	ah,ah
-	pop	bx
-	cmp	bx,ax
-	jz	get_status_record
-	mov	al,byte ptr request_job
-	xor	ah,ah
-	mov	bx,2h
-	cwd
-	idiv	bx
-	mov	byte ptr .index_random_record,al
-	mov	byte ptr .1030h,0h
-	mov	byte ptr .1031h,0h
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,21h	; F_READRAND
-	push	ax
-	call	xdos
-	add	sp,4h
-	or	al,al
-	jz	get_status_record
-	mov	byte ptr request,1h
-	jmp	status_reply
+        mov     al,byte ptr request_job
+        xor     ah,ah
+        mov     bx,2h
+        cwd
+        idiv    bx
+        push    ax
+        mov     al,byte ptr index_random_record
+        xor     ah,ah
+        pop     bx
+        cmp     bx,ax
+        jz      get_status_record
+        mov     al,byte ptr request_job
+        xor     ah,ah
+        mov     bx,2h
+        cwd
+        idiv    bx
+        mov     byte ptr index_random_record,al
+        mov     byte ptr index_random_record+1,0h
+        mov     byte ptr index_random_record+2,0h
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,21h  ; F_READRAND
+        push    ax
+        call    xdos
+        add     sp,4h
+        or      al,al
+        jz      get_status_record
+        mov     byte ptr request,1h
+        jmp     status_reply
 
 get_status_record:
-	mov	al,byte ptr request_job
-	xor	ah,ah
-	mov	bx,2h
-	cwd
-	idiv	bx
-	xchg	ax,dx
-	mov	cl,6h
-	shl	ax,cl
-	mov	word ptr (0-15h)[bp],ax
-	mov	ax,offset index_record
-	push	ax
-	mov	ax,word ptr (0-15h)[bp]
-	inc	ax
-	pop	bx
-	add	bx,ax
-	cmp	byte ptr [bx],20h
-	jz	next_status_job
-	mov	ax,offset index_record
-	push	ax
-	mov	ax,word ptr (0-15h)[bp]
-	inc	ax
-	pop	bx
-	add	bx,ax
-	cmp	byte ptr [bx],0h
-	jz	next_status_job
-	sub	si,si
-	jmps	test_status_reply
+        mov     al,byte ptr request_job
+        xor     ah,ah
+        mov     bx,2h
+        cwd
+        idiv    bx
+        xchg    ax,dx
+        mov     cl,6h
+        shl     ax,cl
+        mov     word ptr local_result_word[bp],ax
+        mov     ax,offset index_record
+        push    ax
+        mov     ax,word ptr local_result_word[bp]
+        inc     ax
+        pop     bx
+        add     bx,ax
+        cmp     byte ptr [bx],20h
+        jz      next_status_job
+        mov     ax,offset index_record
+        push    ax
+        mov     ax,word ptr local_result_word[bp]
+        inc     ax
+        pop     bx
+        add     bx,ax
+        cmp     byte ptr [bx],0h
+        jz      next_status_job
+        sub     si,si
+        jmps    test_status_reply
 
 copy_status_reply:
-	mov	ax,offset request_data
-	add	ax,si
-	push	ax
-	mov	ax,offset index_record
-	push	ax
-	mov	ax,si
-	add	ax,word ptr (0-15h)[bp]
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr [bx]
-	pop	bx
-	mov	byte ptr [bx],al
-	inc	si
+        mov     ax,offset request_data
+        add     ax,si
+        push    ax
+        mov     ax,offset index_record
+        push    ax
+        mov     ax,si
+        add     ax,word ptr local_result_word[bp]
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr [bx]
+        pop     bx
+        mov     byte ptr [bx],al
+        inc     si
 
 test_status_reply:
-	cmp	si,40h
-	jc	copy_status_reply
-	mov	word ptr (0-13h)[bp],1h
-	jmps	status_end
+        cmp     si,index_entry_bytes
+        jc      copy_status_reply
+        mov     word ptr local_work_index[bp],1h
+        jmps    status_end
 
 next_status_job:
-	inc	byte ptr request_job
+        inc     byte ptr request_job
 
 test_status_job:
-	cmp	byte ptr request_job,0feh
-	jz	status_end
-	jmp	select_status_job
+        cmp     byte ptr request_job,0feh
+        jz      status_end
+        jmp     select_status_job
 
 status_end:
-	mov	byte ptr request,0h
-	cmp	word ptr (0-13h)[bp],1h
-	jz	status_reply
-	mov	byte ptr request_job,0ffh
+        mov     byte ptr request,0h
+        cmp     word ptr local_work_index[bp],1h
+        jz      status_reply
+        mov     byte ptr request_job,0ffh
 
 status_reply:
-	jmp	send_reply
+        jmp     send_reply
 
 ; Handle the termination request and outstanding devices.
 
 terminate_spooler:
-	sub	sp,10h
-	mov	al,byte ptr request_job
-	xor	ah,ah
-	mov	word ptr (0-18h)[bp],ax
-	mov	ax,64h
-	push	ax
-	mov	al,91h	; P_PRIORITY
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	word ptr (0-26h)[bp],0h
-	mov	word ptr (0-24h)[bp],0h
-	mov	byte ptr (0-22h)[bp],0h
-	mov	byte ptr (0-21h)[bp],0h
-	mov	byte ptr (0-20h)[bp],44h
-	mov	byte ptr (0-1fh)[bp],53h
-	mov	byte ptr (0-1eh)[bp],50h
-	mov	si,3h
-	jmps	test_shutdown_flags
+        sub     sp,10h
+        mov     al,byte ptr request_job
+        xor     ah,ah
+        mov     word ptr (0-18h)[bp],ax
+        mov     ax,64h
+        push    ax
+        mov     al,91h  ; P_PRIORITY
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     word ptr (0-26h)[bp],0h
+        mov     word ptr (0-24h)[bp],0h
+        mov     byte ptr (0-22h)[bp],0h
+        mov     byte ptr (0-21h)[bp],0h
+        mov     byte ptr (0-20h)[bp],44h
+        mov     byte ptr (0-1fh)[bp],53h
+        mov     byte ptr (0-1eh)[bp],50h
+        mov     si,3h
+        jmps    test_shutdown_flags
 
 clear_shutdown_flag:
-	lea	ax,word ptr (0-20h)[bp]
-	add	ax,si
-	xchg	ax,bx
-	mov	byte ptr [bx],20h
-	inc	si
+        lea     ax,word ptr (0-20h)[bp]
+        add     ax,si
+        xchg    ax,bx
+        mov     byte ptr [bx],20h
+        inc     si
 
 test_shutdown_flags:
-	cmp	si,8h
-	jc	clear_shutdown_flag
-	sub	si,si
-	jmps	test_shutdown_devices
+        cmp     si,spool_slot_count
+        jc      clear_shutdown_flag
+        sub     si,si
+        jmps    test_shutdown_devices
 
 start_shutdown_device:
-	jmps	inspect_shutdown_device
+        jmps    inspect_shutdown_device
 
 notify_device:
-	mov	ax,offset device_queues
-	push	ax
-	mov	ax,si
-	mov	cl,4h
-	shl	ax,cl
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,8ah	; Q_CREAD
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	byte ptr request,0ah
-	mov	ax,word ptr (0-18h)[bp]
-	mov	byte ptr request_job,al
-	mov	ax,offset device_queues
-	push	ax
-	mov	ax,si
-	mov	cl,4h
-	shl	ax,cl
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,8ch	; Q_CWRITE
-	push	ax
-	call	xdos
-	add	sp,4h
-	jmps	advance_shutdown_device
+        mov     ax,offset device_queues
+        push    ax
+        mov     ax,si
+        mov     cl,4h
+        shl     ax,cl
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,8ah  ; Q_CREAD
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     byte ptr request,0ah
+        mov     ax,word ptr (0-18h)[bp]
+        mov     byte ptr request_job,al
+        mov     ax,offset device_queues
+        push    ax
+        mov     ax,si
+        mov     cl,4h
+        shl     ax,cl
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,8ch  ; Q_CWRITE
+        push    ax
+        call    xdos
+        add     sp,4h
+        jmps    advance_shutdown_device
 
 skip_idle_device:
-	jmps	advance_shutdown_device
+        jmps    advance_shutdown_device
 
 skip_shutdown_device:
-	jmps	advance_shutdown_device
-	jmps	advance_shutdown_device
+        jmps    advance_shutdown_device
+        jmps    advance_shutdown_device
 
 inspect_shutdown_device:
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,0dh
-	mul	si
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr [bx]
-	xor	ah,ah
-	cmp	al,0ffh
-	jz	skip_idle_device
-	cmp	al,4h
-	jz	notify_device
-	cmp	al,3h
-	jz	notify_device
-	cmp	al,2h
-	jz	notify_device
-	cmp	al,1h
-	jz	notify_device
-	cmp	al,0h
-	jz	notify_device
-	jmps	skip_shutdown_device
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,device_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr [bx]
+        xor     ah,ah
+        cmp     al,0ffh
+        jz      skip_idle_device
+        cmp     al,4h
+        jz      notify_device
+        cmp     al,3h
+        jz      notify_device
+        cmp     al,2h
+        jz      notify_device
+        cmp     al,1h
+        jz      notify_device
+        cmp     al,0h
+        jz      notify_device
+        jmps    skip_shutdown_device
 
 advance_shutdown_device:
-	inc	si
+        inc     si
 
 test_shutdown_devices:
-	cmp	si,10h
-	jc	start_shutdown_device
-	jmps	delete_input_queue
+        cmp     si,device_slot_count
+        jc      start_shutdown_device
+        jmps    delete_input_queue
 
 drain_input_queue:
-	mov	ax,offset input_queue
-	push	ax
-	mov	ax,8ah	; Q_CREAD
-	push	ax
-	call	xdos
-	add	sp,4h
-	or	ax,ax
-	jz	drain_input_queue
+        mov     ax,offset input_queue
+        push    ax
+        mov     ax,8ah  ; Q_CREAD
+        push    ax
+        call    xdos
+        add     sp,4h
+        or      ax,ax
+        jz      drain_input_queue
 
 delete_input_queue:
-	mov	ax,offset input_queue
-	push	ax
-	mov	ax,88h	; Q_DELETE
-	push	ax
-	call	xdos
-	add	sp,4h
-	or	ax,ax
-	jnz	drain_input_queue
-	mov	byte ptr request,0h
-	jmps	delete_mutex_queue
+        mov     ax,offset input_queue
+        push    ax
+        mov     ax,88h  ; Q_DELETE
+        push    ax
+        call    xdos
+        add     sp,4h
+        or      ax,ax
+        jnz     drain_input_queue
+        mov     byte ptr request,0h
+        jmps    delete_mutex_queue
 
 wait_before_delete:
-	mov	ax,3ch
-	push	ax
-	mov	al,8dh	; P_DELAY
-	push	ax
-	call	xdos
-	add	sp,4h
+        mov     ax,3ch
+        push    ax
+        mov     al,8dh  ; P_DELAY
+        push    ax
+        call    xdos
+        add     sp,4h
 
 delete_mutex_queue:
-	mov	ax,offset mutex_queue
-	push	ax
-	mov	ax,88h	; Q_DELETE
-	push	ax
-	call	xdos
-	add	sp,4h
-	or	ax,ax
-	jnz	wait_before_delete
-	mov	ax,offset output_queue
-	push	ax
-	mov	ax,88h	; Q_DELETE
-	push	ax
-	call	xdos
-	add	sp,4h
-	cmp	word ptr (0-18h)[bp],1h
-	jz	check_index_active
-	jmp	shutdown_done
+        mov     ax,offset mutex_queue
+        push    ax
+        mov     ax,88h  ; Q_DELETE
+        push    ax
+        call    xdos
+        add     sp,4h
+        or      ax,ax
+        jnz     wait_before_delete
+        mov     ax,offset output_queue
+        push    ax
+        mov     ax,88h  ; Q_DELETE
+        push    ax
+        call    xdos
+        add     sp,4h
+        cmp     word ptr (0-18h)[bp],1h
+        jz      check_index_active
+        jmp     shutdown_done
 
 check_index_active:
-	mov	al,byte ptr .index_active
-	or	al,al
-	jnz	prepare_index_cleanup
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,0fh	; F_OPEN
-	push	ax
-	call	xdos
-	add	sp,4h
+        mov     al,byte ptr index_active
+        or      al,al
+        jnz     prepare_index_cleanup
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,0fh  ; F_OPEN
+        push    ax
+        call    xdos
+        add     sp,4h
 
 prepare_index_cleanup:
-	mov	ax,offset index_record
-	push	ax
-	mov	ax,1ah	; F_DMAOFF
-	push	ax
-	call	xdos
-	add	sp,4h
-	sub	si,si
-	jmps	test_cleanup_records
+        mov     ax,offset index_record
+        push    ax
+        mov     ax,1ah  ; F_DMAOFF
+        push    ax
+        call    xdos
+        add     sp,4h
+        sub     si,si
+        jmps    test_cleanup_records
 
 visit_index_record:
-	dec	sp
-	dec	sp
-	mov	ax,si
-	mov	byte ptr .index_random_record,al
-	mov	byte ptr .1030h,0h
-	mov	byte ptr .1031h,0h
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,21h	; F_READRAND
-	push	ax
-	call	xdos
-	add	sp,4h
-	or	al,al
-	jnz	close_index_file
-	sub	di,di
-	jmps	test_index_halves
+        dec     sp
+        dec     sp
+        mov     ax,si
+        mov     byte ptr index_random_record,al
+        mov     byte ptr index_random_record+1,0h
+        mov     byte ptr index_random_record+2,0h
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,21h  ; F_READRAND
+        push    ax
+        call    xdos
+        add     sp,4h
+        or      al,al
+        jnz     close_index_file
+        sub     di,di
+        jmps    test_index_halves
 
 erase_index_half:
-	mov	ax,di
-	mov	cl,6h
-	shl	ax,cl
-	add	ax,18h
-	mov	word ptr (0-28h)[bp],ax
-	mov	bx,offset index_record
-	add	bx,word ptr (0-28h)[bp]
-	cmp	byte ptr [bx],20h
-	jz	advance_index_half
-	mov	ax,offset index_record
-	add	ax,word ptr (0-28h)[bp]
-	mov	word ptr (0-11h)[bp],ax
-	push	ax
-	mov	ax,13h	; F_DELETE
-	push	ax
-	call	xdos
-	add	sp,4h
+        mov     ax,di
+        mov     cl,6h
+        shl     ax,cl
+        add     ax,18h
+        mov     word ptr (0-28h)[bp],ax
+        mov     bx,offset index_record
+        add     bx,word ptr (0-28h)[bp]
+        cmp     byte ptr [bx],20h
+        jz      advance_index_half
+        mov     ax,offset index_record
+        add     ax,word ptr (0-28h)[bp]
+        mov     word ptr (0-11h)[bp],ax
+        push    ax
+        mov     ax,13h  ; F_DELETE
+        push    ax
+        call    xdos
+        add     sp,4h
 
 advance_index_half:
-	inc	di
+        inc     di
 
 test_index_halves:
-	cmp	di,2h
-	jc	erase_index_half
-	inc	sp
-	inc	sp
-	inc	si
+        cmp     di,2h
+        jc      erase_index_half
+        inc     sp
+        inc     sp
+        inc     si
 
 test_cleanup_records:
-	cmp	si,7fh
-	jc	visit_index_record
+        cmp     si,7fh
+        jc      visit_index_record
 
 close_index_file:
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,10h	; F_CLOSE
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,13h	; F_DELETE
-	push	ax
-	call	xdos
-	add	sp,4h
-	sub	si,si
-	jmps	test_shutdown_jobs
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,10h  ; F_CLOSE
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,13h  ; F_DELETE
+        push    ax
+        call    xdos
+        add     sp,4h
+        sub     si,si
+        jmps    test_shutdown_jobs
 
 close_submitted_job:
-	mov	ax,offset spool_status
-	push	ax
-	mov	ax,18h
-	mul	si
-	pop	bx
-	add	bx,ax
-	cmp	byte ptr 0ch[bx],1h
-	jnz	advance_shutdown_job
-	mov	ax,spool_fcbs
-	push	ax
-	mov	ax,24h
-	mul	si
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,10h	; F_CLOSE
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,spool_fcbs
-	push	ax
-	mov	ax,24h
-	mul	si
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,13h	; F_DELETE
-	push	ax
-	call	xdos
-	add	sp,4h
+        mov     ax,offset spool_status
+        push    ax
+        mov     ax,spool_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        cmp     byte ptr 0ch[bx],1h
+        jnz     advance_shutdown_job
+        mov     ax,offset spool_fcbs
+        push    ax
+        mov     ax,fcb_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,10h  ; F_CLOSE
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset spool_fcbs
+        push    ax
+        mov     ax,fcb_bytes
+        mul     si
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,13h  ; F_DELETE
+        push    ax
+        call    xdos
+        add     sp,4h
 
 advance_shutdown_job:
-	inc	si
+        inc     si
 
 test_shutdown_jobs:
-	cmp	si,8h
-	jc	close_submitted_job
+        cmp     si,spool_slot_count
+        jc      close_submitted_job
 
 shutdown_done:
-	jmp	leave_spooler
-	add	sp,10h
+        jmp     leave_spooler
+        add     sp,10h
 
 ; Command 10h: process an event from a despooler.
 
 despool_event:
-	mov	al,byte ptr request_job
-	xor	ah,ah
-	mov	di,ax
-	mov	ax,offset index_record
-	mov	word ptr .current_dma,ax
-	mov	ax,offset index_record
-	push	ax
-	mov	ax,1ah	; F_DMAOFF
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	byte ptr .1031h,0h
-	mov	byte ptr .1030h,0h
-	mov	ax,di
-	shr	ax,1
-	mov	byte ptr .index_random_record,al
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,21h	; F_READRAND
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	si,1h
-	jmp	test_event_record
+        mov     al,byte ptr request_job
+        xor     ah,ah
+        mov     di,ax
+        mov     ax,offset index_record
+        mov     word ptr current_dma,ax
+        mov     ax,offset index_record
+        push    ax
+        mov     ax,1ah  ; F_DMAOFF
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     byte ptr index_random_record+2,0h
+        mov     byte ptr index_random_record+1,0h
+        mov     ax,di
+        shr     ax,1
+        mov     byte ptr index_random_record,al
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,21h  ; F_READRAND
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     si,1h
+        jmp     test_event_record
 
 copy_event_record:
-	mov	ax,offset index_record
-	push	ax
-	mov	ax,di
-	and	ax,1h
-	mov	cl,6h
-	shl	ax,cl
-	add	ax,si
-	pop	bx
-	add	bx,ax
-	mov	byte ptr [bx],20h
-	inc	si
+        mov     ax,offset index_record
+        push    ax
+        mov     ax,di
+        and     ax,1h
+        mov     cl,6h
+        shl     ax,cl
+        add     ax,si
+        pop     bx
+        add     bx,ax
+        mov     byte ptr [bx],20h
+        inc     si
 
 test_event_record:
-	cmp	si,40h
-	jc	copy_event_record
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,22h	; F_WRITERAND
-	push	ax
-	call	xdos
-	add	sp,4h
-	or	byte ptr .1013h,80h
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,10h	; F_CLOSE
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,di
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr 3h[bx]
-	xor	ah,ah
-	mov	dx,0dh
-	mul	dx
-	pop	bx
-	add	ax,bx
-	mov	word ptr (0-0dh)[bp],ax
-	sub	si,si
-	jmps	test_event_status
+        cmp     si,index_entry_bytes
+        jc      copy_event_record
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,22h  ; F_WRITERAND
+        push    ax
+        call    xdos
+        add     sp,4h
+        or      byte ptr index_fcb+5,80h
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,10h  ; F_CLOSE
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,di
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr 3h[bx]
+        xor     ah,ah
+        mov     dx,0dh
+        mul     dx
+        pop     bx
+        add     ax,bx
+        mov     word ptr local_work_record[bp],ax
+        sub     si,si
+        jmps    test_event_status
 
 copy_event_status:
-	mov	ax,word ptr (0-0dh)[bp]
-	add	ax,si
-	push	ax
-	mov	al,byte ptr request_data[si]
-	pop	bx
-	mov	byte ptr [bx],al
-	inc	si
+        mov     ax,word ptr local_work_record[bp]
+        add     ax,si
+        push    ax
+        mov     al,byte ptr request_data[si]
+        pop     bx
+        mov     byte ptr [bx],al
+        inc     si
 
 test_event_status:
-	cmp	si,0dh
-	jc	copy_event_status
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,di
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	byte ptr [bx],0ffh
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,di
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 1h[bx],0h
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,di
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 2h[bx],0ffh
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,di
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	byte ptr 3h[bx],0ffh
-	jmp	schedule_ready_jobs
+        cmp     si,0dh
+        jc      copy_event_status
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,di
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     byte ptr [bx],0ffh
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,di
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 1h[bx],0h
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,di
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 2h[bx],0ffh
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,di
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     byte ptr 3h[bx],0ffh
+        jmp     schedule_ready_jobs
 
 ; Command 11h: update the reporting despooler's status.
 
 update_device_status:
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr request_job
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr 3h[bx]
-	xor	ah,ah
-	mov	di,ax
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,0dh
-	mul	di
-	pop	bx
-	add	bx,ax
-	cmp	byte ptr [bx],4h
-	jnz	select_dsp_state
-	mov	byte ptr request,1h
-	mov	byte ptr .0cc5h,0ffh
-	mov	ax,offset device_queues
-	push	ax
-	mov	ax,di
-	mov	cl,4h
-	shl	ax,cl
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,8bh	; Q_WRITE
-	push	ax
-	call	xdos
-	add	sp,4h
-	jmp	receive_request
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr request_job
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr 3h[bx]
+        xor     ah,ah
+        mov     di,ax
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,device_slot_bytes
+        mul     di
+        pop     bx
+        add     bx,ax
+        cmp     byte ptr [bx],4h
+        jnz     select_dsp_state
+        mov     byte ptr request,1h
+        mov     byte ptr request_job_status,0ffh
+        mov     ax,offset device_queues
+        push    ax
+        mov     ax,di
+        mov     cl,4h
+        shl     ax,cl
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,8bh  ; Q_WRITE
+        push    ax
+        call    xdos
+        add     sp,4h
+        jmp     receive_request
 
 select_dsp_state:
-	jmp	dispatch_device_state
+        jmp     dispatch_device_state
 
 dsp_acknowledge:
-	jmp	device_report_ok
+        jmp     device_report_ok
 
 apply_device_report:
-	mov	al,byte ptr request_job
-	xor	ah,ah
-	mov	word ptr (0-13h)[bp],ax
-	mov	ax,offset index_record
-	mov	word ptr .current_dma,ax
-	mov	ax,offset index_record
-	push	ax
-	mov	ax,1ah	; F_DMAOFF
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	byte ptr .1031h,0h
-	mov	byte ptr .1030h,0h
-	mov	ax,word ptr (0-13h)[bp]
-	shr	ax,1
-	mov	byte ptr .index_random_record,al
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,21h	; F_READRAND
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset index_record
-	push	ax
-	mov	ax,word ptr (0-13h)[bp]
-	and	ax,1h
-	mov	cl,6h
-	shl	ax,cl
-	pop	bx
-	add	ax,bx
-	mov	word ptr (0-0fh)[bp],ax
-	add	ax,11h
-	xchg	ax,bx
-	dec	byte ptr [bx]
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,22h	; F_WRITERAND
-	push	ax
-	call	xdos
-	add	sp,4h
-	or	byte ptr .1013h,80h
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,10h	; F_CLOSE
-	push	ax
-	call	xdos
-	add	sp,4h
-	jmp	device_report_ok
+        mov     al,byte ptr request_job
+        xor     ah,ah
+        mov     word ptr local_work_index[bp],ax
+        mov     ax,offset index_record
+        mov     word ptr current_dma,ax
+        mov     ax,offset index_record
+        push    ax
+        mov     ax,1ah  ; F_DMAOFF
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     byte ptr index_random_record+2,0h
+        mov     byte ptr index_random_record+1,0h
+        mov     ax,word ptr local_work_index[bp]
+        shr     ax,1
+        mov     byte ptr index_random_record,al
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,21h  ; F_READRAND
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset index_record
+        push    ax
+        mov     ax,word ptr local_work_index[bp]
+        and     ax,1h
+        mov     cl,6h
+        shl     ax,cl
+        pop     bx
+        add     ax,bx
+        mov     word ptr local_index_entry[bp],ax
+        add     ax,11h
+        xchg    ax,bx
+        dec     byte ptr [bx]
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,22h  ; F_WRITERAND
+        push    ax
+        call    xdos
+        add     sp,4h
+        or      byte ptr index_fcb+5,80h
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,10h  ; F_CLOSE
+        push    ax
+        call    xdos
+        add     sp,4h
+        jmp     device_report_ok
 
 update_device_record:
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,0dh
-	mul	di
-	pop	bx
-	add	bx,ax
-	mov	byte ptr [bx],3h
-	jmp	device_report_ok
-	jmps	device_report_ok
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,device_slot_bytes
+        mul     di
+        pop     bx
+        add     bx,ax
+        mov     byte ptr [bx],3h
+        jmp     device_report_ok
+        jmps    device_report_ok
 
 dispatch_device_state:
-	mov	al,byte ptr .0cc5h
-	xor	ah,ah
-	cmp	al,2h
-	jz	update_device_record
-	cmp	al,1h
-	jnz	test_device_idle
-	jmp	apply_device_report
+        mov     al,byte ptr request_job_status
+        xor     ah,ah
+        cmp     al,2h
+        jz      update_device_record
+        cmp     al,1h
+        jnz     test_device_idle
+        jmp     apply_device_report
 
 test_device_idle:
-	cmp	al,0h
-	jnz	device_report_ok
-	jmp	dsp_acknowledge
+        cmp     al,0h
+        jnz     device_report_ok
+        jmp     dsp_acknowledge
 
 device_report_ok:
-	mov	byte ptr request,1h
-	mov	byte ptr .0cc5h,0h
-	mov	ax,offset device_queues
-	push	ax
-	mov	ax,di
-	mov	cl,4h
-	shl	ax,cl
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,8bh	; Q_WRITE
-	push	ax
-	call	xdos
-	add	sp,4h
-	jmp	receive_request
+        mov     byte ptr request,1h
+        mov     byte ptr request_job_status,0h
+        mov     ax,offset device_queues
+        push    ax
+        mov     ax,di
+        mov     cl,4h
+        shl     ax,cl
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,8bh  ; Q_WRITE
+        push    ax
+        call    xdos
+        add     sp,4h
+        jmp     receive_request
 
 bad_request:
-	mov	byte ptr request,0ffh
-	jmps	send_reply
-	jmps	send_reply
+        mov     byte ptr request,0ffh
+        jmps    send_reply
+        jmps    send_reply
 
 dispatch_request:
-	mov	ax,word ptr (0-9h)[bp]
-	cmp	ax,11h
-	jnz	test_event_command
-	jmp	update_device_status
+        mov     ax,word ptr local_command_word[bp]
+        cmp     ax,cmd_report
+        jnz     test_event_command
+        jmp     update_device_status
 
 test_event_command:
-	cmp	ax,10h
-	jnz	test_terminate_command
-	jmp	despool_event
+        cmp     ax,cmd_event
+        jnz     test_terminate_command
+        jmp     despool_event
 
 test_terminate_command:
-	cmp	ax,0ah
-	jnz	test_status_command
-	jmp	terminate_spooler
+        cmp     ax,cmd_terminate
+        jnz     test_status_command
+        jmp     terminate_spooler
 
 test_status_command:
-	cmp	ax,3h
-	jnz	test_abort_command
-	jmp	report_status
+        cmp     ax,cmd_status
+        jnz     test_abort_command
+        jmp     report_status
 
 test_abort_command:
-	cmp	ax,2h
-	jnz	test_finish_command
-	jmp	abort_job
+        cmp     ax,cmd_abort
+        jnz     test_finish_command
+        jmp     abort_job
 
 test_finish_command:
-	cmp	ax,7h
-	jnz	test_append_command
-	jmp	finish_job
+        cmp     ax,cmd_finish
+        jnz     test_append_command
+        jmp     finish_job
 
 test_append_command:
-	cmp	ax,1h
-	jnz	test_start_command
-	jmp	append_job_data
+        cmp     ax,cmd_append
+        jnz     test_start_command
+        jmp     append_job_data
 
 test_start_command:
-	cmp	ax,0h
-	jnz	unsupported_command
-	jmp	start_job
+        cmp     ax,cmd_submit
+        jnz     unsupported_command
+        jmp     start_job
 
 unsupported_command:
-	jmps	bad_request
+        jmps    bad_request
 
 ; Try the output queue and delay before retrying a busy queue.
 
 send_reply:
-	sub	si,si
-	jmps	test_reply_attempts
+        sub     si,si
+        jmps    test_reply_attempts
 
 retry_reply:
-	mov	ax,offset output_queue
-	push	ax
-	mov	ax,8ch	; Q_CWRITE
-	push	ax
-	call	xdos
-	add	sp,4h
-	or	ax,ax
-	jz	check_reply_command
-	mov	ax,0ah
-	push	ax
-	mov	al,8dh	; P_DELAY
-	push	ax
-	call	xdos
-	add	sp,4h
-	jmps	next_reply_attempt
+        mov     ax,offset output_queue
+        push    ax
+        mov     ax,8ch  ; Q_CWRITE
+        push    ax
+        call    xdos
+        add     sp,4h
+        or      ax,ax
+        jz      check_reply_command
+        mov     ax,0ah
+        push    ax
+        mov     al,8dh  ; P_DELAY
+        push    ax
+        call    xdos
+        add     sp,4h
+        jmps    next_reply_attempt
 
+; A completed submission can make new work available to an idle despooler.
 check_reply_command:
-	cmp	word ptr (0-9h)[bp],7h
-	jz	schedule_ready_jobs
-	jmp	receive_request
+        cmp     word ptr local_command_word[bp],7h
+        jz      schedule_ready_jobs
+        jmp     receive_request
 
 next_reply_attempt:
-	inc	si
+        inc     si
 
 test_reply_attempts:
-	cmp	si,6h
-	jc	retry_reply
-	mov	ax,0d58h
-	mov	word ptr .0e72h,ax
-	mov	ax,offset output_queue
-	push	ax
-	mov	ax,8ah	; Q_CREAD
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset request
-	mov	word ptr .0e72h,ax
-	jmps	send_reply
+        cmp     si,6h
+        jc      retry_reply
+        mov     ax,offset discard_message
+        mov     word ptr reply_buffer_ptr,ax
+        mov     ax,offset output_queue
+        push    ax
+        mov     ax,8ah  ; Q_CREAD
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset request
+        mov     word ptr reply_buffer_ptr,ax
+        jmps    send_reply
 
 ; Walk the ready chain, select a device and send the next job to DSP.
 schedule_ready_jobs:
-	mov	byte ptr (0-0ah)[bp],0feh
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr (0-0ah)[bp]
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr [bx]
-	mov	byte ptr (0-0bh)[bp],al
-	sub	si,si
-	jmp	test_dispatch_entries
+        mov     byte ptr local_previous_job[bp],0feh
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr local_previous_job[bp]
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr [bx]
+        mov     byte ptr local_next_job[bp],al
+        sub     si,si
+        jmp     test_dispatch_entries
 
 check_ready_link:
-	cmp	byte ptr (0-0bh)[bp],0ffh
-	jnz	inspect_ready_job
-	jmp	check_work_remaining
+        cmp     byte ptr local_next_job[bp],0ffh
+        jnz     inspect_ready_job
+        jmp     check_work_remaining
 
 inspect_ready_job:
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr (0-0bh)[bp]
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr 3h[bx]
-	xor	ah,ah
-	mov	word ptr (0-13h)[bp],ax
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,0dh
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	bx,ax
-	cmp	byte ptr [bx],0h
-	jz	prepare_device_message
-	jmp	advance_dispatch_link
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr local_next_job[bp]
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr 3h[bx]
+        xor     ah,ah
+        mov     word ptr local_work_index[bp],ax
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,device_slot_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     bx,ax
+        cmp     byte ptr [bx],0h
+        jz      prepare_device_message
+        jmp     advance_dispatch_link
 
 prepare_device_message:
-	mov	byte ptr request,0h
-	mov	al,byte ptr (0-0bh)[bp]
-	mov	byte ptr request_job,al
-	mov	ax,offset index_record
-	mov	word ptr .current_dma,ax
-	mov	ax,offset index_record
-	push	ax
-	mov	ax,1ah	; F_DMAOFF
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	al,byte ptr (0-0bh)[bp]
-	xor	ah,ah
-	mov	bx,2h
-	cwd
-	idiv	bx
-	mov	byte ptr .index_random_record,al
-	mov	byte ptr .1031h,0h
-	mov	byte ptr .1030h,0h
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,21h	; F_READRAND
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset index_record
-	push	ax
-	mov	al,byte ptr (0-0bh)[bp]
-	xor	ah,ah
-	mov	bx,2h
-	cwd
-	idiv	bx
-	xchg	ax,dx
-	mov	cl,6h
-	shl	ax,cl
-	pop	bx
-	add	ax,bx
-	mov	word ptr (0-0fh)[bp],ax
-	mov	bx,word ptr (0-0fh)[bp]
-	mov	byte ptr 0ch[bx],3h
-	sub	di,di
-	jmp	test_dispatch_data
+        mov     byte ptr request,0h
+        mov     al,byte ptr local_next_job[bp]
+        mov     byte ptr request_job,al
+        mov     ax,offset index_record
+        mov     word ptr current_dma,ax
+        mov     ax,offset index_record
+        push    ax
+        mov     ax,1ah  ; F_DMAOFF
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     al,byte ptr local_next_job[bp]
+        xor     ah,ah
+        mov     bx,2h
+        cwd
+        idiv    bx
+        mov     byte ptr index_random_record,al
+        mov     byte ptr index_random_record+2,0h
+        mov     byte ptr index_random_record+1,0h
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,21h  ; F_READRAND
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset index_record
+        push    ax
+        mov     al,byte ptr local_next_job[bp]
+        xor     ah,ah
+        mov     bx,2h
+        cwd
+        idiv    bx
+        xchg    ax,dx
+        mov     cl,6h
+        shl     ax,cl
+        pop     bx
+        add     ax,bx
+        mov     word ptr local_index_entry[bp],ax
+        mov     bx,word ptr local_index_entry[bp]
+        mov     byte ptr 0ch[bx],3h
+        sub     di,di
+        jmp     test_dispatch_data
 
 copy_dispatch_data:
-	mov	ax,offset request_data
-	add	ax,di
-	push	ax
-	mov	ax,offset index_record
-	push	ax
-	mov	al,byte ptr (0-0bh)[bp]
-	xor	ah,ah
-	mov	bx,2h
-	cwd
-	idiv	bx
-	xchg	ax,dx
-	mov	cl,6h
-	shl	ax,cl
-	add	ax,di
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr [bx]
-	pop	bx
-	mov	byte ptr [bx],al
-	inc	di
+        mov     ax,offset request_data
+        add     ax,di
+        push    ax
+        mov     ax,offset index_record
+        push    ax
+        mov     al,byte ptr local_next_job[bp]
+        xor     ah,ah
+        mov     bx,2h
+        cwd
+        idiv    bx
+        xchg    ax,dx
+        mov     cl,6h
+        shl     ax,cl
+        add     ax,di
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr [bx]
+        pop     bx
+        mov     byte ptr [bx],al
+        inc     di
 
 test_dispatch_data:
-	cmp	di,40h
-	jc	copy_dispatch_data
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,22h	; F_WRITERAND
-	push	ax
-	call	xdos
-	add	sp,4h
-	or	byte ptr .1013h,80h
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,10h	; F_CLOSE
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset device_queues
-	push	ax
-	mov	ax,word ptr (0-13h)[bp]
-	mov	cl,4h
-	shl	ax,cl
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,8bh	; Q_WRITE
-	push	ax
-	call	xdos
-	add	sp,4h
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,0dh
-	mul	word ptr (0-13h)[bp]
-	pop	bx
-	add	bx,ax
-	mov	byte ptr [bx],1h
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr (0-0bh)[bp]
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	ax,bx
-	push	ax
-	mov	ax,word ptr (0-13h)[bp]
-	pop	bx
-	mov	byte ptr 3h[bx],al
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr (0-0bh)[bp]
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr [bx]
-	mov	byte ptr (0-0bh)[bp],al
-	mov	ax,offset job_status
-	push	ax
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr (0-0ah)[bp]
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr [bx]
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	byte ptr [bx],0ffh
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr (0-0ah)[bp]
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr (0-0bh)[bp]
-	mov	byte ptr [bx],al
-	jmps	next_dispatch_entry
+        cmp     di,index_entry_bytes
+        jc      copy_dispatch_data
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,22h  ; F_WRITERAND
+        push    ax
+        call    xdos
+        add     sp,4h
+        or      byte ptr index_fcb+5,80h
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,10h  ; F_CLOSE
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset device_queues
+        push    ax
+        mov     ax,word ptr local_work_index[bp]
+        mov     cl,4h
+        shl     ax,cl
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,8bh  ; Q_WRITE
+        push    ax
+        call    xdos
+        add     sp,4h
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,device_slot_bytes
+        mul     word ptr local_work_index[bp]
+        pop     bx
+        add     bx,ax
+        mov     byte ptr [bx],1h
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr local_next_job[bp]
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     ax,bx
+        push    ax
+        mov     ax,word ptr local_work_index[bp]
+        pop     bx
+        mov     byte ptr 3h[bx],al
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr local_next_job[bp]
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr [bx]
+        mov     byte ptr local_next_job[bp],al
+        mov     ax,offset job_status
+        push    ax
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr local_previous_job[bp]
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr [bx]
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     byte ptr [bx],0ffh
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr local_previous_job[bp]
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr local_next_job[bp]
+        mov     byte ptr [bx],al
+        jmps    next_dispatch_entry
 
 advance_dispatch_link:
-	mov	al,byte ptr (0-0bh)[bp]
-	mov	byte ptr (0-0ah)[bp],al
-	mov	ax,offset job_status
-	push	ax
-	mov	al,byte ptr (0-0bh)[bp]
-	xor	ah,ah
-	shl	ax,1
-	shl	ax,1
-	pop	bx
-	add	bx,ax
-	mov	al,byte ptr [bx]
-	mov	byte ptr (0-0bh)[bp],al
+        mov     al,byte ptr local_next_job[bp]
+        mov     byte ptr local_previous_job[bp],al
+        mov     ax,offset job_status
+        push    ax
+        mov     al,byte ptr local_next_job[bp]
+        xor     ah,ah
+        shl     ax,1
+        shl     ax,1
+        pop     bx
+        add     bx,ax
+        mov     al,byte ptr [bx]
+        mov     byte ptr local_next_job[bp],al
 
 next_dispatch_entry:
-	inc	si
+        inc     si
 
 test_dispatch_entries:
-	cmp	si,0feh
-	jnc	check_work_remaining
-	jmp	check_ready_link
+        cmp     si,job_number_count
+        jnc     check_work_remaining
+        jmp     check_ready_link
 
 check_work_remaining:
-	cmp	byte ptr .ready_head,0ffh
-	jnz	resume_receive
-	sub	si,si
-	jmps	test_active_devices
+        cmp     byte ptr ready_head,0ffh
+        jnz     resume_receive
+        sub     si,si
+        jmps    test_active_devices
 
 inspect_active_device:
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,0dh
-	mul	si
-	pop	bx
-	add	bx,ax
-	cmp	byte ptr [bx],0ffh
-	jz	next_active_device
-	mov	ax,offset despool_status
-	push	ax
-	mov	ax,0dh
-	mul	si
-	pop	bx
-	add	bx,ax
-	cmp	byte ptr [bx],0h
-	ja	resume_receive
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,device_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        cmp     byte ptr [bx],0ffh
+        jz      next_active_device
+        mov     ax,offset despool_status
+        push    ax
+        mov     ax,device_slot_bytes
+        mul     si
+        pop     bx
+        add     bx,ax
+        cmp     byte ptr [bx],0h
+        ja      resume_receive
 
 next_active_device:
-	inc	si
+        inc     si
 
 test_active_devices:
-	cmp	si,10h
-	jc	inspect_active_device
-	mov	byte ptr .index_active,0h
-	mov	ax,offset index_fcb
-	push	ax
-	mov	ax,10h	; F_CLOSE
-	push	ax
-	call	xdos
-	add	sp,4h
+        cmp     si,device_slot_count
+        jc      inspect_active_device
+        mov     byte ptr index_active,0h
+        mov     ax,offset index_fcb
+        push    ax
+        mov     ax,10h  ; F_CLOSE
+        push    ax
+        call    xdos
+        add     sp,4h
 
 resume_receive:
-	jmp	receive_request
+        jmp     receive_request
 
 leave_spooler:
-	lea	sp,word ptr (0-4h)[bp]
-	pop	di
-	pop	si
-	pop	bp
-	ret
+        lea     sp,word ptr (0-4h)[bp]
+        pop     di
+        pop     si
+        pop     bp
+        ret
 
 ; Alignment followed by UTLASM's four 16-byte CPATCH records.
-	db	0h
-	db	41h
-	rb	15
-	db	42h
-	rb	15
-	db	43h
-	rb	15
-	db	44h
-	rb	15
+                        db      0h
+cpatch_a                db      'A'
+                        rb      15
+cpatch_b                db      'B'
+                        rb      15
+cpatch_c                db      'C'
+                        rb      15
+cpatch_d                db      'D'
+                        rb      15
 
 ; Assembly system interfaces shared with the PRINTMGR utility (UTLASM).
 
 getds:
-	mov	ax,ds
-	ret
+        mov     ax,ds
+        ret
 
 g_lsts:
-	push	bp
-	mov	bp,sp
-	mov	cl,9ah
-	int	0e0h
-	mov	al,es:byte ptr 84h[bx]
-	xor	ah,ah
-	pop	bp
-	ret
+        push    bp
+        mov     bp,sp
+        mov     cl,9ah
+        int     0e0h
+        mov     al,es:byte ptr 84h[bx]
+        xor     ah,ah
+        pop     bp
+        ret
 
 g_sysdsk:
-	push	bp
-	mov	bp,sp
-	mov	cl,9ah
-	int	0e0h
-	mov	al,es:byte ptr 4bh[bx]
-	pop	bp
-	ret
+        push    bp
+        mov     bp,sp
+        mov     cl,9ah
+        int     0e0h
+        mov     al,es:byte ptr 4bh[bx]
+        pop     bp
+        ret
 
 get_pids:
-	push	bp
-	mov	bp,sp
-	push	si
-	push	di
-	sub	sp,0ah
-	mov	cl,9ch
-	int	0e0h
-	mov	cx,0h
-	mov	si,word ptr 4h[bp]
+        push    bp
+        mov     bp,sp
+        push    si
+        push    di
+        sub     sp,0ah
+        mov     cl,9ch
+        int     0e0h
+        mov     cx,0h
+        mov     si,word ptr 4h[bp]
 
+; Follow the parent link until the process family ends or the caller array is full.
 next_parent_pid:
-	mov	bx,es:word ptr 1eh[bx]
-	or	bx,bx
-	jz	pid_list_done
-	mov	word ptr [si],bx
-	inc	si
-	inc	si
-	inc	cx
-	jmp	next_parent_pid
+        mov     bx,es:word ptr 1eh[bx]
+        or      bx,bx
+        jz      pid_list_done
+        mov     word ptr [si],bx
+        inc     si
+        inc     si
+        inc     cx
+        jmp     next_parent_pid
 
 pid_list_done:
-	xchg	ax,cx
-	lea	sp,word ptr (0-4h)[bp]
-	pop	di
-	pop	si
-	pop	bp
-	ret
+        xchg    ax,cx
+        lea     sp,word ptr (0-4h)[bp]
+        pop     di
+        pop     si
+        pop     bp
+        ret
 
+; Near parameter: pass the function in CX and argument in DX to INT E0h.
 xdos:
-	push	bp
-	mov	bp,sp
-	mov	ax,word ptr 4h[bp]
-	xchg	ax,cx
-	mov	ax,word ptr 6h[bp]
-	xchg	ax,dx
-	int	0e0h
-	pop	bp
-	ret
+        push    bp
+        mov     bp,sp
+        mov     ax,word ptr 4h[bp]
+        xchg    ax,cx
+        mov     ax,word ptr 6h[bp]
+        xchg    ax,dx
+        int     0e0h
+        pop     bp
+        ret
 
+; Far parameter: load DS:DX from the stack, then restore the caller's DS.
 ptr_xdos:
-	push	bp
-	mov	bp,sp
-	push	si
-	push	di
-	mov	ax,word ptr 4h[bp]
-	xchg	ax,cx
-	push	ds
-	lds	dx,dword ptr 6h[bp]
-	int	0e0h
-	pop	ds
-	lea	sp,word ptr (0-4h)[bp]
-	pop	di
-	pop	si
-	pop	bp
-	ret
+        push    bp
+        mov     bp,sp
+        push    si
+        push    di
+        mov     ax,word ptr 4h[bp]
+        xchg    ax,cx
+        push    ds
+        lds     dx,dword ptr 6h[bp]
+        int     0e0h
+        pop     ds
+        lea     sp,word ptr (0-4h)[bp]
+        pop     di
+        pop     si
+        pop     bp
+        ret
 
+; Return ES in BX along with the normal AX result.
 long_xdo:
-	push	bp
-	mov	bp,sp
-	push	si
-	push	di
-	mov	ax,word ptr 4h[bp]
-	xchg	ax,cx
-	mov	ax,word ptr 6h[bp]
-	xchg	ax,dx
-	int	0e0h
-	mov	bx,es
-	lea	sp,word ptr (0-4h)[bp]
-	pop	di
-	pop	si
-	pop	bp
-	ret
+        push    bp
+        mov     bp,sp
+        push    si
+        push    di
+        mov     ax,word ptr 4h[bp]
+        xchg    ax,cx
+        mov     ax,word ptr 6h[bp]
+        xchg    ax,dx
+        int     0e0h
+        mov     bx,es
+        lea     sp,word ptr (0-4h)[bp]
+        pop     di
+        pop     si
+        pop     bp
+        ret
 
+; The C runtime probes BDOS and OS versions to select supported runtime features.
 identify_os:
-	sub	ax,ax
-	push	ax
-	mov	al,0ch
-	push	ax
-	call	runtime_bdos
-	add	sp,4h
-	mov	ax,word ptr bdos_saved_ax
-	mov	word ptr .1042h,ax
-	jmps	classify_version
+        sub     ax,ax
+        push    ax
+        mov     al,0ch
+        push    ax
+        call    runtime_bdos
+        add     sp,4h
+        mov     ax,word ptr bdos_saved_ax
+        mov     word ptr runtime_version,ax
+        jmps    classify_version
 
 legacy_os_flags:
-	or	word ptr .1040h,25h
-	jmp	os_done
+        or      word ptr runtime_features,25h
+        jmp     os_done
 
 query_os_release:
-	sub	ax,ax
-	push	ax
-	mov	al,0a3h
-	push	ax
-	call	runtime_bdos
-	add	sp,4h
-	jmps	dispatch_release
+        sub     ax,ax
+        push    ax
+        mov     al,0a3h
+        push    ax
+        call    runtime_bdos
+        add     sp,4h
+        jmps    dispatch_release
 
 plain_release:
-	or	word ptr .1040h,0h
+        or      word ptr runtime_features,0h
 
 flag_multiuser:
-	or	word ptr .1040h,40h
-	jmps	check_optional_calls
+        or      word ptr runtime_features,40h
+        jmps    check_optional_calls
 
 concurrent_release:
-	or	word ptr .1040h,0h
+        or      word ptr runtime_features,0h
 
 flag_concurrent:
-	or	word ptr .1040h,0c5h
-	jmps	check_optional_calls
+        or      word ptr runtime_features,0c5h
+        jmps    check_optional_calls
 
 dispatch_release:
-	mov	ax,word ptr bdos_saved_ax
-	cmp	ax,1420h
-	jz	flag_concurrent
-	cmp	ax,1431h
-	jz	concurrent_release
-	cmp	ax,22h
-	jz	flag_multiuser
-	cmp	ax,1031h
-	jz	plain_release
-	jmps	concurrent_release
+        mov     ax,word ptr bdos_saved_ax
+        cmp     ax,1420h
+        jz      flag_concurrent
+        cmp     ax,1431h
+        jz      concurrent_release
+        cmp     ax,22h
+        jz      flag_multiuser
+        cmp     ax,1031h
+        jz      plain_release
+        jmps    concurrent_release
 
 check_optional_calls:
-	call	probe_os_mode
-	jmps	os_done
+        call    probe_os_mode
+        jmps    os_done
 
 native_concurrent_flags:
-	or	word ptr .1040h,0c5h
-	jmps	os_done
+        or      word ptr runtime_features,0c5h
+        jmps    os_done
 
 os_flags_ready:
-	jmps	os_done
-	jmps	os_done
+        jmps    os_done
+        jmps    os_done
 
 classify_version:
-	mov	ax,word ptr .1042h
-	cmp	ax,3022h
-	jz	os_flags_ready
-	cmp	ax,2022h
-	jz	os_flags_ready
-	cmp	ax,22h
-	jz	os_flags_ready
-	cmp	ax,1031h
-	jz	native_concurrent_flags
-	cmp	ax,1431h
-	jz	query_os_release
-	cmp	ax,1130h
-	jz	legacy_os_flags
-	cmp	ax,1430h
-	jnz	query_extended_version
-	jmp	legacy_os_flags
+        mov     ax,word ptr runtime_version
+        cmp     ax,3022h
+        jz      os_flags_ready
+        cmp     ax,2022h
+        jz      os_flags_ready
+        cmp     ax,22h
+        jz      os_flags_ready
+        cmp     ax,1031h
+        jz      native_concurrent_flags
+        cmp     ax,1431h
+        jz      query_os_release
+        cmp     ax,1130h
+        jz      legacy_os_flags
+        cmp     ax,1430h
+        jnz     query_extended_version
+        jmp     legacy_os_flags
 
 query_extended_version:
-	jmps	query_os_release
+        jmps    query_os_release
 
 os_done:
-	ret
+        ret
 
 probe_os_mode:
-	sub	ax,ax
-	push	ax
-	mov	al,44h
-	push	ax
-	call	runtime_bdos
-	add	sp,4h
-	cmp	word ptr bdos_saved_ax,0ffffh
-	jz	mode_unavailable
-	cmp	word ptr bdos_saved_ax,0h
-	jz	mode_unavailable
-	or	word ptr .1040h,2h
-	sub	ax,ax
-	jmps	mode_done
+        sub     ax,ax
+        push    ax
+        mov     al,44h
+        push    ax
+        call    runtime_bdos
+        add     sp,4h
+        cmp     word ptr bdos_saved_ax,0ffffh
+        jz      mode_unavailable
+        cmp     word ptr bdos_saved_ax,0h
+        jz      mode_unavailable
+        or      word ptr runtime_features,2h
+        sub     ax,ax
+        jmps    mode_done
 
 mode_unavailable:
-	mov	ax,0ffffh
+        mov     ax,0ffffh
 
 mode_done:
-	ret
-	rb	7
+        ret
+                        rb      7
 
-	dseg
-	rb	258
-	db	6fh
-	db	10h
-	rb	162
+; Data group: base page, job tables, transfer buffers and runtime globals.
+        dseg
+loader_page             rb      256
+runtime_prefix          rw      1
+initial_data_end        dw      106fh
+heap_break              rw      1
+submission_workspace    rb      160
 
-spool_status rb 192	; eight 24-byte submission records
+spool_status            rb      192  ; eight 24-byte submission records
 
-despool_status rb 208	; sixteen 13-byte device records
+despool_status          rb      208  ; sixteen 13-byte device records
 
 ; 255 four-byte entries, indexed by job number.
-job_status rb 1020
+job_status              rb      1016
+ready_head              rb      4  ; sentinel entry after the 254 usable jobs
 
-queue_error rb 0
-	db	'LST000: '
+queue_error             rb      0
+                        db      'LST000: '
 
-error_text rb 0
-	db	'There was not enough queue buffer space in your system to '
-	db	'start the spooler.'
-	db	0dh
-	db	0ah
-	rb	1316
+error_text              db      'There was not enough queue buffer space in your system to '
+                        db      'start the spooler.'
+                        db      13,10,0
+                        rb      1
+current_dma             rw      1
+spool_buffers           rb      1024  ; eight partial records
+spool_fcbs              rb      288  ; eight open spool files
 
-spool_filename rb 0
-	db	'SPL.DSP'
-	rb	5
+spool_filename          db      'SPL.DSP',0
+parse_args              rw      1  ; F_PARSE source pointer
+parse_target            rw      1  ; destination FCB pointer
 
-request rb 0
-	db	0h
-
-request_job rb 0
-	db	0h
-
-request_name rb 11
-request_job_status db 0
-
-request_device rb 0
-	rb	18
-
-request_data rb 0
-	rb	288
+request                 db      0  ; command on input, result on reply
+request_job             db      0
+request_name            rb      11
+request_job_status      db      0
+request_device          db      0
+request_priority        db      0
+request_flags           db      0
+request_copies          db      0
+copies_left             db      0
+original_records        rw      1
+remaining_records       rw      1
+request_length          rw      1
+request_reserved        rb      7
+request_data            rb      128
+discard_message         rb      160  ; drain stale SPLOUT reply before retrying
 
 ; Q_MAKE descriptors: queue linkage, flags, eight-byte name,
 ; message length, capacity and bookkeeping space.
-mutex_descriptor dw 0,0,1
- db 'MXSPL   '
- dw 0,1
- rb 10
-input_descriptor dw 0,0,0
- db 'SPLIN   '
- dw 160,1
- rb 10
-output_descriptor dw 0,0,0
- db 'SPLOUT  '
- dw 160,1
- rb 10
+mutex_descriptor        dw      0,0,1
+                        db      'MXSPL   '
+                        dw      0,1
+                        rb      10
+input_descriptor        dw      0,0,0
+                        db      'SPLIN   '
+                        dw      160,1
+                        rb      10
+output_descriptor       dw      0,0,0
+                        db      'SPLOUT  '
+                        dw      160,1
+                        rb      10
 
 ; Q_OPEN/Q_READ/Q_WRITE parameter blocks. Both data queues share the
 ; 160-byte request/reply buffer. The mutex carries no message payload.
-mutex_queue dw 0,0,0,0
- db 'MXSPL   '
-input_queue dw 0,0,0,offset request
- db 'SPLIN   '
-output_queue dw 0,0,0,offset request
- db 'SPLOUT  '
+mutex_queue             dw      0,0,0,0
+                        db      'MXSPL   '
+input_queue             dw      0,0,0,offset request
+                        db      'SPLIN   '
+output_queue            dw      0,0,0
+reply_buffer_ptr        dw      offset request
+                        db      'SPLOUT  '
 
-device_queues rb 0
-	rb	262
-	db	0b8h
-	db	0ch
-	db	'DSP     '
+device_queues           rb      256  ; sixteen queue parameter blocks
+device_queue_template   dw      0,0,0,offset request
+                        db      'DSP     '
 
-index_record rb 0
-	rb	130
+index_record            rb      128
+index_active            db      0
+                        rb      1
 
-index_fcb rb 0
-	db	0h
-	db	'INDEX   DSP'
-	rb	34
+index_fcb               db      0
+                        db      'INDEX   DSP'
+                        rb      21
+index_random_record     rb      3
+default_drive           db      0
+                        rb      1
+drive_letter            db      0
+                        rb      1
+runtime_buffer_flags    rw      1
+runtime_os_class        db      0
+                        rb      3
 
-bdos_saved_ax rb 0
-	rb	8
-	db	'Cprogram'
-	db	0h
-	db	0h
-	db	'CON:'
-	db	0h
-	db	0h
-	db	'LST:'
-	db	0h
-	db	0h
-	db	1ah
-	rb	21
-	org	106fh
-	db	0
-	end
+bdos_saved_ax           rw      1
+                        rw      1
+runtime_features        rw      1
+runtime_version         rw      1
+                        db      'Cprogram'
+                        db      0h
+                        db      0h
+                        db      'CON:'
+                        db      0h
+                        db      0h
+                        db      'LST:'
+                        db      0h
+                        db      0h
+                        db      1ah
+                        rb      3
+bdos_saved_cx           rw      1
+                        rb      15
+        org     106fh
+                        db      0
+        end
