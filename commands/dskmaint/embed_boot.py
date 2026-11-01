@@ -2,7 +2,7 @@
 from pathlib import Path
 import sys
 
-raw = Path('dskraw.cmd').read_bytes()
+raw = Path('dskmaint.raw').read_bytes()
 boot = Path('dosboot.bin').read_bytes()
 marker = b'PUT THE PC LOADER HERE'
 assert len(boot) == 512, 'DOSBOOT must be exactly one sector'

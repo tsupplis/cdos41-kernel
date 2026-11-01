@@ -40,7 +40,7 @@ $(OBJECTS): $(LOCAL_INCLUDES) Makefile
 # Remove generated outputs only; preserve sources and reference files.
 clean:
 	rm -f *.sys *.loc *.cmd *.obj *.h86 *.hex *.sym *.lin *.lst *.prn *.log
-	rm -f *.mp? *.lnk *.map *.exe *.com dosboot.bin dskraw.inp
+	rm -f *.mp? *.lnk *.map *.exe *.com dosboot.bin dskmaint.raw dskraw.inp
 
 help1.obj: help1.a86 Makefile
 	$(INTEL_ASM86) $<
@@ -60,12 +60,13 @@ dosboot.bin: dosboot.cmd Makefile
 dskraw.inp: dskmaint.in Makefile
 	python3 -c "from pathlib import Path; p=Path('dskmaint.in').read_bytes(); assert p.startswith(b'dskmaint ='); Path('$@').write_bytes(p.replace(b'dskmaint =',b'dskraw =',1))"
 
-dskraw.cmd: $(OBJECTS) dskraw.inp Makefile
+dskmaint.raw: $(OBJECTS) dskraw.inp Makefile
 	@$(LINK86) 'dskraw[input]' > dskmaint-link.log 2>&1; result=$$?; cat dskmaint-link.log; test $$result -eq 0
 	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal|NO FILE' dskmaint-link.log
+	mv dskraw.cmd $@
 	$(CMDINFO) $@
 
-dskmaint.cmd: dskraw.cmd dosboot.bin embed_boot.py Makefile
+dskmaint.cmd: dskmaint.raw dosboot.bin embed_boot.py Makefile
 	python3 embed_boot.py
 	$(CMDINFO) $@
 
