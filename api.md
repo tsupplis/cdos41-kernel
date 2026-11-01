@@ -27,7 +27,7 @@
 | 07 | Console input without echo/check | DOS 1.x | Implemented | — | — |
 | 08 | Console input without echo, Ctrl-C check | DOS 1.x | Implemented | Ctrl-C path implemented | — |
 | 09 | Print dollar-terminated string | DOS 1.x | Implemented | — | — |
-| 0A | Buffered console input | DOS 1.x | Implemented | Ctrl-C path implemented | — |
+| 0A | Buffered console input | DOS 1.x | Implemented | Capacity includes CR; zero capacity returns immediately; DEL acts as Backspace; Ctrl-C path implemented | European recovery plus zero-capacity guard |
 | 0B | Console input status | DOS 1.x | Implemented | — | — |
 | 0C | Flush input and read | DOS 1.x | Implemented | AL=01h/06h/07h/08h/0Ah read selectors | — |
 | 0D | Disk reset | DOS 1.x | Implemented | — | — |
@@ -44,8 +44,8 @@
 | 18 | Reserved/legacy in-use | Unused / stub | Unused | AL=00h; no service performed | — |
 | 19 | Get default drive | DOS 1.x | Implemented | — | — |
 | 1A | Set DTA | DOS 1.x | Implemented | — | — |
-| 1B | Allocation information, current drive | DOS 1.x | Partial | Geometry plus hash/FAT buffer segment, offset zero; FAT media uses the loaded FAT, CP/M media is not a DOS FAT | — |
-| 1C | Allocation information, selected drive | DOS 1.x | Partial | DL=0 current, 1=A, …; AL=FFh when DPH absent; same media-dependent pointer as 1B | — |
+| 1B | Allocation information, current drive | DOS 1.x | Partial | Geometry plus hash/FAT buffer segment, offset zero; FAT12/16 counts exclude reserved clusters; CP/M media is not a DOS FAT | — |
+| 1C | Allocation information, selected drive | DOS 1.x | Partial | DL=0 current, 1=A, …; Initializes/query DPB through BDOS; AL=FFh on selection/DPB failure; restores current drive; same media-dependent pointer as 1B | — |
 | 1D | Reserved/legacy read-only | Unused / stub | Unused | AL=00h; no service performed | — |
 | 1E | Reserved/legacy attributes | Unused / stub | Unused | AL=00h; no service performed | — |
 | 1F | Get current-drive DPB | DOS 1.x | Missing | m_null returns AL=00h; no DOS DPB pointer | — |
@@ -93,11 +93,13 @@ DOS 1.x FCB AL-status convention. Reserved slots are explicitly listed below.
 | 45 / 46 | Duplicate / force duplicate handle | Implemented | References share the handle control block and its position; not proof that shell redirection establishes those handles | — |
 | 47 | Get current directory | Implemented | Reconstructs FAT path using the temporary P: directory mapping | — |
 | 48 / 49 / 4A | Allocate / free / resize memory | Implemented | DOS memory descriptor blocks, PSP ownership and largest-available-block errors | — |
-| 4B | Execute / load overlay | Partial | AL=0 loads and runs COM/EXE; AL=3 loads/relocates EXE overlay; other subfunctions rejected | — |
+| 4B | Execute / load program or overlay | Partial | AL=0 loads and runs COM/EXE; AL=1 prepares COM/EXE without executing, returning SP/SS/IP/CS at ES:BX+0Eh; AL=3 loads/relocates EXE overlay; other subfunctions rejected | European 1985 recovery |
 | 4C | Terminate with status | Implemented | AL=exit status, normal termination type 0; common cleanup/parent return | — |
 | 4D | Get child return code | Implemented | Returns stored status/type in AX, then clears it; distinct from native function 108 and private shell return code | — |
 | 4E / 4F | Find first / next by pathname | Implemented | DTA search state, attributes and translated CP/M/FAT entries | — |
-| 50–53 | Reserved / later DOS internals | Stub | No service; CF clear, AL=0, AH retained; no PSP/list-of-lists contract | — |
+| 50 | Set current PSP | Implemented | Saves BX in the active PSP used by EXEC/termination; does not switch concurrent processes | European 1985 recovery |
+| 51 | Get current PSP | Implemented | Returns the active PSP segment in BX | European 1985 recovery |
+| 52–53 | Reserved / later DOS internals | Stub | No service; CF clear, AL=0, AH retained; no list-of-lists contract | — |
 | 54 | Get verify flag | Stub | Always returns AL=0; AH=2Eh does not enable verification | — |
 | 55 | Reserved / later DOS internals | Stub | No service; CF clear, AL=0, AH retained | — |
 | 56 | Rename pathname | Implemented | Path preparation and native rename | — |

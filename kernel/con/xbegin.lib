@@ -467,13 +467,20 @@ entry:					;arrive here from JMP at
 ;	instruction.
 
 	cld				;set the direction flag
-	cbw				;ah = 0
+	cbw				;ah = 0 for valid function numbers
+; European 29-Nov-1985 kernel: reject calls outside the dispatch table.
+	cmp al,38
+	ja entry_invalid
 	shl al,1			;multiply by 2
 	xchg bx,ax			;save bx in ax
-	call function_table[bx]		;no range checking needed
-	mov bx,ax			;only called by O.S.
+	call function_table[bx]		;validated function number
+entry_return:
+	mov bx,ax			;return result in AX and BX
 	retf				;return to O.S. kernel
 
+entry_invalid:
+	mov ax,0ffffh
+	jmps entry_return
 
 function_table:
 	dw	io_const		; 0 console status

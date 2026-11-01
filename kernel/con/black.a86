@@ -2645,10 +2645,12 @@ cnpr5:
 	jne cnpr6
 	inc cx
 	jmps cnpr5
-cnpr6:					;if (!reading && j > 0xff7)
+; European kernel BDOS 4A6Ah: compare against this volume's cluster
+; limit. A valid FAT16 successor above 0FF7h is not an end-of-chain mark.
+cnpr6:					;if (!reading && j > nclstrs)
 	test bdrwflg,1
 	jnz cnpr8
-	cmp ax,0ff7h
+	cmp ax,nclstrs
 	jbe cnpr8			;{
 cnpr7:					;  while(!getblk(i) && 
 	push bx				;        i < dpbptr->nclstrs)
@@ -2847,6 +2849,9 @@ zero1:					;while(BX--)
 	ret
 
 testfile:
+; European kernel BDOS 4BDDh: reacquire the directory buffer even when
+; its record number has not changed; other operations may have reused it.
+	or rd_dir_flag,0fh
 	xor al,al			;if (!dont_close) return(0);
 	xchg dont_close,al		;dont_close = 0;
 	or al,al
@@ -2898,7 +2903,23 @@ extendf:
 	ja exf1
 	test high_ext,080h		;if (!(high_ext & 0x80)) return;
 	jz exf1
-	jmps closedir			;closedir();
+; European kernel BDOS 4C63h: never update through a stale dirp after
+; extending a file. Keep the original CKS-high-byte 50h flag selection:
+; low nibble forces buffer lookup, high nibble additionally forces a read.
+	mov rd_dir_flag,0fh
+	test byte ptr chksiz+1,50h
+	jnz exf_lookup
+	mov rd_dir_flag,0ffh
+exf_lookup:
+	call setenddir
+	mov cx,2
+	call getdir
+	or ax,ax
+	jz exf_error
+	jmps closedir
+exf_error:
+	mov lret,11			;directory lookup failed during write
+	add sp,2			;discard extendf caller, return from bdosrw
 exf1:	
 	ret
 

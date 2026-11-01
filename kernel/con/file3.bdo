@@ -1071,7 +1071,9 @@ check_all_media:
 	xor al,al
 	xchg media_flag,al		;reset SCB media flag
 	test al,al			;was SCB media flag set
-	jz ret20			; no
+	jnz chk_am_start		; yes
+	jmp ret20			; no pending media change
+chk_am_start:
 	mov bx,dlog			;test logged-in drives only
 	mov al,16
 chk_am1:
@@ -1083,8 +1085,14 @@ chk_am1:
 	  mov bx,[bx]
 chk_am2:
 	  or bx,bx! jz chk_am4		;end of bcb list?
+; A shared BCB chain can contain another drive's pending data. Only
+; consider buffers for this drive (European kernel BDOS offset 1F0Ah).
+	    mov al,adrive
+	    cmp al,[bx]
+	    jnz chk_am_next
 	    test byte ptr 4[bx],0ffh	; no - is buffer pending
 	    jnz chk_am3			;  yes
+chk_am_next:
 	      mov bx,12[bx]		;get next bcb
 	      jmps chk_am2
 chk_am3:

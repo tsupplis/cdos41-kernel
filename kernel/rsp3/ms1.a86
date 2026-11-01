@@ -1437,6 +1437,14 @@ pass2:
 	mov	di,2ch				; offset of environment ptr
 	stosw					; store seg of env into PSP
 
+; European 24-Sep-1985 PC-MODE: DOS far-call entry at PSP:0050h.
+; Programs may call this stub instead of issuing INT 21h directly.
+psp_dos_entry:
+	mov di,50h
+	mov ax,21cdh			; INT 21h
+	stosw
+	mov al,0cbh			; RETF to the application's caller
+	stosb
 	ret
 
 
@@ -2978,6 +2986,11 @@ ms_conin:
 ;
 
 	call conech			;get a character
+; European PC-MODE: function 01h must take the existing Ctrl-C exit.
+	cmp al,CNTRLC
+	jne ms_conin_return
+	jmp c_term
+ms_conin_return:
 	mov ret_al,al
 	ret
 
@@ -3414,7 +3427,15 @@ read:
 	mov al,column
 	mov strcol,al			;save start for clt-x,ctl-h
 	mov bx,rdbuf_dx
-	mov cl,es:[bx]			;cl = maximum buffer length
+	mov cl,es:[bx]			;capacity includes terminating CR
+; European PC-MODE reserves one byte for CR. Guard zero capacity before
+; decrementing, so a zero-sized buffer cannot become a 255-byte buffer.
+	or cl,cl
+	jnz read_capacity
+	mov ax,ds ! mov es,ax
+	ret
+read_capacity:
+	dec cl
 	inc bx				;bx = next to fill - 1
 	push bx
 	mov ch,0			;ch = current buffer length
@@ -3431,7 +3452,10 @@ eofre:
 l_19:
 					;end of line
 	cmp al,LF ! je eofre		;jump to end of read if LF
+; European PC-MODE treats DEL like Backspace, not CP/M's echo-delete.
+	cmp al,RUBOUT ! jz read_backspace
 	cmp al,CTLH ! jnz noth		;backspace?
+read_backspace:
 					;do we have any chars to backspace
 	  or ch,ch ! jz readnx
 					;characters remain in buffer,backup one
@@ -3441,17 +3465,8 @@ l_19:
 					;length comput
 	  jmp linelen			;uses same code as repeat
 noth:
-					;not a backspace
-	cmp al,RUBOUT ! jnz notrub	;RUBOUT char?
-	  or ch,ch ! jz readnx		;skip if len = 0
-					;buffer has char,resend last char
-	  mov al,es:[bx]		;al = last char
-	  dec ch ! dec bx		;blen=blen-1
-					;next to fill -1 decremented
-	  jmp rdech1			;act like this is an echo
-
 notrub:
-					;not a RUBOUT char,check eol
+					;check physical end of line
 	cmp al,CTLE ! jnz note		;physical end of line?
 					;yes,save active counters
 					;and force eol
@@ -4362,6 +4377,13 @@ srch_exit2:
 
 
 srch_label:
+; European PC-MODE: a disk has only one volume label. Find-next cannot
+; return it again; empty labels and names outside the requested mask fail.
+	cmp ms_ah,FSEARCH
+	je srch_label_first
+	mov al,0ffh
+	ret
+srch_label_first:
 	mov cl,FSELDSK
 	mov dl,[di] ! dec dl
 	mov temp_dsk,dl				;save drive for error handler
@@ -4373,10 +4395,27 @@ label_srch_loop:
 	cmp al,0FFH ! je srch_label_exit
 	  mov cl,FSEARCH_NEXT
 	  cmp byte ptr [si],20H ! jne label_srch_loop ;check for volume label
+	  cmp byte ptr 1[si],' '
+	  jne srch_label_match
+srch_label_missing:
+	  mov al,0ffh
+	  jmps srch_label_exit
+srch_label_match:
 	  push es
 	  les bx,MS_FCB_PTR
+	  push si ! push bx
+	  mov cx,11
+srch_label_char:
+	  inc bx ! inc si
+	  mov al,es:[bx]
+	  cmp al,'?' ! je srch_label_next
+	  cmp al,[si]
+srch_label_next:
+	  loope srch_label_char
+	  pop bx ! pop si
 	  mov dl,es:[bx]
 	  pop es
+	  jne srch_label_missing
 	  or dl,dl ! jnz not_zero_drv
 	    mov dl,cur_dsk
 	    inc dl
@@ -4875,10 +4914,39 @@ ms_get_alloc:
 ;	exit:
 ;
 
-	mov es,sysdat
-	mov bl,cur_dsk ! xor bh,bh
-	shl bx,1
-	mov bx,es:0C18H[bx]		;get dph address out of dph table
+	mov dl,0			;function 1Bh uses the current drive
+ms_alloc_select:
+	dec dl ! jns ms_alloc_drive
+	mov dl,cur_dsk
+ms_alloc_drive:
+	cmp dl,cur_dsk ! je ms_alloc_dpb
+	mov cl,FSELDSK
+	call bdos
+	or al,al ! jz ms_alloc_dpb
+ms_alloc_error:
+	mov ret_al,0ffh
+	ret
+ms_alloc_dpb:
+	mov alloc_drive,dl
+; Function 31 initializes the disk and returns the DPB through ES:BX.
+; Unlike bdos, this entry preserves the returned ES instead of hiding it.
+	mov cl,31
+	push dx
+	call bdos_return_es
+	pop dx
+	cmp dl,cur_dsk ! je ms_alloc_restore_done
+	mov cl,FSELDSK
+	mov dl,cur_dsk			;do not reselect the queried drive
+	call abdos			;restore the process's current drive
+ms_alloc_restore_done:
+	mov si,bx
+	cmp ax,0ffffh ! je ms_alloc_error
+	xor cx,cx ! mov dx,cx		;high word for geometry division
+	mov ax,es
+	cmp ax,sysdat ! jne not_dos_dpb
+	mov bl,alloc_drive
+	xor bh,bh ! shl bx,1
+	mov bx,es:0c18h[bx]
 
 ms_get_alloc1:
 	mov si,es:8[bx]			;get dpb address
@@ -4891,7 +4959,8 @@ ms_get_alloc1:
 	pop ds
 	mov MS_BX,cx			;zero offset for FAT
 	mov ax,80H
-	cmp es:word ptr [si],0FFFFH ! jne not_dos_dpb
+; Both native FAT DPB markers are valid: FFFEh (FAT12), FFFFh (FAT16).
+	cmp es:word ptr [si],0FFFEH ! jb not_dos_dpb
 	  mov cl,es:1bh[si]		;PSH out of dpb
 	  shl ax,cl
 	  mov MS_CX,ax			;return physical sector size
@@ -4899,9 +4968,11 @@ ms_get_alloc1:
 	  mov ax,es:8[si]		;get cluster size
 	  div bx
 	  mov ret_al,al
-	  mov ax,es:6[si]		;get number of clusters
+	  mov ax,es:6[si]		;cluster limit includes reserved 0 and 1
+	  sub ax,2			;return usable allocation units
 	  jmps ms_alloc_exit
 not_dos_dpb:
+	mov ax,80H			;also reached directly from BDOS DPB
 	mov cl,es:15[si]		;PSH out of dpb
 	shl ax,cl
 	mov MS_CX,ax			;return physical sector size
@@ -4934,20 +5005,8 @@ ms_spec_alloc:
 ;		DX = # Allocation units
 ;
 
-	dec dl ! jns spec_ok		; if not default, skip
-	    mov dl,cur_dsk		;   else, get current
+	jmp ms_alloc_select		;shared default/specified-drive path
 
-spec_ok:
-	mov es,sysdat
-	mov bl,dl
-	xor bh,bh ! shl bx,1
-	mov bx,es:0C18h[bx]
-	cmp bx,0 ! je spec_error	; is there a drive?
-	    jmp ms_get_alloc1		; yes
-
-spec_error:
-	mov ret_al,0FFh			; this is how dos returns an error
-	ret
 
 eject
 
@@ -7333,6 +7392,13 @@ restore_ms_dma:
 
 eject
 
+; Function 31 must expose the DPB segment returned by BDOS.
+bdos_return_es:
+	pushf
+	cli
+	callf cs:BDOS_PTR
+	ret
+
 bdos:
 	push es	;THESE WILL BE SWAPPED
 	push cx
@@ -7722,6 +7788,7 @@ ms_ss			dw	0
 ms_cs			dw	0
 ms_ip			dw	0
 
+alloc_drive		db	0		;selected allocation-info drive
 rdbuf_dx		dw	0
 
 cli_ds			dw	0

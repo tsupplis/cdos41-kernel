@@ -318,3 +318,119 @@ is changed. The check is also included in `make check`.
 ## IBM XIOS graphics on EGA and VGA
 
 The color XIOS uses the captured video BIOS for CGA-compatible modes and palettes on enhanced adapters. INT E6h selector 30 advertises native 640×350, 16-color mode when the adapter has sufficient memory. The foreground graphics owner must restore text before switching consoles.
+
+## Recovery from the European 29-Nov-1985 kernel
+
+Reference: `base/ccpm.sys`, SHA-256
+`a5c3a5559b03194d636d5eb74b475257a249e126caaa5725a6622f43f49218b0`.
+These are selective source changes recovered from the binary, not replacement
+components. Existing local fixes are retained. Offsets below are relative to
+its BDOS code group or XIOS/SYSDAT group, not whole-file offsets.
+
+### BDOS and XIOS: recovered and tested
+
+- `kernel/con/bdosif.bdo`, `retmon`: restore bit 7 of the caller's FCB drive
+  byte for directory operations after copying the local FCB back. Recovered
+  from BDOS `0259h`. Tests execute assembled code for ordinary/directory
+  FCBs with zero, one and 36 bytes copied, including copy-boundary checks.
+- `kernel/con/file3.bdo`, `check_all_media`: skip shared-chain buffers whose
+  drive differs from `adrive` before testing their pending-write flag.
+  Recovered from BDOS `1F0Ah`. Six assembled-code cases cover empty chains,
+  clean/dirty buffers and buffers belonging to the selected/another drive.
+- `kernel/con/xbegin.lib`, `entry`: reject function numbers above 38 before
+  indexing the XIOS function table; return `FFFFh` in AX and BX. Recovered
+  from XIOS `0C40h`. All 256 possible function bytes are exercised with
+  synthetic dispatch targets, including both range boundaries.
+
+Tests use disposable memory fixtures and stub disk dependencies. These
+routine-level checks are supplemented by the PCE boot/usability suite.
+
+### PCTMP: isolated compatibility changes recovered and tested
+
+The original's PC-MODE stamp is 24-Sep-1985. The current batch recovers:
+
+- `kernel/rsp3/ms1.a86`: install `INT 21h; RETF` at PSP offset `50h`.
+- `kernel/rsp3/ms2.a86`: implement functions `50h` and `51h` using the existing
+  `active_psp` value; these functions do not switch concurrent processes.
+- `kernel/rsp3/ms2.a86`: support EXEC `4B01h` for COM/EXE load-only operation,
+  returning SP, SS, IP and CS at parameter-block offsets `0Eh` through `14h`.
+  Retain the original's prepared-child state rather than starting execution.
+
+`tools/pctmp_recovery_check.py` executes the built routines: the PSP stub
+and adjacent bytes; 50h/51h dispatch and six get/set cases; and 20 EXEC
+control-flow cases covering COM/EXE, execute/load-only/overlay, invalid
+subfunctions and failure cleanup. EXEC file I/O, allocation and loaders
+are stubbed; this verifies control flow and returned parameter layout, not
+end-to-end loading of an application. A separate `make check-pctmp-live`
+boots disposable media and runs a DOS program that checks the PSP stub and
+50h/51h services, loads real COM and MZ EXE children with 4B01h, inspects
+their returned entry-point bytes, frees their memory, restores the parent
+PSP/DTA and returns to the shell. This live test passes.
+
+`make check` and `make check-historical` run these tests and
+`tools/historical_check.py`. Like the RTC tests, NASM builds only disposable
+test drivers; production components retain ASM86/RASM86 and LINK86.
+
+Remaining candidates have not been ported: DOS critical-error and
+FCB directory-context changes. They require separate
+validation; this entry does not claim completion of that recovery work.
+
+The boot regression now reserves scratch space by removing HELP.HLP only
+from its disposable tools-disk copy. The distributed tools image is full;
+without this fixture preparation its PIP copy test fails with “DISK WRITE
+NO DATA BLOCK” independently of the recovered changes. Distributed payloads
+remain unchanged.
+
+### DOS console, volume labels and allocation information
+
+`kernel/rsp3/ms1.a86`: reserve the buffered-input CR byte, treat DEL as
+Backspace, dispatch function 01h Ctrl-C through the existing break path;
+reject repeated/empty/nonmatching volume-label searches; and retrieve the
+DPB through BDOS 31 before reporting allocation information, recognizing
+both FAT DPB markers and excluding reserved clusters 0 and 1. A zero-capacity
+input guard prevents underflow in the recovered decrement. Specified-drive allocation queries explicitly reselect `cur_dsk` afterward;
+the historical binary reselected the queried drive instead. An explicit zero
+high word also makes division safe for a DPB returned outside SYSDAT.
+
+`tools/pctmp_io_check.py` executes the rebuilt routines with synthetic console
+and disk dependencies: 13 console cases (capacities 0/1/2/5/255, CR bounds,
+Backspace/DEL, overflow and function 01h Ctrl-C), 14 volume-label cases
+(exact/wildcard/mismatch/empty/find-next, default/explicit drive), and 48
+allocation cases (FAT12/FAT16/CP/M/external DPB, drive selection, selection/DPB
+failures and restoration). All pass. The test runs under `make check` and
+`make check-historical`. The three test groups also reject the unmodified archived-source build.
+
+`make check-pctmp-live` additionally checks real FAT12 geometry against the
+fixture's BPB, CP/M allocation reporting, current-drive preservation, exact
+and mismatching label searches, find-next exhaustion, and zero/bounded DOS
+console input. The rebuilt system passes these checks as well as the earlier
+PSP and COM/EXE load-only checks.
+The larger error/directory-context work remains separate.
+
+### FAT extension and shared-directory ownership
+
+Recovered from the European kernel: `black.a86` uses the volume cluster
+limit at `cnpr6` instead of a FAT12-only constant; `testfile` forces directory
+buffer lookup; `extendf` invalidates/reacquires directory state before updating
+it, retaining the original CKS flag policy and error-11 unwind. The original
+word test at CKS+1 masks only its low byte; the source expresses that as a
+byte test without reading an unrelated adjacent byte.
+
+`ms2.a86` increments an HDS reference count by the receiving CAT's owner
+count when inserting a directory into an existing shared CAT. The other
+inheritance paths remain unchanged.
+
+`tools/fat_recovery_check.py` passes 79 assembled-code cases: 36 FAT12/16
+boundary decisions, four forced-lookup flag cases, 30 extension cases and
+nine CAT/HDS inheritance cases. Extension tests use separate code/data
+segments and check fresh versus stale directory writes, CKS policies,
+skipped updates, error 11, and stack balance. Inheritance tests cover one,
+two and five owners, existing directories and the no-CAT path. The test is
+included in `make check` and `make check-historical`.
+
+The live DOS regression additionally grows two FAT files alternately to
+32 KiB each with distinct contents and verifies both files byte-for-byte
+from the resulting image. This PCE test and the full `make check` pass.
+The archived-source build fails the FAT-boundary and ownership regressions.
+FAT16 boundary and shared-CAT cases are routine-level tests; the live disk
+stress test uses FAT12.

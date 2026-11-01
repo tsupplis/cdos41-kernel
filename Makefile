@@ -28,6 +28,10 @@ check: all
 	$(MAKE) -C commands check
 	$(MAKE) -C kernel/sysgen check
 	$(MAKE) -C kernel/con check-cursor check-rtc
+	python3 tools/historical_check.py
+	python3 tools/pctmp_recovery_check.py
+	python3 tools/pctmp_io_check.py
+	python3 tools/fat_recovery_check.py
 	$(MAKE) -C boot check
 	$(MAKE) -C media check
 
@@ -125,3 +129,16 @@ check-rtc: kernel
 .PHONY: check-setenv
 check-setenv: all
 	python3 tools/setenv_check.py
+
+# Execute historical recovery regressions against the locally built components.
+.PHONY: check-historical
+check-historical: kernel
+	python3 tools/historical_check.py
+	python3 tools/pctmp_recovery_check.py
+	python3 tools/pctmp_io_check.py
+	python3 tools/fat_recovery_check.py
+
+# Real DOS loaders and PSP services in a disposable PCE boot.
+.PHONY: check-pctmp-live
+check-pctmp-live: all
+	python3 tools/pctmp_live_check.py

@@ -2092,14 +2092,14 @@
     {
       "path": "kernel/con/xbegin.lib",
       "origin": "41SRC_05.IMG.DIR/XBEGIN.LIB",
-      "sha256": "83a41a3021d253df5c74cc1a312e6091a956b45ef48002d0a8ee452dc71f3014",
+      "sha256": "35d9a34b1b32a62dcb658f313f19b91a5d8d44c9be882c54ab52d1f07d0dc9be",
       "original_sha256": "52e2eab2f8f9dc3bfc8fbf37c7f99cdfefbe8af3f2796a3013d3a12d69df9e69",
       "modifications": "Remaining CCP/M import parity review and Ctrl+Alt+Esc WMENU wake shortcut; see tool READMEs and patches.md."
     },
     {
       "path": "kernel/con/black.a86",
       "origin": "41SRC_02.IMG.DIR/BLACK.A86",
-      "sha256": "ae2f8d2b8e5367891174a0cf3866646aad4054ebf7f8aac527c1ed87272f0760",
+      "sha256": "1df58d5e1170e44e359e8d9299f5d962945c80db7b8da4ce07481d9a3f524fc7",
       "original_sha256": "dfe07ef63cf0a06b582193fc1238d7c8a7ccf30f02621729597a4127d4e10edf",
       "modifications": [
         "Correct copydir attribute boundary from five filename bits to f1-f4; prevent FAT lowercase-name case flags from becoming FCB interface flags and invalidating CLOSE checksums."
@@ -2163,7 +2163,7 @@
     {
       "path": "kernel/con/file3.bdo",
       "origin": "41SRC_02.IMG.DIR/FILE3.BDO",
-      "sha256": "a5ce8bb32cae4e69dd946eb9a999e728e5b2dd328d32fafc6f7e4f369199f809"
+      "sha256": "071c9efd94431cd28b15414a836c82e1251e8f6f445ea74802e26e13d6c9ca36"
     },
     {
       "path": "kernel/con/file2.bdo",
@@ -2178,7 +2178,7 @@
     {
       "path": "kernel/con/bdosif.bdo",
       "origin": "41SRC_02.IMG.DIR/BDOSIF.BDO",
-      "sha256": "d6d5d345e0ebcf38c70be9ac113beea13abb7bda5aeef403286053b2354edd3e"
+      "sha256": "b29fc91b60c2ded10c177b26679b834bde25129b4ab6cd6f517469abfabffe3c"
     },
     {
       "path": "kernel/con/start.cod",
@@ -2624,12 +2624,12 @@
     {
       "path": "kernel/rsp3/ms2.a86",
       "origin": "41SRC_03.IMG.DIR/MS2.A86",
-      "sha256": "f4c93c5c36bbbefbf3fcd10dc5a5d283811012236acd07a2fffd3f05bd95bf56"
+      "sha256": "e639f1cfcd0e9a622376489fd54015d6172a50f9d5e1573f54f5e81b570df1b1"
     },
     {
       "path": "kernel/rsp3/ms1.a86",
       "origin": "41SRC_03.IMG.DIR/MS1.A86",
-      "sha256": "bf11132e92ace9c210d0e959828187ef4bfe5a597c37a58724a406416856f8fc"
+      "sha256": "35c2514a1515a4b540486ca1d746d6df48c0ffe2334b5294015d44ee7aaf0558"
     },
     {
       "path": "kernel/rsp3/wwcall.a86",

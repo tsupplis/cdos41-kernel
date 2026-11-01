@@ -323,6 +323,12 @@ retmon:
 	  mov di,info
 	  mov es,parametersegment
 	  rep movsb
+; European 29-Nov-1985 kernel: retain the directory-operation drive flag
+; after copying the local FCB back to its caller (base BDOS offset 0259h).
+	  test hdirfx,0ffh
+	  jz retmon6
+	  mov di,info
+	  or es:byte ptr [di],080h
 retmon6:
 	pop es				;restore uda segment
 	mov si,offset dma_ofst+4 ! mov di,offset u_dma_ofst+4

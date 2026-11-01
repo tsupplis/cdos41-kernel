@@ -235,8 +235,8 @@ ms2_func_table	dw	ms2_get_dta	; func 2F
 		dw	ms2_get_retcode	; func 4D
 		dw	ms2_find_first	; func 4E
 		dw	ms2_find_next	; func 4F
-		dw	ms2_null	; func 50
-		dw	ms2_null	; func 51
+		dw	ms2_set_psp	; func 50
+		dw	ms2_get_psp	; func 51
 		dw	ms2_null	; func 52
 		dw	ms2_null	; func 53
 		dw	ms2_get_verify	; func 54
@@ -379,9 +379,21 @@ io_ctrl_table	dw	80D3h		; values courtesy Joe Wein
 
 
 ;	*****************************
-;	***    DOS Function 54    ***
-;	***    Get Verify State   ***
+;	*** DOS Functions 50/51/54 ***
+;	*** PSP / Verify State    ***
 ;	*****************************
+
+; European 24-Sep-1985 PC-MODE: functions 50h/51h access the same
+; active PSP used by EXEC and termination. They do not switch processes.
+ms2_set_psp:
+	mov ax,ms2_bx
+	mov active_psp,ax
+	ret
+
+ms2_get_psp:
+	mov ax,active_psp
+	mov ms2_bx,ax
+	ret
 
 ms2_get_verify:
 	mov	ms2_ret_al,0		; show as always off
@@ -1217,7 +1229,10 @@ give_parent:
 
 	mov	bp,es:[di+bx]		; bp -> our new hds
 	mov	es:[si+bx],bp		; give parent our new hds
-	inc	es:hds_count[bp]	; add one to its count
+; European PC-MODE 31CEh: a CAT can be shared by several processes.
+; Installing an HDS into it adds one owner per CAT owner, not just one.
+	mov	ax,es:cat_count[si]
+	add	es:hds_count[bp],ax
 	jmps	give_parent_done
 
 give_parent_nocat:
@@ -3083,7 +3098,11 @@ ms2_exec:
 	mov	bx,dx			; bx -> fcb for loaders
 	mov	ax,ms2_ax		; get subfunction code
 	cmp	al,3			; if al = 3
-	jz	ms2_exec_load_exe	;   then load .exe file only
+	jz	ms2_exec_load_exe	;   then load .exe overlay only
+; European PC-MODE also accepts 4B01h: allocate and prepare the child,
+; returning its initial SS:SP and CS:IP without transferring control.
+	cmp	al,1
+	jz	ms2_exec_go
 	cmp	al,0			; if al = 0
 	mov	al,no_function		;   then load and go
 	jnz	ms2_exec_error		; else, return an error
@@ -3099,7 +3118,7 @@ ms2_exec_go_com:
 
 	call	set_up_psp		; build child's psp
 	call	set_com_regs		; set up initial registers
-	jmp	go_to_child		; goodbye!
+	jmps	ms2_exec_ready		; load-only and load-and-go share this
 
 ms2_exec_go_exe:
 	call	exe_read_header		; read in the exe info
@@ -3113,7 +3132,10 @@ ms2_exec_go_exe:
 	add	dx,10h			; dx = load seg
 	add	exe_hdr_cs,dx		; bias the code segment
 	add	exe_hdr_ss,dx		;   and the stack segment too
-	jmp	go_to_child		; goodbye!
+ms2_exec_ready:
+	cmp	ms2_al,1
+	jz	ms2_exec_loaded
+	jmp	go_to_child		; load-and-go transfers control
 
 ms2_exec_load_exe:
 	call	exe_read_header		; read in the exe info
@@ -3131,6 +3153,25 @@ ms2_exec_load_exe:
 ms2_exec_error:
 	call	restore_dta		; always reset the dta
 	jmp	ms2_error_ret		;   then report error
+
+; Load-only result extends the EXEC parameter block at ES:BX+0Eh.
+; Match the original order: SP, SS, IP, CS. Keep the prepared child's
+; PSP/memory state, as the original does; only restore the working ES.
+ms2_exec_loaded:
+	push es
+	mov es,ms2_es
+	mov di,ms2_bx
+	add di,0eh
+	mov ax,exe_hdr_sp
+	stosw
+	mov ax,exe_hdr_ss
+	stosw
+	mov ax,exe_hdr_ip
+	stosw
+	mov ax,exe_hdr_cs
+	stosw
+	pop es
+	ret
 
 
 ;	*****************************
