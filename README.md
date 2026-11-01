@@ -18,7 +18,7 @@ accompany the sources, with CP/M-Plus-style usability improvements. The assembly
 <p align="center">
 <img src="images/ccpm86.png" alt="Concurrent DOS 4.11 running in PCE" width="48%">
 <img src="images/windows.png" alt="Overlapping console windows" width="48%">
-<br><sub>Concurrent CP/M-86 3.1 &nbsp;·&nbsp; Console windows</sub><br>
+<br><sub>Concurrent DOS 4.11 &nbsp;·&nbsp; Console windows</sub><br>
 <img src="images/setup.png" alt="XIOS configuration menu" width="48%">
 <img src="images/basic.png" alt="Microsoft BASIC 5.50A" width="48%">
 <br><sub>System setup &nbsp;·&nbsp; Microsoft BASIC 5.50A</sub>
