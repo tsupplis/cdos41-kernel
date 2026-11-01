@@ -1,4 +1,4 @@
-# SPL - assemble the labelled 8086 source and restore the release encodings.
+# SPL - default DRC build, with a separately verified ASM86 reconstruction.
 ASM86=cpm86_asm86
 GENCMD=cpm86_gencmd
 PYTHON=python3
@@ -8,21 +8,27 @@ RASM86=pcdev_rasm86
 LINK86=drccpm_link
 CMDINFO=cmdinfo
 
-.PHONY: all check cbuild check-c check-live clean
+.PHONY: all check cbuild check-c check-asm check-live clean
 .DELETE_ON_ERROR:
 
 all: spl.cmd
 
-spl.h86: spl.a86 Makefile
-	@$(ASM86) $< > spl.log 2>&1; result=$$?; cat spl.log; test $$result -eq 0
-	@grep -qiE 'NUMBER OF ERRORS: +0' spl.log
+spl.cmd: splc.cmd Makefile
+	cp $< $@
 
-spl.cmd: spl.h86 Makefile encodings.py
+splorg.h86: splorg.a86 Makefile
+	@$(ASM86) $< > splorg.log 2>&1; result=$$?; cat splorg.log; test $$result -eq 0
+	@grep -qiE 'NUMBER OF ERRORS: +0' splorg.log
+
+splorg.cmd: splorg.h86 Makefile encodings.py
 	$(GENCMD) $<
-	$(PYTHON) encodings.py
+	$(PYTHON) encodings.py $@
 
-check: all
-	cmp spl.cmd $(REF)
+check: all check-c check-asm
+	cmp spl.cmd splc.cmd
+
+check-asm: splorg.cmd
+	cmp splorg.cmd $(REF)
 
 cbuild: splc.cmd
 
@@ -43,12 +49,12 @@ splc.cmd: splc.obj utlasm.obj Makefile
 	@test -s $@
 	$(CMDINFO) $@
 
-check-c: cbuild
+check-c: all
 	$(PYTHON) tests/check.py
 
-check-live: cbuild
+check-live: all
 	$(PYTHON) tests/live.py
 
 clean:
-	$(RM) spl.cmd spl.h86 spl.log spl.lst spl.sym
+	$(RM) spl.cmd splorg.cmd splorg.h86 splorg.log splorg.lst splorg.sym
 	$(RM) splc.cmd splc.obj splc.log splc-link.log splc.sym utlasm.obj utlasm.log utlasm.lst utlasm.sym

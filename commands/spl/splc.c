@@ -1,5 +1,5 @@
 /*
- * Behavioral reconstruction of SPL 4.11 from spl.a86.
+ * Behavioral reconstruction of SPL 4.11 from splorg.a86.
  * This is new source, not the recovered original SPL.C.
  */
 #include "splc.h"

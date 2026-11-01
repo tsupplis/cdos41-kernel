@@ -159,7 +159,7 @@ def check():
         folder = Path(directory)
         for name, requests, options, replies in cases():
             old = execute(folder, ROOT / "base/spl.cmd", requests, options)
-            new = execute(folder, SPL / "splc.cmd", requests, options)
+            new = execute(folder, SPL / "spl.cmd", requests, options)
             if old != new:
                 at = next((i for i, pair in enumerate(zip(old, new))
                            if pair[0] != pair[1]), min(len(old), len(new)))
@@ -201,7 +201,7 @@ def check():
             message(2, 255), message(7, 255), message(0), message(7),
             message(3, 255), message(1, 255), event(255), message(17, 255),
         ]
-        trace = execute(folder, SPL / "splc.cmd", requests, {})
+        trace = execute(folder, SPL / "spl.cmd", requests, {})
         for diagnostic in (
             b"SPL: append for unknown job\r\n",
             b"SPL: event for unknown job\r\n",

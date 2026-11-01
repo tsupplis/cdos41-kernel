@@ -103,7 +103,7 @@ def check():
         folder = Path(directory)
         system = system_image(folder / "system")
         original = session(folder / "original", ROOT / "base/spl.cmd", system)
-        rebuilt = session(folder / "rebuilt", SPL / "splc.cmd", system)
+        rebuilt = session(folder / "rebuilt", SPL / "spl.cmd", system)
         for command, old, new in zip(COMMANDS, original, rebuilt):
             assert old == new, (command, old, new)
     print("PASS: 11 paired CDOS/PCE screens: startup, submission, status, reset, restart, terminate")

@@ -26,7 +26,8 @@ and the DSP sources identify the message fields and request numbers used in
 this disassembly. The CODE patch area containing A–D records and the XDOS
 wrappers correspond to UTLASM.A86.
 
-Run `make check` to assemble SPL and compare the whole 12,160-byte CMD
+Run `make check-asm` to assemble [splorg.a86](splorg.a86) into `splorg.cmd`
+and compare the whole 12,160-byte CMD
 against the retained copy from CDOS 4.11 disk 3. All instructions are ASM86
 mnemonics. The packaging step restores the release DATA growth limit and
 seven equivalent register MOV encodings selected differently by ASM86.
@@ -39,16 +40,19 @@ It uses Digital Research C **1.11**, K&R declarations, unsigned bytes and
 DSP/PRINTMGR SPLDEF.H. Startup verifies all eight wire/disk structure sizes.
 The build reuses DSP's UTLASM assembly interfaces and the installed C runtime.
 
-The C build is deliberately separate:
+The reconstructed C server is the default build and distribution payload:
 
 ```sh
-make cbuild      # DRC 1.11 + RASM86 + LINK86 -> splc.cmd
+make            # DRC 1.11 + RASM86 + LINK86 -> splc.cmd -> spl.cmd
+make check      # C behavior checks, deployed-binary identity and ASM86 reference
+make check-asm  # separate byte-identical assembly reconstruction -> splorg.cmd
+make cbuild     # build the C intermediate splc.cmd only
 make check-c     # paired machine-code behavioral tests under emu2
 make check-live  # paired PRINTMGR/DSP workflows under CDOS in PCE
 ```
 
-`all`, `check` and distribution images still use the byte-identical assembly
-`spl.cmd`. The C command does not need encoding patches and is not expected to
+`all` and distribution images use the C-built `spl.cmd`; the assembly reference
+build never writes that filename. The C command does not need encoding patches and is not expected to
 match the original bytes. Its DATA allocation is capped at 5 KB, including
 stack space, rather than the linker's default 64 KB.
 
@@ -75,7 +79,8 @@ out-of-bounds memory accesses are not reproduced.
 
 ### Validation
 
-[tests/check.py](tests/check.py) loads **both actual CMD binaries**, including
+[tests/check.py](tests/check.py) loads the retained release and default `spl.cmd`,
+including
 their startup runtimes, into [the emu2 harness](tests/splcheck.asm). It compares
 queue payloads, spool-record writes, index writes, deletions and retry delays.
 Twenty paired scenarios cover submission, defaults, length clamping, capacity,

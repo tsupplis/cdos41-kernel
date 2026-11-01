@@ -36,6 +36,7 @@ DSKMAINT, HDMAINT, GENLDR and LOADCCPM on disks 08, 10 and 11.
 | `mkdir` | MKDIR/PATH/DERROR.A86 (11/07) | Verified build, enabled |
 | `dredix` | C editor modules + UTIL/WMCA/WWCALL, DREDIX.INP (08) | Verified build, enabled |
 | `dsp` | DSP/DSPM.C, UTLASM.A86 (09) | Verified build, enabled |
+| `spl` | Reconstructed SPLC.C/SPLC.H, DSP's UTLASM.A86 | Default DRC 1.11 build; paired machine-code and live CDOS tests; byte-identical ASM86 reference retained |
 | `era` | 4.1 ERAQ.PLM/SCD3 + adapted CCP/M ERA.PLM | ERA and ERAQ build together; old eraq directory consolidated |
 | `help` | SCD3.A86 + HELP3.PLM (11/09) | Verified build and HELP.HLP indexing; text starts from unchanged CCP/M HELP.DAT |
 | `function` | FUNC1/2/3, screen modules, HELP1/2, FUNC10 (09/10) | Verified build, enabled |

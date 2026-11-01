@@ -1,7 +1,8 @@
 """Restore the 4.11 linker's DATA maximum and alternate register encodings."""
 from pathlib import Path
+import sys
 
-path = Path('spl.cmd')
+path = Path(sys.argv[1])
 image = bytearray(path.read_bytes())
 if len(image) != 12160 or image[:18] != bytes.fromhex('01e3010000e3010000020701000007010000'):
     raise ValueError('Unexpected GENCMD group descriptors')
