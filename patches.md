@@ -546,3 +546,11 @@ interactive banner identifies the maintained 4.1N version.
 DSKMAINT now embeds the released 360 KB DOS bootstrap. The full sector matches
 4.11. A floppy formatted by the rebuilt utility cold-boots both original and
 locally generated systems linked for segment 0060h. See the DSKMAINT README.
+
+### National keyboard banks
+
+The IBM PC XIOS initializes the IRQ1 translation pointers from the five
+release keyboard modes. The default index remains zero (US eight-bit).
+Indices 1 and 3 select the national bank through mode bit 1. Plain, Shift, Control and shifted keypad translation use the
+selected pointers. The national bank starts with the UK release maps.
+The national setup directory and its other consumers are still pending.

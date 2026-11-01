@@ -95,11 +95,35 @@ INIT:
 	call	trim_memory		; fix up the partition list
 	call	do_aux_ports		; serial port int init
 	call	rtc_start		; import BIOS RTC before replacing vectors
+	call	select_key_bank	; install scan maps before enabling IRQ1
 	call	do_interrupts		; do all of the int stuff
 	call	sign_on			; print signon message
 	call	enable_ints		; interrupts back on
 	retf				; initializaiton done
 
+
+; Translate the saved N keyboard index into the release mode flags.
+; Invalid indices fall back to US eight-bit. Bit 1 selects the national bank.
+select_key_bank:
+	xor bx,bx
+	mov bl,key_layout
+	cmp bl,5
+	jb key_index_ok
+	xor bx,bx
+key_index_ok:
+	mov al,layout_modes[bx]
+	mov key_mode,al
+	test al,2
+	jnz use_national_keys
+	mov active_plain,offset key_table
+	mov active_shift,offset shift_table
+	mov active_ctrl,offset control_table
+	ret
+use_national_keys:
+	mov active_plain,offset national_plain
+	mov active_shift,offset national_shift
+	mov active_ctrl,offset national_ctrl
+	ret
 
 ;	copy and point int 1Eh:
 do_int_1e:

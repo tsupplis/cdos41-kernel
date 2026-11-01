@@ -210,6 +210,7 @@ release-image provenance. Details are in `base/cdos411.json`.
 | `hexcom` | Convert Intel HEX to COM binaries | - | HEXCOM 3.00-compatible C from [tpzasm](https://github.com/johnsonjh/tpzasm) | Additional tool |
 | `initdir` | Enable or remove directory date/time stamps | 4.11 | Recompiled from CDOS 4.1 | Equivalent |
 | `loadccpm.com` | Load the system from DOS | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Byte-identical |
+| `n` | Configure national keyboard, screen and printer tables | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical |
 | `path.exe` | Display or set the DOS search path | 4.11 | Recompiled from CDOS 4.1 | Equivalent |
 | `pip` | Copy and transfer files | 4.11 | Recompiled from CDOS 4.1 and adapted | Behavior tested |
 | `print` | Print files using Concurrent printer services | - | Recompiled from CCP/M-86 3.1 | Additional tool |

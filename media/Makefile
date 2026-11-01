@@ -44,7 +44,7 @@ EXTRAS_COMMANDS = ../commands/initdir/initdir.cmd ../extra/back.cmd ../extra/res
     ../extra/drtalk.def ../extra/drtalk.dir ../extra/drtalk.key
 
 ADMIN_COMMANDS = ../extra/backrest.doc ../commands/function/function.cmd ../commands/disk/dcomp.cmd \
-    ../base/n.cmd ../base/national.msg \
+    ../commands/n/n.cmd ../base/national.msg \
     ../commands/setport/setport.cmd ../commands/setup/setup.cmd \
     ../commands/stop/stop.cmd \
     ../extra/fm.cmd ../extra/fm.cfg ../base/term.dat

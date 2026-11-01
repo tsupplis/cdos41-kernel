@@ -1,0 +1,4095 @@
+;*****************************************************
+;*   N - Concurrent DOS national setup for the IBM PC
+;*****************************************************
+; Interactive setup reads NATIONAL.MSG and edits tables in CCPM.SYS.
+	cseg
+
+start:
+	call	init_stack
+	call	align_heap
+	call	get_drive
+	call	install_divide_handler
+	call	init_runtime_buffers
+	call	identify_os
+	mov	si,80h
+	lodsb
+	xor	ah,ah
+	push	ax
+	push	si
+	call	call_main
+
+branch_1d:
+	mov	cl,0h
+	push	es
+	int	0e0h
+	pop	es
+	jmp	national_main
+
+fatal_inline:
+	pop	dx
+	push	cs
+	pop	ds
+	mov	cl,9h
+	push	es
+	int	0e0h
+	pop	es
+	jmps	branch_1d
+	ret
+	db	'CP/M V1.11 8/27/84 SMALL Model CLEAR library. Copyright '
+	db	'1983,1984 Digital Research.$'
+
+bdos:
+	push	bp
+	mov	bp,sp
+	push	di
+	push	si
+	mov	dx,word ptr 6h[bp]
+	mov	cl,byte ptr 4h[bp]
+	push	es
+	int	0e0h
+	pop	es
+	mov	word ptr .582h,ax
+	mov	word ptr .5a6h,cx
+	sub	ah,ah
+	pop	si
+	pop	di
+	pop	bp
+	ret
+
+get_drive:
+	mov	cl,0ch
+	push	es
+	int	0e0h
+	pop	es
+	cmp	ah,11h
+	jnz	branch_b1
+	inc	byte ptr .50h
+
+branch_b1:
+	mov	al,byte ptr .50h
+	test	al,al
+	jz	branch_be
+	dec	al
+	cmp	al,0fh
+	jna	branch_c4
+
+branch_be:
+	mov	cl,19h
+	push	es
+	int	0e0h
+	pop	es
+
+branch_c4:
+	mov	byte ptr .5ach,al
+	add	al,41h
+	mov	byte ptr .5aeh,al
+	ret
+
+install_divide_handler:
+	push	ds
+	sub	bx,bx
+	mov	ds,bx
+	mov	word ptr [bx],0dbh
+	mov	word ptr 2h[bx],cs
+	pop	ds
+	ret
+
+divide_error:
+	call	fatal_inline
+	db	'Zero divide error$'
+
+align_heap:
+	push	ds
+	pop	es
+	mov	ax,word ptr .102h
+	add	ax,0fh
+	and	ax,0fff0h
+	mov	word ptr .104h,ax
+	ret
+	mov	ax,sp
+	sub	ax,100h
+	sub	ax,word ptr .104h
+	sub	bx,bx
+	ret
+
+grow_heap:
+	mov	bx,sp
+	mov	bx,ss:word ptr 2h[bx]
+	inc	bx
+	and	bl,0feh
+	mov	ax,word ptr .104h
+	add	bx,ax
+	jc	branch_11e
+	jmps	branch_12a
+
+branch_11e:
+	mov	ax,0ffffh
+	ret
+	mov	bx,sp
+	mov	bx,ss:word ptr 2h[bx]
+	sub	ax,ax
+
+branch_12a:
+	mov	cx,sp
+	sub	cx,100h
+	cmp	bx,cx
+	jnc	branch_11e
+	cmp	bx,word ptr .104h
+	jc	branch_11e
+	mov	word ptr .104h,bx
+	ret
+
+init_runtime_buffers:
+	sub	sp,4h
+	mov	dx,sp
+	mov	cl,69h
+	push	es
+	int	0e0h
+	pop	es
+	add	sp,4h
+	inc	ax
+	jz	branch_155
+	sub	ax,ax
+	or	ax,1000h
+
+branch_155:
+	push	ax
+	mov	cl,0ch
+	push	es
+	int	0e0h
+	pop	es
+	pop	ax
+	cmp	bx,22h
+	jc	branch_190
+	test	bh,2h
+	jz	branch_16d
+	or	ax,800h
+	xor	bh,2h
+
+branch_16d:
+	mov	cx,22h
+	or	ax,400h
+	test	bh,bh
+	jz	branch_190
+	xor	ax,400h
+	inc	cl
+	or	ax,0e000h
+	cmp	bh,1h
+	jz	branch_190
+	inc	cl
+	xor	ax,8000h
+	cmp	bh,14h
+	jz	branch_190
+	sub	cx,cx
+
+branch_190:
+	mov	byte ptr .5b2h,cl
+	mov	word ptr .5b0h,ax
+	ret
+
+init_stack:
+	pop	ax
+	pop	cx
+	pop	dx
+	sub	bx,bx
+	push	ds
+	pushf
+	pop	si
+	cli
+	pop	ss
+	mov	sp,word ptr 6h[bx]
+	push	si
+	popf
+	inc	sp
+	and	sp,0fffeh
+	push	dx
+	push	cx
+	push	bx
+	mov	bp,sp
+	lea	dx,word ptr (0-8h)[bp]
+	push	dx
+	push	bx
+	push	bx
+	push	bx
+	push	ax
+	mov	ss:word ptr .9h,ds
+	ret
+	pop	bx
+	pop	dx
+	inc	dx
+	and	dl,0feh
+	mov	ax,dx
+	add	ax,word ptr .104h
+	cmp	ax,sp
+	jna	branch_1e6
+	call	fatal_inline
+	db	0dh
+	db	0ah
+	db	'Stack overflow.'
+	db	0dh
+	db	0ah
+	db	24h
+
+branch_1e6:
+	sub	sp,dx
+	mov	ax,sp
+	push	dx
+	push	bx
+	ret
+	db	0h
+
+national_main:
+	call	check_platform
+	call	installation_loop
+	call	configure_system
+	call	restore_console
+	ret
+
+check_platform:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	mov	ax,0ch
+	push	ax
+	call	bdos_result
+	inc	sp
+	inc	sp
+	mov	ax,word ptr .48ah
+	mov	cl,8h
+	sar	ax,cl
+	cmp	ax,14h
+	jnz	reject_platform
+	jmps	select_system_layout
+
+unsupported_release:
+	jmps	reject_platform
+
+use_31_layout:
+	mov	word ptr signature_offset,0c3bh
+	jmps	branch_23a
+
+use_41_layout:
+	mov	word ptr signature_offset,0c3ch
+	jmps	branch_23a
+
+select_system_layout:
+	mov	ax,word ptr .48ah
+	xor	ah,ah
+	cmp	ax,31h
+	jz	use_31_layout
+	cmp	ax,30h
+	jz	unsupported_release
+	jmps	use_41_layout
+
+branch_23a:
+	jmps	branch_254
+
+reject_platform:
+	mov	ax,1f6h
+	push	ax
+	mov	ax,9h
+	push	ax
+	call	file_bdos_result
+	add	sp,4h
+	sub	ax,ax
+	push	ax
+	push	ax
+	call	bdos_result
+	add	sp,4h
+
+branch_254:
+	sub	ax,ax
+	push	ax
+	mov	al,6eh
+	push	ax
+	call	bdos_result
+	add	sp,4h
+	mov	ax,0ffffh
+	push	ax
+	mov	ax,6dh
+	push	ax
+	call	bdos_result
+	add	sp,4h
+	or	ax,0eh
+	push	ax
+	mov	ax,6dh
+	push	ax
+	call	bdos_result
+	add	sp,4h
+	mov	ax,36h
+	push	ax
+	call	send_escape
+	inc	sp
+	inc	sp
+	call	clear_screen
+	call	initialize_video
+	call	refresh_console
+	pop	di
+	pop	si
+	pop	bp
+	ret
+
+copy_bytes:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	mov	si,word ptr 4h[bp]
+	mov	di,word ptr 6h[bp]
+
+branch_29d:
+	mov	ax,di
+	inc	di
+	push	ax
+	mov	ax,si
+	inc	si
+	xchg	ax,bx
+	mov	al,byte ptr [bx]
+	pop	bx
+	mov	byte ptr [bx],al
+	dec	word ptr 8h[bp]
+	cmp	word ptr 8h[bp],0h
+	jnz	branch_29d
+	pop	di
+	pop	si
+	pop	bp
+	ret
+
+fill_bytes:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	mov	si,word ptr 4h[bp]
+
+branch_2bf:
+	mov	ax,si
+	inc	si
+	push	ax
+	mov	ax,word ptr 6h[bp]
+	pop	bx
+	mov	byte ptr [bx],al
+	dec	word ptr 8h[bp]
+	cmp	word ptr 8h[bp],0h
+	jnz	branch_2bf
+	pop	di
+	pop	si
+	pop	bp
+	ret
+
+read_console_key:
+	push	bp
+	mov	bp,sp
+	cmp	word ptr 4h[bp],20h
+	jnl	branch_300
+	cmp	word ptr 4h[bp],0dh
+	jz	branch_2f1
+	cmp	word ptr 4h[bp],0ah
+	jz	branch_2f1
+	cmp	word ptr 4h[bp],8h
+	jnz	branch_300
+
+branch_2f1:
+	push	word ptr 4h[bp]
+	mov	ax,6h
+	push	ax
+	call	bdos
+	add	sp,4h
+	jmps	branch_30d
+
+branch_300:
+	mov	ax,1h
+	push	ax
+	push	word ptr 4h[bp]
+	call	fill_video_cells
+	add	sp,4h
+
+branch_30d:
+	pop	bp
+	ret
+
+display_string:
+	push	bp
+	mov	bp,sp
+	push	word ptr 4h[bp]
+	call	write_video_string
+	inc	sp
+	inc	sp
+	pop	bp
+	ret
+	mov	ax,20h
+	push	ax
+	call	read_console_key
+	inc	sp
+	inc	sp
+	ret
+
+send_escape:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	mov	si,word ptr 4h[bp]
+	mov	ax,1bh
+	push	ax
+	mov	al,6h
+	push	ax
+	call	bdos
+	add	sp,4h
+	push	si
+	mov	ax,6h
+	push	ax
+	call	bdos
+	add	sp,4h
+	pop	di
+	pop	si
+	pop	bp
+	ret
+
+set_cursor:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	mov	si,word ptr 4h[bp]
+	mov	di,word ptr 6h[bp]
+	mov	ax,59h
+	push	ax
+	call	send_escape
+	inc	sp
+	inc	sp
+	lea	ax,word ptr 20h[si]
+	push	ax
+	mov	ax,6h
+	push	ax
+	call	bdos
+	add	sp,4h
+	lea	ax,word ptr 20h[di]
+	push	ax
+	mov	ax,6h
+	push	ax
+	call	bdos
+	add	sp,4h
+	pop	di
+	pop	si
+	pop	bp
+	ret
+
+repeat_char:
+	push	bp
+	mov	bp,sp
+	push	word ptr 4h[bp]
+	push	word ptr 6h[bp]
+	call	fill_video_cells
+	add	sp,4h
+	pop	bp
+	ret
+
+clear_screen:
+	mov	ax,45h
+	push	ax
+	call	send_escape
+	inc	sp
+	inc	sp
+	ret
+	mov	ax,72h
+	push	ax
+	call	send_escape
+	inc	sp
+	inc	sp
+	ret
+
+normal_video:
+	mov	ax,75h
+	push	ax
+	call	send_escape
+	inc	sp
+	inc	sp
+	ret
+
+highlight_on:
+	mov	ax,70h
+	push	ax
+	call	send_escape
+	inc	sp
+	inc	sp
+	ret
+
+highlight_off:
+	mov	ax,71h
+	push	ax
+	call	send_escape
+	inc	sp
+	inc	sp
+	ret
+	mov	ax,76h
+	push	ax
+	call	send_escape
+	inc	sp
+	inc	sp
+	ret
+	mov	ax,77h
+	push	ax
+	call	send_escape
+	inc	sp
+	inc	sp
+	ret
+
+cursor_on:
+	mov	ax,65h
+	push	ax
+	call	send_escape
+	inc	sp
+	inc	sp
+	ret
+
+cursor_off:
+	mov	ax,66h
+	push	ax
+	call	send_escape
+	inc	sp
+	inc	sp
+	ret
+
+print_centered:
+	push	bp
+	mov	bp,sp
+	mov	ax,28h
+	push	ax
+	push	word ptr 6h[bp]
+	call	string_length
+	inc	sp
+	inc	sp
+	sar	ax,1
+	xchg	ax,bx
+	pop	ax
+	sub	ax,bx
+	push	ax
+	push	word ptr 4h[bp]
+	call	set_cursor
+	add	sp,4h
+	push	word ptr 6h[bp]
+	call	display_string
+	inc	sp
+	inc	sp
+	pop	bp
+	ret
+
+clear_line:
+	push	bp
+	mov	bp,sp
+	mov	ax,1h
+	push	ax
+	push	word ptr 4h[bp]
+	call	set_cursor
+	add	sp,4h
+	mov	ax,20h
+	push	ax
+	mov	al,4eh
+	push	ax
+	call	repeat_char
+	add	sp,4h
+	pop	bp
+	ret
+
+show_heading:
+	push	bp
+	mov	bp,sp
+	mov	ax,4h
+	push	ax
+	call	clear_line
+	inc	sp
+	inc	sp
+	call	highlight_on
+	push	word ptr 4h[bp]
+	mov	ax,4h
+	push	ax
+	call	print_centered
+	add	sp,4h
+	call	highlight_off
+	call	normal_video
+	pop	bp
+	ret
+
+initialize_console:
+	push	bp
+	mov	bp,sp
+	sub	sp,6h
+	call	query_console
+	jmps	branch_47f
+
+branch_460:
+	mov	ax,0fdh
+	push	ax
+	mov	al,6h
+	push	ax
+	call	bdos
+	add	sp,4h
+	mov	word ptr (0-6h)[bp],ax
+	cmp	ax,6ah
+	jnz	branch_47a
+	call	select_language
+	jmps	branch_47f
+
+branch_47a:
+	mov	ax,word ptr (0-6h)[bp]
+	jmps	branch_481
+
+branch_47f:
+	jmps	branch_460
+
+branch_481:
+	mov	sp,bp
+	pop	bp
+	ret
+
+select_language:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	sub	sp,4h
+	mov	ax,212h
+	push	ax
+	mov	ax,1h
+	push	ax
+	call	print_centered
+	add	sp,4h
+	mov	ax,5h
+	push	ax
+	mov	al,1h
+	push	ax
+	call	set_cursor
+	add	sp,4h
+	mov	ax,153h
+	mov	word ptr (0-6h)[bp],ax
+	jmps	branch_4bb
+
+branch_4b0:
+	mov	ax,word ptr (0-8h)[bp]
+	neg	ax
+	push	ax
+	call	read_console_key
+	inc	sp
+	inc	sp
+
+branch_4bb:
+	mov	ax,word ptr (0-6h)[bp]
+	inc	word ptr (0-6h)[bp]
+	xchg	ax,bx
+	mov	al,byte ptr [bx]
+	xor	ah,ah
+	mov	word ptr (0-8h)[bp],ax
+	or	ax,ax
+	jnz	branch_4b0
+	lea	sp,word ptr (0-4h)[bp]
+	pop	di
+	pop	si
+	pop	bp
+	ret
+
+restore_console:
+	call	clear_screen
+	mov	ax,37h
+	push	ax
+	call	send_escape
+	inc	sp
+	inc	sp
+	call	cursor_on
+	call	normal_video
+	sub	ax,ax
+	push	ax
+	push	ax
+	call	set_cursor
+	add	sp,4h
+	sub	ax,ax
+	push	ax
+	push	ax
+	call	bdos_result
+	add	sp,4h
+	ret
+
+menu_select:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	mov	ax,word ptr .19ah
+	or	ax,ax
+	jz	branch_512
+	call	draw_menu
+	mov	word ptr .19ah,0h
+	jmps	branch_52e
+
+branch_512:
+	mov	word ptr .19ch,3h
+	jmps	branch_527
+
+branch_51a:
+	mov	ax,word ptr .19ch
+	push	ax
+	call	clear_line
+	inc	sp
+	inc	sp
+	inc	word ptr .19ch
+
+branch_527:
+	cmp	word ptr .19ch,17h
+	jl	branch_51a
+
+branch_52e:
+	mov	ax,53ch
+	push	ax
+	mov	ax,1h
+	push	ax
+	call	print_centered
+	add	sp,4h
+	push	word ptr 4h[bp]
+	call	show_heading
+	inc	sp
+	inc	sp
+	pop	di
+	pop	si
+	pop	bp
+	ret
+
+draw_menu:
+	sub	ax,ax
+	push	ax
+	push	ax
+	call	set_cursor
+	add	sp,4h
+	call	normal_video
+	call	cursor_off
+	mov	byte ptr .19eh,0h
+	jmps	branch_599
+
+branch_55f:
+	sub	ax,ax
+	push	ax
+	mov	al,byte ptr .19eh
+	xor	ah,ah
+	push	ax
+	call	set_cursor
+	add	sp,4h
+	mov	ax,1h
+	push	ax
+	mov	al,0b3h
+	push	ax
+	call	fill_video_cells
+	add	sp,4h
+	mov	ax,4eh
+	push	ax
+	mov	al,20h
+	push	ax
+	call	fill_video_cells
+	add	sp,4h
+	mov	ax,1h
+	push	ax
+	mov	al,0b3h
+	push	ax
+	call	fill_video_cells
+	add	sp,4h
+	inc	byte ptr .19eh
+
+branch_599:
+	cmp	byte ptr .19eh,17h
+	jc	branch_55f
+	sub	ax,ax
+	push	ax
+	mov	al,17h
+	push	ax
+	call	set_cursor
+	add	sp,4h
+	mov	ax,1h
+	push	ax
+	mov	al,0c0h
+	push	ax
+	call	fill_video_cells
+	add	sp,4h
+	mov	ax,4eh
+	push	ax
+	mov	al,0c4h
+	push	ax
+	call	fill_video_cells
+	add	sp,4h
+	mov	ax,1h
+	push	ax
+	mov	al,0d9h
+	push	ax
+	call	fill_video_cells
+	add	sp,4h
+	sub	ax,ax
+	push	ax
+	push	ax
+	call	set_cursor
+	add	sp,4h
+	mov	ax,1h
+	push	ax
+	mov	al,0dah
+	push	ax
+	call	fill_video_cells
+	add	sp,4h
+	mov	ax,4eh
+	push	ax
+	mov	al,0c4h
+	push	ax
+	call	fill_video_cells
+	add	sp,4h
+	mov	ax,1h
+	push	ax
+	mov	al,0bfh
+	push	ax
+	call	fill_video_cells
+	add	sp,4h
+	sub	ax,ax
+	push	ax
+	mov	al,2h
+	push	ax
+	call	set_cursor
+	add	sp,4h
+	mov	ax,1h
+	push	ax
+	mov	al,0c6h
+	push	ax
+	call	fill_video_cells
+	add	sp,4h
+	mov	ax,4eh
+	push	ax
+	mov	al,0cdh
+	push	ax
+	call	fill_video_cells
+	add	sp,4h
+	mov	ax,1h
+	push	ax
+	mov	al,0b5h
+	push	ax
+	call	fill_video_cells
+	add	sp,4h
+	ret
+
+configure_system:
+	mov	ax,5000h
+	push	ax
+	call	allocate
+	inc	sp
+	inc	sp
+	mov	word ptr .4f2h,ax
+	mov	ax,1000h
+	push	ax
+	call	allocate
+	inc	sp
+	inc	sp
+	mov	word ptr .4b8h,ax
+	call	load_messages
+	call	load_national_tables
+	call	installation_menu
+	call	save_national_settings
+	ret
+
+installation_loop:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	dec	sp
+	dec	sp
+	mov	ax,214h
+	push	ax
+	call	menu_select
+	inc	sp
+	inc	sp
+	mov	ax,22ah
+	push	ax
+	mov	ax,231h
+	push	ax
+	mov	ax,239h
+	push	ax
+	mov	ax,242h
+	push	ax
+	mov	ax,250h
+	push	ax
+	mov	ax,256h
+	push	ax
+	mov	ax,25eh
+	push	ax
+	mov	ax,26ah
+	push	ax
+	mov	ax,272h
+	push	ax
+	mov	ax,27bh
+	push	ax
+	sub	ax,ax
+	push	ax
+	mov	al,0ah
+	push	ax
+	call	draw_options
+	add	sp,18h
+	mov	word ptr (0-6h)[bp],ax
+	cmp	word ptr (0-6h)[bp],9h
+	jnz	branch_6ad
+	call	restore_console
+
+branch_6ad:
+	mov	ax,1a1h
+	push	ax
+	mov	ax,word ptr (0-6h)[bp]
+	shl	ax,1
+	pop	bx
+	add	bx,ax
+	mov	ax,word ptr [bx]
+	mov	word ptr .48ch,ax
+	lea	sp,word ptr (0-4h)[bp]
+	pop	di
+	pop	si
+	pop	bp
+	ret
+
+message_address:
+	push	bp
+	mov	bp,sp
+	sub	sp,6h
+	mov	ax,64h
+	mul	word ptr .48ch
+	add	word ptr 4h[bp],ax
+	mov	ax,word ptr 4h[bp]
+	shl	ax,1
+	add	ax,word ptr .4f2h
+	add	ax,80h
+	mov	word ptr (0-6h)[bp],ax
+	mov	bx,word ptr (0-6h)[bp]
+	mov	ax,word ptr [bx]
+	add	ax,word ptr .4f2h
+	add	ax,80h
+	mov	sp,bp
+	pop	bp
+	ret
+
+display_message:
+	push	bp
+	mov	bp,sp
+	mov	ax,word ptr 4h[bp]
+	add	ax,32h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	pop	bp
+	ret
+
+fatal_message:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	push	word ptr 4h[bp]
+	call	menu_select
+	inc	sp
+	inc	sp
+	mov	ax,1b3h
+	push	ax
+	mov	ax,word ptr .48ch
+	shl	ax,1
+	pop	bx
+	add	bx,ax
+	push	word ptr [bx]
+	sub	ax,ax
+	push	ax
+	inc	ax
+	push	ax
+	call	draw_options
+	add	sp,6h
+	call	restore_console
+	pop	di
+	pop	si
+	pop	bp
+	ret
+
+load_messages:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	mov	ax,449h
+	push	ax
+	call	open_fcb
+	inc	sp
+	inc	sp
+	or	ax,ax
+	jz	branch_757
+	mov	ax,1c9h
+	push	ax
+	mov	ax,word ptr .48ch
+	shl	ax,1
+	pop	bx
+	add	bx,ax
+	push	word ptr [bx]
+	call	fatal_message
+	inc	sp
+	inc	sp
+
+branch_757:
+	mov	word ptr .1c7h,0a0h
+	mov	word ptr .1c5h,0h
+	jmps	branch_7c0
+
+branch_765:
+	mov	ax,word ptr .1c5h
+	mov	cl,7h
+	shl	ax,cl
+	add	ax,word ptr .4f2h
+	push	ax
+	mov	ax,1ah
+	push	ax
+	call	file_bdos_result
+	add	sp,4h
+	cmp	word ptr .1c7h,80h
+	jng	branch_79e
+	mov	ax,80h
+	push	ax
+	mov	al,2ch
+	push	ax
+	call	bdos_result
+	add	sp,4h
+	sub	word ptr .1c7h,80h
+	add	word ptr .1c5h,80h
+	jmps	branch_7b2
+
+branch_79e:
+	mov	ax,word ptr .1c7h
+	push	ax
+	mov	ax,2ch
+	push	ax
+	call	bdos_result
+	add	sp,4h
+	mov	word ptr .1c7h,0h
+
+branch_7b2:
+	mov	ax,490h
+	push	ax
+	mov	ax,14h
+	push	ax
+	call	file_bdos_result
+	add	sp,4h
+
+branch_7c0:
+	mov	ax,word ptr .1c7h
+	or	ax,ax
+	jnz	branch_765
+	mov	ax,490h
+	push	ax
+	mov	ax,10h
+	push	ax
+	call	file_bdos_result
+	add	sp,4h
+	mov	word ptr .48eh,1h
+	pop	di
+	pop	si
+	pop	bp
+	ret
+
+open_fcb:
+	push	bp
+	mov	bp,sp
+	sub	sp,6h
+	mov	ax,25h
+	push	ax
+	sub	ax,ax
+	push	ax
+	mov	ax,490h
+	push	ax
+	call	fill_bytes
+	add	sp,6h
+	mov	ax,0bh
+	push	ax
+	mov	ax,491h
+	push	ax
+	push	word ptr 4h[bp]
+	call	copy_bytes
+	add	sp,6h
+	mov	ax,490h
+	push	ax
+	mov	ax,0fh
+	push	ax
+	call	file_bdos_result
+	add	sp,4h
+	cmp	ax,0ffh
+	jz	branch_81e
+	sub	ax,ax
+	jmps	branch_861
+
+branch_81e:
+	mov	word ptr (0-6h)[bp],50h
+	mov	bx,word ptr (0-6h)[bp]
+	mov	al,byte ptr [bx]
+	mov	byte ptr .490h,al
+	mov	ax,490h
+	push	ax
+	mov	ax,0fh
+	push	ax
+	call	file_bdos_result
+	add	sp,4h
+	cmp	ax,0ffh
+	jz	branch_842
+	sub	ax,ax
+	jmps	branch_861
+
+branch_842:
+	mov	byte ptr .490h,10h
+	mov	ax,490h
+	push	ax
+	mov	ax,0fh
+	push	ax
+	call	file_bdos_result
+	add	sp,4h
+	cmp	ax,0ffh
+	jz	branch_85e
+	sub	ax,ax
+	jmps	branch_861
+
+branch_85e:
+	mov	ax,1h
+
+branch_861:
+	mov	sp,bp
+	pop	bp
+	ret
+
+; Split a transfer at 4 KiB buffer boundaries, preserving the surrounding file bytes.
+transfer_bytes:
+	push	bp
+	mov	bp,sp
+	sub	sp,8h
+
+branch_86b:
+	mov	ax,1000h
+	push	ax
+	mov	ax,word ptr 6h[bp]
+	and	ax,0fffh
+	xchg	ax,bx
+	pop	ax
+	sub	ax,bx
+	mov	word ptr (0-8h)[bp],ax
+	cmp	word ptr 0ah[bp],ax
+	jnl	branch_887
+	mov	ax,word ptr 0ah[bp]
+	mov	word ptr (0-8h)[bp],ax
+
+branch_887:
+	push	word ptr 6h[bp]
+	call	select_file_block
+	inc	sp
+	inc	sp
+	mov	ax,word ptr 6h[bp]
+	and	ax,0fffh
+	add	ax,word ptr .4b8h
+	mov	word ptr (0-6h)[bp],ax
+	cmp	word ptr 4h[bp],77h
+	jnz	branch_8b9
+	push	word ptr (0-8h)[bp]
+	push	word ptr (0-6h)[bp]
+	push	word ptr 8h[bp]
+	call	copy_bytes
+	add	sp,6h
+	mov	word ptr .4bah,1h
+	jmps	branch_8c8
+
+branch_8b9:
+	push	word ptr (0-8h)[bp]
+	push	word ptr 8h[bp]
+	push	word ptr (0-6h)[bp]
+	call	copy_bytes
+	add	sp,6h
+
+branch_8c8:
+	mov	ax,word ptr (0-8h)[bp]
+	add	word ptr 6h[bp],ax
+	mov	ax,word ptr (0-8h)[bp]
+	sub	word ptr 0ah[bp],ax
+	mov	ax,word ptr (0-8h)[bp]
+	add	word ptr 8h[bp],ax
+	cmp	word ptr 0ah[bp],0h
+	jg	branch_86b
+	mov	sp,bp
+	pop	bp
+	ret
+
+read_bytes:
+	push	bp
+	mov	bp,sp
+	push	word ptr 8h[bp]
+	push	word ptr 6h[bp]
+	push	word ptr 4h[bp]
+	mov	ax,72h
+	push	ax
+	call	transfer_bytes
+	add	sp,8h
+	pop	bp
+	ret
+
+write_bytes:
+	push	bp
+	mov	bp,sp
+	push	word ptr 8h[bp]
+	push	word ptr 6h[bp]
+	push	word ptr 4h[bp]
+	mov	ax,77h
+	push	ax
+	call	transfer_bytes
+	add	sp,8h
+	pop	bp
+	ret
+
+select_file_block:
+	push	bp
+	mov	bp,sp
+	sub	sp,6h
+	mov	ax,word ptr 4h[bp]
+	mov	cl,0ch
+	shr	ax,cl
+	mov	word ptr (0-6h)[bp],ax
+	mov	ax,word ptr .4bch
+	cmp	word ptr (0-6h)[bp],ax
+	jz	branch_937
+	call	flush_dirty_block
+	push	word ptr (0-6h)[bp]
+	call	read_file_block
+	inc	sp
+	inc	sp
+
+branch_937:
+	mov	sp,bp
+	pop	bp
+	ret
+
+read_file_block:
+	push	bp
+	mov	bp,sp
+	push	word ptr 4h[bp]
+	call	set_block_dma
+	inc	sp
+	inc	sp
+	mov	ax,word ptr 4h[bp]
+	mov	word ptr .4bch,ax
+	mov	ax,490h
+	push	ax
+	mov	ax,21h
+	push	ax
+	call	file_bdos_result
+	add	sp,4h
+	pop	bp
+	ret
+
+flush_dirty_block:
+	mov	ax,word ptr .4bah
+	or	ax,ax
+	jz	buffer_clean
+	mov	word ptr .4bah,0h
+	mov	ax,word ptr .4bch
+	push	ax
+	call	set_block_dma
+	inc	sp
+	inc	sp
+	mov	ax,490h
+	push	ax
+	mov	ax,22h
+	push	ax
+	call	file_bdos_result
+	add	sp,4h
+
+buffer_clean:
+	ret
+
+set_block_dma:
+	push	bp
+	mov	bp,sp
+	sub	sp,6h
+	mov	ax,word ptr .4b8h
+	push	ax
+	mov	ax,1ah
+	push	ax
+	call	file_bdos_result
+	add	sp,4h
+	mov	ax,20h
+	push	ax
+	mov	al,2ch
+	push	ax
+	call	bdos_result
+	add	sp,4h
+	mov	ax,word ptr 4h[bp]
+	mov	cl,0ch
+	shl	ax,cl
+	mov	cl,7h
+	shr	ax,cl
+	mov	word ptr (0-6h)[bp],ax
+	mov	byte ptr .4b3h,0h
+	mov	ax,2h
+	push	ax
+	mov	ax,4b1h
+	push	ax
+	lea	ax,word ptr (0-6h)[bp]
+	push	ax
+	call	copy_bytes
+	add	sp,6h
+	mov	sp,bp
+	pop	bp
+	ret
+
+; Read the group size at file byte 1. The data group begins after the 128-byte header and the code paragraphs.
+load_national_tables:
+	mov	ax,offset kernel_filename
+	push	ax
+	call	open_fcb
+	inc	sp
+	inc	sp
+	or	ax,ax
+	jz	read_group_size
+	mov	ax,1dh
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	call	fatal_message
+	inc	sp
+	inc	sp
+
+read_group_size:
+	mov	ax,2h
+	push	ax
+	mov	ax,offset code_paragraphs
+	push	ax
+	mov	ax,1h
+	push	ax
+	call	read_bytes
+	add	sp,6h
+	mov	ax,word ptr code_paragraphs
+	mov	cl,4h
+	shl	ax,cl
+	add	ax,80h
+	mov	word ptr data_file_base,ax
+	mov	ax,2h
+	push	ax
+	mov	ax,offset table_work
+	push	ax
+	mov	ax,word ptr data_file_base
+	add	ax,word ptr signature_offset
+	push	ax
+	call	read_bytes
+	add	sp,6h
+; Verify JW before interpreting the following relative directory pointer.
+	cmp	word ptr table_work,574ah
+	jz	read_directory_pointer
+	mov	ax,1eh
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	call	fatal_message
+	inc	sp
+	inc	sp
+
+; The word after JW points to a directory of 24 words, relative to the data group.
+read_directory_pointer:
+	mov	ax,2h
+	push	ax
+	mov	ax,offset table_work
+	push	ax
+	mov	ax,word ptr data_file_base
+	add	ax,word ptr signature_offset
+	inc	ax
+	inc	ax
+	push	ax
+	call	read_bytes
+	add	sp,6h
+	mov	ax,30h
+	push	ax
+	mov	ax,offset slot_offsets
+	push	ax
+	mov	ax,word ptr data_file_base
+	add	ax,word ptr table_work
+	push	ax
+	call	read_bytes
+	add	sp,6h
+	mov	word ptr table_work,0h
+	jmps	test_slot_count
+
+; Translate each nonzero relative pointer into a file position. Zero denotes an unavailable table.
+relocate_slot:
+; Convert nonzero displacements to file offsets. A missing slot becomes FFFFh.
+	mov	ax,offset slot_offsets
+	push	ax
+	mov	ax,word ptr table_work
+	shl	ax,1
+	pop	bx
+	add	bx,ax
+	cmp	word ptr [bx],0h
+	jz	mark_missing
+	mov	ax,offset slot_offsets
+	push	ax
+	mov	ax,word ptr table_work
+	shl	ax,1
+	pop	bx
+	add	bx,ax
+	mov	ax,word ptr data_file_base
+	add	word ptr [bx],ax
+	jmps	advance_slot
+
+mark_missing:
+	mov	ax,offset slot_offsets
+	push	ax
+	mov	ax,word ptr table_work
+	shl	ax,1
+	pop	bx
+	add	bx,ax
+	mov	word ptr [bx],0ffffh
+
+advance_slot:
+	inc	word ptr table_work
+
+test_slot_count:
+	cmp	word ptr table_work,18h
+	jl	relocate_slot
+	mov	ax,37h
+	push	ax
+	mov	ax,offset device_records
+	push	ax
+	mov	ax,word ptr .4d2h
+	push	ax
+	call	read_bytes
+	add	sp,6h
+	mov	word ptr .112h,0h
+	jmps	test_device_count
+
+; Read five 11-byte device descriptions from slot 10.
+load_device:
+	mov	ax,4f4h
+	push	ax
+	mov	ax,word ptr .112h
+	shl	ax,1
+	pop	bx
+	add	ax,bx
+	push	ax
+	mov	ax,offset device_records
+	push	ax
+	mov	ax,0bh
+	mul	word ptr .112h
+	pop	bx
+	add	bx,ax
+	mov	al,byte ptr 1h[bx]
+	xor	ah,ah
+	pop	bx
+	mov	word ptr [bx],ax
+	mov	ax,offset device_records
+	push	ax
+	mov	ax,0bh
+	mul	word ptr .112h
+	pop	bx
+	add	bx,ax
+	mov	byte ptr 8h[bx],0ffh
+	inc	word ptr .112h
+
+test_device_count:
+	cmp	word ptr .112h,5h
+	jl	load_device
+	mov	word ptr .4feh,0h
+	mov	ax,1h
+	push	ax
+	mov	ax,4feh
+	push	ax
+	mov	ax,word ptr .4c2h
+	push	ax
+	call	read_bytes
+	add	sp,6h
+	mov	word ptr .500h,0h
+	mov	ax,1h
+	push	ax
+	mov	ax,500h
+	push	ax
+	mov	ax,word ptr .4e2h
+	push	ax
+	call	read_bytes
+	add	sp,6h
+	ret
+
+installation_menu:
+	push	bp
+	mov	bp,sp
+	sub	sp,6h
+	mov	word ptr (0-6h)[bp],0h
+	jmp	branch_bba
+
+branch_b41:
+	mov	ax,1h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	call	menu_select
+	inc	sp
+	inc	sp
+	jmps	branch_b74
+
+branch_b52:
+	call	keyboard_menu
+	mov	word ptr (0-6h)[bp],1h
+	jmps	branch_bba
+
+branch_b5c:
+	call	printer_menu
+	mov	word ptr (0-6h)[bp],2h
+	jmps	branch_bba
+
+branch_b66:
+	call	display_settings
+	mov	word ptr (0-6h)[bp],3h
+	jmps	branch_bba
+
+branch_b70:
+	jmps	branch_bbc
+	jmps	branch_bba
+
+branch_b74:
+	mov	ax,5h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,4h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,3h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,2h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	push	word ptr (0-6h)[bp]
+	mov	ax,4h
+	push	ax
+	call	draw_options
+	add	sp,0ch
+	cmp	ax,2h
+	jz	branch_b66
+	cmp	ax,1h
+	jz	branch_b5c
+	cmp	ax,0h
+	jz	branch_b52
+	jmps	branch_b70
+
+branch_bba:
+	jmps	branch_b41
+
+branch_bbc:
+	mov	sp,bp
+	pop	bp
+	ret
+
+keyboard_menu:
+	push	bp
+	mov	bp,sp
+	sub	sp,4ch
+	mov	ax,6h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	call	menu_select
+	inc	sp
+	inc	sp
+	mov	ax,1ah
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	lea	ax,word ptr (0-4ch)[bp]
+	push	ax
+	call	copy_string
+	add	sp,4h
+	mov	ax,word ptr .4feh
+	add	ax,7h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	lea	ax,word ptr (0-4ch)[bp]
+	push	ax
+	call	append_string
+	add	sp,4h
+	lea	ax,word ptr (0-4ch)[bp]
+	push	ax
+	mov	ax,6h
+	push	ax
+	call	print_centered
+	add	sp,4h
+	mov	ax,12h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,0bh
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,0ah
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,9h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,8h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,7h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,word ptr .4feh
+	push	ax
+	mov	ax,6h
+	push	ax
+	call	draw_options
+	add	sp,10h
+	mov	word ptr (0-6h)[bp],ax
+	cmp	word ptr (0-6h)[bp],5h
+	jz	branch_c67
+	mov	ax,word ptr (0-6h)[bp]
+	mov	word ptr .4feh,ax
+
+branch_c67:
+	mov	sp,bp
+	pop	bp
+	ret
+
+printer_menu:
+	push	bp
+	mov	bp,sp
+	sub	sp,6h
+	mov	word ptr (0-6h)[bp],0h
+	jmps	branch_ce9
+
+branch_c78:
+	mov	ax,0ch
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	call	menu_select
+	inc	sp
+	inc	sp
+	mov	ax,12h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,11h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,10h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,0fh
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,0eh
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,0dh
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	push	word ptr (0-6h)[bp]
+	mov	ax,6h
+	push	ax
+	call	draw_options
+	add	sp,10h
+	mov	word ptr (0-6h)[bp],ax
+	cmp	word ptr (0-6h)[bp],5h
+	jz	branch_ce7
+	mov	ax,word ptr (0-6h)[bp]
+	inc	word ptr (0-6h)[bp]
+	push	ax
+	call	select_printer_option
+	inc	sp
+	inc	sp
+	jmps	branch_ce9
+
+branch_ce7:
+	jmps	branch_ceb
+
+branch_ce9:
+	jmps	branch_c78
+
+branch_ceb:
+	mov	sp,bp
+	pop	bp
+	ret
+
+select_printer_option:
+	push	bp
+	mov	bp,sp
+	sub	sp,42h
+	mov	ax,13h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	lea	ax,word ptr (0-42h)[bp]
+	push	ax
+	call	copy_string
+	add	sp,4h
+	mov	ax,word ptr 4h[bp]
+	add	ax,0dh
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	lea	ax,word ptr (0-42h)[bp]
+	push	ax
+	call	append_string
+	add	sp,4h
+	lea	ax,word ptr (0-42h)[bp]
+	push	ax
+	call	menu_select
+	inc	sp
+	inc	sp
+	mov	ax,4f4h
+	push	ax
+	mov	ax,word ptr 4h[bp]
+	shl	ax,1
+	pop	bx
+	add	bx,ax
+	mov	ax,word ptr [bx]
+	mov	word ptr (0-6h)[bp],ax
+	mov	ax,1ah
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	lea	ax,word ptr (0-42h)[bp]
+	push	ax
+	call	copy_string
+	add	sp,4h
+	mov	ax,11dh
+	push	ax
+	mov	ax,word ptr (0-6h)[bp]
+	shl	ax,1
+	pop	bx
+	add	bx,ax
+	push	word ptr [bx]
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	lea	ax,word ptr (0-42h)[bp]
+	push	ax
+	call	append_string
+	add	sp,4h
+	lea	ax,word ptr (0-42h)[bp]
+	push	ax
+	mov	ax,6h
+	push	ax
+	call	print_centered
+	add	sp,4h
+	mov	ax,12h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,word ptr .127h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,word ptr .125h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,word ptr .123h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,word ptr .121h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,word ptr .11fh
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,word ptr .11dh
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	push	word ptr (0-6h)[bp]
+	mov	ax,7h
+	push	ax
+	call	draw_options
+	add	sp,12h
+	mov	word ptr (0-6h)[bp],ax
+	cmp	word ptr (0-6h)[bp],6h
+	jz	branch_de7
+	mov	ax,4f4h
+	push	ax
+	mov	ax,word ptr 4h[bp]
+	shl	ax,1
+	pop	bx
+	add	bx,ax
+	mov	ax,word ptr (0-6h)[bp]
+	mov	word ptr [bx],ax
+
+branch_de7:
+	mov	sp,bp
+	pop	bp
+	ret
+
+display_settings:
+	push	bp
+	mov	bp,sp
+	sub	sp,4ch
+	mov	ax,4h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	call	menu_select
+	inc	sp
+	inc	sp
+	mov	ax,18h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	lea	ax,word ptr (0-4ch)[bp]
+	push	ax
+	call	copy_string
+	add	sp,4h
+	mov	ax,word ptr .4feh
+	add	ax,7h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	lea	ax,word ptr (0-4ch)[bp]
+	push	ax
+	call	append_string
+	add	sp,4h
+	lea	ax,word ptr (0-4ch)[bp]
+	push	ax
+	mov	ax,7h
+	push	ax
+	call	print_centered
+	add	sp,4h
+	mov	ax,19h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,0ah
+	push	ax
+	call	print_centered
+	add	sp,4h
+	mov	word ptr (0-6h)[bp],0h
+	jmps	branch_ebe
+
+branch_e54:
+	mov	ax,23h
+	push	ax
+	mov	ax,word ptr (0-6h)[bp]
+	add	ax,0dh
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	call	string_length
+	inc	sp
+	inc	sp
+	xchg	ax,bx
+	pop	ax
+	sub	ax,bx
+	push	ax
+	mov	ax,word ptr (0-6h)[bp]
+	add	ax,0ch
+	push	ax
+	call	set_cursor
+	add	sp,4h
+	mov	ax,word ptr (0-6h)[bp]
+	add	ax,0dh
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	call	display_string
+	inc	sp
+	inc	sp
+	mov	ax,461h
+	push	ax
+	call	display_string
+	inc	sp
+	inc	sp
+	mov	ax,11dh
+	push	ax
+	mov	ax,4f4h
+	push	ax
+	mov	ax,word ptr (0-6h)[bp]
+	shl	ax,1
+	pop	bx
+	add	bx,ax
+	mov	ax,word ptr [bx]
+	shl	ax,1
+	pop	bx
+	add	bx,ax
+	push	word ptr [bx]
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	call	display_string
+	inc	sp
+	inc	sp
+	inc	word ptr (0-6h)[bp]
+
+branch_ebe:
+	cmp	word ptr (0-6h)[bp],5h
+	jl	branch_e54
+	mov	ax,12h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	sub	ax,ax
+	push	ax
+	inc	ax
+	push	ax
+	call	draw_options
+	add	sp,6h
+	mov	sp,bp
+	pop	bp
+	ret
+
+wrap_selection:
+	push	bp
+	mov	bp,sp
+	mov	ax,word ptr 4h[bp]
+	cmp	word ptr 6h[bp],ax
+	jnl	branch_eed
+	mov	ax,word ptr 8h[bp]
+	jmps	branch_efd
+
+branch_eed:
+	mov	ax,word ptr 8h[bp]
+	cmp	word ptr 6h[bp],ax
+	jng	branch_efa
+	mov	ax,word ptr 4h[bp]
+	jmps	branch_efd
+
+branch_efa:
+	mov	ax,word ptr 6h[bp]
+
+branch_efd:
+	pop	bp
+	ret
+
+draw_options:
+	push	bp
+	mov	bp,sp
+	sub	sp,12h
+	cmp	word ptr 4h[bp],1h
+	jng	branch_f3a
+	mov	ax,word ptr .48eh
+	or	ax,ax
+	jz	branch_f3a
+	mov	ax,24h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,8h
+	push	ax
+	call	print_centered
+	add	sp,4h
+	mov	ax,25h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,9h
+	push	ax
+	call	print_centered
+	add	sp,4h
+
+branch_f3a:
+	lea	ax,word ptr 8h[bp]
+	mov	word ptr (0-6h)[bp],ax
+	cmp	word ptr 4h[bp],1h
+	jng	branch_f4d
+	mov	word ptr (0-12h)[bp],0bh
+	jmps	branch_f52
+
+branch_f4d:
+	mov	word ptr (0-12h)[bp],14h
+
+branch_f52:
+	mov	word ptr (0-0eh)[bp],0h
+	mov	word ptr (0-8h)[bp],0h
+	jmps	branch_f82
+
+branch_f5e:
+	mov	ax,word ptr (0-8h)[bp]
+	shl	ax,1
+	add	ax,word ptr (0-6h)[bp]
+	xchg	ax,bx
+	push	word ptr [bx]
+	call	string_length
+	inc	sp
+	inc	sp
+	mov	word ptr (0-0ch)[bp],ax
+	mov	ax,word ptr (0-0eh)[bp]
+	cmp	word ptr (0-0ch)[bp],ax
+	jng	branch_f7f
+	mov	ax,word ptr (0-0ch)[bp]
+	mov	word ptr (0-0eh)[bp],ax
+
+branch_f7f:
+	inc	word ptr (0-8h)[bp]
+
+branch_f82:
+	mov	ax,word ptr 4h[bp]
+	cmp	word ptr (0-8h)[bp],ax
+	jl	branch_f5e
+	mov	word ptr (0-8h)[bp],0h
+	jmps	branch_fbc
+
+branch_f91:
+	push	word ptr (0-0eh)[bp]
+	mov	ax,word ptr 6h[bp]
+	cmp	word ptr (0-8h)[bp],ax
+	mov	ax,0h
+	jnz	branch_fa0
+	inc	ax
+
+branch_fa0:
+	push	ax
+	mov	ax,word ptr (0-8h)[bp]
+	shl	ax,1
+	add	ax,word ptr (0-6h)[bp]
+	xchg	ax,bx
+	push	word ptr [bx]
+	mov	ax,word ptr (0-8h)[bp]
+	add	ax,word ptr (0-12h)[bp]
+	push	ax
+	call	show_field
+	add	sp,8h
+	inc	word ptr (0-8h)[bp]
+
+branch_fbc:
+	mov	ax,word ptr 4h[bp]
+	cmp	word ptr (0-8h)[bp],ax
+	jl	branch_f91
+	mov	ax,word ptr 6h[bp]
+	mov	word ptr (0-0ah)[bp],ax
+	jmp	branch_1098
+
+branch_fcd:
+	mov	ax,word ptr 6h[bp]
+	cmp	word ptr (0-0ah)[bp],ax
+	jz	branch_1018
+	push	word ptr (0-0eh)[bp]
+	sub	ax,ax
+	push	ax
+	mov	ax,word ptr (0-0ah)[bp]
+	shl	ax,1
+	add	ax,word ptr (0-6h)[bp]
+	xchg	ax,bx
+	push	word ptr [bx]
+	mov	ax,word ptr (0-0ah)[bp]
+	add	ax,word ptr (0-12h)[bp]
+	push	ax
+	call	show_field
+	add	sp,8h
+	push	word ptr (0-0eh)[bp]
+	mov	ax,1h
+	push	ax
+	mov	ax,word ptr 6h[bp]
+	shl	ax,1
+	add	ax,word ptr (0-6h)[bp]
+	xchg	ax,bx
+	push	word ptr [bx]
+	mov	ax,word ptr 6h[bp]
+	add	ax,word ptr (0-12h)[bp]
+	push	ax
+	call	show_field
+	add	sp,8h
+	mov	ax,word ptr 6h[bp]
+	mov	word ptr (0-0ah)[bp],ax
+
+branch_1018:
+	cmp	word ptr 4h[bp],1h
+	jnz	branch_1026
+	call	initialize_console
+	sub	ax,ax
+	jmp	branch_109b
+
+branch_1026:
+	jmps	branch_1070
+
+branch_1028:
+	mov	ax,word ptr 4h[bp]
+	dec	ax
+	push	ax
+	mov	ax,word ptr 6h[bp]
+	dec	ax
+	push	ax
+	sub	ax,ax
+	push	ax
+	call	wrap_selection
+	add	sp,6h
+	mov	word ptr 6h[bp],ax
+	jmp	branch_1098
+
+branch_1041:
+	mov	ax,word ptr 4h[bp]
+	dec	ax
+	mov	word ptr 6h[bp],ax
+
+branch_1048:
+	mov	ax,word ptr 6h[bp]
+	jmp	branch_109b
+
+branch_104e:
+	call	select_language
+	jmp	branch_1098
+
+branch_1054:
+	mov	ax,word ptr 4h[bp]
+	dec	ax
+	push	ax
+	mov	ax,word ptr 6h[bp]
+	inc	ax
+	push	ax
+	sub	ax,ax
+	push	ax
+	call	wrap_selection
+	add	sp,6h
+	mov	word ptr 6h[bp],ax
+	jmp	branch_1098
+	jmp	branch_1098
+
+branch_1070:
+	call	initialize_console
+	cmp	ax,6ah
+	jz	branch_104e
+	cmp	ax,0dh
+	jz	branch_1048
+	cmp	ax,1bh
+	jz	branch_1041
+	cmp	ax,38h
+	jz	branch_1028
+	cmp	ax,34h
+	jz	branch_1028
+	cmp	ax,0c8h
+	jz	branch_1028
+	cmp	ax,0cbh
+	jz	branch_1028
+	jmps	branch_1054
+
+branch_1098:
+	jmp	branch_fcd
+
+branch_109b:
+	mov	sp,bp
+	pop	bp
+	ret
+
+show_field:
+	push	bp
+	mov	bp,sp
+	sub	sp,0ah
+	add	word ptr 0ah[bp],0ah
+	mov	ax,word ptr 0ah[bp]
+	sar	ax,1
+	mov	word ptr (0-0ah)[bp],ax
+	push	word ptr 6h[bp]
+	call	string_length
+	inc	sp
+	inc	sp
+	mov	word ptr (0-6h)[bp],ax
+	sar	ax,1
+	mov	word ptr (0-8h)[bp],ax
+	mov	ax,28h
+	sub	ax,word ptr (0-0ah)[bp]
+	push	ax
+	push	word ptr 4h[bp]
+	call	set_cursor
+	add	sp,4h
+	cmp	word ptr 8h[bp],0h
+	jz	branch_10da
+	call	highlight_on
+
+branch_10da:
+	mov	ax,467h
+	push	ax
+	call	display_string
+	inc	sp
+	inc	sp
+	mov	ax,20h
+	push	ax
+	mov	ax,word ptr (0-0ah)[bp]
+	sub	ax,3h
+	sub	ax,word ptr (0-8h)[bp]
+	push	ax
+	call	repeat_char
+	add	sp,4h
+	push	word ptr 6h[bp]
+	call	display_string
+	inc	sp
+	inc	sp
+	mov	ax,20h
+	push	ax
+	mov	ax,word ptr (0-0ah)[bp]
+	sub	ax,word ptr (0-6h)[bp]
+	add	ax,word ptr (0-8h)[bp]
+	push	ax
+	call	repeat_char
+	add	sp,4h
+	cmp	word ptr 8h[bp],0h
+	jz	branch_111c
+	call	highlight_off
+
+branch_111c:
+	mov	sp,bp
+	pop	bp
+	ret
+
+; Report a missing kernel table if the selected directory entry is FFFFh.
+require_slot:
+	push	bp
+	mov	bp,sp
+	cmp	word ptr 4h[bp],0ffffh
+	jnz	branch_1134
+	mov	ax,offset missing_table_msg
+	push	ax
+	call	fatal_message
+	inc	sp
+	inc	sp
+	jmps	branch_1137
+
+branch_1134:
+	mov	ax,word ptr 4h[bp]
+
+branch_1137:
+	pop	bp
+	ret
+
+; Include the NUL terminator when writing a selected string.
+write_string_slot:
+	push	bp
+	mov	bp,sp
+	push	word ptr 6h[bp]
+	call	string_length
+	inc	sp
+	inc	sp
+	inc	ax
+	push	ax
+	push	word ptr 6h[bp]
+	mov	ax,offset slot_offsets
+	push	ax
+	mov	ax,word ptr 4h[bp]
+	shl	ax,1
+	pop	bx
+	add	bx,ax
+	push	word ptr [bx]
+	call	require_slot
+	inc	sp
+	inc	sp
+	push	ax
+	call	write_bytes
+	add	sp,6h
+	pop	bp
+	ret
+
+write_block_slot:
+	push	bp
+	mov	bp,sp
+	push	word ptr 8h[bp]
+	push	word ptr 6h[bp]
+	mov	ax,offset slot_offsets
+	push	ax
+	mov	ax,word ptr 4h[bp]
+	shl	ax,1
+	pop	bx
+	add	bx,ax
+	push	word ptr [bx]
+	call	require_slot
+	inc	sp
+	inc	sp
+	push	ax
+	call	write_bytes
+	add	sp,6h
+	pop	bp
+	ret
+
+save_national_settings:
+	push	bp
+	mov	bp,sp
+	mov	ax,1fh
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	call	menu_select
+	inc	sp
+	inc	sp
+	mov	ax,20h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,21h
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	sub	ax,ax
+	push	ax
+	mov	al,2h
+	push	ax
+	call	draw_options
+	add	sp,8h
+	cmp	ax,1h
+	jnz	branch_11c4
+	jmp	branch_1494
+
+branch_11c4:
+	mov	ax,1bh
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	call	menu_select
+	inc	sp
+	inc	sp
+	sub	ax,ax
+	push	ax
+	call	message_address
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,0eh
+	push	ax
+	call	write_string_slot
+	add	sp,4h
+	mov	ax,1h
+	push	ax
+	mov	ax,48ch
+	push	ax
+	sub	ax,ax
+	push	ax
+	call	write_block_slot
+	add	sp,6h
+	mov	ax,1h
+	push	ax
+	mov	ax,106h
+	push	ax
+	mov	ax,word ptr .4feh
+	shl	ax,1
+	pop	bx
+	add	ax,bx
+	push	ax
+	mov	ax,1h
+	push	ax
+	call	write_block_slot
+	add	sp,6h
+	mov	ax,1h
+	push	ax
+	mov	ax,4feh
+	push	ax
+	mov	ax,2h
+	push	ax
+	call	write_block_slot
+	add	sp,6h
+	cmp	word ptr .500h,0h
+	jnz	branch_1286
+	mov	ax,36h
+	push	ax
+	sub	ax,ax
+	push	ax
+	call	display_message
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,3h
+	push	ax
+	call	write_block_slot
+	add	sp,6h
+	mov	ax,36h
+	push	ax
+	mov	al,1h
+	push	ax
+	call	display_message
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,4h
+	push	ax
+	call	write_block_slot
+	add	sp,6h
+	mov	ax,36h
+	push	ax
+	mov	al,2h
+	push	ax
+	call	display_message
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,5h
+	push	ax
+	call	write_block_slot
+	add	sp,6h
+	mov	ax,6h
+	push	ax
+	call	display_message
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,9h
+	push	ax
+	call	write_string_slot
+	add	sp,4h
+	jmps	branch_12df
+
+branch_1286:
+	mov	ax,36h
+	push	ax
+	mov	al,0dh
+	push	ax
+	call	display_message
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,3h
+	push	ax
+	call	write_block_slot
+	add	sp,6h
+	mov	ax,36h
+	push	ax
+	mov	al,0eh
+	push	ax
+	call	display_message
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,4h
+	push	ax
+	call	write_block_slot
+	add	sp,6h
+	mov	ax,36h
+	push	ax
+	mov	al,0fh
+	push	ax
+	call	display_message
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,5h
+	push	ax
+	call	write_block_slot
+	add	sp,6h
+	mov	ax,10h
+	push	ax
+	call	display_message
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,9h
+	push	ax
+	call	write_string_slot
+	add	sp,4h
+
+branch_12df:
+	mov	ax,3h
+	push	ax
+	call	display_message
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,6h
+	push	ax
+	call	write_string_slot
+	add	sp,4h
+	mov	ax,4h
+	push	ax
+	call	display_message
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,7h
+	push	ax
+	call	write_string_slot
+	add	sp,4h
+	mov	ax,5h
+	push	ax
+	call	display_message
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,8h
+	push	ax
+	call	write_string_slot
+	add	sp,4h
+	mov	word ptr .112h,0h
+	jmp	branch_1375
+
+branch_1324:
+	mov	ax,offset device_records
+	push	ax
+	mov	ax,0bh
+	mul	word ptr .112h
+	pop	bx
+	add	ax,bx
+	push	ax
+	mov	ax,4f4h
+	push	ax
+	mov	ax,word ptr .112h
+	shl	ax,1
+	pop	bx
+	add	bx,ax
+	mov	ax,word ptr [bx]
+	pop	bx
+	mov	byte ptr 1h[bx],al
+	mov	ax,offset device_records
+	push	ax
+	mov	ax,0bh
+	mul	word ptr .112h
+	pop	bx
+	add	ax,bx
+	push	ax
+	mov	ax,117h
+	push	ax
+	mov	ax,4f4h
+	push	ax
+	mov	ax,word ptr .112h
+	shl	ax,1
+	pop	bx
+	add	bx,ax
+	mov	bx,word ptr [bx]
+	pop	ax
+	add	bx,ax
+	mov	al,byte ptr [bx]
+	xor	ah,ah
+	pop	bx
+	mov	word ptr 2h[bx],ax
+	inc	word ptr .112h
+
+branch_1375:
+	cmp	word ptr .112h,5h
+	jl	branch_1324
+	mov	ax,37h
+	push	ax
+	mov	ax,offset device_records
+	push	ax
+	mov	ax,0ah
+	push	ax
+	call	write_block_slot
+	add	sp,6h
+	mov	ax,30h
+	push	ax
+	mov	al,7h
+	push	ax
+	call	display_message
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,0bh
+	push	ax
+	call	write_block_slot
+	add	sp,6h
+	mov	ax,30h
+	push	ax
+	mov	al,8h
+	push	ax
+	call	display_message
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,0ch
+	push	ax
+	call	write_block_slot
+	add	sp,6h
+	mov	ax,5h
+	push	ax
+	mov	al,9h
+	push	ax
+	call	display_message
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,0dh
+	push	ax
+	call	write_block_slot
+	add	sp,6h
+	mov	ax,5h
+	push	ax
+	mov	al,0ah
+	push	ax
+	call	display_message
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,0fh
+	push	ax
+	call	write_block_slot
+	add	sp,6h
+	mov	ax,8h
+	push	ax
+	mov	al,0bh
+	push	ax
+	call	display_message
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,10h
+	push	ax
+	call	write_block_slot
+	add	sp,6h
+	mov	ax,8h
+	push	ax
+	mov	al,0ch
+	push	ax
+	call	display_message
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,11h
+	push	ax
+	call	write_block_slot
+	add	sp,6h
+	mov	ax,1h
+	push	ax
+	mov	ax,500h
+	push	ax
+	mov	ax,12h
+	push	ax
+	call	write_block_slot
+	add	sp,6h
+	cmp	word ptr .500h,0h
+	jnz	branch_145b
+	mov	ax,11h
+	push	ax
+	call	display_message
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,13h
+	push	ax
+	call	write_string_slot
+	add	sp,4h
+	mov	ax,12h
+	push	ax
+	call	display_message
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,14h
+	push	ax
+	call	write_string_slot
+	add	sp,4h
+	jmps	branch_1483
+
+branch_145b:
+	mov	ax,13h
+	push	ax
+	call	display_message
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,13h
+	push	ax
+	call	write_string_slot
+	add	sp,4h
+	mov	ax,14h
+	push	ax
+	call	display_message
+	inc	sp
+	inc	sp
+	push	ax
+	mov	ax,14h
+	push	ax
+	call	write_string_slot
+	add	sp,4h
+
+branch_1483:
+	call	flush_dirty_block
+	mov	ax,490h
+	push	ax
+	mov	ax,10h
+	push	ax
+	call	file_bdos_result
+	add	sp,4h
+
+branch_1494:
+	pop	bp
+	ret
+
+bdos_result:
+	push	bp
+	mov	bp,sp
+	sub	sp,6h
+	push	word ptr 6h[bp]
+	push	word ptr 4h[bp]
+	call	bdos
+	add	sp,4h
+	mov	word ptr (0-6h)[bp],ax
+	mov	ax,word ptr .582h
+	mov	word ptr .48ah,ax
+	mov	sp,bp
+	pop	bp
+	ret
+
+file_bdos_result:
+	push	bp
+	mov	bp,sp
+	sub	sp,6h
+	push	word ptr 6h[bp]
+	push	word ptr 4h[bp]
+	call	bdos
+	add	sp,4h
+	mov	word ptr (0-6h)[bp],ax
+	mov	ax,word ptr .582h
+	mov	word ptr .48ah,ax
+	mov	sp,bp
+	pop	bp
+	ret
+
+call_main:
+	call	national_main
+	ret
+
+initialize_video:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	push	es
+	mov	cl,9ah
+	int	0e0h
+	mov	word ptr .1e6h,es
+	mov	ax,10h
+	mov	dx,0ffh
+	call	xios_call
+	mov	word ptr .1e4h,ax
+	cmp	ax,0ffffh
+	jz	branch_14fc
+	cmp	ax,0c00h
+	jnc	branch_1504
+
+branch_14fc:
+	mov	word ptr .1e2h,0h
+	jmps	branch_154b
+
+branch_1504:
+	mov	word ptr .1e2h,1h
+	mov	cl,99h
+	int	0e0h
+	mov	byte ptr .1ech,al
+	call	get_console_pointer
+	mov	al,byte ptr .1ech
+	cmp	al,byte ptr .1e8h
+	jnc	branch_14fc
+	call	get_window_data
+	mov	ax,es:word ptr 16h[bx]
+	mov	word ptr .1eah,ax
+	cmp	ax,es:word ptr 18h[bx]
+	jnz	branch_1533
+	mov	word ptr .1e2h,3h
+
+branch_1533:
+	call	refresh_window_data
+	call	get_window_data
+	mov	es,es:word ptr 16h[bx]
+	cmp	es:byte ptr .0h,20h
+	jz	branch_154b
+	mov	word ptr .1e2h,0h
+
+branch_154b:
+	pop	es
+	pop	di
+	pop	si
+	pop	bp
+	ret
+	mov	ax,word ptr .1e2h
+	ret
+
+refresh_console:
+	push	bp
+	push	si
+	push	di
+	push	es
+	cmp	word ptr .1e2h,3h
+	jz	branch_1562
+	call	refresh_window_data
+
+branch_1562:
+	pop	es
+	pop	di
+	pop	si
+	pop	bp
+	ret
+
+write_video_string:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	push	es
+	call	video_cell_address
+	mov	si,word ptr 4h[bp]
+
+branch_1573:
+	lodsb
+	test	al,al
+	jz	branch_157b
+	stosw
+	jmps	branch_1573
+
+branch_157b:
+	dec	si
+	sub	si,word ptr 4h[bp]
+	mov	ax,si
+	add	dl,al
+	call	update_cursor
+	pop	es
+	pop	di
+	pop	si
+	pop	bp
+	ret
+
+fill_video_cells:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	push	es
+	call	video_cell_address
+	mov	al,byte ptr 4h[bp]
+	mov	cx,word ptr 6h[bp]
+	add	dl,cl
+	cld
+	rep	stosw
+	call	update_cursor
+	pop	es
+	pop	di
+	pop	si
+	pop	bp
+	ret
+
+query_console:
+	push	bp
+	push	si
+	push	di
+	push	es
+	mov	dl,byte ptr .1ech
+	mov	ax,10h
+	call	xios_call
+	mov	es,word ptr .1e6h
+	mov	dl,byte ptr .1ech
+	mov	cx,es:word ptr 2h[bx]
+	mov	bx,es:word ptr 4h[bx]
+	mov	ax,14h
+	call	xios_call
+	pop	es
+	pop	di
+	pop	si
+	pop	bp
+	ret
+
+get_console_pointer:
+	les	bx,dword ptr .1e4h
+	mov	al,es:byte ptr 1h[bx]
+	mov	byte ptr .1e8h,al
+	cbw
+	mov	si,ax
+	mov	al,es:byte ptr 1h[bx+si]
+	mov	byte ptr .1e9h,al
+	ret
+
+get_window_data:
+	mov	dl,byte ptr .1ech
+	mov	ax,10h
+	call	xios_call
+	mov	es,word ptr .1e6h
+	ret
+
+refresh_window_data:
+	call	get_console_pointer
+	mov	dl,al
+	sub	cx,cx
+	mov	ax,7h
+	jmp	xios_call
+
+video_cell_address:
+	call	get_window_data
+	mov	dx,es:word ptr [bx]
+	mov	al,50h
+	mul	dh
+	add	al,dl
+	adc	ah,0h
+	mov	di,ax
+	shl	di,1
+	mov	ah,es:byte ptr 1ch[bx]
+	mov	es,es:word ptr 16h[bx]
+	ret
+
+xios_call:
+	push	ds
+	mov	ds,word ptr .1e6h
+	mov	si,word ptr .68h
+	mov	es,word ptr 10h[si]
+	callf	dword ptr .28h
+	pop	ds
+	ret
+
+update_cursor:
+	xchg	dl,dh
+	add	dx,2020h
+	mov	word ptr .1f2h,dx
+	mov	dx,1f0h
+	mov	cx,9h
+	int	0e0h
+	ret
+	db	0h
+
+allocate:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	mov	ax,word ptr 4h[bp]
+	add	ax,6h
+	dec	ax
+	mov	bx,6h
+	sub	dx,dx
+	div	bx
+	inc	ax
+	mov	si,ax
+	push	si
+	call	find_free_block
+	inc	sp
+	inc	sp
+	mov	di,ax
+	or	ax,ax
+	jnz	branch_166a
+	sub	ax,ax
+	jmps	branch_1672
+
+branch_166a:
+	push	si
+	push	di
+	call	split_block
+	add	sp,4h
+
+branch_1672:
+	pop	di
+	pop	si
+	pop	bp
+	ret
+
+find_free_block:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	mov	ax,word ptr .58ah
+	mov	di,ax
+	mov	ax,word ptr [di]
+	mov	si,ax
+
+branch_1684:
+	mov	ax,word ptr 2h[si]
+	push	ax
+	mov	bx,word ptr 4h[si]
+	pop	ax
+	xor	ax,bx
+	not	ax
+	or	ax,ax
+	jz	branch_16a1
+	mov	ax,1h
+	push	ax
+	call	heap_error_hook
+	inc	sp
+	inc	sp
+	sub	ax,ax
+	jmps	branch_16d6
+
+branch_16a1:
+	mov	ax,word ptr 2h[si]
+	cmp	ax,word ptr 4h[bp]
+	jc	branch_16ad
+	mov	ax,di
+	jmps	branch_16d6
+
+branch_16ad:
+	cmp	si,word ptr .58ah
+	jnz	branch_16ce
+	push	word ptr 4h[bp]
+	call	extend_arena
+	inc	sp
+	inc	sp
+	mov	si,ax
+	or	ax,ax
+	jnz	branch_16ce
+	mov	ax,2h
+	push	ax
+	call	heap_error_hook
+	inc	sp
+	inc	sp
+	sub	ax,ax
+	jmps	branch_16d6
+
+branch_16ce:
+	mov	di,si
+	mov	ax,word ptr [si]
+	mov	si,ax
+	jmps	branch_1684
+
+branch_16d6:
+	pop	di
+	pop	si
+	pop	bp
+	ret
+
+split_block:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	mov	bx,word ptr 4h[bp]
+	mov	ax,word ptr [bx]
+	mov	si,ax
+	mov	ax,word ptr 2h[si]
+	push	ax
+	mov	ax,word ptr 6h[bp]
+	add	ax,4h
+	pop	bx
+	cmp	bx,ax
+	ja	branch_16ff
+	push	word ptr 4h[bp]
+	mov	ax,word ptr [si]
+	pop	bx
+	mov	word ptr [bx],ax
+	jmps	branch_173e
+
+branch_16ff:
+	mov	ax,6h
+	mul	word ptr 6h[bp]
+	xchg	ax,bx
+	mov	ax,si
+	add	ax,bx
+	mov	di,ax
+	push	di
+	mov	ax,word ptr 2h[si]
+	sub	ax,word ptr 6h[bp]
+	pop	bx
+	mov	word ptr 2h[bx],ax
+	push	di
+	mov	ax,word ptr 2h[di]
+	not	ax
+	pop	bx
+	mov	word ptr 4h[bx],ax
+	push	di
+	mov	ax,word ptr [si]
+	pop	bx
+	mov	word ptr [bx],ax
+	mov	bx,word ptr 4h[bp]
+	mov	word ptr [bx],di
+	mov	bx,si
+	mov	ax,word ptr 6h[bp]
+	mov	word ptr 2h[bx],ax
+	push	si
+	mov	ax,word ptr 2h[si]
+	not	ax
+	pop	bx
+	mov	word ptr 4h[bx],ax
+
+branch_173e:
+	mov	ax,word ptr 4h[bp]
+	mov	word ptr .58ah,ax
+	lea	ax,word ptr 6h[si]
+	pop	di
+	pop	si
+	pop	bp
+	ret
+
+extend_arena:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	dec	sp
+	dec	sp
+	mov	ax,word ptr 4h[bp]
+	add	ax,3fh
+	mov	cl,6h
+	shr	ax,cl
+	mov	cl,6h
+	shl	ax,cl
+	mov	word ptr (0-6h)[bp],ax
+	mov	ax,6h
+	mul	word ptr (0-6h)[bp]
+	push	ax
+	call	grow_heap
+	inc	sp
+	inc	sp
+	mov	si,ax
+	cmp	si,0ffffh
+	jnz	branch_177a
+	sub	ax,ax
+	jmps	branch_17af
+
+branch_177a:
+	mov	ax,si
+	inc	ax
+	cwd
+	push	dx
+	push	ax
+	sub	ax,ax
+	push	ax
+	inc	ax
+	push	ax
+	call	long_complement
+	call	long_and
+	pop	ax
+	pop	dx
+	mov	si,ax
+	mov	di,si
+	mov	bx,di
+	mov	ax,word ptr (0-6h)[bp]
+	mov	word ptr 2h[bx],ax
+	push	di
+	mov	ax,word ptr 2h[di]
+	not	ax
+	pop	bx
+	mov	word ptr 4h[bx],ax
+	lea	ax,word ptr 6h[di]
+	push	ax
+	call	free_block
+	inc	sp
+	inc	sp
+	mov	ax,word ptr .58ah
+
+branch_17af:
+	lea	sp,word ptr (0-4h)[bp]
+	pop	di
+	pop	si
+	pop	bp
+	ret
+
+free_block:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	mov	ax,word ptr 4h[bp]
+	sub	ax,6h
+	mov	si,ax
+	mov	ax,word ptr 2h[si]
+	push	ax
+	mov	bx,word ptr 4h[si]
+	pop	ax
+	xor	ax,bx
+	not	ax
+	or	ax,ax
+	jz	branch_17e2
+	mov	ax,3h
+	push	ax
+	call	heap_error_hook
+	inc	sp
+	inc	sp
+	mov	ax,0ffffh
+	jmp	branch_18a3
+
+branch_17e2:
+	mov	ax,word ptr .58ah
+	mov	di,ax
+	jmps	branch_1809
+
+branch_17e9:
+	cmp	si,di
+	jc	branch_17f3
+	mov	ax,word ptr [di]
+	cmp	si,ax
+	jc	branch_180b
+
+branch_17f3:
+	mov	ax,word ptr [di]
+	cmp	di,ax
+	jc	branch_1805
+	mov	ax,word ptr [di]
+	cmp	si,ax
+	jna	branch_1803
+	cmp	si,di
+	jc	branch_1805
+
+branch_1803:
+	jmps	branch_180b
+
+branch_1805:
+	mov	ax,word ptr [di]
+	mov	di,ax
+
+branch_1809:
+	jmps	branch_17e9
+
+branch_180b:
+	cmp	si,di
+	jc	branch_1837
+	mov	ax,word ptr 2h[si]
+	mov	dx,6h
+	mul	dx
+	xchg	ax,bx
+	mov	ax,si
+	add	ax,bx
+	push	ax
+	mov	ax,word ptr 2h[di]
+	mov	dx,6h
+	mul	dx
+	xchg	ax,bx
+	mov	ax,di
+	add	ax,bx
+	pop	bx
+	cmp	bx,ax
+	ja	branch_1837
+	mov	word ptr .58ah,di
+	sub	ax,ax
+	jmps	branch_18a3
+
+branch_1837:
+	mov	ax,word ptr 2h[si]
+	mov	dx,6h
+	mul	dx
+	xchg	ax,bx
+	mov	ax,si
+	add	ax,bx
+	push	ax
+	mov	ax,word ptr [di]
+	pop	bx
+	cmp	bx,ax
+	jnz	branch_186a
+	push	si
+	mov	bx,word ptr [di]
+	mov	ax,word ptr 2h[bx]
+	pop	bx
+	add	word ptr 2h[bx],ax
+	push	si
+	mov	ax,word ptr 2h[si]
+	not	ax
+	pop	bx
+	mov	word ptr 4h[bx],ax
+	push	si
+	mov	bx,word ptr [di]
+	mov	ax,word ptr [bx]
+	pop	bx
+	mov	word ptr [bx],ax
+	jmps	branch_1870
+
+branch_186a:
+	push	si
+	mov	ax,word ptr [di]
+	pop	bx
+	mov	word ptr [bx],ax
+
+branch_1870:
+	mov	ax,word ptr 2h[di]
+	mov	dx,6h
+	mul	dx
+	xchg	ax,bx
+	mov	ax,di
+	add	ax,bx
+	cmp	ax,si
+	jnz	branch_189b
+	push	di
+	mov	ax,word ptr 2h[si]
+	pop	bx
+	add	word ptr 2h[bx],ax
+	push	di
+	mov	ax,word ptr 2h[di]
+	not	ax
+	pop	bx
+	mov	word ptr 4h[bx],ax
+	push	di
+	mov	ax,word ptr [si]
+	pop	bx
+	mov	word ptr [bx],ax
+	jmps	branch_189d
+
+branch_189b:
+	mov	word ptr [di],si
+
+branch_189d:
+	mov	word ptr .58ah,di
+	sub	ax,ax
+
+branch_18a3:
+	pop	di
+	pop	si
+	pop	bp
+	ret
+
+resize_block:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	mov	si,word ptr 4h[bp]
+	sub	sp,4h
+	push	si
+	call	free_block
+	inc	sp
+	inc	sp
+	mov	ax,word ptr 6h[bp]
+	add	ax,6h
+	dec	ax
+	mov	bx,6h
+	sub	dx,dx
+	div	bx
+	inc	ax
+	mov	word ptr (0-6h)[bp],ax
+	push	ax
+	call	find_free_block
+	inc	sp
+	inc	sp
+	mov	word ptr (0-8h)[bp],ax
+	or	ax,ax
+	jnz	branch_18db
+	sub	ax,ax
+	jmps	branch_1932
+
+branch_18db:
+	mov	bx,word ptr (0-8h)[bp]
+	mov	ax,word ptr [bx]
+	add	ax,6h
+	mov	di,ax
+	cmp	si,di
+	jz	branch_1926
+	cmp	di,si
+	jnc	branch_1907
+	jmps	branch_18ff
+
+branch_18ef:
+	mov	ax,di
+	inc	di
+	push	ax
+	mov	ax,si
+	inc	si
+	xchg	ax,bx
+	mov	al,byte ptr [bx]
+	pop	bx
+	mov	byte ptr [bx],al
+	dec	word ptr 6h[bp]
+
+branch_18ff:
+	cmp	word ptr 6h[bp],0h
+	jnz	branch_18ef
+	jmps	branch_1926
+
+branch_1907:
+	mov	ax,word ptr 6h[bp]
+	add	di,ax
+	mov	ax,word ptr 6h[bp]
+	add	si,ax
+	jmps	branch_1920
+
+branch_1913:
+	dec	di
+	mov	ax,di
+	push	ax
+	dec	si
+	mov	al,byte ptr [si]
+	pop	bx
+	mov	byte ptr [bx],al
+	dec	word ptr 6h[bp]
+
+branch_1920:
+	cmp	word ptr 6h[bp],0h
+	jnz	branch_1913
+
+branch_1926:
+	push	word ptr (0-6h)[bp]
+	push	word ptr (0-8h)[bp]
+	call	split_block
+	add	sp,4h
+
+branch_1932:
+	lea	sp,word ptr (0-4h)[bp]
+	pop	di
+	pop	si
+	pop	bp
+	ret
+
+long_complement:
+	push	bp
+	mov	bp,sp
+	not	word ptr 4h[bp]
+	not	word ptr 6h[bp]
+	pop	bp
+	ret
+	push	bp
+	mov	bp,sp
+	sub	ax,ax
+	test	word ptr 4h[bp],0ffffh
+	jnz	branch_1958
+	test	word ptr 6h[bp],0ffffh
+	jnz	branch_1958
+	inc	ax
+
+branch_1958:
+	mov	word ptr 4h[bp],ax
+	mov	word ptr 6h[bp],0h
+	pop	bp
+	ret
+
+long_and:
+	push	bp
+	mov	bp,sp
+	mov	ax,word ptr 4h[bp]
+	mov	bx,word ptr 6h[bp]
+	and	word ptr 8h[bp],ax
+	and	word ptr 0ah[bp],bx
+	pop	bp
+	ret	04h
+	push	bp
+	mov	bp,sp
+	mov	ax,word ptr 4h[bp]
+	mov	bx,word ptr 6h[bp]
+	or	word ptr 8h[bp],ax
+	or	word ptr 0ah[bp],bx
+	pop	bp
+	ret	04h
+	push	bp
+	mov	bp,sp
+	mov	ax,word ptr 4h[bp]
+	mov	bx,word ptr 6h[bp]
+	xor	word ptr 8h[bp],ax
+	xor	word ptr 0ah[bp],bx
+	pop	bp
+	ret	04h
+	push	bp
+	mov	bp,sp
+	mov	cx,word ptr 4h[bp]
+	jcxz	branch_19b5
+	mov	bx,word ptr 0ah[bp]
+	mov	ax,word ptr 8h[bp]
+
+branch_19a9:
+	shl	ax,1
+	rcl	bx,1
+	loop	branch_19a9
+	mov	word ptr 0ah[bp],bx
+	mov	word ptr 8h[bp],ax
+
+branch_19b5:
+	pop	bp
+	ret	04h
+	push	bp
+	mov	bp,sp
+	mov	cx,word ptr 4h[bp]
+	jcxz	branch_19d3
+	mov	bx,word ptr 0ah[bp]
+	mov	ax,word ptr 8h[bp]
+
+branch_19c7:
+	shr	bx,1
+	rcr	ax,1
+	loop	branch_19c7
+	mov	word ptr 0ah[bp],bx
+	mov	word ptr 8h[bp],ax
+
+branch_19d3:
+	pop	bp
+	ret	04h
+	db	0h
+	ret
+
+heap_error_hook:
+	ret
+
+identify_os:
+	sub	ax,ax
+	push	ax
+	mov	al,0ch
+	push	ax
+	call	bdos
+	add	sp,4h
+	mov	ax,word ptr .582h
+	mov	word ptr .5b8h,ax
+	jmps	branch_1a4b
+
+branch_19ee:
+	or	word ptr .5b6h,25h
+	jmp	branch_1a76
+
+branch_19f7:
+	sub	ax,ax
+	push	ax
+	mov	al,0a3h
+	push	ax
+	call	bdos
+	add	sp,4h
+	jmps	branch_1a21
+
+branch_1a05:
+	or	word ptr .5b6h,0h
+
+branch_1a0b:
+	or	word ptr .5b6h,40h
+	jmps	branch_1a3a
+
+branch_1a13:
+	or	word ptr .5b6h,0h
+
+branch_1a19:
+	or	word ptr .5b6h,0c5h
+	jmps	branch_1a3a
+
+branch_1a21:
+	mov	ax,word ptr .582h
+	cmp	ax,1420h
+	jz	branch_1a19
+	cmp	ax,1431h
+	jz	branch_1a13
+	cmp	ax,22h
+	jz	branch_1a0b
+	cmp	ax,1031h
+	jz	branch_1a05
+	jmps	branch_1a13
+
+branch_1a3a:
+	call	probe_bdos_mode
+	jmps	branch_1a76
+
+branch_1a3f:
+	or	word ptr .5b6h,0c5h
+	jmps	branch_1a76
+
+branch_1a47:
+	jmps	branch_1a76
+	jmps	branch_1a76
+
+branch_1a4b:
+	mov	ax,word ptr .5b8h
+	cmp	ax,3022h
+	jz	branch_1a47
+	cmp	ax,2022h
+	jz	branch_1a47
+	cmp	ax,22h
+	jz	branch_1a47
+	cmp	ax,1031h
+	jz	branch_1a3f
+	cmp	ax,1431h
+	jz	branch_19f7
+	cmp	ax,1130h
+	jz	branch_19ee
+	cmp	ax,1430h
+	jnz	branch_1a74
+	jmp	branch_19ee
+
+branch_1a74:
+	jmps	branch_19f7
+
+branch_1a76:
+	ret
+
+probe_bdos_mode:
+	sub	ax,ax
+	push	ax
+	mov	al,44h
+	push	ax
+	call	bdos
+	add	sp,4h
+	cmp	word ptr .582h,0ffffh
+	jz	branch_1a9b
+	cmp	word ptr .582h,0h
+	jz	branch_1a9b
+	or	word ptr .5b6h,2h
+	sub	ax,ax
+	jmps	branch_1a9e
+
+branch_1a9b:
+	mov	ax,0ffffh
+
+branch_1a9e:
+	ret
+
+append_string:
+	mov	dx,0ffffh
+	jmp	branch_1aa8
+
+copy_string:
+	mov	dx,1h
+
+branch_1aa8:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	mov	ax,ds
+	mov	es,ax
+	mov	di,word ptr 6h[bp]
+	sub	al,al
+	mov	cx,0ffffh
+	repne	scasb
+	xchg	cx,dx
+	mov	di,word ptr 4h[bp]
+	repne	scasb
+	dec	di
+	mov	si,word ptr 6h[bp]
+	not	dx
+	mov	cx,dx
+	shr	cx,1
+	rep	movsw
+	jnc	branch_1ad1
+	movsb
+
+branch_1ad1:
+	mov	ax,word ptr 4h[bp]
+
+branch_1ad4:
+	pop	di
+	pop	si
+	pop	bp
+	ret
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	mov	ax,ds
+	mov	es,ax
+	mov	di,word ptr 6h[bp]
+	sub	ax,ax
+	mov	cx,0ffffh
+	repne	scasb
+	not	cx
+	mov	si,word ptr 4h[bp]
+	mov	di,word ptr 6h[bp]
+	repe	cmpsb
+	jz	branch_1ad4
+
+branch_1af7:
+	jg	branch_1afc
+	dec	ax
+	jmps	branch_1ad4
+
+branch_1afc:
+	inc	ax
+	jmps	branch_1ad4
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	mov	ax,ds
+	mov	es,ax
+	mov	di,word ptr 6h[bp]
+	sub	ax,ax
+	mov	cx,0ffffh
+	repne	scasb
+	not	cx
+	mov	si,word ptr 4h[bp]
+	mov	di,word ptr 6h[bp]
+
+branch_1b1a:
+	repe	cmpsb
+	jz	branch_1ad4
+	mov	bh,byte ptr (0-1h)[si]
+	mov	bl,es:byte ptr (0-1h)[di]
+	sub	bh,61h
+	cmp	bh,19h
+	ja	branch_1b30
+	add	bh,0e0h
+
+branch_1b30:
+	add	bh,61h
+	sub	bl,61h
+	cmp	bl,19h
+	ja	branch_1b3e
+	add	bl,0e0h
+
+branch_1b3e:
+	add	bl,61h
+	cmp	bh,bl
+	jz	branch_1b1a
+	jmps	branch_1af7
+
+string_length:
+	mov	bx,sp
+	push	di
+	mov	ax,ds
+	mov	es,ax
+	mov	di,ss:word ptr 2h[bx]
+	sub	al,al
+	mov	cx,0ffffh
+	repne	scasb
+	not	cx
+	mov	ax,cx
+	dec	ax
+	pop	di
+	ret
+
+	dseg
+	rb	258
+	db	0bfh
+	db	5h
+	rb	4
+	db	6h
+	db	0h
+	db	1h
+	db	0h
+	db	7h
+	db	0h
+	db	3h
+	rb	8
+	db	4h
+	db	2h
+	db	4h
+	db	7h
+	db	1h
+	db	0h
+	db	14h
+	db	0h
+	db	15h
+	db	0h
+	db	22h
+	db	0h
+	db	16h
+	db	0h
+	db	17h
+	db	0h
+	db	23h
+	db	0h
+	db	'Copyright (C) 1983,84,85 Digital Research'
+	db	0h
+	db	0b9h
+	db	8eh
+	db	9bh
+	db	9bh
+	db	8ch
+	db	97h
+	db	92h
+	db	99h
+	db	8dh
+	db	0e0h
+	db	9ah
+	db	8eh
+	db	91h
+	db	93h
+	db	0e0h
+	db	0b6h
+	db	91h
+	db	9bh
+	db	0e0h
+	db	0a9h
+	db	9bh
+	db	97h
+	db	92h
+	db	0d4h
+	db	0e0h
+	db	89h
+	db	98h
+	db	91h
+	db	0e0h
+	db	99h
+	db	9bh
+	db	92h
+	db	9bh
+	db	8eh
+	db	91h
+	db	8bh
+	db	8dh
+	db	94h
+	db	87h
+	db	0e0h
+	db	99h
+	db	9fh
+	db	8ah
+	db	9bh
+	db	0e0h
+	db	87h
+	db	91h
+	db	8bh
+	db	0e0h
+	db	8ch
+	db	98h
+	db	9bh
+	db	0e0h
+	db	0b5h
+	db	0beh
+	db	0bch
+	db	0e0h
+	db	0dah
+	db	0e0h
+	db	0b4h
+	db	0adh
+	db	0ach
+	db	0e0h
+	db	9ch
+	db	8eh
+	db	97h
+	db	8ah
+	db	9bh
+	db	8eh
+	db	8dh
+	db	0h
+	db	1h
+	rb	8
+	db	1h
+	db	0h
+	db	2h
+	db	0h
+	db	3h
+	db	0h
+	db	4h
+	db	0h
+	db	8h
+	db	0h
+	db	5h
+	db	0h
+	db	6h
+	db	0h
+	db	7h
+	db	0h
+	db	87h
+	db	2h
+	db	95h
+	db	2h
+	db	0a8h
+	db	2h
+	db	0b9h
+	db	2h
+	db	0c7h
+	db	2h
+	db	0dbh
+	db	2h
+	db	0eeh
+	db	2h
+	db	0f5h
+	db	2h
+	db	9h
+	db	3h
+	rb	4
+	db	1eh
+	db	3h
+	db	3fh
+	db	3h
+	db	69h
+	db	3h
+	db	8ah
+	db	3h
+	db	0abh
+	db	3h
+	db	0cch
+	db	3h
+	db	0edh
+	db	3h
+	db	5h
+	db	4h
+	db	28h
+	db	4h
+table_work rb 0
+	rb	18
+	db	7h
+	db	70h
+	db	7h
+	db	1bh
+	db	'Y  '
+	db	0h
+	db	0h
+	db	'Requires Concurrent PC DOS$'
+	db	0h
+	db	20h
+	db	0h
+	db	'Select your language:'
+	db	0h
+	db	'<EXIT>'
+	db	0h
+	db	'Espa'
+	db	0a4h
+	db	'ol'
+	db	0h
+	db	'Italiano'
+	db	0h
+	db	'Sverige/Suomi'
+	db	0h
+	db	'Norge'
+	db	0h
+	db	'Danmark'
+	db	0h
+	db	'English, UK'
+	db	0h
+	db	'Deutsch'
+	db	0h
+	db	'Fran'
+	db	87h
+	db	'ais'
+	db	0h
+	db	'English, US'
+	db	0h
+	db	'Abort Program'
+	db	0h
+	db	'Terminer programme'
+	db	0h
+	db	'Programm beenden'
+	db	0h
+	db	'Abort Program'
+	db	0h
+	db	'<dan> Abort Program'
+	db	0h
+	db	'<sw> Abort Program'
+	db	0h
+	db	'Uscire'
+	db	0h
+	db	'Abortar el Programa'
+	db	0h
+	db	'<norw.>Abort Program'
+	db	0h
+	db	'ERROR: Missing File NATIONAL.MSG'
+	db	0h
+	db	'Erreur: Il manque le fichier NATIONAL.MSG'
+	db	0h
+	db	'FEHLER: Datei NATIONAL.MSG fehlt'
+	db	0h
+	db	'Error: Missing File NATIONAL.MSG'
+	db	0h
+	db	'Error: missing file NATIONAL.MSG'
+	db	0h
+	db	'Error: missing file NATIONAL.MSG'
+	db	0h
+	db	'Si bisogna NATIONAL.MSG'
+	db	0h
+	db	'Hace falta el fichero NATIONAL.MSG'
+	db	0h
+	db	'ERROR: Missing file NATIONAL.MSG'
+	db	0h
+	db	'NATIONALMSG'
+	db	0h
+kernel_filename rb 0
+	db	'CCPM    SYS'
+	db	0h
+	db	'  =  '
+	db	0h
+	db	' o '
+	db	0h
+missing_table_msg rb 0
+	db	'Missing table in file CCPM.SYS'
+	rb	51
+	db	0ffh
+	db	0ffh
+slot_offsets rb 0
+	rb	48
+code_paragraphs rb 0
+	db	0h
+	db	0h
+data_file_base rb 0
+	rb	18
+device_records rb 0
+	rb	56
+signature_offset rb 0
+	db	0h
+	db	0h
+	db	'Concurrent PC DOS National Setup Utility for the IBM PC  '
+	db	'version 4.1'
+	rb	4
+	db	84h
+	db	5h
+	db	0h
+	db	0h
+	db	0ffh
+	db	0ffh
+	db	84h
+	db	5h
+	db	'Cprogram'
+	db	0h
+	db	0h
+	db	'CON:'
+	db	0h
+	db	0h
+	db	'LST:'
+	db	0h
+	db	0h
+	db	1ah
+	rb	29
+	org	5bfh
+	db	0
+	end

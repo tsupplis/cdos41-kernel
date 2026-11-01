@@ -965,10 +965,10 @@ test_alt_num:
 
 scan_code_ok:
 	mov al,scan_code
-	mov bx,offset key_table		;translation table for single keys
+	mov bx,active_plain		;translation table for single keys
 	test down_bits,ctrl_bit		;was control key already down ?
 	jz test_for_keypad		;no, try numlock
-	  mov bx,offset control_table	;yes, point to control key table
+	  mov bx,active_ctrl	;yes, point to control key table
 	  jmp translate
 
 test_for_keypad:
@@ -983,7 +983,7 @@ test_for_keypad2:
 	    jz test_for_shift
 	      test down_bits,shft_left_bit or shft_right_bit
 	      jnz translate		;use key_table if numlock,shifted
-	      mov bx,offset shift_table
+	      mov bx,active_shift
 	      jmps translate		;use shift table if numlock
 pcmode_keypad:
 	test down_bits,alt_bit
@@ -1017,7 +1017,7 @@ test_for_shift:
 	test down_bits,shft_left_bit or shft_right_bit
 	jz translate			;no $ return key from key_table
 keypad_shifted:
-	  mov bx,offset shift_table	;yes $ get key from shift_table
+	  mov bx,active_shift	;yes $ get key from shift_table
 
 ;* kludge to support shift-tab in a mode compatible with PCDOS plus what
 ;* was previously done for 3.2.  Shift-table contents used to be 0ch.
@@ -1432,6 +1432,40 @@ control_table:
 	db	'123'			;1,2,3
 	db	'0',full_key + 80h	;0,.
 
+
+; National keyboard configuration. Index zero preserves the OEM US default.
+key_layout db 0
+key_mode db 0
+layout_modes db 0,6,1,7,3
+active_plain dw offset key_table
+active_shift dw offset shift_table
+active_ctrl dw offset control_table
+
+; Release UK national bank. N replaces scan codes 0 through 53 per map.
+national_plain:
+	db 0ffh,01bh,031h,032h,033h,034h,035h,036h,037h,038h,039h,030h	; scans 0-11
+	db 02dh,03dh,008h,009h,071h,077h,065h,072h,074h,079h,075h,069h	; scans 12-23
+	db 06fh,070h,05bh,05dh,00dh,0ffh,061h,073h,064h,066h,067h,068h	; scans 24-35
+	db 06ah,06bh,06ch,03bh,027h,023h,0ffh,05ch,07ah,078h,063h,076h	; scans 36-47
+	db 062h,06eh,06dh,02ch,02eh,02fh,0ffh,02ah,0ffh,020h,0ffh,080h	; scans 48-59
+	db 081h,082h,083h,084h,085h,086h,087h,088h,089h,0ffh,013h,08ah	; scans 60-71
+	db 08bh,08ch,02dh,08dh,0ffh,08eh,02bh,08fh,090h,091h,092h,093h	; scans 72-83
+national_shift:
+	db 0ffh,01bh,021h,022h,09ch,024h,025h,05eh,026h,02ah,028h,029h	; scans 0-11
+	db 05fh,02bh,008h,000h,051h,057h,045h,052h,054h,059h,055h,049h	; scans 12-23
+	db 04fh,050h,07bh,07dh,00dh,0ffh,041h,053h,044h,046h,047h,048h	; scans 24-35
+	db 04ah,04bh,04ch,03ah,040h,07eh,0ffh,07ch,05ah,058h,043h,056h	; scans 36-47
+	db 042h,04eh,04dh,03ch,03eh,03fh,0ffh,0fch,0ffh,020h,0ffh,09eh	; scans 48-59
+	db 09fh,0a0h,0a1h,0a2h,0a3h,0a4h,0a5h,0a6h,0a7h,0ffh,003h,037h	; scans 60-71
+	db 038h,039h,02dh,034h,035h,036h,02bh,031h,032h,033h,030h,02eh	; scans 72-83
+national_ctrl:
+	db 0ffh,01bh,0ffh,000h,0ffh,0ffh,0ffh,01eh,0ffh,0ffh,0ffh,0ffh	; scans 0-11
+	db 01fh,0ffh,07fh,0ffh,011h,017h,005h,012h,014h,019h,015h,009h	; scans 12-23
+	db 00fh,010h,01bh,01dh,00ah,0ffh,001h,013h,004h,006h,007h,008h	; scans 24-35
+	db 00ah,00bh,00ch,0ffh,000h,01fh,0ffh,05ch,01ah,018h,003h,016h	; scans 36-47
+	db 002h,00eh,00dh,0ffh,0ffh,0ffh,0ffh,010h,0ffh,020h,0ffh,0a8h	; scans 48-59
+	db 0a9h,0aah,0abh,0ach,0adh,0aeh,0afh,0b0h,0b1h,0ffh,003h,037h	; scans 60-71
+	db 038h,039h,02dh,034h,035h,036h,0fdh,031h,032h,033h,030h,0feh	; scans 72-83
 
 ;********************************************************
 ;*							*
