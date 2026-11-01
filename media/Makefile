@@ -26,7 +26,7 @@ MAINT_COMMANDS = ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
     ../commands/dskmaint/dskmaint.cmd ../commands/disk/dcopy.cmd ../commands/hdmaint/hdmaint.cmd \
     ../commands/initdir/initdir.cmd
 
-MENU_COMMANDS = ../base/spl.cmd ../commands/print/print.cmd ../commands/dredix/dredix.cmd ../commands/copymenu/copymenu.cmd ../commands/editmenu/editmenu.cmd \
+MENU_COMMANDS = ../commands/spl/spl.cmd ../commands/print/print.cmd ../commands/dredix/dredix.cmd ../commands/copymenu/copymenu.cmd ../commands/editmenu/editmenu.cmd \
     ../commands/printmgr/printmgr.cmd ../commands/dsp/dsp.cmd ../base/term.dat \
     ../base/menu.dat ../base/fdmenu.dat ../base/hdmenu.dat \
     ../base/index.dsp ../commands/dredix/help.edx \
