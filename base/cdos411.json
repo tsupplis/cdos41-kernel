@@ -20,7 +20,8 @@
           "sha256": "d7b9e8dc9a13766d30a0bd4b826e94f6e0e3ca733bb25df94f21f8f2edca3818",
           "bytes": 22528
         }
-      ]
+      ],
+      "repository_path": "extra/back.cmd"
     },
     {
       "name": "batch.cmd",
@@ -46,7 +47,8 @@
           "sha256": "c977c1bddd7265a548e5bd7043715dc66e94c6e7ff595035e4aea1eb63183298",
           "bytes": 28800
         }
-      ]
+      ],
+      "repository_path": "extra/brinst.cmd"
     },
     {
       "name": "cardfile.cmd",
@@ -163,7 +165,8 @@
           "sha256": "ab6ccfd5337f9fbd4191b163ce1eeeb53d03e3ffc4b318b1ba91cbbe2c6f40a6",
           "bytes": 79616
         }
-      ]
+      ],
+      "repository_path": "extra/drtalk.exe"
     },
     {
       "name": "dskmaint.cmd",
@@ -355,8 +358,7 @@
     },
     {
       "name": "neat.cmd",
-      "status": "restored from 4.11 image",
-      "base_sha256": "02ee2b7f92c4de94bfbee381dc239b9ef7e516ed0d1f767f7e10fde463a14efd",
+      "status": "archive image only; excluded from project",
       "references": [
         {
           "image": "cdos-4.11-1.img",
@@ -481,7 +483,8 @@
           "sha256": "771272b0e879eaec0e8e623a6694755e8760c508173261478efb52999bae95fd",
           "bytes": 18944
         }
-      ]
+      ],
+      "repository_path": "extra/rest.cmd"
     },
     {
       "name": "rmdir.cmd",
