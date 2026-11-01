@@ -226,6 +226,7 @@ release-image provenance. Details are in `base/cdos411.json`.
 | `setup` | Customize system hardware settings | 4.11 | —; original OEM binary retained | Original used |
 | `show` | Display disk space and drive information | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |
 | `submit` | Run SUB command files | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool |
+| `stop` | List processes and stop a selected entry | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical |
 | `sysdisk` | Display or change the system search path | 4.11 | Recompiled from CDOS 4.1; SD-mode D.A86 wrapper | Byte-identical |
 | `systat` | Inspect processes and system resources | 4.1 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |
 | `time.exe` | Display or set the time through DOS | 4.11 | Reverse Engineered from CDOS 4.11 and patched | Behavior tested |

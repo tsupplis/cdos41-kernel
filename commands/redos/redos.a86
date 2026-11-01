@@ -1,7 +1,16 @@
-; REDOS.COM - install PC DOS system files in the reserved fixed-disk slots.
-; Reconstructed from the CDOS 4.11 release. DOS command: REDOS [drive:]
-; DOS pre-parses the destination in the PSP FCB. Source files are on A:.
-; Assemble and package as in REDOS.SUB: ASM86 $FI, GENCMD NHEAD 8080 CODE[B10].
+;*****************************************************
+;*
+;*	REDOS.COM   Concurrent DOS 4.11
+;*
+;*****************************************************
+
+; REDOS [drive:] installs PC DOS system files from A:
+; in the reserved slots on the destination hard disk.
+; The default destination is the current drive.
+; REDOS.SUB uses ASM86 $FI and GENCMD NHEAD 8080 CODE[B10].
+
+;Revisions:
+;	Reconstructed from the CDOS 4.11 release binary.
 
 psp_limit       equ     word ptr .6
 psp_drive       equ     byte ptr .5ch

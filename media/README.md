@@ -14,7 +14,7 @@ disks contain CCPM.SYS and STARTUP.0; the remaining disks are data-only.
 | cdosmenu.img | No | PRINT, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP, menu/terminal/message data, window BAT examples and sample text. |
 | cdosdos.img | No | Rebuilt COPY.EXE, DATE.EXE, ERASE.EXE, PATH.EXE, TIME.EXE, REN.EXE and SETENV.EXE; LOADCCPM.COM, rebuilt REDOS.COM and core commands. |
 | cdosoem1.img | No | BackRest and its support files from `extra/`, plus FM, FM.CFG and SPL from `base/`. |
-| cdosoem2.img | No | Rebuilt FUNCTION, HELP, SETPORT and HDMAINT; original SETUP, N, STOP, HDMAINT manual and the original 4.1 HELP.HLP. |
+| cdosoem2.img | No | Rebuilt FUNCTION, HELP, SETPORT, STOP and HDMAINT; original SETUP, N, HDMAINT manual and the original 4.1 HELP.HLP. |
 
 Rebuilt command outputs are used wherever available. Remaining original
 binaries and data are explicit base/ prerequisites in the Makefile; there

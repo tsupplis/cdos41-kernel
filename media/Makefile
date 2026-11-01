@@ -13,7 +13,7 @@ SYSTEM_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ..
     ../commands/era/eraq.cmd ../commands/ren/ren.cmd ../commands/date/date.cmd \
     ../commands/sdir/sdir.cmd ../commands/show/show.cmd ../commands/set/set.cmd \
     ../commands/submit/submit.cmd ../commands/type/type.cmd ../commands/dir/dir.cmd \
-    ../commands/ed/ed.cmd ../commands/rename/ren.exe ../base/stop.cmd \
+    ../commands/ed/ed.cmd ../commands/rename/ren.exe ../commands/stop/stop.cmd \
     ../commands/putget/put.cmd ../commands/putget/get.cmd ../commands/putget/rdr.cmd
 
 TOOLS_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
@@ -47,7 +47,7 @@ OEM1_COMMANDS = ../extra/back.cmd ../extra/rest.cmd ../extra/brinst.cmd \
 OEM2_COMMANDS = ../commands/function/function.cmd ../commands/help/help.cmd \
     ../base/n.cmd \
     ../commands/setport/setport.cmd ../base/setup.cmd \
-    ../base/stop.cmd ../commands/hdmaint/hdmaint.cmd \
+    ../commands/stop/stop.cmd ../commands/hdmaint/hdmaint.cmd \
     ../base/hdmaint.doc ../commands/help/help.hlp
 
 .PHONY: all check check-media check-pce test clean

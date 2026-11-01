@@ -1885,7 +1885,9 @@ the supplied INDEX.DSP data. PRINTMGR manages spool requests; DSP displays
 spool information. These are separate from the direct PRINT command.
 
 ///1STOP
-  See FREEMEMORY.
+STOP lists programs, memory usage and free memory. Enter a listed number to
+stop that process, or press Return to exit. STOP name window is a separate
+shell command. See also FREEMEMORY.
 
 ///1SUBMIT
     Syntax:
