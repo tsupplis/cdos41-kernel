@@ -851,6 +851,12 @@ new_screen_done:
 ;		dx = cursor
 
 vc_out:
+	cmp cl,20h
+	jb vc_raw_char
+	mov al,cl
+	call nat_screen
+	mov cl,al
+vc_raw_char:
 	push	es
 	call	point_cursor	; di -> cursor pos
 	mov	ch,vs_attrib

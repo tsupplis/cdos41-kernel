@@ -711,6 +711,23 @@ s_get_open3:
 	loop	s_get_open1
 
 s_window:
+ mov al,'8'
+ test key_mode,1
+ jz sl_store_bits
+ mov al,'7'
+sl_store_bits:
+ mov smsg_bits,al
+ xor bx,bx
+ test key_mode,2
+ jz sl_country
+ mov bl,nat_language
+ cmp bl,9
+ jb sl_country
+ xor bx,bx
+sl_country:
+ shl bx,1
+ mov ax,word ptr country_codes[bx]
+ mov smsg_country,ax
 	cmp im_here,0 ! jz s_capslock
 	  mov si,offset winstr
 	  mov di,offset smsg_window
@@ -976,9 +993,12 @@ smsg_proc3		rb	8
 			rb	1
 smsg_proc4		rb	8
 			rb	1
-smsg_pstr		rb	8
-smsg_pnum		rb	1
-			rb	1
+smsg_pstr rb 4
+smsg_pnum rb 1
+ rb 1
+smsg_country rw 1
+smsg_bits rb 1
+ rb 1
 smsg_openvec		rb	7
 			rb	1
 smsg_ctrlS		rw	0
@@ -999,7 +1019,8 @@ smsg_min		dw	'00'
 
 ;	To restore "Printer="
 
-printer_msg		db	'Printer='
+printer_msg db 'Prn='
+country_codes db 'US F DUKDK S I E N'
 
 ;	For system or null processes
 

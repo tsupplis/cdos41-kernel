@@ -18,6 +18,20 @@ def check(path):
     flags, count = word(data, 0x56), data[0x4a]
     assert count and flags + count * 3 <= min(len(data), 65536), 'Flag table outside SYSDAT'
     assert data[flags:flags + count * 3] == b'\xff' * (count * 3), 'Invalid RTM flag initialization: expected FF FF FF for every entry'
+    # The release N.CMD seeks with 16-bit file offsets, including the header.
+    data_file = 128 + code_length * 16
+    directory = word(data, 0x0c3e)
+    assert data[0x0c3c:0x0c3e] == b'JW', 'Missing N.CMD signature'
+    assert directory and data_file + directory + 48 <= 65536, 'N.CMD directory beyond reach'
+    sizes = (1, 1, 1, 54, 54, 54, 16, 16, 16, 16, 55, 48, 48, 5, 40, 5, 8, 8, 1, 16, 16)
+    ranges = []
+    for index, size in enumerate(sizes):
+        start = word(data, directory + 2 * index)
+        assert start and start + size <= min(len(data), 65536 - data_file), ('Invalid national slot', index)
+        ranges.append((start, start + size))
+    ranges.sort()
+    assert all(a[1] <= b[0] for a, b in zip(ranges, ranges[1:])), 'Overlapping national slots'
+    assert data[directory+42:directory+48] == bytes(6), 'Unexpected national slots 21-23'
     segment = word(data, 0x42)
     seen, names = set(), []
     while segment:

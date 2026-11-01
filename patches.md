@@ -553,14 +553,34 @@ The IBM PC XIOS initializes the IRQ1 translation pointers from the five
 release keyboard modes. The default index remains zero (US eight-bit).
 Indices 1 and 3 select the national bank through mode bit 1. Plain, Shift, Control and shifted keypad translation use the
 selected pointers. The national bank starts with the UK release maps.
-The national setup directory and its other consumers are still pending.
+The setup directory publishes these maps in slots 3–5.
 
 ### National printer translation
 
 The XIOS list-output entry now applies the 4.11 per-printer state machine
 before dispatching to the physical port. Five device records retain their
 own model, escape continuation, parameter count and character-set state.
-All five default to transparent output. The national setup directory is
-still pending. Capturing the device number and output byte at the physical
+All five default to transparent output. Slot 10 exposes the five records to N. Capturing the device number and output byte at the physical
 dispatch gave identical streams for all six release models with keyboard
 layouts 0 and 3, including extended characters and ESC sequences.
+
+### National keyboard input and virtual-console output
+
+The XIOS now applies the 4.11 national input and printable-output tables
+as a pair. Alt scan-code overrides suppress one subsequent UK seven-bit
+screen substitution. Caps Lock uses the national case pairs, and the
+dead-key path handles composition, deferred keys and the error bell.
+The compact-keyboard console shortcuts retain their tagged event path.
+
+A release comparison exercised every byte under the five layouts and
+each of the four accent indices. In UK seven-bit mode a scan override
+followed by two writes of 23h produced virtual-screen words 5E23h and
+5E9Ch with attribute 5Eh. N configures these hooks through the national directory.
+
+### National setup directory and status line
+
+The IBM PC XIOS publishes the JW signature at DATA + 0C3Ch and the
+24-word directory used by N.CMD. Its 21 populated slots point to the
+keyboard maps, printer records, translation data and saved selections.
+The status line uses the release Prn= field to leave space for the
+two-character country code and the seven/eight-bit indicator.

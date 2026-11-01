@@ -14,9 +14,9 @@ missing table. N converts the other offsets to file positions. Its update
 routines use the directory to write strings and fixed-size blocks.
 
 The release kernel on disk 1 contains the signature at file offset 989Ch.
-The rebuilt kernel examined during reconstruction contained 00 FC at its
-corresponding offset A9FCh. National configuration requires a compatible
-directory and working kernel consumers for its entries.
+The rebuilt IBM PC XIOS now publishes the same directory at DATA + 0C3Ch.
+The build checks that its 21 populated slots fit within N's 16-bit file
+address range. Slots 21–23 are zero.
 
 ## Build and verification
 
@@ -32,8 +32,7 @@ Run `make check` in this directory.
 Build with `make nprobe.cmd`. Run NPROBE with the target 4.11 CCPM.SYS in
 the current directory. It opens the file read-only, prints the 24 directory
 entries relative to DATA, then prints the keyboard/screen choice in English.
-The release disk 1 file selects index 1 (U.K., 8 Bit). The rebuilt kernel
-fails the JW check before the directory is read.
+The release disk 1 file selects index 1 (U.K., 8 Bit). The rebuilt kernel defaults to index 0 (U.S., 8 Bit).
 
 The following slot numbers are decimal. Sizes and source indices come from
 the arguments to write_block_slot and write_string_slot in N.CMD. String
@@ -101,7 +100,7 @@ The rebuilt IBM PC XIOS now initializes the three pointers in
 select_key_bank before installing its interrupt vectors. The plain,
 Control, Shift and Num Lock paths use those pointers. The fixed bank
 remains the default and the separate national bank holds the UK release
-maps. The national directory and the remaining consumers are still pending.
+maps. N updates the national bank through slots 3–5.
 
 ## Printer records and the XIOS output path
 
@@ -135,3 +134,29 @@ state machine. Its pr_emit calls physical_list, which dispatches to
 parallel_out, serial_out or null_out. list_data still holds physical port
 addresses and serial numbers. The default model is transparent on all
 five devices.
+
+## Screen and keyboard consumers in the 4.11 release
+
+Offsets below are relative to the release DATA group (the XIOS executes
+there). The screen uses the same substitution tables as the keyboard and
+printer. There is no separate national character framebuffer.
+
+| Slots | Release consumer | Rebuilt source counterpart |
+| --- | --- | --- |
+| 0, 1 | At 3F02h the status-line builder selects ASCII 7 or 8 from mode bit 0. Bit 1 selects the language index for a two-character country abbreviation. | Status-line construction in xchar.lib |
+| 2, 7, 8 | At 4D88h the printable virtual-console path calls 6C2Fh. In layout 3 it substitutes slot 7 to slot 8 unless the one-shot suppression flag was set. It also converts ECh to 15h. At 6A5Fh the input path calls 6B60h, which searches the opposite direction for layouts 3 and 4 and can reject an unmapped high-bit character. | vc_out in xcon1.lib; keyboard delivery in xbegin.lib |
+| 6 | Caps Lock calls 6B8Eh, which toggles ASCII case or searches slot 6 and selects the adjacent byte by XORing its index with 1. | Caps Lock handling after tr_1 in xbegin.lib |
+| 9 | At 68D4h and 6BD6h the layout-1 keyboard path searches a zero-terminated list of encoded scan codes. A match records a pending accent index. Routine 6BE6h combines it with the next character using internal accent tables and handles unmatched combinations. | Keyboard IRQ translation in xbegin.lib |
+| 19, 20 | At 68F5h slot 19 supplies a count followed by scan codes (bit 7 includes Shift). A match indexes slot 20, sets the one-shot suppression flag and routes the replacement through the keyboard delivery path. | Keyboard IRQ translation and the printable console path |
+| 14, 18 | N writes the language description to slot 14. N reads slot 18 and uses it to choose the installation tables. No direct XIOS address operand for either slot was identified in this pass. | Configuration storage; runtime use beyond N is unconfirmed |
+
+Release layout 3 is UK seven-bit. For example, its slot 7/8 pair maps
+23h to 9Ch on printable console output, and maps 9Ch back to 23h on
+keyboard input. The suppression flag links those two paths: translating
+only the screen or only the IRQ handler would miss the special-scan case.
+The vc_xlat tables in the rebuilt console code determine which window owns
+a screen cell; they serve a different purpose.
+
+The rebuilt XIOS now implements the paired input and printable-output
+lookups above, the Alt scan overrides, case pairs and dead-key composition.
+The status line displays the effective country and character width alongside Prn=.

@@ -443,7 +443,9 @@ genccpm_buf	dw	buffer_size/16
 
 acb		dw	offset acb_tab	;pointer to the first acb
 
-debug		db	false		;save debugger interrupts
+; N.CMD locates these words at DATA + 0C3Ch in the generated CCPM.SYS.
+national_signature dw 574ah
+                   dw offset national_directory
 
 
 ;********************************************************
@@ -778,6 +780,11 @@ i_keyboard:
 
 	in al,kbd_data			;get the scan code
 	mov scan_code,al		;save the scan code
+	mov nat_function,0ffh
+	cmp al,55
+	jae scan_classified
+	mov nat_function,0
+scan_classified:
 	mov pc_scan_code,al		;save for PC mode
 	in al,kbd_control		;get the current control port
 	mov ah,al			;save the current state
@@ -851,7 +858,7 @@ key_make:
     jne key_console_shortcuts
     mov al,07dh                 ; native Ctrl-keypad-Plus event
     mov key_type,0ffh
-    jmp save_key_code
+    jmp mask_key_code
 key_console_shortcuts:
     cmp al,15                   ; Ctrl-Alt-Tab: next foreground console
     je key_next_console
@@ -870,7 +877,7 @@ key_next_console:
 key_console_event:
     or al,070h                  ; existing console-switch event encoding
     mov key_type,0ffh
-    jmp save_key_code
+    jmp mask_key_code
 key_translate:
 	cmp	al,70			; if not the break key scan code
 	jnz	not_ctrl_break		;   then continue on
@@ -907,7 +914,7 @@ not_switch:
 
 ;	correct pc scan code for shft/ctrl/alt function keys
 	test	key_vs_mode,pcmode_bit	; if not in pc mode
-	jz	scan_code_ok		;   then skip
+	jz	near_scan_ok		;   then skip
 
 	mov	al,down_bits
 	mov	ah,25			; shift scan increment
@@ -940,13 +947,13 @@ not_pc_fkey:
 	cld				; scan code already in al
 	repnz	scasb			; search the list
 	pop	es			; restore es
-	jnz	scan_code_ok		; if not in the list
+	jnz	near_scan_ok		; if not in the list
 
 	mov	al,.x_ctrl_xlat[di]	; get the translated value
 	mov	pc_scan_code,al		;   and save it
 
 	test 	key_vs_mode,pcmode_bit	; if this console is in pcmode
-	jz	scan_code_ok		;   then zero AL and exit
+	jz	near_scan_ok		;   then zero AL and exit
 	cmp	al,0FFh			; ignore keys 8,5,2 when pcmode and
 	jz	ignore_key		;   the cntrl key is pressed
 	xor	al,al
@@ -954,14 +961,98 @@ not_pc_fkey:
 ignore_key:
 	jmp	key_scan_done
 
+near_scan_ok:
+	jmp scan_code_ok
 test_alt_num:
-	test	down_bits,alt_bit
-	jz	scan_code_ok
-	cmp	al,2
-	jb	scan_code_ok
-	cmp	al,13
-	ja	scan_code_ok
-	add	pc_scan_code,118
+
+nat_alt_scan:
+	cmp	al,047h
+	jnc	nat_plain_scan
+	test	byte ptr down_bits,08h
+	jnz	nat_alt_key
+
+nat_plain_scan:
+	jmp	scan_code_ok
+
+nat_alt_key:
+	cmp	al,0fh
+	jnz	nat_alt_mod
+	jmp	key_scan_done
+
+nat_alt_mod:
+	cmp	byte ptr down_bits,08h
+	jnz	nat_alt_dead
+	cmp	al,02h
+	jc	nat_alt_letter
+	cmp	al,0dh
+	ja	nat_alt_letter
+	add	byte ptr pc_scan_code,076h
+	jmp	turn_on_msb
+
+nat_alt_letter:
+	mov	bx,offset national_plain
+	xlat	bx
+	cmp	al,061h
+	jc	nat_alt_dead
+	cmp	al,07ah
+	ja	nat_alt_dead
+	test	byte ptr key_mode,02h
+	jz	nat_alt_encode
+	push	es
+	push	ds
+	pop	es
+	mov	di,offset key_table
+	mov	cx,03bh
+	cld
+	repne	scasb
+	sub	di,06fbfh
+	mov	ax,di
+	mov	pc_scan_code,al
+	pop	es
+
+nat_alt_encode:
+	jmp	turn_on_msb
+
+nat_alt_dead:
+	cmp	byte ptr key_layout,01h
+	jnz	nat_scan_override
+	mov	cl,scan_code
+	test	byte ptr down_bits,03h
+	jz	nat_dead_tag
+	or	cl,080h
+
+nat_dead_tag:
+	or	cl,040h
+	mov	di,offset nat_dead_keys
+	call	pr_find
+	cmp	di,0ffffh
+	jz	nat_scan_override
+	mov	nat_accent,di
+	jmp	key_scan_done
+
+; Alt scan overrides are counted pairs. Shift sets bit 7 of the lookup key.
+nat_scan_override:
+	mov	al,scan_code
+	test	byte ptr down_bits,03h
+	jz	nat_override_find
+	or	al,080h
+
+nat_override_find:
+	mov	cx,00h
+	mov	cl,nat_override
+	jcxz	scan_code_ok
+	push	es
+	push	ds
+	pop	es
+	mov	di,offset nat_override+1
+	cld
+	repne	scasb
+	pop	es
+	jnz	scan_code_ok
+	sub	di,offset nat_override+2
+	mov	al,nat_replacement[di]
+	mov	byte ptr nat_no_echo_map,0ffh
+	jmp	nat_deliver
 
 scan_code_ok:
 	mov al,scan_code
@@ -1030,24 +1121,25 @@ keypad_shifted:
 
 translate:
 	xlat bx				;look up the key
-tr_1:					;*
-	cmp al,0ffh			;is it undefined
-	jz skip_alt_char		;yes $ done
-	  cbw				;extend sign into AH
-	  mov key_type,ah		;save the key type, 0 or 0FFH
-	  test toggle_bits,capslock_bit	;test for caps lock
-	  jz test_for_alt
-	    cmp al,'z'			;yes
-	    ja test_for_alt		;not alphabetic
-	      cmp al,'a'		;is it lower case ?
-	      jae do_case_change	;yes $ switch case
-	        cmp al,'Z'
-	        ja test_for_alt		;not alphabetic
-	          cmp al,'A'		;test for upper case
-	          jb test_for_alt	;not alphabetic
-do_case_change:
-	xor al,020h			;switch the case
+tr_1:
+	cmp al,0ffh
+	je skip_alt_char
+	cbw
+	and ah,nat_function
+	mov key_type,ah
+	jnz test_for_alt
+	call nat_dead_scan
+	cmp di,0ffffh
+	je key_compose
+	jmp key_scan_done
+key_compose:
+	call nat_compose
+	test toggle_bits,capslock_bit
+	jz test_for_alt
+	call nat_caps
 test_for_alt:
+	cmp nat_function,0
+	jz nat_deliver
 	test down_bits,alt_bit		;is alt key currently down ?
 	jz save_key_code		;no
 	  cmp al,80h			;check for function key
@@ -1059,24 +1151,31 @@ test_for_alt:
 turn_on_msb:
 	or al,080h			;yes $ turn on msb for alt key
 	test key_vs_mode,pcmode_bit
-	jz save_with_msb
+	jz nat_deliver
 
 	mov ah,scan_code
 	xor al,al
 	cmp ah,2  ! jb skip_alt_char
-	cmp ah,14 ! jb save_with_msb	;check for alt and 1234567890-= keys
+	cmp ah,14 ! jb nat_deliver	;check for alt and 1234567890-= keys
 	cmp ah,16 ! jb skip_alt_char
-	cmp ah,26 ! jb save_with_msb	;check for alt and qwertyuiop keys
+	cmp ah,26 ! jb nat_deliver	;check for alt and qwertyuiop keys
 	cmp ah,30 ! jb skip_alt_char
-	cmp ah,39 ! jb save_with_msb	;check for alt and asdfghjkl keys
+	cmp ah,39 ! jb nat_deliver	;check for alt and asdfghjkl keys
 	cmp ah,44 ! jb skip_alt_char
-	cmp ah,51 ! jb save_with_msb	;check for alt and zxcvbnm keys
+	cmp ah,51 ! jb nat_deliver	;check for alt and zxcvbnm keys
 skip_alt_char:
 	jmp key_scan_done
 
 ;	console switch keys reenter the mainstream here
 
 save_key_code:
+	cmp nat_function,0
+	jne mask_key_code
+nat_deliver:
+	call nat_input
+	jc key_scan_done
+	jmp save_with_msb
+mask_key_code:
 	and al,07fh			;mask off sign bit from table
 save_with_msb:
 	mov key_value,al		;save the character
@@ -1112,6 +1211,14 @@ not_pc_scroll_key:
 	call flagset				; alert the system!
 
 key_scan_done:
+	xor al,al
+	xchg al,nat_deferred
+	test al,al
+	jz key_update_shifts
+	mov key_type,0
+	mov pc_scan_code,0
+	jmp nat_deliver
+key_update_shifts:
 						;save PC style shift status
 	cmp scan_code,78 ! jb pc_shift_update	;  ignore update if local fn
 	  test down_bits,ctrl_bit ! jnz no_pc_shifts
@@ -1142,6 +1249,156 @@ no_pc_shifts:
 	mov sp,cs:keyboard_sp
 	jmpf cs: dword ptr dispatcher	;let dispatcher do iret
 
+
+
+; Reverse the national mapping before delivery. Carry discards unmapped high bytes.
+nat_input:
+	cmp	byte ptr key_layout,03h
+	jc	nat_input_done
+	cmp	byte ptr nat_function,00h
+	jnz	nat_input_done
+	mov	bx,offset pr_uk_to
+
+nat_input_loop:
+	cmp	byte ptr [bx],00h
+	jz	nat_input_miss
+	cmp	al,[bx]
+	jz	nat_input_match
+	inc	bx
+	jmps	nat_input_loop
+
+nat_input_match:
+	sub	bx,offset pr_uk_to
+	mov	al,pr_uk_from[bx]
+
+nat_input_done:
+	test	al,al
+	ret
+
+nat_input_miss:
+	test	al,al
+	jns	nat_input_done
+	stc
+	ret
+
+; Toggle ASCII directly; national case pairs occupy adjacent slot-6 bytes.
+nat_caps:
+	cmp	al,07ah
+	ja	nat_caps_pair
+	cmp	al,061h
+	jnc	nat_toggle_ascii
+	cmp	al,05ah
+	ja	nat_caps_pair
+	cmp	al,041h
+	jc	nat_caps_pair
+
+nat_toggle_ascii:
+	xor	al,020h
+	ret
+
+nat_caps_pair:
+	mov	cl,al
+	mov	di,offset pr_national_chars
+	call	pr_find
+	cmp	di,0ffffh
+	jz	nat_caps_done
+	xor	di,01h
+	mov	al,pr_national_chars[di]
+
+nat_caps_done:
+	ret
+
+; Record a pending layout-1 accent. DI = FFFFh when the key is ordinary.
+nat_dead_scan:
+	mov	di,0ffffh
+	test	byte ptr down_bits,0ch
+	jnz	nat_dead_done
+	cmp	byte ptr key_layout,01h
+	jnz	nat_dead_done
+	mov	cl,scan_code
+	test	byte ptr down_bits,03h
+	jz	nat_dead_find
+	or	cl,080h
+
+nat_dead_find:
+	mov	di,offset nat_dead_keys
+	call	pr_find
+	cmp	di,0ffffh
+	jz	nat_dead_done
+	mov	nat_accent,di
+
+nat_dead_done:
+	ret
+
+; Compose with the pending accent, or defer the original key if composition fails.
+nat_compose:
+	mov	di,nat_accent
+	cmp	di,0ffffh
+	jz	nat_compose_done
+	mov	cl,al
+	shl	di,1
+	mov	di,nat_bases[di]
+	call	pr_find
+	cmp	di,0ffffh
+	jz	nat_accent_miss
+	mov	bx,nat_accent
+	shl	bx,1
+	mov	bx,nat_composites[bx]
+	mov	al,[bx+di]
+	jmps	nat_compose_done
+
+nat_accent_miss:
+	cmp	al,020h
+	jz	nat_accent_space
+	inc	byte ptr beep_counter
+
+nat_accent_space:
+	mov	di,nat_accent
+	test	di,di
+	jz	nat_compose_done
+	cmp	al,020h
+	jz	nat_accent_emit
+	mov	nat_deferred,al
+
+nat_accent_emit:
+	mov	al,pr_accents[di]
+
+nat_compose_done:
+	mov	word ptr nat_accent,0ffffh
+	ret
+
+; Translate printable output for UK seven-bit. An overridden key suppresses one mapping.
+nat_screen:
+	push	bx
+	cmp	byte ptr key_layout,03h
+	jnz	nat_screen_pilcrow
+	cmp	byte ptr nat_no_echo_map,00h
+	mov	byte ptr nat_no_echo_map,00h
+	jnz	nat_screen_pilcrow
+
+nat_screen_find:
+	mov	bx,offset pr_uk_from
+
+nat_screen_loop:
+	cmp	byte ptr [bx],00h
+	jz	nat_screen_pilcrow
+	cmp	al,[bx]
+	jz	nat_screen_match
+	inc	bx
+	jmps	nat_screen_loop
+
+nat_screen_match:
+	sub	bx,offset pr_uk_from
+	mov	al,pr_uk_to[bx]
+
+nat_screen_pilcrow:
+	cmp	al,0ech
+	jnz	nat_screen_done
+	mov	al,015h
+
+nat_screen_done:
+	pop	bx
+	ret
 
 action_key:
 ;----------
@@ -1434,6 +1691,37 @@ control_table:
 
 
 ; National keyboard configuration. Index zero preserves the OEM US default.
+; DATA-relative slot directory consumed by the release N.CMD.
+national_directory:
+ dw offset nat_language,offset key_mode,offset key_layout
+ dw offset national_plain,offset national_shift,offset national_ctrl
+ dw offset pr_national_chars,offset pr_uk_from,offset pr_uk_to,offset nat_dead_keys
+ dw offset pr_device0,offset pr_wheel_aux,offset pr_wheel_chars,offset pr_wheel_symbols
+ dw offset nat_description,offset pr_wheel_accents,offset pr_one_param,offset pr_two_params
+ dw offset nat_alternate,offset nat_override,offset nat_replacement,0,0,0
+nat_language db 0
+nat_alternate db 0
+nat_description db 'English, U.K. / U.S.A (25/9/83)',13,10,'$',0
+ rb 6
+nat_function db 0
+nat_no_echo_map db 0
+nat_deferred db 0
+nat_accent dw 0ffffh
+nat_dead_keys rb 16
+nat_override db 2,4,84h
+	rb 13
+nat_replacement db 23h,23h
+	rb 14
+accent_base0 db 041h,061h,04fh,06fh,055h,075h,065h,069h,079h,000h
+accent_result0 db 08eh,084h,099h,094h,09ah,081h,089h,08bh,098h
+accent_base1 db 061h,06fh,075h,065h,069h,000h
+accent_result1 db 083h,093h,096h,088h,08ch
+accent_base2 db 061h,06fh,075h,065h,069h,045h,000h
+accent_result2 db 0a0h,0a2h,0a3h,082h,0a1h,090h
+accent_base3 db 061h,06fh,075h,065h,069h,000h
+accent_result3 db 085h,095h,097h,08ah,08dh
+nat_bases dw offset accent_base0,offset accent_base1,offset accent_base2,offset accent_base3
+nat_composites dw offset accent_result0,offset accent_result1,offset accent_result2,offset accent_result3
 key_layout db 0
 key_mode db 0
 layout_modes db 0,6,1,7,3
