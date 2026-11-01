@@ -227,6 +227,7 @@ release-image provenance. Details are in `base/cdos411.json`.
 | `setup` | Customize system hardware settings | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical |
 | `show` | Display disk space and drive information | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |
 | `submit` | Run SUB command files | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool |
+| `spl` | Manage the print spool queues and dispatch jobs to DSP | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical |
 | `stop` | List processes and stop a selected entry | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical |
 | `sysdisk` | Display or change the system search path | 4.11 | Recompiled from CDOS 4.1; SD-mode D.A86 wrapper | Byte-identical |
 | `systat` | Inspect processes and system resources | 4.1 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |
