@@ -66,9 +66,13 @@ Only Pending and Known gap entries are active work.
 | ERA, REN.CMD | Behavior tested | Import review complete against retained originals; release not established |
 | SUBMIT | No reference | CCP/M-86 3.1 original unavailable. No active work. |
 | DSKMAINT | Known gap | Recover/verify 4.11 DOS boot sector; classify helper/runtime differences |
-| PATH.EXE, FUNCTION, ERAQ | Pending | Classify binary differences |
-| CHSET, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP | Pending | Separate compiler/runtime differences from command logic |
-| BATCH, PIP, HELP, DATE.EXE | Pending | Separate intentional local changes from remaining release differences |
+| PATH.EXE | Behavior tested | Set two directories, display and clear match 4.11. The 314-byte command body matches. LINK86 uses a different startup copy offset. |
+| ERAQ, PIP | Behavior tested | ERAQ confirmation, refusal and missing-file cases match. PIP verified copy, concatenation and missing source match. The interactive banner now identifies 4.1N. |
+| CHSET | Behavior tested | Query and update match 4.11, including combined options, duplicate rejection and the resulting CMD bytes. Fixed the empty-field comparison. |
+| COPYMENU, EDITMENU, DREDIX, FUNCTION, HELP | Behavior tested | Compared paired PCE screens for menu navigation, editor input, help and exit paths. See the release comparison target for cases. |
+| DSP, PRINTMGR | Behavior tested | Compared startup and queue/error handling. PRINTMGR now uses the release default of 60 printed lines per 66-line form. Physical print output was not exercised. |
+| BATCH | Behavior tested | Restored the 4.11 console-attach order and priority reset. The OEM baseline with these changes differs only in four serial characters. Local prompt enhancements are retained. |
+| DATE.EXE | Behavior tested | Unmodified OEM command logic matches 4.11. The maintained short-year change passed 54 parser cases, and explicit-date entry/display were compared in PCE. |
 | GENCCPM, GENLDR | No reference | No independent release binaries available |
 
 SDIR's verified 4.11 reference is now `base/sdir.cmd`, replacing the older

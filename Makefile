@@ -148,3 +148,9 @@ check-historical: kernel
 .PHONY: check-pctmp-live
 check-pctmp-live: all
 	python3 tools/pctmp_live_check.py
+
+# Compare original and rebuilt commands on disposable CP/M and FAT media.
+.PHONY: check-release-commands
+check-release-commands: all
+	python3 tools/release_commands_check.py
+	python3 tools/date_check.py

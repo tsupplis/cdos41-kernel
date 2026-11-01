@@ -143,7 +143,7 @@ BYTE	*deli_02	=	"\t =<>,|[]"				;
 		WORD	field_nu;
 	};
 
-#define		EMPTY		-1	/* Can not be same as option number */
+#define		EMPTY		0xff	/* Can not be same as option number */
 
 #define		FIE1_START	0
 #define 	FIE1_END	3   /***/
@@ -394,7 +394,7 @@ BYTE *record;	/* Record to set fields in */
 
 					/* Have 'field=option' check and record */
 
-		    if ( *(record+REC_FIELDS+field) == (BYTE)EMPTY ) {
+		    if ( (*(record+REC_FIELDS+field) & 0xff) == EMPTY ) {
 
 					/* EVERTHING O.K. on this pass */
 
@@ -779,7 +779,7 @@ VOID	print(record,string)
 	    record = record + REC_FIELDS;	/* Pts to fields	*/
 	    for ( i = FIE1_START; i <= FIE1_END; i++,record++)
 	    {
-		if ( (*record != (BYTE)EMPTY) )
+		if ( ((*record & 0xff) != EMPTY) )
 		{	/* Only print if field is not empty		*/
 		    prt_buf = short_string(prt_buf,fie1_tab[i].fieldstr);
 		    *prt_buf++ = '=';

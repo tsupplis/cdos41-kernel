@@ -23,6 +23,9 @@ assert any(a <= start and start + 512 <= b for a, b in ranges), 'Loader outside 
 expected = raw[:start] + boot + raw[start + 512:]
 if '--check' in sys.argv:
     assert Path('dskmaint.cmd').read_bytes() == expected, 'Unexpected DSKMAINT bytes'
+    # Independent sector from the DATA group of the 4.11 release command.
+    reference = Path('../../base/dskmaint.cmd').read_bytes()
+    assert boot == reference[0x378d:0x398d], 'Boot sector differs from 4.11'
     print('PASS: DOSBOOT is embedded; every other CMD byte is unchanged')
 else:
     Path('dskmaint.cmd').write_bytes(expected)

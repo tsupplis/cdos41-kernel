@@ -648,11 +648,11 @@ EJECT
 nextcommand:	; LOOP FOREVER
 ;===========
 
-		; free drive
+	    call attach			; 4.11 attaches before freeing drives
 	    mov dx,0ffffh ! call drive_free
-
-		; attach console
-	    call attach
+	    mov dl,200			; restore batch priority for the next command
+	    mov cl,P_PRIORITY
+	    call ccpm
 	    
 	    mov cl,0			;execute code to clean up translator
 	    callf ms_func_jmp_addr

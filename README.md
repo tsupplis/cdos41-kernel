@@ -190,44 +190,44 @@ a Pending row into verified parity.
 | --- | --- | --- | --- | --- |
 | `asm80` | 8080 assembler | - | Translated using XLT86 from CP/M-80 2.2 and adapted | Additional tool |
 | `asm86` | 8086 assembler | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool |
-| `batch` | Run BAT command files | 4.11 | Recompiled from CDOS 4.1 and adapted | Pending |
+| `batch` | Run BAT command files | 4.11 | Recompiled from CDOS 4.1 and adapted | Behavior tested |
 | `chdir / mkdir` | Change or create directories | 4.11 | Recompiled from CDOS 4.1; shared D.A86 implementation | Byte-identical |
 | `rmdir` | Remove directories | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Equivalent |
-| `chset` | Inspect or change CMD header flags | 4.11 | Recompiled from CDOS 4.1 | Pending |
+| `chset` | Inspect or change CMD header flags | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
 | `cls` | Clear the terminal screen | - | New; TMP built-in; VT52 ESC-E | Additional tool |
 | `copy.exe` | Copy files | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Equivalent |
-| `copymenu` | Copy menu definitions | 4.11 | Recompiled from CDOS 4.1 | Pending |
+| `copymenu` | Copy menu definitions | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
 | `date` | Display or set the date | - | Recompiled from CCP/M-86 3.1 and adapted, Y2K patched | Additional tool |
-| `date.exe` | Display or set the date through DOS | 4.11 | Recompiled from CDOS 4.1 and adapted, short-year fix; commands/datetime | Pending |
+| `date.exe` | Display or set the date through DOS | 4.11 | Recompiled from CDOS 4.1 and adapted, short-year fix; commands/datetime | Behavior tested |
 | `dcomp / dcopy` | Compare or copy floppy diskettes | - | Ported from PC DOS 1.10; imported from CCP/M-86 | Additional tool |
 | `ddt86` | 8086 interactive debugger | - | Recompiled from CCP/M-86 3.1 | Additional tool |
 | `dir` | List directory contents | - | Recompiled from CCP/M-86 3.1 and adapted; separate CDOS 4.1 TMP built-in | Additional tool |
-| `dredix` | Full-screen text editor | 4.11 | Recompiled from CDOS 4.1 | Pending |
+| `dredix` | Full-screen text editor | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
 | `dskmaint` | Format, verify and copy diskettes | 4.11 | Recompiled from CDOS 4.1 | Known gap |
-| `dsp` | Inspect print-spool information | 4.11 | Recompiled from CDOS 4.1 | Pending |
+| `dsp` | Inspect print-spool information | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
 | `ed` | Line-oriented text editor | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool |
-| `editmenu` | Edit menu definitions | 4.11 | Recompiled from CDOS 4.1 | Pending |
+| `editmenu` | Edit menu definitions | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
 | `era` | Erase files | - | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |
-| `eraq` | Erase files with per-file confirmation | 4.11 | Recompiled from CDOS 4.1 | Pending |
+| `eraq` | Erase files with per-file confirmation | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
 | `erase.exe` | Erase files through DOS | 4.11 | Recompiled from CDOS 4.1 | Equivalent |
-| `function` | Program function keys | 4.11 | Recompiled from CDOS 4.1 | Pending |
+| `function` | Program function keys | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
 | `gencmd` | Convert H86 output into CMD executables | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool |
 | `get` | Feed console input from a text file | - | New; shared putget.lib engine, imported from the CCP/M project | Additional tool |
 | `genccpm` | Generate and configure the system image | - | Recompiled from CDOS 4.1 and adapted; flag-table fix | No reference |
 | `genldr` | Generate a system loader | - | Recompiled from CDOS 4.1; carried-over SCD2 startup | No reference |
 | `hdmaint` | Hard-disk maintenance | 4.11 | Recompiled from CDOS 4.1 with recovered flat LBDOS | Byte-identical |
-| `help` | Browse indexed command help | 4.11 | Recompiled from CDOS 4.1; maintained help.dat | Pending |
+| `help` | Browse indexed command help | 4.11 | Recompiled from CDOS 4.1; maintained help.dat | Behavior tested |
 | `hexcom` | Convert Intel HEX to COM binaries | - | HEXCOM 3.00-compatible C from [tpzasm](https://github.com/johnsonjh/tpzasm) | Additional tool |
 | `initdir` | Enable or remove directory date/time stamps | 4.11 | Recompiled from CDOS 4.1 | Equivalent |
 | `loadccpm.com` | Load the system from DOS | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Byte-identical |
-| `path.exe` | Display or set the DOS search path | 4.11 | Recompiled from CDOS 4.1 | Pending |
-| `pip` | Copy and transfer files | 4.11 | Recompiled from CDOS 4.1 and adapted | Pending |
+| `path.exe` | Display or set the DOS search path | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
+| `pip` | Copy and transfer files | 4.11 | Recompiled from CDOS 4.1 and adapted | Behavior tested |
 | `print` | Print files using Concurrent printer services | - | Recompiled from CCP/M-86 3.1 | Additional tool |
-| `printmgr` | Manage print spooling | 4.11 | Recompiled from CDOS 4.1 | Pending |
+| `printmgr` | Manage print spooling | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
 | `put` | Capture console output into a file | - | New; shared putget.lib engine, imported from the CCP/M project | Additional tool |
 | `rdr` | Redirect console input and output together | - | New; shared putget.lib engine, imported from the CCP/M project | Additional tool |
 | `redos.com` | Return from Concurrent to DOS | 4.11 | —; original OEM binary retained, implementation source missing | Original used |
-| `ren` | Rename files | - | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |
+| `ren` | Rename files | - | Recompiled from CCP/M-86 3.1 and adapted for parity | Additional tool |
 | `ren.exe` | Rename files through DOS | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical |
 | `sdir` | Detailed, sorted directory listing | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |
 | `set` | Set file and drive attributes | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |

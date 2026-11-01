@@ -40,21 +40,19 @@ $(OBJECTS): $(LOCAL_INCLUDES) Makefile
 # Remove generated outputs only; preserve sources and reference files.
 clean:
 	rm -f *.sys *.loc *.cmd *.obj *.h86 *.hex *.sym *.lin *.lst *.prn *.log
-	rm -f *.mp? *.lnk *.map *.exe *.com dosboot.bin dskmaint.raw dskraw.inp
+	rm -f *.mp? *.lnk *.map *.exe *.com dosboot.raw dosboot.bin dskmaint.raw dskraw.inp
 
 help1.obj: help1.a86 Makefile
 	$(INTEL_ASM86) $<
 
-# Original DSKMAINT.SUB inserts the 512-byte DOS boot sector with SID.
-# Keep the archived sources unchanged and perform that insertion explicitly.
-dosboot.cmd: dosboot.h86 Makefile
+# GENCMD supplies the CODE group header. Keep its temporary image distinct
+# from runnable commands and extract the same 512 bytes the OEM SID step used.
+dosboot.raw: dosboot.h86 Makefile
 	$(GENCMD) $<
-	$(CMDINFO) $@
+	mv dosboot.cmd $@
 
-# The source deliberately pads beyond one sector; SID copied offsets
-# 80h..27Fh of DOSBOOT.CMD, i.e. exactly the first 512 CODE bytes.
-dosboot.bin: dosboot.cmd Makefile
-	python3 -c "from pathlib import Path; b=Path('$<').read_bytes(); n=int.from_bytes(b[1:3],'little')*16; assert b[0]==1 and n>=512; assert not any(b[128+512:128+n]), 'Nonzero loader bytes would be discarded'; Path('$@').write_bytes(b[128:128+512])"
+dosboot.bin: dosboot.raw Makefile
+	python3 -c "from pathlib import Path; b=Path('$<').read_bytes(); assert b[0]==1 and int.from_bytes(b[1:3],'little')==32; Path('$@').write_bytes(b[128:640])"
 
 # LINK86's input file avoids the 128-byte DOS command-tail limit.
 dskraw.inp: dskmaint.in Makefile

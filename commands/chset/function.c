@@ -74,7 +74,7 @@ EXTERN	WORD	_EXTERR;	/* holds AX after O.S. call */
 #define		DMA_LEN		128
 #define		FCB_LEN		36
 
-#define		EMPTY		-1
+#define		EMPTY		0xff
 
 /*** Record Constants ***/
 
@@ -351,7 +351,7 @@ BYTE *record;
 
     for ( i=0; i < MAX_FIELD; i++) {
 
-	if ( *(field+i) != (BYTE)EMPTY ) {
+	if ( (*(field+i) & 0xff) != EMPTY ) {
 					/* given field needs to be set		*/
 
 	    if ( (cur_rec != com_tab[i].rec_num) ) {
