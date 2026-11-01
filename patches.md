@@ -554,3 +554,13 @@ release keyboard modes. The default index remains zero (US eight-bit).
 Indices 1 and 3 select the national bank through mode bit 1. Plain, Shift, Control and shifted keypad translation use the
 selected pointers. The national bank starts with the UK release maps.
 The national setup directory and its other consumers are still pending.
+
+### National printer translation
+
+The XIOS list-output entry now applies the 4.11 per-printer state machine
+before dispatching to the physical port. Five device records retain their
+own model, escape continuation, parameter count and character-set state.
+All five default to transparent output. The national setup directory is
+still pending. Capturing the device number and output byte at the physical
+dispatch gave identical streams for all six release models with keyboard
+layouts 0 and 3, including extended characters and ESC sequences.

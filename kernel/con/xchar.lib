@@ -1039,7 +1039,367 @@ eject
 ;		DL = device
 ;	Exit:	character sent
 
+; CDOS 4.11 national printer translation. CL = byte, DL = device (0..4).
+; State is private to each printer. Only pr_emit calls the physical driver.
+; Record: device, model, flags (word), handler (word), count (word),
+; last ESC R set, translated character and auxiliary byte.
+
 io_list:
+	cmp	dl,5
+	jnc	pr_return
+	sub	bx,bx
+	mov	bl,dl
+	shl	bx,1
+	mov	bx,pr_devices[bx]
+	jmp	word ptr 4[bx]
+
+pr_return:
+	ret
+
+pr_bypass:
+	mov	word ptr 4[bx],offset pr_emit
+	jmp	pr_emit
+
+pr_decode:
+	cmp	byte ptr 1[bx],5
+	jz	pr_bypass
+	cmp	cl,01bh
+	jz	pr_escape
+	cmp	byte ptr key_layout,3
+	jnz	pr_model
+	call	pr_uk
+
+pr_model:
+	cmp	byte ptr 1[bx],0
+	jnz	pr_not_ibm
+	cmp	cl,0ech
+	jnz	pr_ibm_emit
+	mov	cl,0fh
+
+pr_ibm_emit:
+	jmp	pr_emit
+
+pr_not_ibm:
+	jmp	pr_translate
+
+pr_escape:
+	call	pr_suspend
+	test	word ptr 2[bx],4
+	jz	pr_test_one
+	mov	di,offset pr_graph_cmds
+	call	pr_find
+	cmp	di,0ffffh
+	jz	pr_test_one
+	mov	word ptr 4[bx],offset pr_count_low
+	jmps	pr_emit_escape
+
+pr_test_one:
+	mov	di,offset pr_one_param
+	call	pr_find
+	cmp	di,0ffffh
+	jz	pr_test_two
+	mov	word ptr 4[bx],offset pr_parameter
+	mov	word ptr 6[bx],1
+	jmps	pr_emit_escape
+
+pr_test_two:
+	mov	di,offset pr_two_params
+	call	pr_find
+	cmp	di,0ffffh
+	jz	pr_end_escape
+	mov	word ptr 4[bx],offset pr_parameter
+	mov	word ptr 6[bx],2
+	jmps	pr_emit_escape
+
+pr_end_escape:
+	mov	word ptr 4[bx],offset pr_decode
+
+pr_emit_escape:
+	jmp	pr_emit
+
+pr_count_low:
+	mov	ch,0
+	mov	6[bx],cx
+	call	pr_suspend
+	mov	7[bx],cl
+	call	pr_suspend
+
+pr_parameter:
+	dec	word ptr 6[bx]
+	jnz	pr_emit_param
+	mov	word ptr 4[bx],offset pr_decode
+
+pr_emit_param:
+	jmp	pr_emit
+
+pr_charset:
+	test	word ptr 2[bx],2
+	jz	pr_set_done
+	cmp	8[bx],cl
+	jz	pr_set_done
+	push	cx
+	mov	cl,01bh
+	call	pr_emit
+	mov	cl,052h
+	call	pr_emit
+	pop	cx
+	mov	8[bx],cl
+	jmp	pr_emit
+
+pr_set_done:
+	ret
+
+pr_translate:
+	cmp	cl,080h
+	jnc	pr_extended
+	mov	9[bx],cl
+	mov	byte ptr 10[bx],0
+	jmp	pr_render
+
+pr_extended:
+	cmp	cl,0b0h
+	jnc	pr_graphic
+	cmp	byte ptr 1[bx],4
+	jnz	pr_dotmatrix
+	sub	cl,080h
+	mov	al,cl
+	push	bx
+	mov	bx,offset pr_wheel_chars
+	xlat	bx
+	pop	bx
+	mov	9[bx],al
+	mov	al,cl
+	push	bx
+	mov	bx,offset pr_wheel_aux
+	xlat	bx
+	pop	bx
+	mov	10[bx],al
+	jmps	pr_check_aux
+
+pr_dotmatrix:
+	sub	cl,080h
+	mov	al,cl
+	push	bx
+	mov	bx,offset pr_dot_chars
+	xlat	bx
+	pop	bx
+	mov	9[bx],al
+	mov	al,cl
+	push	bx
+	mov	bx,offset pr_dot_aux
+	xlat	bx
+	pop	bx
+	mov	10[bx],al
+	jmps	pr_check_aux
+
+pr_graphic:
+	mov	di,offset pr_symbols
+	call	pr_find
+	cmp	di,0ffffh
+	jz	pr_unmapped
+	cmp	byte ptr 1[bx],4
+	jnz	pr_dot_symbol
+	mov	al,pr_wheel_symbols[di]
+	mov	9[bx],al
+	mov	byte ptr 10[bx],0
+	jmps	pr_render
+
+pr_dot_symbol:
+	mov	al,pr_dot_symbols[di]
+	mov	9[bx],al
+	mov	al,pr_symbol_aux[di]
+	mov	10[bx],al
+	jmps	pr_render
+
+pr_unmapped:
+	cmp	cl,0ffh
+	jnz	pr_unknown
+	mov	byte ptr 9[bx],020h
+	mov	byte ptr 10[bx],0
+
+pr_check_aux:
+	cmp	byte ptr 10[bx],0ffh
+	jnz	pr_render
+
+pr_unknown:
+	mov	cl,7
+	call	pr_emit
+	mov	cl,03fh
+	jmp	pr_emit
+
+pr_render:
+	cmp	byte ptr 10[bx],9
+	jnc	pr_overstrike
+	mov	cl,10[bx]
+	call	pr_charset
+	mov	cl,9[bx]
+	jmp	pr_emit
+
+pr_overstrike:
+	sub	byte ptr 10[bx],9
+	mov	cl,0
+	call	pr_charset
+	mov	cl,9[bx]
+	call	pr_emit
+	test	word ptr 2[bx],1
+	jz	pr_render_done
+	mov	cl,8
+	call	pr_emit
+	test	word ptr 2[bx],2
+	jnz	pr_accent_set
+	mov	al,10[bx]
+	push	bx
+	mov	bx,offset pr_wheel_accents
+	xlat	bx
+	pop	bx
+	mov	cl,al
+	call	pr_emit
+	jmps	pr_render_done
+
+pr_accent_set:
+	mov	al,10[bx]
+	push	bx
+	mov	bx,offset pr_accent_sets
+	xlat	bx
+	pop	bx
+	mov	cl,al
+	call	pr_charset
+	mov	al,10[bx]
+	push	bx
+	mov	bx,offset pr_accents
+	xlat	bx
+	pop	bx
+	mov	cl,al
+	jmps	pr_emit
+
+pr_render_done:
+	ret
+
+pr_suspend:
+; Save the return IP as the handler for the next input byte. Fall through
+; to send the current byte and return directly to the list caller.
+	pop	word ptr 4[bx]
+
+pr_emit:
+	push	bx
+	mov	dl,[bx]
+	call	physical_list
+	pop	bx
+	ret
+
+pr_uk:
+	push	bx
+	cmp	byte ptr key_layout,3
+	jnz	pr_uk_done
+	mov	bx,offset pr_uk_from
+
+pr_uk_scan:
+	cmp	byte ptr [bx],0
+	jz	pr_uk_done
+	cmp	cl,[bx]
+	jz	pr_uk_match
+	inc	bx
+	jmps	pr_uk_scan
+
+pr_uk_match:
+	sub	bx,offset pr_uk_from
+	mov	cl,pr_uk_to[bx]
+
+pr_uk_done:
+	pop	bx
+	ret
+
+pr_find:
+	push	ax
+	mov	ax,di
+
+pr_scan:
+	cmp	byte ptr [di],0
+	jz	pr_absent
+	cmp	cl,[di]
+	jz	pr_found
+	inc	di
+	jmps	pr_scan
+
+pr_absent:
+	mov	di,0ffffh
+	jmps	pr_find_done
+
+pr_found:
+	sub	di,ax
+
+pr_find_done:
+	pop	ax
+	ret
+
+; Five devices initially use model 5 (transparent output).
+pr_devices dw offset pr_device0,offset pr_device1,offset pr_device2,offset pr_device3,offset pr_device4
+pr_device0 db 0,5
+	dw 0,offset pr_decode,0
+	db 0ffh,0,0
+pr_device1 db 1,5
+	dw 0,offset pr_decode,0
+	db 0ffh,0,0
+pr_device2 db 2,5
+	dw 0,offset pr_decode,0
+	db 0ffh,0,0
+pr_device3 db 3,5
+	dw 0,offset pr_decode,0
+	db 0ffh,0,0
+pr_device4 db 4,5
+	dw 0,offset pr_decode,0
+	db 0ffh,0,0
+
+pr_graph_cmds db 04bh,04ch,000h,000h,000h,000h,000h
+
+pr_accent_sets db 001h,000h,000h,000h
+
+pr_accents db 07eh,05eh,027h,060h
+
+pr_dot_aux db 001h,002h,001h,00ah,002h,001h,004h,001h,00ah,009h,001h,009h
+	db 00ah,006h,002h,004h,00bh,004h,004h,00ah,002h,006h,00ah,001h
+	db 009h,002h,002h,000h,003h,008h,007h,000h,00bh,00bh,00bh,00bh
+	db 007h,007h,000h,000h,007h,0ffh,0ffh,0ffh,0ffh,007h,000h,000h
+
+pr_dot_chars db 05ch,07dh,07bh,061h,07bh,040h,07dh,05ch,065h,065h,07dh,069h
+	db 069h,07eh,05bh,05dh,045h,07bh,05bh,06fh,07ch,07ch,075h,07ch
+	db 079h,05ch,05dh,063h,023h,05ch,023h,066h,061h,069h,06fh,075h
+	db 07ch,05ch,061h,06fh,05dh,007h,007h,007h,007h,05bh,027h,060h
+
+pr_symbols db 0ech,0e1h,0f8h,0e6h,0edh,000h
+
+pr_wheel_symbols db 007h,007h,007h,007h,007h,000h
+
+pr_dot_symbols db 040h,07eh,05bh,007h,07ch,000h
+
+pr_symbol_aux db 002h,002h,001h,0ffh,004h,000h
+
+pr_wheel_aux db 000h,009h,00bh,00ah,009h,00ch,000h,000h,00ah,009h,00ch,009h
+	db 00ah,00ch,009h,000h,00bh,000h,000h,00ah,009h,00bh,00ah,00ch
+	db 009h,009h,009h,000h,000h,000h,000h,000h,00bh,00bh,00bh,00bh
+	db 000h,000h,000h,000h,000h,0ffh,0ffh,0ffh,0ffh,000h,000h,000h
+
+pr_wheel_chars db 043h,075h,065h,061h,061h,065h,061h,063h,065h,065h,065h,069h
+	db 069h,069h,041h,041h,045h,061h,041h,06fh,06fh,06fh,075h,075h
+	db 079h,04fh,055h,063h,023h,059h,050h,066h,061h,069h,06fh,075h
+	db 04eh,06eh,061h,06fh,03fh,007h,007h,007h,007h,021h,022h,022h
+
+pr_wheel_accents db 020h,020h,027h,020h,000h,000h,000h,000h
+
+pr_one_param db 01eh,01fh,000h,000h,000h,000h,000h,000h,000h
+
+pr_two_params db 000h,000h,000h,000h,000h,000h,000h,000h,000h
+
+; Slot 6 follows the escape lists. FX overstrike also indexes this data.
+pr_national_chars db 000h,08eh,094h,099h,081h,09ah,000h,000h,000h,000h,000h,000h,000h,000h,000h,000h
+
+pr_uk_from db 023h,000h,05bh,05ch,05dh,07bh,07ch,07dh,000h,000h,000h,000h
+	db 000h,000h,000h,000h
+
+pr_uk_to db 09ch,000h,08eh,099h,09ah,084h,094h,081h,000h,000h,000h,000h
+	db 000h,000h,000h,000h
+
+physical_list:
 	mov	bl,dl		; get device number
 	mov	bh,0
 	add	bx,bx		; bx = word pointer

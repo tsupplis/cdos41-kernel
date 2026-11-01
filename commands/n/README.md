@@ -102,3 +102,36 @@ select_key_bank before installing its interrupt vectors. The plain,
 Control, Shift and Num Lock paths use those pointers. The fixed bank
 remains the default and the separate national bank holds the UK release
 maps. The national directory and the remaining consumers are still pending.
+
+## Printer records and the XIOS output path
+
+Slot 10 addresses five 11-byte records at release DATA 6DB6h. A separate
+pointer table at 6DACh indexes LPT1–3 and COM1–2 in that order.
+The release list-output entry at 71B6h accepts the character in CL and
+device number in DL, rejects device numbers above four, loads the record
+pointer, then jumps through the handler word at record offset 4.
+
+| Record offset | Purpose |
+| --- | --- |
+| 0 | Physical printer number passed to the output driver |
+| 1 | Model index: IBM Graphics, Epson MX, Epson MX with Graftrax, Epson FX, daisy wheel, or no translation (0–5) |
+| 2–3 | Model flags, set by N to 4, 2, 4, 7, 1 or 0 respectively |
+| 4–5 | Current output handler or continuation for a multi-byte escape sequence |
+| 6–7 | Count used while passing escape-sequence parameters or data |
+| 8 | Last character-set selection sent with ESC R; N resets it to FFh |
+| 9–10 | Translated character and auxiliary translation byte |
+
+On disk all five handlers point to 71D1h. Model 5 installs the direct
+writer at 7383h on its first character. Other models inspect ESC sequences
+and translate characters according to the flags and national tables.
+For example, the daisy-wheel path at 7294h maps characters 80h–AFh
+through slots 12 and 11. The UK seven-bit substitution at 738Bh searches
+slot 7 and substitutes the corresponding byte from slot 8. Slots 16 and
+17 are consulted during escape-sequence handling.
+
+The release direct writer reloads DL from record byte zero and calls
+4281h. The rebuilt io_list now enters the same per-device translation
+state machine. Its pr_emit calls physical_list, which dispatches to
+parallel_out, serial_out or null_out. list_data still holds physical port
+addresses and serial numbers. The default model is transparent on all
+five devices.

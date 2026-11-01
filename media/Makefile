@@ -24,7 +24,7 @@ TOOLS_COMMANDS = ../commands/putget/put.cmd ../commands/putget/get.cmd ../comman
 
 MAINT_COMMANDS = ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
     ../commands/dskmaint/dskmaint.cmd ../commands/disk/dcopy.cmd ../commands/hdmaint/hdmaint.cmd \
-    ../base/hdmaint.doc
+    ../commands/initdir/initdir.cmd
 
 MENU_COMMANDS = ../base/spl.cmd ../commands/print/print.cmd ../commands/dredix/dredix.cmd ../commands/copymenu/copymenu.cmd ../commands/editmenu/editmenu.cmd \
     ../commands/printmgr/printmgr.cmd ../commands/dsp/dsp.cmd ../base/term.dat \
@@ -39,11 +39,11 @@ DOS_COMMANDS = ../commands/loadccpm/loadccpm.com ../commands/setenv/setenv.exe .
     ../commands/path/path.exe ../commands/datetime/time.exe ../commands/rename/ren.exe \
     ../commands/redos/redos.com
 
-EXTRAS_COMMANDS = ../commands/initdir/initdir.cmd ../extra/back.cmd ../extra/rest.cmd ../extra/brinst.cmd \
+EXTRAS_COMMANDS = ../extra/back.cmd ../extra/rest.cmd ../extra/brinst.cmd \
     ../extra/cardfile.cmd ../extra/cardfile.dis ../extra/cardfile.trm ../extra/control.br ../extra/drtalk.exe \
     ../extra/drtalk.def ../extra/drtalk.dir ../extra/drtalk.key
 
-ADMIN_COMMANDS = ../extra/backrest.doc ../commands/function/function.cmd ../commands/disk/dcomp.cmd \
+ADMIN_COMMANDS = ../commands/function/function.cmd ../commands/disk/dcomp.cmd \
     ../commands/n/n.cmd ../base/national.msg \
     ../commands/setport/setport.cmd ../commands/setup/setup.cmd \
     ../commands/stop/stop.cmd \
