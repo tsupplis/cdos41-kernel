@@ -23,6 +23,15 @@ A>RDR [KEYS.IN,PIP.LOG] PIP
 * **Shell built-ins are outside this interface**, including DIR, CLS, USER and PAUSE. Run a native command such as `DIR.CMD`, `SDIR.CMD` or `TYPE.CMD` explicitly.
 * **Only the caller's virtual console is affected.** The hook filters on the console number of the running process; it does not track descendants by `p_parent`. Any process on that console is captured while the tool runs.
 
+## DOS integration status
+
+| Component | Status |
+| --- | --- |
+| Standard-handle ownership, duplication and normal EXEC inheritance | Implemented and tested in PCTMP |
+| Nested return context and Ctrl-C cleanup | Implemented and tested in PCTMP |
+| DOS character/string calls following standard handles | Pending |
+| PUT/GET/RDR DOS launching, bindings and echo options | Pending |
+
 ## How it works
 
 1. `init_environment` checks BDOS 12 (BH = 11h or 14h, as SUBMIT does), saves the SYSDAT segment, raises priority one level above the parent and records the console number (BDOS 153).

@@ -33,6 +33,7 @@ check: all
 	python3 tools/pctmp_io_check.py
 	python3 tools/dos_stamp_check.py
 	python3 tools/dos_api_check.py
+	python3 tools/dos_handles_check.py
 	python3 tools/fat_recovery_check.py
 	python3 tools/pctmp_context_check.py
 	python3 tools/pctmp_critical_check.py
@@ -144,6 +145,7 @@ check-historical: kernel
 	python3 tools/pctmp_io_check.py
 	python3 tools/dos_stamp_check.py
 	python3 tools/dos_api_check.py
+	python3 tools/dos_handles_check.py
 	python3 tools/fat_recovery_check.py
 	python3 tools/pctmp_context_check.py
 	python3 tools/pctmp_critical_check.py

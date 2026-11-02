@@ -84,17 +84,17 @@ DOS 1.x FCB AL-status convention. Reserved slots are explicitly listed below.
 | 37 | Switch character | Partial | Returns DL=2Fh (`/`); no set-switch-character operation | — |
 | 38 | Country information | Implemented | AL=0 returns the full 32-byte US record. Other selectors and DX=FFFFh return CF set, AX=2 | NEW |
 | 39 / 3A / 3B | Make / remove / change directory | Implemented | FAT hierarchical directories; CP/M user areas are not DOS directories | — |
-| 3C / 3D / 3E | Create / open / close handle | Implemented | Shared filesystem via internal FCBs; 20 handle slots, first five reserved for standard devices | — |
-| 3F / 40 | Read / write handle | Implemented | Byte counts and file position; device and file paths | — |
+| 3C / 3D / 3E | Create / open / close handle | Implemented | 20 handle slots, initially 0-4 are standard devices. Close releases device and standard references; final disk references flush before reuse | NEW (handle lifecycle) |
+| 3F / 40 | Read / write handle | Implemented | Byte counts and shared position; EOF reads stop at the logical byte length, including size-plus-one requests | NEW (EOF boundary fix) |
 | 41 | Delete pathname | Implemented | Path parsing followed by native file deletion | — |
 | 42 | Seek handle | Implemented | Origins 0/1/2: beginning/current/end | — |
 | 43 | Get / set file attributes | Implemented | Translated native/FAT attributes; media-dependent semantics | — |
 | 44 | IOCTL | Partial | AL=0 validates the handle and describes its target; AL=6/7 queries input/output readiness. Files report EOF; CON/NUL/AUX/printer use device status. Other selectors return AX=1 | NEW |
-| 45 / 46 | Duplicate / force duplicate handle | Implemented | References share the handle control block and its position; not proof that shell redirection establishes those handles | — |
+| 45 / 46 | Duplicate / force duplicate handle | Implemented | Shared position and counted ownership; checked targets, self/alias duplication and close failures. Standard handles can be rebound | NEW (ownership and validation) |
 | 47 | Get current directory | Implemented | Reconstructs FAT path using the temporary P: directory mapping | — |
 | 48 / 49 / 4A | Allocate / free / resize memory | Implemented | DOS memory descriptor blocks, PSP ownership and largest-available-block errors | — |
-| 4B | Execute / load program or overlay | Partial | AL=0 loads and runs COM/EXE; AL=1 prepares COM/EXE without executing, returning SP/SS/IP/CS at ES:BX+0Eh; AL=3 loads/relocates EXE overlay; other subfunctions rejected | European 1985 recovery |
-| 4C | Terminate with status | Implemented | AL=exit status, normal termination type 0; common cleanup/parent return | — |
+| 4B | Execute / load program or overlay | Partial | AL=0 runs COM/EXE with inherited handles and restores parent registers, stack and DTA. AL=1 prepares a child; AL=3 loads an EXE overlay. Other selectors rejected | European recovery + NEW (EXEC lifecycle) |
+| 4C | Terminate with status | Implemented | AL=status, type 0. Releases child handle references including standard streams and restores the parent table | NEW (handle cleanup) |
 | 4D | Get child return code | Implemented | Returns stored status/type in AX, then clears it; distinct from native function 108 and private shell return code | — |
 | 4E / 4F | Find first / next by pathname | Implemented | DTA search state, attributes and translated CP/M/FAT entries | — |
 | 50 | Set current PSP | Implemented | Saves BX in the active PSP used by EXEC/termination; does not switch concurrent processes | European 1985 recovery |
@@ -295,8 +295,8 @@ Sources: [xcon1.lib](kernel/con/xcon1.lib), [xcon2.lib](kernel/con/xcon2.lib),
 | 48 | 72 | set network error mode | NET | Requires optional NET module; absent from standard images | — |
 | 49 | 73 | attach network | NET | Requires optional NET module; absent from standard images | — |
 | 4A | 74 | detach network | NET | Requires optional NET module; absent from standard images | — |
-| 4B | 75 | set message buffer size | NET | Requires optional NET module; absent from standard images | — |
-| 4C | 76 | get network time and date | NET | Requires optional NET module; absent from standard images | — |
+| 4B | Execute / load program or overlay | Partial | AL=0 runs COM/EXE with inherited handles and restores parent registers, stack and DTA. AL=1 prepares a child; AL=3 loads an EXE overlay. Other selectors rejected | European recovery + NEW (EXEC lifecycle) |
+| 4C | Terminate with status | Implemented | AL=status, type 0. Releases child handle references including standard streams and restores the parent table | NEW (handle cleanup) |
 | 4D | 77 | get network parameter table | NET | Requires optional NET module; absent from standard images | — |
 | 4E | 78 | Reserved | SUP | Illegal; error 2 | — |
 | 4F | 79 | Reserved | SUP | Illegal; error 2 | — |

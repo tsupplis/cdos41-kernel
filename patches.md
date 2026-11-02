@@ -673,3 +673,34 @@ Regressions exercise assembled handlers with synthetic devices and error
 injection, including hard-disk read-back mismatches. Disposable PCE tests
 cover the APIs on FAT and CP/M, continued I/O after commit, exact byte counts
 after reopen, and live Ctrl-C delivery to an application's INT 23h handler.
+
+## DOS redirection foundation and EXEC handle ownership
+
+PCTMP counts every handle reference, including standard devices and files
+assigned to handles 0-4. Close flushes the last disk reference before freeing
+its handle. Forced duplication checks the destination range and handles
+self/alias duplication without changing counts. A failed destination close
+leaves both bindings intact. Duplication requires a free handle number,
+independently of whether another FCB is available.
+
+A root DOS launch initializes its standard table and PSP identity. EXEC
+saves the parent's handle mapping in its PSP and adds one reference per
+inherited slot. Child termination releases its own references, including
+redirected standard streams, and restores the parent mapping. Inheritance
+is rejected before loading if byte-sized reference counts would overflow.
+
+EXEC 4B00h stores the parent's register and DTA frame on its own stack,
+using PSP:2Eh for saved SS:SP. Each nesting level owns its frame. The return
+continuation restores the parent stack, registers, DTA and termination
+vector. Children inherit terminate, Ctrl-C and critical-error vectors.
+Direct abort continuations restore application vectors and release the
+interrupted child's handles before resuming the parent. Ctrl-C uses return
+type 1 and critical abort uses type 2.
+
+The read adapter previously accepted a last requested byte index equal to
+the file's byte length. Requesting exactly size+1 bytes could return a padding
+byte. The comparison now requires the byte length to exceed that index.
+This correction applies to DOS FCB and handle reads on both media types.
+
+GET/PUT/RDR still use their native CMD interface. DOS stream-call routing
+and the tools' DOS launch/binding interface are subsequent work.
