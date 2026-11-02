@@ -36,10 +36,15 @@ def handles():
             at=len(code)
             code+=initialized
             body = f'''
+ push ds
+ mov ax,ds
+ sub ax,1000h
+ mov ds,ax
  mov si,{at}
  xor di,di
  mov cx,{len(initialized)}
- cs rep movsb
+ rep movsb
+ pop ds
  mov di,0f000h
  mov cx,16
  xor ax,ax

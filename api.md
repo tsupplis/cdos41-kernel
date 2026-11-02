@@ -18,18 +18,18 @@
 | AH | Service | Reference version | Status | Limit / behaviour | Extension |
 | --- | --- | --- | --- | --- | --- |
 | 00 | Terminate | DOS 1.x | Implemented | Legacy termination; CS must identify PSP | — |
-| 01 | Console input with echo | DOS 1.x | Implemented | Follows standard handle 0/1; status does not consume input | NEW (streams) |
-| 02 | Console output | DOS 1.x | Implemented | Follows standard handle 0/1; status does not consume input | NEW (streams) |
+| 01 | Console input with echo | DOS 1.x | Implemented | Standard input (0), echo to standard output (1); Ctrl-C processing | NEW (streams) |
+| 02 | Console output | DOS 1.x | Implemented | Standard output (1) | NEW (streams) |
 | 03 | AUX input | DOS 1.x | Implemented | Native AUX input with CIO ownership | — |
 | 04 | AUX output | DOS 1.x | Implemented | Native AUX output with CIO ownership | — |
 | 05 | Printer output | DOS 1.x | Implemented | Native list output; assigned printer | — |
-| 06 | Direct console I/O | DOS 1.x | Implemented | Follows standard handle 0/1; status does not consume input | NEW (streams) |
-| 07 | Console input without echo/check | DOS 1.x | Implemented | Follows standard handle 0/1; status does not consume input | NEW (streams) |
-| 08 | Console input without echo, Ctrl-C check | DOS 1.x | Implemented | Follows standard handle 0/1; status does not consume input | NEW (streams) |
-| 09 | Print dollar-terminated string | DOS 1.x | Implemented | Follows standard handle 0/1; status does not consume input | NEW (streams) |
-| 0A | Buffered console input | DOS 1.x | Implemented | Standard handles 0/1; EOF and CR/LF line input | NEW (streams) |
-| 0B | Console input status | DOS 1.x | Implemented | Follows standard handle 0/1; status does not consume input | NEW (streams) |
-| 0C | Flush input and read | DOS 1.x | Implemented | Follows standard handle 0/1; status does not consume input | NEW (streams) |
+| 06 | Direct console I/O | DOS 1.x | Implemented | DL=FFh polls standard input (0); other DL writes standard output (1) | NEW (streams) |
+| 07 | Console input without echo/check | DOS 1.x | Implemented | Standard input (0), without echo or Ctrl-C check | NEW (streams) |
+| 08 | Console input without echo, Ctrl-C check | DOS 1.x | Implemented | Standard input (0); Ctrl-C processing | NEW (streams) |
+| 09 | Print dollar-terminated string | DOS 1.x | Implemented | Standard output (1), dollar-terminated string | NEW (streams) |
+| 0A | Buffered console input | DOS 1.x | Implemented | Standard input/output; capacity includes CR, DEL acts as Backspace, zero capacity returns immediately; EOF count zero, CR/LF line input | NEW (streams) |
+| 0B | Console input status | DOS 1.x | Implemented | Non-consuming readiness of standard input (0); clear at EOF | NEW (streams) |
+| 0C | Flush input and read | DOS 1.x | Implemented | Flush keyboard input; AL=01h/06h/07h/08h/0Ah selects the corresponding standard-stream operation | NEW (streams) |
 | 0D | Disk reset | DOS 1.x | Implemented | — | — |
 | 0E | Select default drive | DOS 1.x | Implemented | — | — |
 | 0F | FCB open | DOS 1.x | Implemented | FCB adapter → shared CP/M/FAT filesystem | — |
@@ -66,6 +66,7 @@
 | 2E | Set verify-on-write | DOS 1.x | Implemented | AL=0/1 disables/enables additional system-wide physical write verification | NEW |
 | 2F | Get DTA | DOS 2.0 | Implemented | ES:BX=current DTA | — |
 | 30 | DOS version query | DOS 2.0 | Implemented | AX=0002h: DOS 2.0, not native CDOS version 4.1; other saved registers unchanged | — |
+
 
 ## INT 21h — DOS 2.x services
 

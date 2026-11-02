@@ -810,3 +810,18 @@ Run `make check-redirection` for native and DOS stream cases,
 for assembled routines, including the separate-segment packet test.
 The live hardware critical-error path is not claimed by these tests: its
 cleanup continuation is tested directly in the assembled regression.
+
+### Distribution and regression fixtures
+
+`cdostools.img` carries GET/PUT/RDR and the other general utilities.
+`cdosdev.img` separates the assemblers, debugger, conversion/generation tools,
+ED and SUBMIT, with PIP on both disks. Both remain 320-KiB data disks, and
+`make dist` packages all eight images. This leaves room for the larger tools
+without changing the boot or filesystem format.
+
+Native redirection tests launch the wrappers explicitly from B:, where the
+tools disk installs them. Console fixtures initialize the newly introduced
+stream state. Timestamp fixtures initialize the real RSP DATA group and keep
+it separate from code, including the calendar tables; modifying code layout
+must not alter their simulated data. None of these fixture changes weakens
+byte comparisons or error checks.

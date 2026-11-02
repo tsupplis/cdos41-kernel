@@ -283,7 +283,7 @@ system and the live regression checks.
 
 | Command | Result |
 | --- | --- |
-| `make` | Commands, kernel/RSPs, boot sources and seven images |
+| `make` | Commands, kernel/RSPs, boot sources and eight images |
 | `make check` | Command headers, DATE parser, system layout, cursor, boot track and every packaged file/size |
 | `make check-pce` | Boot, console switching, line editing/recall, DIR, PIP, CLS, USER and SYSDISK |
 | `make check-type` | OEM/rebuilt TYPE comparison, DOS/CP/M EOF, passwords and paging |
