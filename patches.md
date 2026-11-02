@@ -200,12 +200,16 @@ logic. HELP removes unsupported MAKE/EDIT and documents ARCHIVE/F1-F4.
 `make check-set` compares OEM/rebuilt execution on disposable CP/M/FAT disks,
 including persisted attributes, interactive passwords and timestamp settings.
 
-## XIOS: WMENU compact-keyboard shortcut
+## XIOS: WMENU compact-keyboard shortcuts
 
-Ctrl+Alt+Esc emits the existing window-manager wake event (7Dh), the same
-as Ctrl+keypad-Plus. The original binding remains available. No manager is
-loaded automatically; WMENU must already be installed. Console shortcuts
-Ctrl+Alt+1..4 and Ctrl+Alt+Tab retain their existing behavior.
+Ctrl+Alt+0 (top-row zero) and Ctrl+Alt+Esc emit the existing window-manager
+wake event (7Dh), the same as Ctrl+keypad-Plus. All three bindings are decoded
+in `kernel/con/xbegin.lib`; WMENU waits for the existing XIOS event and needs
+no binary change. Boot a rebuilt system image to enable the new binding.
+No manager is loaded automatically; WMENU must already be installed.
+Console shortcuts Ctrl+Alt+1..4 and Ctrl+Alt+Tab retain their existing behavior.
+`make check-wmenu` exercises all three wake keys, hide, Abort, uninstalled
+hotkey suppression and ordinary zero input on disposable PCE media.
 
 ## SYSTAT: fixed data allocation
 

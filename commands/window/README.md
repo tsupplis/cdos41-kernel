@@ -35,9 +35,12 @@ Record padding follows Ctrl-Z; bytes beyond that text EOF are not significant.
 
 ## WMENU
 
-Install WMENU once, then press **Ctrl+Alt+Esc** to open its menu.
-Ctrl+keypad-Plus remains available. The manager detaches and waits through
-the existing XIOS services; it is not a DOS TSR.
+Install WMENU once, then press **Ctrl+Alt+0** (top-row zero) or
+**Ctrl+Alt+Esc** to open its menu. Ctrl+keypad-Plus remains available.
+These global shortcuts are decoded by the XIOS keyboard handler, not by
+WMENU; use a system image built with the corresponding XIOS changes.
+The manager detaches and waits through the existing XIOS services; it is
+not a DOS TSR.
 
 The highlighted main menu uses arrows or Space to select Place, Size,
 Scroll, Tracking, Display, Color, Write or Abort; Return opens the selection.
@@ -70,7 +73,8 @@ GLASS, installation/duplicate detection, highlighted menu navigation,
 committed Size/Color/Tracking edits, Write cancellation and manager exit.
 Setup files and meaningful text before Ctrl-Z are compared. OEM bytes after
 Ctrl-Z can contain stale runtime-buffer data and are deliberately ignored.
-`make check-wmenu` checks both wake shortcuts, hide and clean exit.
+`make check-wmenu` checks all three wake shortcuts, hide and clean exit,
+that hotkeys do not leak when no manager is installed, and plain zero input.
 
 This establishes the exercised command/menu paths, not exhaustive equivalence
 for every filename-editing sequence, video adapter, asynchronous switch or

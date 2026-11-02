@@ -42,7 +42,7 @@ The current version includes:
 - CP/M-Plus-style command-line cursor movement, insertion, deletion and recall.
 - Left/Right, Home/End, Delete and Up during buffered console input.
 - Ctrl+Alt+1–4 to select consoles; Ctrl+Alt+Tab to cycle through them.
-- Ctrl+Alt+Esc opens an installed WMENU; Ctrl+keypad-Plus remains available.
+- Ctrl+Alt+0 (top row) or Ctrl+Alt+Esc opens an installed WMENU; Ctrl+keypad-Plus remains available.
 - Optional paging for TYPE, SDIR and DIR, alongside the built-in DIR's `/P` / `[P]`.
 - CP/M-Plus-style console redirection through PUT, GET and RDR for native commands.
 - Extra built-in CLS and SYSDISK command.

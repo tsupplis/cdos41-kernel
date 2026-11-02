@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise both WMENU wake shortcuts on a disposable PCE disk pair."""
+"""Exercise WMENU wake shortcuts on a disposable PCE disk pair."""
 
 from pathlib import Path
 import tempfile, subprocess, shutil
@@ -58,19 +58,25 @@ def save(name):
     c.extend(["c 4000000", f'save "{name}.bin" bin b800:0000 fa0'])
 
 
-key("+Ctrl +Alt Esc -Alt -Ctrl")  # Without a manager this must not leak Escape.
+hotkeys = [
+    ("esc", "+Ctrl +Alt Esc -Alt -Ctrl"),
+    ("keypad", "+Ctrl KP_Plus -Ctrl"),
+]
+if cdos:
+    hotkeys.append(("zero", "+Ctrl +Alt 0 -Alt -Ctrl"))
+for name, chord in hotkeys:
+    key(chord)  # Without a manager these must not leak into console input.
+save("uninstalled")
 for x in "b:wmenu":
     key("+Shift Semicolon -Shift" if x == ":" else "Period" if x == "." else x)
 key("Return")
 save("installed")
-key("+Ctrl +Alt Esc -Alt -Ctrl")
-save("new")
-key("Esc")
-save("idle")
-key("+Ctrl KP_Plus -Ctrl")
-save("old")
-key("Esc")
-key("+Ctrl +Alt Esc -Alt -Ctrl")
+for name, chord in hotkeys:
+    key(chord)
+    save("wake-" + name)
+    key("Esc")
+    save("idle-" + name)
+key(hotkeys[-1][1])
 if cdos:
     for i in range(7):
         key("Space")
@@ -79,6 +85,11 @@ else:
     key("a")
 key("Return")
 save("exited")
+for name, chord in hotkeys:
+    key(chord)
+save("unregistered")
+key("0")
+save("plain-zero")
 c.append("q")
 with (F / "pce.log").open("wb") as log:
     subprocess.run(
@@ -102,15 +113,21 @@ def text(name):
 
 
 assert "Window Manager installed." in text("installed"), text("installed")
-for name in ["new", "old"]:
-    assert "N=" + ("1" if cdos else "0") in text(name).splitlines()[-1], text(name)
-for name in ["idle", "exited"]:
+for name, chord in hotkeys:
+    wake = text("wake-" + name)
+    idle = text("idle-" + name)
+    assert "N=" + ("1" if cdos else "0") in wake.splitlines()[-1], wake
+    assert "N=" not in idle.splitlines()[-1], idle
+for name in ["uninstalled", "exited", "unregistered"]:
     assert "N=" not in text(name).splitlines()[-1], text(name)
-assert [x for x in text("exited").splitlines()[:24] if x][-1] == "A>", text("exited")
+    assert [x for x in text(name).splitlines()[:24] if x][-1] == "A>", text(name)
+assert [x for x in text("plain-zero").splitlines()[:24] if x][-1] == "A>0", text("plain-zero")
 print(
     "PASS: "
     + stem
-    + " Ctrl+Alt+Esc and Ctrl+keypad-Plus wake WMENU; Esc hides it and Abort exits",
+    + (" Ctrl+Alt+0," if cdos else "")
+    + " Ctrl+Alt+Esc and Ctrl+keypad-Plus wake WMENU; Esc hides it, Abort exits,"
+    + " uninstalled hotkeys do not leak and plain 0 still works",
     flush=True,
 )
 shutil.rmtree(F)
