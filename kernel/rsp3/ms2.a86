@@ -196,6 +196,10 @@ ms2_not_critical:
 
 	mov	ah,ms2f_top + 1		; if not, stuff an ms2_null
 ms2_func_ok:
+	cmp ah,59h ! je error_context_ready
+	cmp in_int24_flag,0ffh ! je error_context_ready
+	mov dos_critical_code,0
+error_context_ready:
 	sub	ah,ms2f_first		; reference to our table
 	mov bl,ah ! mov bh,0 ! shl bx,1	; index into our table
 
@@ -683,7 +687,12 @@ get_pd:
 
 ms2_error_ret:
 	xor ah,ah
+	push ax
+	cmp dos_critical_code,0 ! je error_code_saved
+	mov ax,dos_critical_code
+error_code_saved:
 	mov dos_error_code,ax
+	pop ax
 	les	di,ms2_ss_sp		; reach into the return stack
 	or	es:st_flags[di],cf_bit	;   and set the carry bit
 	cbw
@@ -730,6 +739,7 @@ extended_return:
 	mov byte ptr ms2_cx+1,ch
 	ret
 extended_invalid:
+	mov dos_critical_code,0
 	mov al,no_function
 	jmp ms2_error_ret
 
@@ -3877,12 +3887,13 @@ return_code	dw	0		; defaults to zero
 
 ;	Control-break state
 
-public ctbr_state,dos_internal,dos_error_code
+public ctbr_state,dos_internal,dos_error_code,dos_critical_code
 ctbr_state	db	0		; extended DOS break checking
 		db	0		; pad
 
 dos_internal db 0
 dos_error_code dw 0
+dos_critical_code dw 0
 
 active_psp	rw	1		; saves the new psp segment
 new_psp		rw	1		; temporarily saves new psp seg

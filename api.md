@@ -2,7 +2,7 @@
 
 | Scope | Contract |
 | --- | --- |
-| Build | Current CDOS 4.1 PC-MODE build with IBM SQUID XIOS; 1 November 2026 |
+| Build | Current CDOS 4.1 PC-MODE build with IBM SQUID XIOS; 2 November 2026 |
 | Numbers | Hexadecimal unless explicitly labelled decimal |
 | Implemented | Handler present in current code; not exhaustive DOS conformance certification |
 | Partial / stub / missing | Limited contract / no operation / no implementation |
@@ -63,13 +63,13 @@
 | 2B | Set date | DOS 1.x | Implemented | — | — |
 | 2C | Get time | DOS 1.x | Implemented | — | — |
 | 2D | Set time | DOS 1.x | Implemented | — | — |
-| 2E | Set verify-on-write | DOS 1.x | Stub | Unconditional RET; verification is not enabled | — |
+| 2E | Set verify-on-write | DOS 1.x | Implemented | AL=0/1 disables/enables additional system-wide physical write verification | NEW |
 | 2F | Get DTA | DOS 2.0 | Implemented | ES:BX=current DTA | — |
 | 30 | DOS version query | DOS 2.0 | Implemented | AX=0002h: DOS 2.0, not native CDOS version 4.1; other saved registers unchanged | — |
 
 ## INT 21h — DOS 2.x services
 
-AH=2Fh through 57h dispatch through `ms2_func_table`. Successful entry clears
+AH=2Fh through 68h dispatch through `ms2_func_table`. Successful entry clears
 CF; error handlers set CF and return a DOS error in AX. This differs from the
 DOS 1.x FCB AL-status convention. Reserved slots are explicitly listed below.
 
@@ -77,7 +77,7 @@ DOS 1.x FCB AL-status convention. Reserved slots are explicitly listed below.
 | --- | --- | --- | --- | --- |
 | 31 | Terminate and keep resident | Partial | Records termination type 3 and disowns the process memory; ignores DX retained-paragraph count; not full DOS TSR compatibility | — |
 | 32 | Get DPB / reserved slot | Stub | No service; CF clear, AL=0, AH retained | — |
-| 33 | Ctrl-Break control | Partial | AL=0 gets and AL=1 sets a stored flag; source explicitly says the flag is not used to alter checking | — |
+| 33 | Ctrl-Break control | Implemented | AL=0 queries DL; AL=1 sets DL=0/1. Enabled checking polls additional DOS calls and invokes INT 23h with caller registers. Raw 06h/07h and 33h/59h are excluded | NEW |
 | 34 | InDOS pointer / reserved slot | Stub | No pointer; CF clear, AL=0, AH retained | — |
 | 35 | Get interrupt vector | Implemented | AL=vector, ES:BX=result from interrupt vector table | — |
 | 36 | Free disk space | Implemented | Uses media geometry and native free-space service; invalid drive returns AX=FFFFh | — |
@@ -89,7 +89,7 @@ DOS 1.x FCB AL-status convention. Reserved slots are explicitly listed below.
 | 41 | Delete pathname | Implemented | Path parsing followed by native file deletion | — |
 | 42 | Seek handle | Implemented | Origins 0/1/2: beginning/current/end | — |
 | 43 | Get / set file attributes | Implemented | Translated native/FAT attributes; media-dependent semantics | — |
-| 44 | IOCTL | Partial | AL=0 only: synthesised device information; other subfunctions fail with error 1 | — |
+| 44 | IOCTL | Partial | AL=0 validates the handle and describes its target; AL=6/7 queries input/output readiness. Files report EOF; CON/NUL/AUX/printer use device status. Other selectors return AX=1 | NEW |
 | 45 / 46 | Duplicate / force duplicate handle | Implemented | References share the handle control block and its position; not proof that shell redirection establishes those handles | — |
 | 47 | Get current directory | Implemented | Reconstructs FAT path using the temporary P: directory mapping | — |
 | 48 / 49 / 4A | Allocate / free / resize memory | Implemented | DOS memory descriptor blocks, PSP ownership and largest-available-block errors | — |
@@ -100,11 +100,15 @@ DOS 1.x FCB AL-status convention. Reserved slots are explicitly listed below.
 | 50 | Set current PSP | Implemented | Saves BX in the active PSP used by EXEC/termination; does not switch concurrent processes | European 1985 recovery |
 | 51 | Get current PSP | Implemented | Returns the active PSP segment in BX | European 1985 recovery |
 | 52–53 | Reserved / later DOS internals | Stub | No service; CF clear, AL=0, AH retained; no list-of-lists contract | — |
-| 54 | Get verify flag | Stub | Always returns AL=0; AH=2Eh does not enable verification | — |
+| 54 | Get verify flag | Implemented | AL=0/1 returns the additional system-wide verification setting from XIOS | NEW |
 | 55 | Reserved / later DOS internals | Stub | No service; CF clear, AL=0, AH retained | — |
 | 56 | Rename pathname | Implemented | Path preparation and native rename | — |
 | 57 | Get / set handle date/time | Implemented | AL=0/1, disk files, 1980-2099. FAT retains two-second precision. CP/M requires update stamps and stores minutes. Set failures return CF set | NEW |
-| 58–FF | Later services | Missing | CF set, AX=0001h (invalid function) | — |
+| 58 | Later service | Missing | CF set, AX=1 | — |
+| 59 | Extended error information | Implemented | BX=0 queries the last error in AX, class in BH, action in BL and locus in CH. Successful calls and repeated queries retain the error; state is per console | NEW |
+| 5A–67 | Later services | Missing | CF set, AX=1 | — |
+| 68 | Commit file | Implemented | Flushes an open disk file and byte-count metadata, retaining its handle, position, directory context and lock. Invalid/device handles return AX=6 | NEW |
+| 69–FF | Later services | Missing | CF set, AX=1 | — |
 
 ## Filesystem and process boundaries
 
@@ -117,6 +121,7 @@ DOS 1.x FCB AL-status convention. Reserved slots are explicitly listed below.
 | FAT names and F4 | Short names are matched without case. FAT byte 12 case bits do not activate CP/M F4 compatibility in the patched kernel; genuine CP/M F4 remains supported |
 | CP/M-only metadata | User areas, XFCB passwords and configurable directory labels/stamping are CP/M facilities; see SET/SHOW command notes for rejected FAT operations |
 | Program loading | Native CLI (E0h/96h) loads native programs; the shell separately selects CMD/BAT/COM/EXE and uses the PC-MODE loader for DOS programs. DOS EXEC is a third, DOS-caller interface |
+| Write verification | Direct XIOS AL=27h (39 decimal), CH=0/1 sets additional verification, CH=FFh queries; AX=BX returns 0/1. Local extension beyond 4.1; boot-time floppy and per-volume hard-disk verification remain additive |
 | Environment | Per-console DOS environment is 1,024 bytes in this build; DOS PSP exposes its segment. SETENV.EXE edits it; this is not an extra INT E0h function |
 | Shell redirection | Handle APIs exist, but their presence does not establish working shell redirection for DOS programs; that integration remains separate |
 
@@ -245,7 +250,7 @@ Sources: [xcon1.lib](kernel/con/xcon1.lib), [xcon2.lib](kernel/con/xcon2.lib),
 | 1B | 27 | get alloc vector | BDOS | Implemented | — |
 | 1C | 28 | write protect | BDOS | Implemented | — |
 | 1D | 29 | get r/0 vector | BDOS | Implemented | — |
-| 1E | 30 | set file attr. | BDOS | Implemented | — |
+| 1E | 30 | Set file attributes | BDOS | Implemented; F5'+F6' retain the open lock during a byte-count update | NEW (combined flags) |
 | 1F | 31 | get disk parm block | BDOS | Implemented | — |
 | 20 | 32 | user code | BDOS | Implemented | — |
 | 21 | 33 | file read random | BDOS | Implemented | — |
@@ -419,7 +424,7 @@ callers must manage launch selection, console reacquisition and cleanup.
 | --- | --- |
 | Native return status | INT E0h, CL=108. New processes start at zero. P_CHAIN transfers the word to the replacement CMD. Termination publishes the result to the surviving parent. Reads are repeatable. Fatal BDOS disk termination sets FFFDh and keyboard Ctrl-C termination sets FFFEh. |
 | Serial | Native AUX and DOS 03h/04h are present; INT 14h remains firmware-owned. Hardware protocol/ownership tests are separate from this source inventory |
-| DOS control calls | Ctrl-Break flag is stored but unused; verify is a no-op; IOCTL only implements AL=0; country information is a five-byte US subset |
+| DOS control calls | IOCTL supports 00h/06h/07h. Country information uses DOS 2.x US defaults. Extended errors classify locally translated errors; unsupported services continue to report AX=1 |
 | Residency | INT 27h is an IRET stub; AH=31h has a limited keep-memory path, not full TSR semantics |
 | Graphics | Native EGA/VGA mode selection is implemented; it does not turn the DOS CGA drawing code into a complete EGA/VGA BIOS |
 | Raw disk | Code is enabled, unlike the CCP/M build. This inventory is not an exhaustive raw-I/O correctness test; CHS encoding and verify count remain limited |

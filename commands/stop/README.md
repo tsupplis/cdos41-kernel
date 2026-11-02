@@ -36,10 +36,20 @@ under emu2. It checks exact reports, memory accounting, version checks, input
 parsing, and P_ABORT parameters. This requires the Intel crossdev tools, NASM,
 emu2 and Python 3.
 
-`make check-live` compares the release and PL/M reports under Concurrent DOS
-in PCE, including a command tail, an invalid entry and Return. It uses
-temporary copies of the system disk and requires PCE, mtools, the system image
-and its configured ROMs. Neither test stops a real process.
+`make check-live` runs the same keystroke script with each binary under
+Concurrent DOS in PCE and requires every captured VGA text frame, including
+attributes, to match exactly; only the status line with its clock is excluded.
+The script covers the report, entry 99, a non-numeric entry, a command tail,
+Return, and a real stop: PIP is started on console 2, stopped as entry 1 from
+console 1, absent from the next report, and its console returns to a working
+shell. The test uses temporary copies of the system disk and requires PCE,
+mtools, the system image and its configured ROMs. To use another bootable
+system image, run `python3 tests/live.py --system-image /path/to/cdos86.img`;
+add `--dump DIR` to keep the screens as text.
+
+The release and PL/M binaries contain the same message strings. Their constant
+order and the SCD3 serial number differ, and the "abort failed" and
+wrong-version messages are covered only by the synthetic test.
 
 Two exceptional cases intentionally differ in the PL/M build:
 

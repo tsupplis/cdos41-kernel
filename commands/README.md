@@ -65,7 +65,7 @@ Only Pending and Known gap entries are active work.
 | WINDOW/WMENU | Behavior tested | No known fix pending; immediate colour repaint now checked against actual screen bytes |
 | SHOW, SET, TYPE | Behavior tested | No known fix pending; retain documented regression coverage |
 | SYSTAT | Behavior tested | Compared against the retained 4.1 original; no known fix pending |
-| STOP | Behavior tested | Paired synthetic BDOS and live CDOS tests; assembly reference is byte-identical, with two documented PL/M safety differences |
+| STOP | Behavior tested | Paired synthetic BDOS and live CDOS tests (identical screens, real process stop); assembly reference is byte-identical, with two documented PL/M safety differences |
 | ERA, REN.CMD | Behavior tested | Import review complete against retained originals; release not established |
 | SUBMIT | No reference | CCP/M-86 3.1 original unavailable. No active work. |
 | DSKMAINT | Behavior tested | 512-byte loader matches 4.11. Format, cold boot and help navigation pass. See [DSKMAINT](dskmaint/README.md). |

@@ -632,3 +632,44 @@ drive restoration. CP/M tests cover missing file, disabled stamps, missing
 SFCB and legacy requests. The live PCTMP target also boots disposable media
 to verify country fields and timestamp write/set/duplicate/close/reopen on
 FAT and timestamp-enabled CP/M.
+
+## DOS readiness, break checking, errors, verification and commit
+
+These additions extend stock 4.1. IOCTL 44h validates handles and follows
+handle duplication. Subfunction 00h describes the actual target; 06h/07h
+report input/output readiness using file position/length or native console,
+AUX and assigned-printer status. Unsupported subfunctions return error 1.
+
+33h enables extended Ctrl-C checks at DOS entry, preserving application
+registers for INT 23h. Polling enables interrupts and dispatches before
+checking input so PIN can deliver keys. Ordinary input and pending extended
+key tails are preserved. Raw 06h/07h, the control call itself, error queries,
+internal DOS calls and INT 24h reentry are excluded. Existing console checks
+remain active independently of the extended setting.
+
+59h/BX=0 returns the last DOS error and its class/action/locus. State belongs
+to each console's PCTMP data segment. Successful calls and repeated queries
+retain it. The physical-error bridge records the DOS error before INT 24h;
+critical-error details survive conversion to a general handle error.
+
+2Eh/AL=0 or 1 and 54h control/query an additional system-wide verification
+setting through direct XIOS function 39, CH=0/1 or FFh for query. Buffered
+writes drain before a setting change. Floppy writes use the existing FDC
+verification cycle. Hard-disk writes use the existing read-back comparison
+and error/retry handling. Boot-time floppy and per-volume hard-disk verify
+options remain additive. This direct XIOS entry is a local API extension.
+
+68h commits disk handles through partial native close, byte-count update
+and buffer flush while retaining the handle, shared position, opening
+directory and lock. A retained partial-close FCB receives a fresh checksum.
+The original close path discarded the FCB after the attribute update and
+therefore did not need to reuse it. Commit preserves that valid FCB across
+the byte-count update. BDOS 30 with both F5' and F6' now retains the open
+lock during that update; this combined-flag behaviour is a local extension.
+Partial-close, attribute and flush errors are reported. Device and invalid
+handles return DOS error 6.
+
+Regressions exercise assembled handlers with synthetic devices and error
+injection, including hard-disk read-back mismatches. Disposable PCE tests
+cover the APIs on FAT and CP/M, continued I/O after commit, exact byte counts
+after reopen, and live Ctrl-C delivery to an application's INT 23h handler.

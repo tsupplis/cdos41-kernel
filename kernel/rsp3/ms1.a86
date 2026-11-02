@@ -82,7 +82,7 @@ TRUE		EQU	NOT FALSE
 	public check_error,check_error_again,critical_cleanup
 	public backdoor,getstat,ms_commit,printer_ready
 	extrn ctbr_state:byte,dos_internal:byte
-	extrn dos_error_code:word
+	extrn dos_error_code:word,dos_critical_code:word
 	public in_int24_flag,critical_ss,critical_sp,dos1_call
 	public ms_ss,ms_sp,RET_AX
 	extrn ms2_critical_error:near,restore_dta_state:near,restore_pdrive_state:near
@@ -666,6 +666,8 @@ fill_FF_loop:
 	mov buffer_activeb,FALSE
 	mov listcp,FALSE
 	mov in_int24_flag,FALSE
+	mov dos_internal,0
+	mov commit_mode,FALSE
 
 	mov word ptr ros_char,0
 	mov first_write,TRUE
@@ -2483,6 +2485,8 @@ break_dispatch:
 extended_break_poll:
 	push ax
 	cmp ext_char,TRUE ! je break_poll_clear
+	mov cl,142			; let PIN deliver pending keystrokes
+	call bdos
 	call getstat
 	jz break_poll_clear
 	call conin
@@ -2692,6 +2696,7 @@ do_critical_error:
 	mov ax,di
 	add ax,19
 	mov dos_error_code,ax
+	mov dos_critical_code,ax
 	pop ax
 	cmp dos1_call,TRUE
 	je critical_dos1
@@ -4351,6 +4356,7 @@ skip_flush:
 		mov al,[bx] ! dec al ! mov ah,0101b
 		call check_error
 		call restore_commit_fcb
+		cmp al,0ffh ! je xms_close_error
 skip_set_attr:
               jmps xms_close
 xms_close_error:

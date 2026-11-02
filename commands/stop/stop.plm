@@ -46,6 +46,7 @@ dcl group$pointer pointer,
 dcl group$bytes based group$pointer (1) byte;
 
 dcl extents (81) structure (base word, length word, reserved word);
+/* The release also snapshots shared-code owners, although it does not print them. */
 dcl shared$rows (65) structure (
     name (8) byte, size word, pd word, reserved (4) byte);
 dcl rows (65) structure (

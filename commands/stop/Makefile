@@ -40,7 +40,7 @@ stop.obj: stop.plm Makefile
 stop.cmd: scd3.obj stop.obj Makefile
 	@$(LINK86) 'stop=scd3,stop[data[origin[0],max[0]]]' > stop-link.log 2>&1; \
 	  result=$$?; cat stop-link.log; test $$result -eq 0
-	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' stop-link.log
+	@! grep -qiE 'undefined|unresolved|error|unable|cannot|invalid|fatal' stop-link.log
 	@test -s $@
 
 check: all check-asm check-plm
@@ -55,6 +55,6 @@ check-live: stop.cmd tests/live.py $(REF)
 	$(PYTHON) tests/live.py
 
 clean:
-	$(RM) stop.cmd stop.obj stop.log stop.lst stop-link.log
+	$(RM) stop.cmd stop.obj stop.log stop.lst stop.lin stop.sym stop-link.log
 	$(RM) stoporg.cmd stoporg.h86 stoporg.log stoporg.lst stoporg.sym
 	$(RM) scd3.obj scd3.log
