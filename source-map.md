@@ -49,7 +49,9 @@ DSKMAINT, HDMAINT, GENLDR and LOADCCPM on disks 08, 10 and 11.
 | `copymenu` | CMED*.C + screen/window/attribute helpers (07/08/09) | Verified build, enabled |
 | `editmenu` | MED*.C + shared screen/window helpers (08/09) | Verified build, enabled |
 | `copy` | PCCOPY.A86, COPY.BAT (07) | Verified build, enabled; DOS .EXE output |
-| `datetime` | PCDATE.A86, DATE.BAT (08) | Verified DATE.EXE build; TIME.EXE reconstructed in PCTIME.A86, behavioral verification pending |
+| `datetime` | PCDATE.A86, DATE.BAT (08); TIME reconstructed from the 4.11 executable | Verified DATE.EXE build; TIME.EXE matches the complete 4.11 file |
+| `stop` | Reconstructed 4.11 PL/M and assembly; the PL/M build reuses HELP's SCD3 startup interface | Default PL/M behavior is tested with synthetic BDOS and live CDOS; assembly matches the complete 4.11 file |
+| `setport`, `setup` | Reconstructed 4.11 assembly with a shared HELP engine and workspace | SETUP matches the complete reference; SETPORT retains only 39 checked equivalent encodings |
 | `date` | Unchanged CCP/M DATE.PLM and source-build Makefile | Native DATE.CMD build |
 | `erase` | PCERASE/MEDIA.A86, ERASE.BAT (09) | Verified build, enabled; DOS .EXE output |
 | `path` | PATHX.A86, PATH.BAT (11) | Verified build, enabled; DOS .EXE output |

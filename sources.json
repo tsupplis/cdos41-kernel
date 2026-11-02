@@ -4179,7 +4179,7 @@
       "sha256": "5f1078e10fc9d8e9400d55dc5e07c33f230392f97fdbb114350e66ceee827295"
     },
     {
-      "path": "commands/stop/stop.a86",
+      "path": "commands/stop/stoporg.a86",
       "origin": "Reverse engineered from CDOS 4.11 STOP.CMD",
       "sha256": "01bd12070b0fa1c8c5898e1bd98423d8a2054503234a63ccd2bbd1f282e4010c"
     },
