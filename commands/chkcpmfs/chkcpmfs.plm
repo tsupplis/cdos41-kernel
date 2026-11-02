@@ -20,9 +20,10 @@ declare
     dirblk literally 'dpb.dbl',
     (dir$offset, map$index, block$number,
      records$per$block, needed$blocks, entry$count, block$count,
-     error$count, original$dma) address,
+     error$count, original$dma, drive$mask, ro$vector) address,
     (disk, dcnt, entry$user, rc,
-     slots, slot, map$bit) byte;
+     slots, slot, map$bit, protect$status, changed$ro,
+     restore$failed) byte;
 
 mon1: procedure (func,info) external;
     declare func byte, info address;
@@ -199,16 +200,48 @@ dos$media: procedure byte;
     return dirbuf(0) = 20h and dirbuf(15) = 80h;
 end dos$media;
 
+protect$drive: procedure byte;
+    drive$mask = shl(1,disk);
+    ro$vector = mon3(29,0);
+    if (ro$vector and drive$mask) <> 0 then return 0;
+
+    protect$status = mon2(28,0);
+    ro$vector = mon3(29,0);
+    if (ro$vector and drive$mask) <> 0 then changed$ro = 1;
+    if protect$status = 0ffh or changed$ro = 0 then return 0ffh;
+    return 0;
+end protect$drive;
+
+restore$drive: procedure;
+    if changed$ro <> 0 then do;
+        protect$status = mon2(37,drive$mask);
+        ro$vector = mon3(29,0);
+        changed$ro = 0;
+        if protect$status = 0ffh or
+           (ro$vector and drive$mask) <> 0 then do;
+            restore$failed = 1;
+            call print$string(.('ERROR: drive write protection could not be restored; use SET $'));
+            call put(disk + 'A');
+            call print$string(.(': [RW].$'));
+            call newline;
+        end;
+    end;
+end restore$drive;
+
 terminate: procedure;
+    call restore$drive;
     call mon1(0,0);
 end terminate;
 
 plmstart: procedure public;
     declare i address;
 
+    changed$ro, restore$failed = 0;
     call print$string(.('CHKCPMFS 1.0 - READ-ONLY CP/M FILESYSTEM CHECK$'));
     call newline;
     call print$string(.('Scans ordinary file entries through BDOS on the current drive.$'));
+    call newline;
+    call print$string(.('Temporarily write-protects the drive and preserves its prior RO state.$'));
     call newline;
     call print$string(.('Keep the drive idle; the scan has no exclusive lock.$'));
     call newline;
@@ -241,6 +274,12 @@ plmstart: procedure public;
     entry$count, block$count, error$count = 0;
     original$dma = mon3(52,0);
 
+    if protect$drive <> 0 then do;
+        call print$string(.('ERROR: could not establish drive write protection; scan stopped.$'));
+        call newline;
+        call terminate;
+    end;
+
     search$fcb(0) = '?';
     do i = 1 to 11;
         search$fcb(i) = '?';
@@ -261,6 +300,7 @@ plmstart: procedure public;
         dcnt = mon2(18,0);
     end;
     call mon1(26,original$dma);
+    call restore$drive;
 
     call print$string(.('Directory entries scanned: $'));
     call decimal(entry$count);
@@ -270,8 +310,10 @@ plmstart: procedure public;
     call print$string(.('Consistency errors: $'));
     call decimal(error$count);
     call newline;
-    if error$count = 0 then
+    if error$count = 0 and restore$failed = 0 then
         call print$string(.('No inconsistencies found in checked entries.$'));
+    else if restore$failed <> 0 then
+        call print$string(.('Scan completed with a drive protection error.$'));
     else
         call print$string(.('Review the reported directory-entry errors.$'));
     call newline;

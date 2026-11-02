@@ -40,8 +40,8 @@ must honor EOF. Native text-record input/append behavior is described below.
 The native hook filters by virtual console, so it can intercept other native
 processes sharing that console while active. DOS handles belong to the launched
 process hierarchy. Both paths keep other consoles' streams independent.
-The DOS root loader retains its historical sector-aligned EXE-header limit;
-this adapter does not extend MZ format support or add shell `<`, `>` or `|`.
+The DOS root loader supports paragraph-aligned EXE headers. These wrappers
+do not add shell `<`, `>` or `|`.
 
 ## DOS ownership and launch
 

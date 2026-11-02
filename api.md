@@ -395,7 +395,7 @@ now checks the number of entries; unknown selectors return FFFFh.
 | CL | Service | Contract / limit |
 | --- | --- | --- |
 | 0 | Cleanup | PC-MODE cleanup/reset path |
-| 1 | DOS program launch | Packet contains far pointer to opened FCB, far pointer to 134-byte CLI block, and user-zero flag; COM/EXE loader; EXE headers must be sector-aligned. No extension search or shell command parser |
+| 1 | DOS program launch | Packet contains far pointer to opened FCB, far pointer to 134-byte CLI block, and user-zero flag; COM/EXE loader; paragraph-aligned MZ headers supported. No extension search or shell command parser |
 | 2 | Minimum memory | DX=FFFFh queries; other values set minimum memory |
 | 3 | 8087 policy | DL=FFh queries; zero/nonzero clears/sets policy bit |
 | 4 | Suspend policy | DL=FFh queries; zero/nonzero clears/sets policy bit |

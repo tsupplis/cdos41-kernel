@@ -174,3 +174,8 @@ check-dskmaint-live: all
 .PHONY: check-retcode
 check-retcode: media
 	python3 tools/retcode108/check.py
+
+# Same independent loader fixtures in CCP/M and CDOS; disposable PCE disks only.
+.PHONY: check-exe
+check-exe: all
+	python3 tools/exe_header_check.py

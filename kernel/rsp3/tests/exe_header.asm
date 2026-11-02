@@ -10,7 +10,7 @@ org 100h
  mov ah,9
  int 21h
  int 20h
-message db 'COM H', '0'+CASEID/10, '0'+CASEID%10, ' PASS',13,10,'$'
+message db 'COM H', '0'+CASEID/10, '0'+CASEID % 10, ' PASS',13,10,'$'
 %else
 org 0
 ; One MZ relocation rebases this word to the actual image segment.
@@ -29,7 +29,7 @@ entry:
  mov bx,ds
  add bx,(TARGET_BYTES-1)/16
  mov es,bx
- cmp byte [es:(TARGET_BYTES-1)%16],0a5h
+ cmp byte [es:(TARGET_BYTES-1) % 16],0a5h
  jne failed
  mov dx,success
  jmp report
@@ -46,8 +46,8 @@ report:
  xor ax,ax
  push ax
  retf
-success db 'EXE H', '0'+CASEID/10, '0'+CASEID%10, ' PASS',13,10,'$'
-failure db 'EXE H', '0'+CASEID/10, '0'+CASEID%10, ' FAIL',13,10,'$'
+success db 'EXE H', '0'+CASEID/10, '0'+CASEID % 10, ' PASS',13,10,'$'
+failure db 'EXE H', '0'+CASEID/10, '0'+CASEID % 10, ' FAIL',13,10,'$'
  times TARGET_BYTES-1-($-$$) db 066h
  db 0a5h
 %endif

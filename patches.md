@@ -792,10 +792,9 @@ the packet boundary, since a flat test image alone can mask this error.
 ASM86 command-side numeric memory operands use register-indirect addressing,
 matching the existing loader-discovery convention.
 
-The root DOS loader's historical EXE path reads headers in 512-byte sectors.
-The EXE regression uses a sector-aligned header, as the existing utilities do;
-this work does not claim support for arbitrary smaller MZ headers. That loader
-limitation is independent of stream routing and is retained as a known limit.
+The initial redirection EXE regression used a sector-aligned header.
+The historical loader limitation it exposed is corrected in the PCTMP exact
+header-positioning change below; it was independent of stream routing.
 
 ### Verification
 
@@ -825,3 +824,37 @@ stream state. Timestamp fixtures initialize the real RSP DATA group and keep
 it separate from code, including the calendar tables; modifying code layout
 must not alter their simulated data. None of these fixture changes weakens
 byte comparisons or error checks.
+
+## PCTMP: exact EXE header positioning
+
+This is the same EXE-loader defect documented for DOS Plus 1.2 in the
+[Seasip DOS Plus EXE-loader analysis](https://www.seasip.info/Cpm/dosplus_exe.html).
+The historical calculation converts header paragraphs to bytes, divides by
+512 and multiplies by four. It therefore discards a partial 512-byte page.
+Changing the divisor alone fixes record-aligned headers but still fails on
+headers such as 96 bytes. MZ header sizes are paragraphs, so the full reader
+must also handle an image starting inside a 128-byte CP/M record.
+
+`kernel/rsp3/ms1.a86` now computes the exact declared image length with
+32-bit arithmetic, checks the fixed MZ header and nonempty image bounds, and
+reads from `header_paragraphs / 8`, skipping
+`(header_paragraphs & 7) * 16` bytes of the first record. Each read goes through
+128 bytes of per-console DATA scratch. Only image bytes are copied to the
+child: record padding never extends a copy beyond the paragraph-rounded
+allocation. EOF before the remaining image is loaded takes normal loader
+failure/cleanup. The original header buffer stays intact for relocation.
+The existing final-page conventions are retained.
+
+This is the root/private-function-1 PCTMP loader. DOS EXEC already uses
+paragraph-sized FCB records and is not rerouted through this reader. No BDOS,
+XIOS, command helper or sibling-project dependency is added.
+
+Both independent projects contain the same local `tools/exe_header_check.py`
+and `kernel/rsp3/tests/exe_header.asm` fixtures. `make check-exe` exercises
+32/48/64/80/96/112/128/144/256/512/528/65552-byte headers, a >64-KiB image,
+both full-final-page conventions, relocation, nonzero CS:IP, final image bytes,
+malformed/truncated input, and COM execution after errors. NASM is used only
+for disposable test programs; production assembly tools remain unchanged.
+
+The reported DOS version is unchanged. Fixing MZ loading does not establish
+full DOS 2.11 API compatibility.
