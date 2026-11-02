@@ -29,7 +29,7 @@ pagesize 72					; Apr 29, 1985
 	extrn backdoor:near,getstat:near,ms_commit:near,printer_ready:near
 	extrn stream_read_byte:near,stream_write_byte:near,native_putchar:near
 	public standard_stream_mask,standard_input_byte,standard_input_status
-	public standard_output_byte
+	public standard_output_byte,standard_line_begin,standard_line_end
 	extrn check_dos_media_fcb:near
 	extrn	convert_date:near	; dos to cpm date
 	extrn	convert_time:near	;   and time conversion
@@ -2462,6 +2462,41 @@ standard_status_ready:
 standard_status_done:
 	pop si ! pop bx
 	ret
+; Skip a CR's following LF only if no other read/seek has moved this
+; same handle in between line calls. Raw and block reads remain byte-exact.
+standard_line_begin:
+	push bx ! push dx ! push si
+	mov dx,line_input_hcb
+	mov line_input_hcb,0
+	mov bx,hcb_list
+	xor ax,ax
+	or bx,bx ! jz line_begin_return
+	cmp bx,dx ! jne line_begin_return
+	mov si,hcb_fcb_base[bx]
+	mov dx,fcb_rand_rec[si]
+	cmp dx,line_input_pos ! jne line_begin_return
+	mov dx,fcb_rand_rec2[si]
+	cmp dx,line_input_pos+2 ! jne line_begin_return
+	inc al
+line_begin_return:
+	pop si ! pop dx ! pop bx
+	ret
+standard_line_end:
+	push ax ! push bx ! push si
+	mov line_input_hcb,0
+	cmp al,13 ! jne line_end_return
+	mov bx,hcb_list
+	or bx,bx ! jz line_end_return
+	mov line_input_hcb,bx
+	mov si,hcb_fcb_base[bx]
+	mov ax,fcb_rand_rec[si]
+	mov line_input_pos,ax
+	mov ax,fcb_rand_rec2[si]
+	mov line_input_pos+2,ax
+line_end_return:
+	pop si ! pop bx ! pop ax
+	ret
+
 standard_input_byte:
 	push bx ! push di ! push es
 	mov bx,hcb_list
@@ -2601,6 +2636,9 @@ set_up_hcb:
 	ja	setup_hcb_error		; skip if not
 
 	inc	al			; bit 0 = read, bit 1 = write
+	cmp bx,line_input_hcb ! jne new_handle_line_clear
+	mov line_input_hcb,0
+new_handle_line_clear:
 	mov	hcb_flags[bx],al	; set up the flags
 	mov	hcb_count[bx],1		; a single hcb owner
 
@@ -3086,6 +3124,9 @@ eject
 ;****************************************
 
 	DSEG
+
+line_input_hcb dw 0
+line_input_pos dw 0,0
 
 temp_ptr	rw	1		; for storing logical byte pointer
 temp_ptr2	rw	1		;   after it is converted to records
@@ -3684,6 +3725,7 @@ ms2_handles_init:
 	push ax ! push bx ! push cx ! push dx ! push si ! push di ! push es
 	mov active_psp,ax
 	mov abort_pending,0
+	mov line_input_hcb,0
 	mov es,ax
 	mov es:psp_parent,0
 	lea si,hcb_list

@@ -84,6 +84,7 @@ TRUE		EQU	NOT FALSE
 	public stream_read_byte,stream_write_byte,native_putchar
 	extrn standard_stream_mask:near,standard_input_byte:near
 	extrn standard_input_status:near,standard_output_byte:near
+	extrn standard_line_begin:near,standard_line_end:near
 	extrn ctbr_state:byte,dos_internal:byte
 	extrn dos_error_code:word,dos_critical_code:word
 	public in_int24_flag,critical_ss,critical_sp,dos1_call
@@ -3604,6 +3605,10 @@ read:
 	mov ax,ds ! mov es,ax
 	ret
 read_capacity:
+	test legacy_io_flags,1 ! jz line_begin_done
+	call standard_line_begin
+	mov line_skip_lf,al
+line_begin_done:
 	dec cl
 	inc bx				;bx = next to fill - 1
 	push bx
@@ -3772,12 +3777,21 @@ dont_echo:
 	jmp readnx			;go for another if no
 
 readen:
+	test legacy_io_flags,1 ! jz line_record_done
+	cmp legacy_eof,0 ! je line_record_end
+	xor al,al
+line_record_end:
+	call standard_line_end
+line_record_done:
 					;end of read,store blen
 	inc bx
 	mov es:byte ptr [bx],CR
 	pop bx
 	mov es:[bx],ch
 	mov ax,ds ! mov es,ax		;restore es
+	cmp legacy_eof,0 ! je line_echo_cr
+	ret
+line_echo_cr:
 	mov cl,CR
 	jmp conout
 
@@ -8067,6 +8081,7 @@ attribute		db	0	;CURRENT attribute
 dir_attr		db	0
 legacy_io_flags db 0
 legacy_eof db 0
+line_skip_lf db 0
 stream_operation db 0
 stream_byte db 0
 stream_fcb dw 0
