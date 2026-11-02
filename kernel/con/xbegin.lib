@@ -471,7 +471,7 @@ entry:					;arrive here from JMP at
 	cld				;set the direction flag
 	cbw				;ah = 0 for valid function numbers
 ; European 29-Nov-1985 kernel: reject calls outside the dispatch table.
-	cmp al,38
+	cmp al,39
 	ja entry_invalid
 	shl al,1			;multiply by 2
 	xchg bx,ax			;save bx in ax
@@ -531,6 +531,17 @@ function_table:
 
 	dw	io_auxin_stat		;37 aux input status
 	dw	io_auxout_stat		;38 aux output status
+	dw io_verify_policy		;39 additional write verification
+
+; CH=0/1 sets additional system-wide disk verification; FFh queries.
+; Boot-time floppy and per-volume hard-disk verification remain additive.
+io_verify_policy:
+	cmp ch,1 ! ja verify_policy_query
+	mov force_write_verify,ch
+verify_policy_query:
+	xor ax,ax
+	mov al,force_write_verify
+	ret
 
 io_ret:
 	ret				; for null function calls

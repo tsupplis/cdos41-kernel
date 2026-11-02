@@ -80,6 +80,9 @@ TRUE		EQU	NOT FALSE
 
 
 	public check_error,check_error_again,critical_cleanup
+	public backdoor,getstat,ms_commit,printer_ready
+	extrn ctbr_state:byte,dos_internal:byte
+	extrn dos_error_code:word
 	public in_int24_flag,critical_ss,critical_sp,dos1_call
 	public ms_ss,ms_sp,RET_AX
 	extrn ms2_critical_error:near,restore_dta_state:near,restore_pdrive_state:near
@@ -1671,6 +1674,23 @@ get_data_seg:
 ms_dsegs	rw	256
 
 
+; Query the process's assigned printer through the native BIOS bridge.
+printer_ready:
+	mov es,sysdat
+	mov si,es:RLR
+	mov al,es:PD_LIST[si]
+	mov bfcb+3,al
+	mov bfcb,15
+	lea dx,bfcb
+	mov cl,S_BIOS
+	call bdos
+	test ah,80h
+	mov al,0
+	jnz printer_status_done
+	dec al
+printer_status_done:
+	ret
+
 backdoor:
 	push dx ! push si
 	push es ! push ds
@@ -2431,9 +2451,52 @@ int_21:
 	    jmp int_20
 
 not_terminate:
-	cmp ah,MS2F_FIRST ! jb not_dos2	; if this is a DOS
-					; ver 2.x function
-	    jmp ms2_func_entry		;   then jump away
+	; Extended break checking runs on the application's stack, before
+	; either DOS dispatcher captures it. INT 23h therefore sees user regs.
+	push ax ! push bx ! push cx ! push dx
+	push si ! push di ! push bp ! push ds ! push es
+	call get_data_seg
+	cmp dos_internal,0 ! jne break_no_poll
+	cmp in_int24_flag,TRUE ! je break_no_poll
+	cmp ctbr_state,0 ! je break_no_poll
+	cmp ah,6 ! je break_no_poll
+	cmp ah,7 ! je break_no_poll
+	cmp ah,33h ! je break_no_poll
+	cmp ah,59h ! je break_no_poll
+	sti				; native console polling may yield
+	call extended_break_poll
+	cli
+	jc break_pending
+break_no_poll:
+	pop es ! pop ds ! pop bp ! pop di ! pop si
+	pop dx ! pop cx ! pop bx ! pop ax
+	jmps break_dispatch
+break_pending:
+	pop es ! pop ds ! pop bp ! pop di ! pop si
+	pop dx ! pop cx ! pop bx ! pop ax
+	int 23h
+break_dispatch:
+	cmp ah,MS2F_FIRST ! jb not_dos2
+	jmp ms2_func_entry
+
+; Return carry only for a pending Ctrl-C; preserve ordinary/extended input.
+extended_break_poll:
+	push ax
+	cmp ext_char,TRUE ! je break_poll_clear
+	call getstat
+	jz break_poll_clear
+	call conin
+	cmp al,CNTRLC ! je break_poll_set
+	mov ros_char,ax
+	mov ext_char,FALSE
+break_poll_clear:
+	pop ax
+	clc
+	ret
+break_poll_set:
+	pop ax
+	stc
+	ret
 
 not_dos2:
 	push ds ! push ds
@@ -2625,6 +2688,11 @@ error_tab	rw	0
 eject
 
 do_critical_error:
+	push ax
+	mov ax,di
+	add ax,19
+	mov dos_error_code,ax
+	pop ax
 	cmp dos1_call,TRUE
 	je critical_dos1
 	jmp ms2_critical_error		; handle calls use their own saved frame
@@ -4182,6 +4250,47 @@ xset_def_drv_byte:
 
 eject
 
+; SET ATTRIBUTES does not refresh an open FCB checksum. Preserve the
+; partial-close FCB while using a copy to write the exact final byte count.
+save_commit_fcb:
+	cmp commit_mode,TRUE ! jne commit_copy_done
+	push si ! push di
+	mov si,cpm_fcb
+	lea di,commit_fcb
+	call copy_commit_fcb
+	mov si,cpm_fcb
+	or byte ptr 5[si],80h		; retain the open lock during byte-count update
+	pop di ! pop si
+commit_copy_done:
+	ret
+restore_commit_fcb:
+	cmp commit_mode,TRUE ! jne commit_copy_done
+	push si ! push di
+	lea si,commit_fcb
+	mov di,cpm_fcb
+	call copy_commit_fcb
+	pop di ! pop si
+	ret
+copy_commit_fcb:
+	push ax ! push cx ! push es
+	push ds ! pop es
+	mov cx,36
+	cld
+	rep movsb
+	pop es ! pop cx ! pop ax
+	ret
+
+ms_commit:
+	push word ptr ms_ds_dx ! push word ptr ms_ds_dx+2
+	mov word ptr ms_ds_dx,dx
+	mov word ptr ms_ds_dx+2,ds
+	mov commit_mode,TRUE
+	call ms_close
+	mov commit_mode,FALSE
+	pop word ptr ms_ds_dx+2 ! pop word ptr ms_ds_dx
+	mov al,ret_al
+	ret
+
 ms_close:
 ;=======
 ;
@@ -4234,12 +4343,14 @@ skip_flush:
 	      call close_file
 	      pop cx				;restore byte count
 	      cmp al,0FFH ! je xms_close_error ;exit with error
+	        call save_commit_fcb
 	        or byte ptr cpm_f6[bx],80H	;set high bit for set byte count
 	        mov byte ptr CPM_CR[bx],ch	;set byte count
 	        mov cl,FSET_ATTR
 	        				;dx = offset of cpm fcb
 		mov al,[bx] ! dec al ! mov ah,0101b
 		call check_error
+		call restore_commit_fcb
 skip_set_attr:
               jmps xms_close
 xms_close_error:
@@ -4248,6 +4359,7 @@ xms_close:
 	  les di,ms_fcb_ptr
 	  mov bx,cpm_fcb
 	  call leave_fcb_directory		; success and failure both restore CHDIR
+	  cmp commit_mode,TRUE ! je xms_close2
 	  jmp kill_fcb				;delete fcb from FCB table
 auxclose:
 	cmp	es:byte ptr MS_DEVICE_CODE[si],0FEH ; Is this an OX?
@@ -4279,13 +4391,21 @@ select_fcb_directory:
 	jmp set_fcb_directory
 
 close_file:
-	mov dx,bx				;move cpm fcb offset into dx
-	push bx					;save cpm fcb offset in bx
+	mov dx,bx
+	push bx
+	mov al,5[bx]
+	push ax
+	cmp commit_mode,TRUE ! jne close_file_call
+	or byte ptr 5[bx],80h		; f5' requests a partial close
+close_file_call:
 	mov cl,FCLOSE
 	mov al,[bx] ! dec al
 	mov ah,0101b
 	call check_error
-	pop bx					;restore cpm fcb in bx
+	pop dx
+	pop bx
+	mov 5[bx],dl
+	mov dx,bx			; caller reuses the native FCB parameter
 	ret
 
 
@@ -7045,17 +7165,17 @@ d_bcd:
 eject
 
 m2e_verify:
-;=========
-;
-;	Function	02Eh
-;	Set/reset verify switch
-;
-;	entry:	DL = 0 disable verify
-;		DL = 1 enable verify
-;
-;	exit:	None
-;
-
+	; DOS 2Eh takes the switch in AL. XIOS CH=0/1 sets the global
+	; additional verification policy, CH=FFh queries it.
+	cmp al,1 ! ja verify_done
+	push ax
+	call flush_buffer
+	mov cl,48 ! call bdos		; drain writes under the old policy
+	pop cx
+	mov ch,cl
+	mov ax,39
+	call backdoor
+verify_done:
 	ret
 
 
@@ -7766,7 +7886,8 @@ attribute		db	0	;CURRENT attribute
 				;BIT 1 = HIDDEN
 				;BIT 2 = SYSTEM
 dir_attr		db	0
-verify_flag		db	0	;FF MEANS READ AFTER WRITE
+commit_mode		db	0	; partial close from DOS commit
+commit_fcb rb 36			; valid native FCB across SET ATTRIBUTES
 last_dmaadr		dw	0	;LAST DMA SET
 last_dmabase		dw	0
 ms_dmaadr		dw	0

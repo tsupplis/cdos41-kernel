@@ -570,8 +570,11 @@ write_flop:
 
 	test	al,al		; check return code
 	jnz	write_flop_done	; if bad, give up
-	cmp	verify_flag,0	; if we aren't verifying
-	jz	write_flop_done	;   then we're also done
+	cmp force_write_verify,0
+	jnz write_flop_verify
+	cmp verify_flag,0
+	jz write_flop_done
+write_flop_verify:
 
 	mov	dma_mode_storage,dma_mode_verify_fdc
 	mov	fdc_command,fdc_cmnd_read
@@ -1617,6 +1620,7 @@ fdc_spec2_var		db	fdc_spec_2	;*head load default
 
 recal_byte		db	0		;which disks have been recal'd
 verify_flag		db	0		;verify after disk write?
+force_write_verify db 0		; DOS system-wide additional policy
 disk_time_out		db	0		;count down for tick routine
 ddio_head		db	0		;saves funny head values
 ddio_entry		db	0		;* were we entered thru ddio?

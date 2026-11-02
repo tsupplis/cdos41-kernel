@@ -532,12 +532,15 @@ hd_write2:
 	or	al,al
 	jnz	hd_write_exit		; exit here if failed
 
+	cmp force_write_verify,0
+	jne hd_force_verify
 	push	si
 	  mov	si,HDINF_label_ofs[si]
 	  test	HDLB_cpm_options[si],1
 	  pop	si
 	  jz	hd_write_exit		;no, just exit (al still valid)
 
+hd_force_verify:
 	mov	bx,offset hd_vfy_iopb	;else run verify cycle
 	mov	IBM_fn[bx],2		;IBM read opcode
 	  call	hd_local_io

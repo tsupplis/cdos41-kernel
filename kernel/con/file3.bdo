@@ -1772,6 +1772,12 @@ chk_olist01:
 	      jz chk_olist05
 	      mov ch,3! call search_olist
 chk_olist02:
+	    ; DOS commit updates the byte count while retaining the open lock.
+	    cmp fx_intrn,fxi30 ! jne chk_olist_regular
+	    mov al,attributes
+	    and al,0c0h
+	    cmp al,0c0h ! je retl1
+chk_olist_regular:
 	    test chk_olist_flag,true! jz retl1
 
 ;	check to see if the lock list item is extended and if the interface

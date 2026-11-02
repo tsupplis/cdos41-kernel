@@ -492,7 +492,10 @@ close021:				;entered from PC/BDOS closef
 
 if BMPM
 	test attributes,80h		;is this a partial close
-	jnz ret34			;yes - return
+	jz close_release
+	mov comp_fcb_cks,true		; retained FAT FCB may have updated mapping
+	ret
+close_release:
 	call pack_sdcnt
 	;find olist item for this process and file
 	mov ch,5

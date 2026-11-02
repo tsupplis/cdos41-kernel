@@ -26,6 +26,7 @@ pagesize 72					; Apr 29, 1985
 	public	ms2_func_entry		; called from ms1 Int_21
 	public	ms2_terminate		; for memory and handle cleanup
 	extrn	get_data_seg:near	; shared with ms1
+	extrn backdoor:near,getstat:near,ms_commit:near,printer_ready:near
 	extrn check_dos_media_fcb:near
 	extrn	convert_date:near	; dos to cpm date
 	extrn	convert_time:near	;   and time conversion
@@ -154,7 +155,7 @@ eject
 ;	***  General DOS 2.x equates  ***
 
 ms2f_first	equ	2Fh		; our first function number
-ms2f_top	equ	57h		; our last function number
+ms2f_top	equ	68h		; our last function number
 st_flags	equ	word ptr .4	; flags back up the stack
 cf_bit		equ	0001h		; carry flag is the lsb
 rlr		equ	word ptr .68h	; ready list root (our pd)
@@ -256,7 +257,24 @@ ms2_func_table	dw	ms2_get_dta	; func 2F
 		dw	ms2_null	; func 55
 		dw	ms2_f_rename	; func 56
 		dw	ms2_f_datetime	; func 57
-		dw	ms2_invalid	; func > 57
+		dw ms2_invalid		; 58h
+		dw ms2_extended_error	; 59h
+		dw ms2_invalid		; 5Ah
+		dw ms2_invalid		; 5Bh
+		dw ms2_invalid		; 5Ch
+		dw ms2_invalid		; 5Dh
+		dw ms2_invalid		; 5Eh
+		dw ms2_invalid		; 5Fh
+		dw ms2_invalid		; 60h
+		dw ms2_invalid		; 61h
+		dw ms2_invalid		; 62h
+		dw ms2_invalid		; 63h
+		dw ms2_invalid		; 64h
+		dw ms2_invalid		; 65h
+		dw ms2_invalid		; 66h
+		dw ms2_invalid		; 67h
+		dw ms2_commit		; 68h
+		dw ms2_invalid		; above 68h
 
 eject
 ;**************************************************
@@ -371,31 +389,80 @@ intnl_info	dw	0		; US month/day/year
 ;	*****************************
 
 ms2_io_ctrl:
-	mov	ax,ms2_ax
-	cmp	al,0			; we support only func 0
-	jnz	ms2_io_ctrl_error
-
-	mov	ax,0040h		; assume disk status
-	mov	bx,ms2_bx
-	cmp	bx,rsv_hcb		; if beyond the reserved
-	jae	ms2_io_ctrl_put		;   it must be a file
-
-	shl	bx,1
-	mov	ax,io_ctrl_table[bx]	; fetch phony device status
-
-ms2_io_ctrl_put:
-	mov	ms2_dx,ax		; return status word
+	mov al,hf_read + hf_write
+	call get_active_handle
+	jc ioctl_error
+	mov si,hcb_fcb_base[bx]
+	mov al,ms2_al
+	cmp al,0 ! je ioctl_info
+	cmp al,6 ! je ioctl_input
+	cmp al,7 ! je ioctl_output
+	mov al,no_function
+ioctl_error:
+	jmp ms2_error_ret
+ioctl_info:
+	mov ax,0040h
+	test hcb_flags[bx],hf_device ! jz ioctl_disk_info
+	mov ax,80c0h		; character device, IOCTL unsupported
+	cmp byte ptr 1[si],'N' ! jne ioctl_not_null
+	or al,4			; NUL
+	jmps ioctl_info_done
+ioctl_not_null:
+	cmp byte ptr 1[si],'C' ! jne ioctl_info_done
+	or al,13h		; CON input/output, special device
+	jmps ioctl_info_done
+ioctl_disk_info:
+	mov al,[si]
+	or al,al ! jnz ioctl_explicit_drive
+	mov al,cur_dsk
+	inc al
+ioctl_explicit_drive:
+	dec al
+	and al,1fh
+	or al,40h
+ioctl_info_done:
+	mov ms2_dx,ax
 	ret
-
-ms2_io_ctrl_error:
-	mov	al,no_function
-	jmp	ms2_error_ret
-
-io_ctrl_table	dw	80D3h		; values courtesy Joe Wein
-		dw	80D3h
-		dw	80D3h
-		dw	80C0h
-		dw	80C0h
+ioctl_input:
+	test hcb_flags[bx],hf_device ! jnz ioctl_char_input
+	mov ax,fcb_rand_rec2[si]
+	cmp ax,fcb_byte_size2[si] ! jb ioctl_ready
+	ja ioctl_not_ready
+	mov ax,fcb_rand_rec[si]
+	cmp ax,fcb_byte_size[si] ! jb ioctl_ready
+	jmps ioctl_not_ready
+ioctl_char_input:
+	cmp byte ptr 1[si],'N' ! je ioctl_ready
+	cmp byte ptr 1[si],'C' ! jne ioctl_aux_input
+	call getstat
+	jz ioctl_not_ready
+	jmps ioctl_ready
+ioctl_aux_input:
+	cmp byte ptr 1[si],'A' ! jne ioctl_not_ready
+	mov cl,7
+	call ccpm
+	or al,al ! jz ioctl_not_ready
+	jmps ioctl_ready
+ioctl_output:
+	test hcb_flags[bx],hf_device ! jz ioctl_ready
+	cmp byte ptr 1[si],'L' ! je ioctl_printer
+	cmp byte ptr 1[si],'P' ! je ioctl_printer
+	cmp byte ptr 1[si],'A' ! je ioctl_aux_output
+	jmps ioctl_ready
+ioctl_printer:
+	call printer_ready
+	or al,al ! jz ioctl_not_ready
+	jmps ioctl_ready
+ioctl_aux_output:
+	mov cl,8
+	call ccpm
+	or al,al ! jz ioctl_not_ready
+ioctl_ready:
+	mov ms2_ret_ax,00ffh
+	ret
+ioctl_not_ready:
+	mov ms2_ret_ax,0
+	ret
 
 
 ;	*****************************
@@ -416,7 +483,10 @@ ms2_get_psp:
 	ret
 
 ms2_get_verify:
-	mov	ms2_ret_al,0		; show as always off
+	mov ax,39
+	mov ch,0ffh
+	call backdoor
+	mov ms2_ret_ax,ax
 	ret
 
 
@@ -435,7 +505,7 @@ ms2_null:
 ;	*****************************
 
 ms2_invalid:
-	mov	ms2_ret_ax,1		; invalid function number
+	mov al,1			; invalid function number
 	jmp	ms2_error_ret		; set carry for caller
 
 
@@ -551,7 +621,9 @@ ms2_critical_abort:
 	int 22h				; terminate, not Ctrl-C processing
 
 ms1_func:
-	int	21h			; right back in
+	inc dos_internal
+	int	21h
+	dec dos_internal			; right back in
 	ret
 
 
@@ -610,11 +682,85 @@ get_pd:
 ;	the carry flag set (error) for DOS 2.x functions
 
 ms2_error_ret:
+	xor ah,ah
+	mov dos_error_code,ax
 	les	di,ms2_ss_sp		; reach into the return stack
 	or	es:st_flags[di],cf_bit	;   and set the carry bit
 	cbw
 	mov	ms2_ret_ax,ax		; save the return code
 	ret
+
+
+; DOS 59h/BX=0 returns the last DOS 2.x error without consuming it.
+ms2_extended_error:
+	cmp ms2_bx,0 ! jne extended_invalid
+	mov ax,dos_error_code
+	mov ms2_ret_ax,ax
+	mov bx,0704h		; application error, abort
+	mov ch,1		; unknown locus
+	or ax,ax ! jnz extended_classify
+	xor bx,bx ! xor ch,ch
+	jmps extended_return
+extended_classify:
+	cmp ax,19 ! jb extended_not_physical
+	mov bx,0b01h		; media error, retry
+	mov ch,2
+	cmp ax,21 ! jne extended_return
+	mov bx,0502h		; device not ready, delayed retry
+	jmps extended_return
+extended_not_physical:
+	cmp ax,8 ! jne extended_disk
+	mov bx,0104h		; exhausted resource
+	mov ch,5		; memory
+	jmps extended_return
+extended_disk:
+	cmp ax,2 ! je extended_missing
+	cmp ax,3 ! je extended_missing
+	cmp ax,15 ! je extended_missing
+	cmp ax,18 ! je extended_missing
+	cmp ax,5 ! jne extended_return
+	mov bx,0303h		; authorization, user intervention
+	mov ch,2
+	jmps extended_return
+extended_missing:
+	mov bx,0803h		; not found, user intervention
+	mov ch,2
+extended_return:
+	mov ms2_bx,bx
+	mov byte ptr ms2_cx+1,ch
+	ret
+extended_invalid:
+	mov al,no_function
+	jmp ms2_error_ret
+
+; Partial close writes byte-count metadata but retains the FCB and locks.
+ms2_commit:
+	mov al,hf_read + hf_write
+	call get_active_handle
+	jc commit_error
+	test hcb_flags[bx],hf_device ! jnz commit_device
+	call swap_pdrive
+	push bx
+	mov dx,hcb_fcb_base[bx]
+	call ms_commit
+	push ax
+	mov cl,48
+	call ccpm
+	pop dx
+	or dl,dl ! jnz commit_failed
+	cmp al,0ffh ! je commit_failed
+	pop bx
+	call swap_pdrive
+	ret
+commit_failed:
+	pop bx
+	call swap_pdrive
+	mov al,no_access
+commit_error:
+	jmp ms2_error_ret
+commit_device:
+	mov al,no_h_match
+	jmps commit_error
 
 
 eject
@@ -3731,8 +3877,12 @@ return_code	dw	0		; defaults to zero
 
 ;	Control-break state
 
-ctbr_state	db	0		; currently kept but not used
+public ctbr_state,dos_internal,dos_error_code
+ctbr_state	db	0		; extended DOS break checking
 		db	0		; pad
+
+dos_internal db 0
+dos_error_code dw 0
 
 active_psp	rw	1		; saves the new psp segment
 new_psp		rw	1		; temporarily saves new psp seg
