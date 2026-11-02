@@ -12,8 +12,12 @@ count; zero slots are allowed for sparse files. `CCPM.SYS` is checked like any
 other file. The checker refuses DOS/FAT media identified by the CDOS
 pseudo-label.
 
-Run it only when the drive is idle. BDOS does not provide an exclusive
-filesystem lock for this scan, so concurrent writes can make its results
-inconsistent. This version does not inspect deleted directory slots, validate
+Run it only when the drive is idle. The checker does not hold an exclusive
+filesystem lock, so concurrent writes can make its results inconsistent. This
+version does not inspect deleted directory slots, validate
 timestamp/XFCB metadata, read data sectors, identify lost blocks, or repair
 anything. Its results are limited to the directory entries BDOS exposes.
+
+Run `make check` in this directory for synthetic BDOS and DMA tests. After
+building the media, `make check-live` also tests disposable CP/M and FAT images
+under CDOS in PCE and verifies that the images are unchanged.

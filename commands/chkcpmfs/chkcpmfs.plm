@@ -4,6 +4,7 @@ $COMPACT
 chkcpmfs:
 do;
 
+/* BDOS search copies 33 FCB bytes back to the caller. */
 declare
     media$fcb (36) byte,
     search$fcb (36) byte,
@@ -143,6 +144,7 @@ check$entry: procedure;
         error$count = error$count + 1;
     end;
 
+    /* BDOS allocates every nonzero slot; zero may be a sparse-file hole. */
     do slot = 0 to slots - 1;
         if maxall > 255 then do;
             i = dir$offset + 16 + (slot * 2);
@@ -151,28 +153,28 @@ check$entry: procedure;
         end;
         else block$number = dirbuf(dir$offset + 16 + slot);
         if block$number <> 0 then do;
-        block$count = block$count + 1;
+            block$count = block$count + 1;
 
-        if block$number > maxall then
-            call report$block(.('IS OUTSIDE THE DISK$'));
-        else do;
-            if block$number < 8 then do;
-                if (low(dirblk) and shl(1,7 - block$number)) <> 0 then
-                    call report$block(.('IS RESERVED FOR THE DIRECTORY$'));
-            end;
-            else if block$number < 16 then do;
-                if (high(dirblk) and
-                    shl(1,15 - block$number)) <> 0 then
-                    call report$block(.('IS RESERVED FOR THE DIRECTORY$'));
-            end;
+            if block$number > maxall then
+                call report$block(.('IS OUTSIDE THE DISK$'));
+            else do;
+                if block$number < 8 then do;
+                    if (low(dirblk) and shl(1,7 - block$number)) <> 0 then
+                        call report$block(.('IS RESERVED FOR THE DIRECTORY$'));
+                end;
+                else if block$number < 16 then do;
+                    if (high(dirblk) and
+                        shl(1,15 - block$number)) <> 0 then
+                        call report$block(.('IS RESERVED FOR THE DIRECTORY$'));
+                end;
 
-            map$index = shr(block$number,3);
-            map$bit = shl(1,block$number and 7);
-            if (alloc$map(map$index) and map$bit) <> 0 then
-                call report$block(.('IS REFERENCED MORE THAN ONCE$'));
-            else alloc$map(map$index) =
-                 alloc$map(map$index) or map$bit;
-        end;
+                map$index = shr(block$number,3);
+                map$bit = shl(1,block$number and 7);
+                if (alloc$map(map$index) and map$bit) <> 0 then
+                    call report$block(.('IS REFERENCED MORE THAN ONCE$'));
+                else alloc$map(map$index) =
+                     alloc$map(map$index) or map$bit;
+            end;
         end;
     end;
 end check$entry;
@@ -208,7 +210,7 @@ plmstart: procedure public;
     call newline;
     call print$string(.('Scans ordinary file entries through BDOS on the current drive.$'));
     call newline;
-    call print$string(.('Keep the drive idle during the scan; BDOS does not lock it.$'));
+    call print$string(.('Keep the drive idle; the scan has no exclusive lock.$'));
     call newline;
 
     if dos$media then do;

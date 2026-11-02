@@ -112,7 +112,7 @@ def run_case(folder, image, name, entries, overrides, expected):
     (folder / "directory.bin").write_bytes(directory)
     settings = {
         "DIR_ENTRIES": len(entries), "BSH": 4, "EXM": 1, "DSM": 157,
-        "AL0": 0x80, "AL1": 0, "DOS_MEDIA": 0, "INITIAL_DMA": 0x80,
+        "AL0": 0x80, "AL1": 0, "DOS_MEDIA": 0, "INITIAL_DMA": 0x345,
         "EXPECTED_SEARCHES": 2, "EXPECTED_DMA_SETS": 4,
     }
     settings.update(overrides)

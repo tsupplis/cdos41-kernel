@@ -72,13 +72,17 @@ def prepare_data(folder):
     return clean, bad, system[1][16]
 
 
-def prepare_fat(folder):
-    image = folder / "fat-source.img"
-    run("mformat", "-C", "-i", str(image), "-t", "40", "-h", "2",
-        "-n", "8", "-c", "2", "::", cwd=folder)
-    sentinel = folder / "sentinel.txt"
-    sentinel.write_bytes(b"untouched FAT sentinel\r\n")
-    run("mcopy", "-i", str(image), str(sentinel), "::SENTINEL.TXT", cwd=folder)
+def prepare_fat(folder, name, *, label=False, sentinel=False):
+    image = folder / f"{name}-source.img"
+    args = ["mformat", "-C", "-i", str(image), "-t", "40", "-h", "2",
+            "-n", "8", "-c", "2"]
+    if label:
+        args.extend(["-v", "CHECKDISK"])
+    run(*args, "::", cwd=folder)
+    if sentinel:
+        source = folder / "sentinel.txt"
+        source.write_bytes(b"untouched FAT sentinel\r\n")
+        run("mcopy", "-i", str(image), str(source), "::SENTINEL.TXT", cwd=folder)
     return image
 
 
@@ -132,7 +136,9 @@ def main():
         folder = Path(directory)
         system, entries, references = prepare_system(folder)
         clean, bad, shared = prepare_data(folder)
-        fat = prepare_fat(folder)
+        fat_empty = prepare_fat(folder, "fat-empty")
+        fat_label = prepare_fat(folder, "fat-label", label=True)
+        fat_file = prepare_fat(folder, "fat-file", sentinel=True)
 
         screen = boot(folder, system, clean, "A")
         assert "Drive A  DPB block shift" in screen, screen
@@ -146,16 +152,23 @@ def main():
         assert "Directory entries scanned: 3  block references checked: 3" in screen, screen
         assert "Consistency errors: 0" in screen and "ERROR:" not in screen, screen
 
+        screen = boot(folder, system, MEDIA / "cdos86base.img", "B")
+        assert "Drive B  DPB block shift" in screen, screen
+        assert "Directory entries scanned: 0  block references checked: 0" in screen, screen
+        assert "Consistency errors: 0" in screen and "ERROR:" not in screen, screen
+
         screen = boot(folder, system, bad, "B")
         assert "Drive B  DPB block shift" in screen, screen
         assert re.search(r"USER 1 FILE SECOND\s+\.DAT: BLOCK "
                          + str(shared) + r" IS REFERENCED MORE THAN ONCE", screen), screen
         assert "Consistency errors: 1" in screen, screen
 
-        screen = boot(folder, system, fat, "B")
-        assert "DOS media detected; no CP/M filesystem scan performed." in screen, screen
-        assert "Directory entries scanned:" not in screen, screen
-    print("PASS: live CDOS system, all-user data disk, cross-link and FAT refusal; images unchanged")
+        for fat in (fat_empty, fat_label, fat_file):
+            screen = boot(folder, system, fat, "B")
+            assert "DOS media detected; no CP/M filesystem scan performed." in screen, screen
+            assert "Directory entries scanned:" not in screen, screen
+    print(f"PASS: live CDOS system ({entries} entries, {references} references), "
+          "all-user and empty CP/M disks, cross-link, FAT refusal; images unchanged")
 
 
 if __name__ == "__main__":
