@@ -30,6 +30,8 @@ The assembly is based on partial 4.1 OEM sources corrected to align with Europea
 <img src="images/fm.png" alt="Concurrent DOS File Manager" width="48%">
 <img src="images/menu.png" alt="Concurrent DOS startup menu" width="48%">
 <br><sub>File Manager &nbsp;·&nbsp; Startup menu</sub>
+<br><img src="images/rose.png" alt="Rose screenshot" width="48%">
+<br><sub>Rose</sub>
 </p>
 
 The build follows the CCP/M project's source organization and toolchain.
