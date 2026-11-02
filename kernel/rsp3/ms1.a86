@@ -5395,13 +5395,16 @@ stream_byte_entry:
 	cmp stream_operation,0 ! jne stream_find_fcb
 	mov ax,es:MS_RAN_REC+2[di]
 	cmp ax,es:MS_FILE_SIZE+2[di] ! jb stream_find_fcb
-	ja stream_byte_eof
+	jbe $+5
+	jmp stream_byte_eof
 	mov ax,es:MS_RAN_REC[di]
-	cmp ax,es:MS_FILE_SIZE[di] ! jae stream_byte_eof
+	cmp ax,es:MS_FILE_SIZE[di] ! jb $+5
+	jmp stream_byte_eof
 stream_find_fcb:
 	push ds ! pop es
 	call find_fcb_pub
-	jc stream_byte_error
+	jnc $+5
+	jmp stream_byte_error
 	mov cpm_fcb,si
 	mov di,stream_fcb
 	mov ax,MS_RAN_REC[di]
@@ -5417,9 +5420,10 @@ stream_record_shift:
 	mov CPM_RAN_REC+2[si],dl
 	call activate_buffer
 	cmp stream_operation,0 ! jne stream_write_buffer
-	or al,al ! jnz stream_byte_error
+	or al,al ! jz $+5
+	jmp stream_byte_error
 	mov bx,stream_index
-	mov al,buffer[bx]
+	mov al,byte ptr buffer[bx]
 	mov stream_byte,al
 	jmps stream_advance
 stream_write_buffer:
@@ -5440,13 +5444,14 @@ stream_new_record:
 stream_buffer_ready:
 	mov bx,stream_index
 	mov al,stream_byte
-	mov buffer[bx],al
+	mov byte ptr buffer[bx],al
 	mov buffer_writtenb,TRUE
 	mov si,cpm_fcb
 	mov cpm_written[si],TRUE
 	cmp first_write,TRUE ! jne stream_advance
 	call flush_buffer
-	or al,al ! jnz stream_byte_error
+	or al,al ! jz $+5
+	jmp stream_byte_error
 	mov first_write,FALSE
 stream_advance:
 	mov di,stream_fcb

@@ -23,8 +23,8 @@ livetest.cmd: livetest.obj start.obj command.obj win.obj format.obj xios.obj Mak
 	$(PYTHON) trim.py $@
 	$(CMDINFO) $@
 
-wmenu.cmd: wmenu.obj start.obj command.obj win.obj format.obj xios.obj Makefile trim.py
-	$(DRCLINK86) wmenu=start,wmenu,command,win,format,xios
+wmenu.cmd: wmenu.obj start.obj win.obj format.obj xios.obj Makefile trim.py
+	$(DRCLINK86) wmenu=start,wmenu,win,format,xios
 	$(PYTHON) trim.py $@
 	$(CMDINFO) $@
 

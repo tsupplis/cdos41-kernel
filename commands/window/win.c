@@ -4,6 +4,7 @@
  */
 #include "win.h"
 WORD xdata=0;
+int window_first=0;
 char *colors[] = {"Black","Blue","Green","Cyan","Red","Magenta","Yellow","White"};
 
 conchar(c) int c; { bdos(2,c); return 0; }
@@ -17,6 +18,8 @@ w_init()
     int version;
     version=bdos(12,0);
     if ((version&0xff00)!=0x1400 || (version&255)<0x31) return 0;
+    /* CCP/M 3.x starts at 31h; CDOS 4.x starts at 40h. */
+    window_first=(version&255)>=0x40;
     xinit();
     return 1;
 }
@@ -64,10 +67,10 @@ w_apply(w) struct window *w;
     old=farword(xdata,p+28);
     a=(old&0xff88)|(w->foreground&7)|((w->background&7)<<4);
     farput(xdata,p+28,a);
-    xcall(21,0,((w->vrow-1)<<8)|(w->vcol-1),
-          (w->tracking<<8)|w->number);
     xcall(20,((w->prow+w->nrows-2)<<8)|(w->pcol+w->ncols-2),
           ((w->prow-1)<<8)|(w->pcol-1),w->number);
+    xcall(21,0,((w->vrow-1)<<8)|(w->vcol-1),
+          (w->tracking<<8)|w->number);
     if (a!=old) {
         /* Service 24 above synchronizes a full foreground console via
          * copy_full_top before geometry changes. Repaint the image, then
@@ -89,7 +92,7 @@ w_view()
     message("------ ---- ---- ----- ----- ---- ---- -------- ------- ------- -------\r\n");
     for(n=0;n<w_status(1);++n) {
         w_read(n,&w);
-        format(line,"  %d     %02d   %02d   %02d    %02d    %02d   %02d     %s    %s  %s   %s\r\n",n+WINDOW_FIRST,
+        format(line,"  %d     %02d   %02d   %02d    %02d    %02d   %02d     %s    %s  %s   %s\r\n",n+window_first,
           w.prow,w.pcol,w.nrows,w.ncols,w.vrow,w.vcol,
           w.tracking?"Row":"No",w.display?"Color":"B&W",
           colors[w.foreground],colors[w.background]);
@@ -151,7 +154,7 @@ w_write(n,type,name) int n,type; char *name;
         for(n=0;n<w_status(1);++n) {
             w_read(n,&w);
             format(line,"window ch n=%d pr=%02d,pc=%02d,nr=%02d,nc=%02d,vr=%02d,vc=%02d,tr=%s,d=%s,fg=%s,bg=%s\r\n",
-              n+WINDOW_FIRST,w.prow,w.pcol,w.nrows,w.ncols,w.vrow,w.vcol,
+              n+window_first,w.prow,w.pcol,w.nrows,w.ncols,w.vrow,w.vcol,
               w.tracking?"Row":"No",w.display?"Color":"B&W",
               colors[w.foreground],colors[w.background]);
             text(line);

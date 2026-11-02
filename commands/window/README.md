@@ -1,8 +1,8 @@
 # WINDOW and WMENU
 
-Shared C implementation imported from the CCP/M project and adapted for
-parity with the retained CDOS OEM WINDOW/WMENU. This is a source rewrite,
-not a byte-identical disassembly. Both commands build in this directory.
+Shared C implementation for CCP/M 3.1 and CDOS 4.1, checked against the
+retained CDOS OEM WINDOW/WMENU. This is a source rewrite, not a byte-identical
+disassembly. Both commands build in this directory.
 
 ```
 make -C commands/window
@@ -13,8 +13,8 @@ make check-wmenu
 
 ## Public interface
 
-CDOS WINDOW uses **N=1..4**. XIOS service indices remain 0..3 internally;
-this differs from the CCP/M rewrite's public numbering.
+BDOS 12 selects the OS-native public numbering: CCP/M uses **N=0..3** and
+CDOS uses **N=1..4**. Both map to XIOS indices 0..3 internally.
 
 ```
 WINDOW VIEW
@@ -68,7 +68,7 @@ provides the C/far-memory bridge; `format.c` supplies small-model formatting.
 restores the original state. These test programs are not distribution tools.
 
 `make check-window` runs OEM and rebuilt commands on disposable CDOS/FAT
-images. It checks VIEW, 1..4 bounds, geometry/colors, all three export modes,
+images. It checks VIEW, CDOS 1..4 bounds, geometry/colors, all three export modes,
 GLASS, installation/duplicate detection, highlighted menu navigation,
 committed Size/Color/Tracking edits, Write cancellation and manager exit.
 Setup files and meaningful text before Ctrl-Z are compared. OEM bytes after
@@ -96,6 +96,9 @@ against 4.11 for all four CARDDECK stages, a full-screen colour change and a
 background-console change, without clearing between operations. The WMENU
 comparison also checks the screen attributes after an interactive colour edit.
 This fixes an omitted repaint operation; no command-line syntax changes.
+
+`make -C commands/window check` in either project compiles the same host
+checks, including both BDOS identities and public numbering ranges.
 
 The linker can append an unnecessary zero record after the declared CODE/DATA
 groups. `trim.py` validates this simple CMD layout and removes only zero bytes

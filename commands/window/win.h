@@ -11,8 +11,8 @@
  * are one-based; XIOS row/column words use zero-based row in the high byte.
  * ABI reference: kernel/con/xbegin.lib and xconout.lib, VS_* definitions.
  */
-/* CDOS OEM WINDOW numbers its four PC windows 1..4. XIOS uses 0..3. */
-#define WINDOW_FIRST 1
+/* XIOS numbers windows 0..3; OEM command numbers depend on the OS. */
+extern int window_first;
 typedef unsigned short WORD;
 struct window {
     int number, prow, pcol, nrows, ncols, vrow, vcol;

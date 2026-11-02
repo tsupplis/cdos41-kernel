@@ -27,9 +27,9 @@ static edit(n,mode) int n,mode;
     char prompt[160];
     w_read(n,&w);
     for(;;) {
-        if(mode==0) format(prompt,"WINDOW CHANGE N=%d PRow=%02d,PCol=%02d             (Pressing \030,\031,\032,\033 places window)",n+WINDOW_FIRST,w.prow,w.pcol);
-        if(mode==1) format(prompt,"WINDOW CHANGE N=%d NRows=%02d,NCols=%02d            (Pressing \030,\031,\032,\033 sizes window)",n+WINDOW_FIRST,w.nrows,w.ncols);
-        if(mode==2) format(prompt,"WINDOW CHANGE N=%d VRow=%02d,VCol=%02d             (Pressing \030,\031,\032,\033 scrolls window)",n+WINDOW_FIRST,w.vrow,w.vcol);
+        if(mode==0) format(prompt,"WINDOW CHANGE N=%d PRow=%02d,PCol=%02d             (Pressing \030,\031,\032,\033 places window)",n+window_first,w.prow,w.pcol);
+        if(mode==1) format(prompt,"WINDOW CHANGE N=%d NRows=%02d,NCols=%02d            (Pressing \030,\031,\032,\033 sizes window)",n+window_first,w.nrows,w.ncols);
+        if(mode==2) format(prompt,"WINDOW CHANGE N=%d VRow=%02d,VCol=%02d             (Pressing \030,\031,\032,\033 scrolls window)",n+window_first,w.vrow,w.vcol);
         fields(prompt,mode==1?24:23,2,mode==1?33:31,2);
         k=w_key(); if(k==13 || k==27) return;
         r=c=0;
@@ -47,8 +47,8 @@ static toggle(n,display) int n,display;
     struct window w; int k; char prompt[160];
     w_read(n,&w);
     for(;;) {
-        if(display) format(prompt,"WINDOW CHANGE N=%d Display=%s    (Pressing \030,\031 changes display style)",n+WINDOW_FIRST,w.display?"Color":"B&W  ");
-        else format(prompt,"WINDOW CHANGE N=%d Tracking=%s    (Pressing \030,\031 changes cursor tracking style)",n+WINDOW_FIRST,w.tracking?"Row":"No ");
+        if(display) format(prompt,"WINDOW CHANGE N=%d Display=%s    (Pressing \030,\031 changes display style)",n+window_first,w.display?"Color":"B&W  ");
+        else format(prompt,"WINDOW CHANGE N=%d Tracking=%s    (Pressing \030,\031 changes cursor tracking style)",n+window_first,w.tracking?"Row":"No ");
         fields(prompt,display?26:27,display?5:3,0,0);
         k=w_key(); if(k==13 || k==27) return;
         if(k==' ' || k==0xff0b || k==0xff10) {
@@ -66,7 +66,7 @@ static color(n) int n;
     w_read(n,&w); background=0;
     for(;;) {
         color_name(fg,w.foreground); color_name(bg,w.background);
-        format(prompt,"WINDOW CHANGE N=%d FG=%s,BG=%s     (Pressing \030,\031,\032,\033 changes colors)",n+WINDOW_FIRST,fg,bg);
+        format(prompt,"WINDOW CHANGE N=%d FG=%s,BG=%s     (Pressing \030,\031,\032,\033 changes colors)",n+window_first,fg,bg);
         fields(prompt,background?32:21,7,0,0);
         k=w_key(); if(k==13 || k==27) return;
         if(k==9 || k==0xff0d || k==0xff0e) { background=!background; continue; }
@@ -82,11 +82,11 @@ static write_file(n) int n;
 {
     char name[20],prompt[160]; int used,k,type,typing;
     type=typing=0; name[0]='A'+bdos(25,0); name[1]=':';
-    format(name+2,"WINDOW%d.TXT",n+WINDOW_FIRST);
+    format(name+2,"WINDOW%d.TXT",n+window_first);
     for(used=0;name[used];++used) ;
     for(;;) {
         name[used]=0;
-        format(prompt,"WINDOW WRITE N=%d Type=%s,File=%s         (Pressing \030,\031 changes type)",n+WINDOW_FIRST,type==0?"W":type==1?"C":"S",name);
+        format(prompt,"WINDOW WRITE N=%d Type=%s,File=%s         (Pressing \030,\031 changes type)",n+window_first,type==0?"W":type==1?"C":"S",name);
         fields(prompt,22,1,29,used);
         k=w_key(); if(k==27) return;
         if(k==9 || k==' ' || k==0xff0b) { type=(type+1)%3; continue; }
@@ -114,15 +114,15 @@ main()
     while(!done) {
         w_key(); n=w_status(2); active=1; w_manager(2,255);
         while(active && !done) {
-            format(prompt,"N=%d:  Place Size Scroll Tracking Display Color Write Abort         [ESC]->Exit",n+WINDOW_FIRST);
+            format(prompt,"N=%d:  Place Size Scroll Tracking Display Color Write Abort         [ESC]->Exit",n+window_first);
             fields(prompt,starts[choice],lengths[choice],0,0);
             k=w_key(); run=0;
             if(k==27) active=0;
             else if(previous(k)) choice=(choice+7)%8;
             else if(next(k)) choice=(choice+1)%8;
             else if(k==13) run=1;
-            else if(k>='0'+WINDOW_FIRST && k<'0'+WINDOW_FIRST+w_status(1)) {
-                n=k-'0'-WINDOW_FIRST; w_top(n);
+            else if(k>='0'+window_first && k<'0'+window_first+w_status(1)) {
+                n=k-'0'-window_first; w_top(n);
             }
             if(!run) continue;
             if(choice<3) edit(n,choice);
@@ -130,7 +130,7 @@ main()
             else if(choice==5) color(n);
             else if(choice==6) write_file(n);
             else {
-                format(prompt,"N=%d:        (Press [RETURN] to abort WMENU, [ESC] to go back to previous menu)",n+WINDOW_FIRST);
+                format(prompt,"N=%d:        (Press [RETURN] to abort WMENU, [ESC] to go back to previous menu)",n+window_first);
                 line(prompt); k=w_key(); if(k==13) done=1;
             }
         }
