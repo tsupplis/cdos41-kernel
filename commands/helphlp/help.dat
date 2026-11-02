@@ -1111,7 +1111,7 @@ system image; follow its prompts and the accompanying OEM documentation.
     Explanation:
 
     GET feeds the console input of a program from a text file instead
-    of the keyboard.  The infile is read in 128-byte records until a
+    of the keyboard. For native CMD programs, infile is read until a
     CTRL-Z or the end of the file.  The line read at that point is
     empty, which ends programs such as PIP; any later input comes from
     the keyboard.  The program and any programs it starts on this
@@ -1120,10 +1120,11 @@ system image; follow its prompts and the accompanying OEM documentation.
 
     E or EI echoes the characters supplied from the file to the screen.
 
-    The command-line must name a program (a .CMD file).  Commands built
+    The command-line names a .CMD, .COM or .EXE program.  Commands built
     into the shell, such as DIR, TYPE and CLS, are not redirected; use
     the program forms such as SDIR.CMD or TYPE.CMD.
-    DOS programs (.COM, .EXE) run by PC-MODE cannot be redirected.
+    DOS programs use standard input; NUL and CTRL-Z are data, and EOF
+    remains EOF. DOS line input returns an empty line at EOF.
 
     ///2EXAMPLES
     Examples:
@@ -1558,10 +1559,11 @@ by the shell and BATCH; no PAUSE.CMD is needed for this built-in.
     A       appends to outfile instead of replacing it.
     E or EO also shows the output on the screen.
 
-    The command-line must name a program (a .CMD file).  Commands built
+    The command-line names a .CMD, .COM or .EXE program.  Commands built
     into the shell, such as DIR, TYPE and CLS, are not redirected; use
     the program forms such as SDIR.CMD or TYPE.CMD.
-    DOS programs (.COM, .EXE) run by PC-MODE cannot be redirected.
+    DOS programs use standard handles 0/1 and legacy INT 21h console
+    calls. Stderr remains on the screen. BIOS/direct video is excluded.
 
     ///2EXAMPLES
     Examples:
@@ -1591,9 +1593,13 @@ RD is a shell/BATCH alias for RMDIR.CMD. See RMDIR for syntax.
     EO      echoes the output written to outfile to the screen.
     E       echoes both.
 
-    The command-line must name a program (a .CMD file).  Commands built
+    DOS NUL and CTRL-Z bytes are preserved; block reads return zero at
+    EOF. DOS append uses the true byte length. Input/output must differ.
+
+    The command-line names a .CMD, .COM or .EXE program.  Commands built
     into the shell, such as DIR, TYPE and CLS, are not redirected.
-    DOS programs (.COM, .EXE) run by PC-MODE cannot be redirected.
+    DOS programs use standard handles 0/1 and legacy INT 21h console
+    calls. Stderr remains on the screen. BIOS/direct video is excluded.
 
     ///2EXAMPLES
     Examples:

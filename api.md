@@ -18,18 +18,18 @@
 | AH | Service | Reference version | Status | Limit / behaviour | Extension |
 | --- | --- | --- | --- | --- | --- |
 | 00 | Terminate | DOS 1.x | Implemented | Legacy termination; CS must identify PSP | — |
-| 01 | Console input with echo | DOS 1.x | Implemented | Ctrl-C path implemented | — |
-| 02 | Console output | DOS 1.x | Implemented | — | — |
+| 01 | Console input with echo | DOS 1.x | Implemented | Follows standard handle 0/1; redirected status does not consume input | NEW (streams) |
+| 02 | Console output | DOS 1.x | Implemented | Follows standard handle 0/1; redirected status does not consume input | NEW (streams) |
 | 03 | AUX input | DOS 1.x | Implemented | Native AUX input with CIO ownership | — |
 | 04 | AUX output | DOS 1.x | Implemented | Native AUX output with CIO ownership | — |
 | 05 | Printer output | DOS 1.x | Implemented | Native list output; assigned printer | — |
-| 06 | Direct console I/O | DOS 1.x | Implemented | — | — |
-| 07 | Console input without echo/check | DOS 1.x | Implemented | — | — |
-| 08 | Console input without echo, Ctrl-C check | DOS 1.x | Implemented | Ctrl-C path implemented | — |
-| 09 | Print dollar-terminated string | DOS 1.x | Implemented | — | — |
-| 0A | Buffered console input | DOS 1.x | Implemented | Capacity includes CR; zero capacity returns immediately; DEL acts as Backspace; Ctrl-C path implemented | European recovery plus zero-capacity guard |
-| 0B | Console input status | DOS 1.x | Implemented | — | — |
-| 0C | Flush input and read | DOS 1.x | Implemented | AL=01h/06h/07h/08h/0Ah read selectors | — |
+| 06 | Direct console I/O | DOS 1.x | Implemented | Follows standard handle 0/1; redirected status does not consume input | NEW (streams) |
+| 07 | Console input without echo/check | DOS 1.x | Implemented | Follows standard handle 0/1; redirected status does not consume input | NEW (streams) |
+| 08 | Console input without echo, Ctrl-C check | DOS 1.x | Implemented | Follows standard handle 0/1; redirected status does not consume input | NEW (streams) |
+| 09 | Print dollar-terminated string | DOS 1.x | Implemented | Follows standard handle 0/1; redirected status does not consume input | NEW (streams) |
+| 0A | Buffered console input | DOS 1.x | Implemented | Standard handles 0/1; EOF and CR/LF line input | NEW (streams) |
+| 0B | Console input status | DOS 1.x | Implemented | Follows standard handle 0/1; redirected status does not consume input | NEW (streams) |
+| 0C | Flush input and read | DOS 1.x | Implemented | Follows standard handle 0/1; redirected status does not consume input | NEW (streams) |
 | 0D | Disk reset | DOS 1.x | Implemented | — | — |
 | 0E | Select default drive | DOS 1.x | Implemented | — | — |
 | 0F | FCB open | DOS 1.x | Implemented | FCB adapter → shared CP/M/FAT filesystem | — |
@@ -123,7 +123,7 @@ DOS 1.x FCB AL-status convention. Reserved slots are explicitly listed below.
 | Program loading | Native CLI (E0h/96h) loads native programs; the shell separately selects CMD/BAT/COM/EXE and uses the PC-MODE loader for DOS programs. DOS EXEC is a third, DOS-caller interface |
 | Write verification | Direct XIOS AL=27h (39 decimal), CH=0/1 sets additional verification, CH=FFh queries; AX=BX returns 0/1. Local extension beyond 4.1; boot-time floppy and per-volume hard-disk verification remain additive |
 | Environment | Per-console DOS environment is 1,024 bytes in this build; DOS PSP exposes its segment. SETENV.EXE edits it; this is not an extra INT E0h function |
-| Shell redirection | Handle APIs exist, but their presence does not establish working shell redirection for DOS programs; that integration remains separate |
+| Console redirection | GET/PUT/RDR support native BDOS console calls and DOS standard input/output, including legacy INT 21h calls; shell `<`, `>` and `|` parsing is not implemented |
 
 ## Graphics modes and entry points
 
@@ -295,8 +295,8 @@ Sources: [xcon1.lib](kernel/con/xcon1.lib), [xcon2.lib](kernel/con/xcon2.lib),
 | 48 | 72 | set network error mode | NET | Requires optional NET module; absent from standard images | — |
 | 49 | 73 | attach network | NET | Requires optional NET module; absent from standard images | — |
 | 4A | 74 | detach network | NET | Requires optional NET module; absent from standard images | — |
-| 4B | Execute / load program or overlay | Partial | AL=0 runs COM/EXE with inherited handles and restores parent registers, stack and DTA. AL=1 prepares a child; AL=3 loads an EXE overlay. Other selectors rejected | European recovery + NEW (EXEC lifecycle) |
-| 4C | Terminate with status | Implemented | AL=status, type 0. Releases child handle references including standard streams and restores the parent table | NEW (handle cleanup) |
+| 4B | 75 | set message buffer size | NET | Requires optional NET module; absent from standard images | — |
+| 4C | 76 | get network time and date | NET | Requires optional NET module; absent from standard images | — |
 | 4D | 77 | get network parameter table | NET | Requires optional NET module; absent from standard images | — |
 | 4E | 78 | Reserved | SUP | Illegal; error 2 | — |
 | 4F | 79 | Reserved | SUP | Illegal; error 2 | — |
@@ -387,13 +387,14 @@ This is the OEM shell/loader interface in `ms1.a86`, not an INT E0h function
 and not a DOS INT 21h service. The PCTMP entry jump at code offset 3 routes
 to `ms_func`; callers must locate their owning PCTMP and use its matching ABI.
 CL selects the operation; DS:DX is the packet for packet operations. Results
-are returned in AX/BX. The implemented selectors below are 0–8; do not probe
-beyond them (the source range guard uses the table byte length).
+are returned in AX/BX. Selectors 0–8 are historical; 9 and FFh are local
+extensions beyond CDOS 4.1/4.11. Confirm FFh before calling 9. The range guard
+now checks the number of entries; unknown selectors return FFFFh.
 
 | CL | Service | Contract / limit |
 | --- | --- | --- |
 | 0 | Cleanup | PC-MODE cleanup/reset path |
-| 1 | DOS program launch | Packet contains far pointer to opened FCB, far pointer to 134-byte CLI block, and user-zero flag; COM/EXE loader, not extension search or a shell command parser |
+| 1 | DOS program launch | Packet contains far pointer to opened FCB, far pointer to 134-byte CLI block, and user-zero flag; COM/EXE loader; EXE headers must be sector-aligned. No extension search or shell command parser |
 | 2 | Minimum memory | DX=FFFFh queries; other values set minimum memory |
 | 3 | 8087 policy | DL=FFh queries; zero/nonzero clears/sets policy bit |
 | 4 | Suspend policy | DL=FFh queries; zero/nonzero clears/sets policy bit |
@@ -401,6 +402,8 @@ beyond them (the source range guard uses the table byte length).
 | 6 | ORDER | DS:DX points to 13 bytes: byte 0 zero=set, nonzero=query; remaining 12 bytes are four three-character extensions |
 | 7 | Built-in table address | Internal table offset returned in DX; not a standalone application service |
 | 8 | Additional memory | DX=FFFFh queries; other values set additional memory |
+| 9 | DOS stream configuration (NEW) | Version-1 six-word packet: version, flags, input FCB far pointer, output FCB far pointer. Flags 1=input, 2=output, 4=append, 8=echo input, 10h=echo output. AX=0 accepted; DX=0 cancels the caller’s pending request |
+| FF | DOS stream capability (NEW) | AX=5244h, DX=1; historical kernels safely reject this selector |
 
 CDOS uses this ORDER facility. The CCP/M project's E0h/F0h SETDEF packet is
 **not present** here. Low-level DOS launch is not a synchronous spawn contract;

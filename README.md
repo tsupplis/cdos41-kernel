@@ -15,7 +15,7 @@ The assembly is based on partial 4.1 OEM sources corrected to align with Europea
 | Source rebuild | Kernel, four RSP families, boot sources and command tools |
 | Usability improvements | Command-line editing and recall, console shortcuts, paging and CLS |
 | Additional tools | ASM80, HEXCOM, Legacy CCP/M tools and floppy copy/compare commands |
-| DOS compatibility | Extended DOS APIs and inherited standard-handle ownership; DOS integration in PUT/GET/RDR is in progress |
+| DOS compatibility | Extended DOS APIs, inherited standard handles and PUT/GET/RDR console redirection for native CMD and DOS programs |
 | Date fixes | Patched native date/reporting utilities and corrected short-year input in DATE.EXE |
 
 
@@ -45,7 +45,7 @@ The current version includes:
 - Ctrl+Alt+1–4 to select consoles; Ctrl+Alt+Tab to cycle through them.
 - Ctrl+Alt+0 (top row) or Ctrl+Alt+Esc opens an installed WMENU; Ctrl+keypad-Plus remains available.
 - Optional paging for TYPE, SDIR and DIR, alongside the built-in DIR's `/P` / `[P]`.
-- CP/M-Plus-style console redirection through PUT, GET and RDR for native commands.
+- CP/M-Plus-style console redirection through PUT, GET and RDR for native and DOS programs.
 - Extra built-in CLS and SYSDISK command.
 - DEL mapped to native ERA.CMD in both the shell and BATCH to keep CP/M as the main flavour.
 - Case-insensitive FAT short names, without interpreting modern case flags as CP/M compatibility attributes.
@@ -99,7 +99,7 @@ See [the API inventory](api.md) for native, DOS, BIOS and graphics interfaces.
 HELP on the tools disk uses the imported CCP/M text as a starting point;
 the second OEM disk retains the original 4.1 help text.
 
-`PUT`, `GET` and `RDR` redirect a native program's console output, input or
+`PUT`, `GET` and `RDR` redirect a native or DOS program's console output, input or
 both, using a bracket prefix:
 
 | Command | Effect |
@@ -114,10 +114,11 @@ A>GET [KEYS.IN] PIP.CMD
 A>RDR [KEYS.IN,PIP.LOG] PIP.CMD
 ```
 
-The current tools support native `.CMD` programs using BDOS console calls.
-Use DIR.CMD or SDIR.CMD for directory capture. The shell's built-in commands,
-DOS executables, BIOS video calls and direct screen writes are outside this
-mechanism. [PUT/GET/RDR notes](commands/putget/README.md).
+Native `.CMD` programs use BDOS console calls; DOS `.COM`/`.EXE` programs
+use standard input/output, including legacy INT 21h console calls. Use
+DIR.CMD or SDIR.CMD for directory capture. Shell built-ins and direct screen
+access remain outside this interface. Details and limits are in the
+[PUT/GET/RDR notes](commands/putget/README.md).
 
 ## Distributions
 
@@ -292,7 +293,7 @@ system and the live regression checks.
 | `make check-fat-case` | FAT case-insensitive names, PIP copy/import, ERA and CP/M F4 preservation |
 | `make check-fat-batch` | FAT-hosted BAT/CMD loading, case flags, EOF forms and buffer refills |
 | `make check-sdir` | OEM/rebuilt SDIR comparison on CP/M/FAT12, directory markers/counts, options and paging |
-| `make check-redirection` | PUT capture/append, GET/RDR input, copied bytes and return to shell |
+| `make check-redirection` | Native/DOS capture, append, input/echo, binary EOF, failure recovery and return to shell |
 | `make check-aliases` | TMP/BATCH DEL execution, argument preservation and common PAUSE text |
 | `make test` | Launch PCE with system/tools disks on A:/B: |
 | `make dist` | Root-level disk images and disks.zip |

@@ -1,6 +1,6 @@
 # PUT / GET / RDR: Console I/O Redirection for Concurrent DOS 4.1
 
-Bracket-style console redirection for native programs under Concurrent DOS 4.1, imported from the CCP/M-86 project.
+Bracket-style console redirection for native CMD and DOS COM/EXE programs under Concurrent DOS 4.1, imported from the CCP/M-86 project.
 
 | Command | Effect |
 | --- | --- |
@@ -18,21 +18,48 @@ A>RDR [KEYS.IN,PIP.LOG] PIP
 
 ## Scope and limits
 
-* **Works for native `.CMD` programs.** Verified on disposable PCE floppy images: multi-record output capture, append, GET feeding a PIP copy command, RDR feeding PIP and capturing its output, exact copied bytes and return to the shell.
-* **DOS programs (`.COM`, `.EXE`) are outside this interface.** BDOS 150 (`p_cli`) launches native CMD programs. The DOS personality uses a saved kernel entry (`BDOS_PTR` in MS1), bypassing the `INT E0h` hook installed here.
-* **Shell built-ins are outside this interface**, including DIR, CLS, USER and PAUSE. Run a native command such as `DIR.CMD`, `SDIR.CMD` or `TYPE.CMD` explicitly.
-* **Only the caller's virtual console is affected.** The hook filters on the console number of the running process; it does not track descendants by `p_parent`. Any process on that console is captured while the tool runs.
-
-## DOS integration status
-
-| Component | Status |
+| Target | Redirected interface |
 | --- | --- |
-| Standard-handle ownership, duplication and normal EXEC inheritance | Implemented and tested in PCTMP |
-| Nested return context and Ctrl-C cleanup | Implemented and tested in PCTMP |
-| DOS character/string calls following standard handles | Pending |
-| PUT/GET/RDR DOS launching, bindings and echo options | Pending |
+| Native CMD | BDOS console input/output, through the existing INT E0 hook |
+| DOS COM/EXE | Standard handles 0/1, including legacy INT 21h console calls |
+| Shell built-ins, BIOS video, direct screen access, explicit CON | Outside these streams |
 
-## How it works
+Use `DIR.CMD`, `SDIR.CMD` or `TYPE.CMD` for native command capture. Command
+selection follows PCTMP ORDER; explicit extensions are honored. The DOS
+adapter searches the current location, then eligible SYS files on the system
+drive/current user or user zero. DOS support requires this project's patched
+PCTMP; the versioned capability probe safely rejects historical kernels.
+
+DOS input is byte-exact: NUL and Ctrl-Z are data, block reads return count zero
+at EOF, and buffered line input returns an empty line. CR/LF works across
+successive line reads. DOS append uses the logical byte length. Echo goes to
+the console, and stderr remains on handle 2. Descendant DOS EXEC calls inherit
+the handles and echo settings; exit restores the parent bindings. Applications
+must honor EOF. Native text-record input/append behavior is described below.
+
+The native hook filters by virtual console, so it can intercept other native
+processes sharing that console while active. DOS handles belong to the launched
+process hierarchy. Both paths keep other consoles' streams independent.
+The DOS root loader retains its historical sector-aligned EXE-header limit;
+this adapter does not extend MZ format support or add shell `<`, `>` or `|`.
+
+## DOS ownership and launch
+
+The shared `dosredir.lib` locates PCTMP and queries its ORDER table. Private
+selector FFh must return AX=5244h, DX=1 before selector 9 is used. Selector 9
+copies parsed filenames into a pending request owned by the caller's process
+descriptor; selector 1 consumes that request when launching the DOS child.
+PCTMP opens and binds files after DOS initialization, in the child's process.
+The CMD installs no hook for DOS and retains no DOS handle. The kernel keeps
+no pointer or callback into the CMD. The wrapper reacquires the console,
+performs existing PCTMP cleanup and cancels unused requests on failure.
+
+The packet and internal ownership contract are documented in
+[patches.md](../../patches.md) and [api.md](../../api.md). Kernel changes stay
+within the existing MS1/MS2 PCTMP component; no helper executable or sibling
+project is required.
+
+## Native CMD path
 
 1. `init_environment` checks BDOS 12 (BH = 11h or 14h, as SUBMIT does), saves the SYSDAT segment, raises priority one level above the parent and records the console number (BDOS 153).
 2. The bracket prefix is parsed; file names go through BDOS 152 into FCBs. Input is opened (BDOS 15). Output is deleted and created, or opened and positioned at the first `1Ah` for `A` (BDOS 35 and 33).
@@ -62,12 +89,16 @@ commands/putget/
 ├── get.a86        # GET front end
 ├── rdr.a86        # RDR front end
 ├── putget.lib     # shared engine: environment, parsing, files, hook, traps
+├── dosredir.lib   # shared DOS resolution and PCTMP launch adapter
 ├── putget.dat     # shared data buffers (one copy, included at org 100h)
 ├── putget.def     # constants; `debug equ 0` gates the BDOS call logger
 └── README.md
 ```
 
-The tools are shipped on the bootable `cdos86.img`, alongside PIP. Run `make check-redirection` at the project root for the disposable-floppy regression.
+The tools are shipped on `cdostools.img`, alongside PIP.
+`make check-redirection` runs native CMD and DOS stream/error-recovery tests on
+disposable CP/M and FAT disks. `make check-pctmp-live` also checks nested EXEC
+and Ctrl-C return. NASM builds test fixtures only; production commands use ASM86.
 
 ## 4.1 adaptation
 
@@ -76,5 +107,4 @@ The shared engine recognizes all three BDOS 6 input/status selectors: FDh
 recognized only FFh; PIP uses FDh after checking console status, so GET would
 otherwise wait on the keyboard during a copy. Output handling remains unchanged.
 
-DOS redirection would require separate integration with the DOS personality's
-console and standard-handle paths.
+The DOS adapter adds standard-handle routing without changing the native hook.
