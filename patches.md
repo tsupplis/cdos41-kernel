@@ -211,6 +211,11 @@ Console shortcuts Ctrl+Alt+1..4 and Ctrl+Alt+Tab retain their existing behavior.
 `make check-wmenu` exercises all three wake keys, hide, Abort, uninstalled
 hotkey suppression and ordinary zero input on disposable PCE media.
 
+Under PCE, `media/cdos86.cfg` sets `escape = "F12"`. PCE otherwise uses Esc as
+its magic-key prefix: Esc is swallowed and the next key release becomes an
+emulator command (for example, 0 sets CPU speed 0), so Esc/Ctrl+Alt chords
+were unreliable interactively. F12 has no XT scan code and never reaches DOS.
+
 ## SYSTAT: fixed data allocation
 
 SYSTAT uses its statically allocated data requirement, matching the OEM

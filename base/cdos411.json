@@ -625,6 +625,19 @@
           "bytes": 13056
         }
       ]
+    },
+    {
+      "name": "menu.dat",
+      "status": "restored from 4.11 image",
+      "base_sha256": "2d2e6bfe00223b59d19373e4765d5af0e5c14642619ad9910c6fd6b09350503e",
+      "references": [
+        {
+          "image": "cdos-4.11-1.img",
+          "path": "MENU.DAT",
+          "sha256": "2d2e6bfe00223b59d19373e4765d5af0e5c14642619ad9910c6fd6b09350503e",
+          "bytes": 2304
+        }
+      ]
     }
   ]
 }

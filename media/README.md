@@ -22,6 +22,9 @@ are no wildcard copies or dependencies on another project.
 
 The tools disk carries HELP.CMD and the maintained HELP.HLP.
 
+`cdos86.cfg` sets the PCE escape key to F12; PCE's default Esc prefix would
+swallow Esc and turn the following key release into an emulator command.
+
 `make check` (or `make check-media`) extracts every selected payload and
 compares all source bytes, allowing only CP/M record padding. It also checks
 327680-byte image sizes and all seven boot tracks. `make test` runs the same
