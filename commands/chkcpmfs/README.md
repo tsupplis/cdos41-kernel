@@ -17,6 +17,9 @@ filesystem lock, so concurrent writes can make its results inconsistent. This
 version does not inspect deleted directory slots, validate
 timestamp/XFCB metadata, read data sectors, identify lost blocks, or repair
 anything. Its results are limited to the directory entries BDOS exposes.
+CP/M rebuilds its allocation vector from the directory when a disk is logged
+in; there is no on-disk list of allocated-but-unreferenced data blocks. This
+checker does not compare the directory with the live in-memory vector.
 
 Run `make check` in this directory for synthetic BDOS and DMA tests. After
 building the media, `make check-live` also tests disposable CP/M and FAT images

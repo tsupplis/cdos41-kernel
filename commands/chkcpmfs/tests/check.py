@@ -44,6 +44,14 @@ def cases():
         "USER 1 FILE USER1   .TXT: BLOCK 1 IS REFERENCED MORE THAN ONCE",
         "Consistency errors: 1",
     ]
+    damaged_system = list(system)
+    damaged_extent = bytearray(damaged_system[4])
+    damaged_extent[16] = 1
+    damaged_system[4] = bytes(damaged_extent)
+    yield "crosslink-in-system", damaged_system, {}, [
+        "USER 0 FILE CCPM    .SYS: BLOCK 1 IS REFERENCED MORE THAN ONCE",
+        "Consistency errors: 1",
+    ]
     yield "sparse", [entry("SPARSE.DAT", [1, 0, 3], records=48)], {}, [
         "block references checked: 2", "Consistency errors: 0",
     ]
@@ -62,6 +70,12 @@ def cases():
         "BLOCK 9 IS RESERVED FOR THE DIRECTORY",
         "Consistency errors: 2",
     ]
+    yield "single-byte-limit", [
+        entry("LIMIT.DAT", [157, 158], records=32),
+    ], {}, [
+        "block references checked: 2", "BLOCK 158 IS OUTSIDE THE DISK",
+        "Consistency errors: 1",
+    ]
     yield "wide-blocks", [
         entry("FIRST.DAT", [300, 600], records=32, wide=True),
         entry("SECOND.DAT", [300, 601], records=32, wide=True),
@@ -77,6 +91,12 @@ def cases():
         "RECORD COUNT EXCEEDS 128",
         "RESERVED EXTENT BITS ARE SET",
         "Consistency errors: 2",
+    ]
+    yield "extent-capacity", [
+        entry("TOOBIG.DAT", [1], records=65, wide=True),
+    ], {"BSH": 3, "DSM": 600, "EXM": 0}, [
+        "RECORD COUNT EXCEEDS EXTENT ALLOCATION CAPACITY",
+        "Consistency errors: 1",
     ]
     yield "special-and-empty", [
         entry("LABEL.DAT", user=0x20),
