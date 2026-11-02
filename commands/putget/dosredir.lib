@@ -18,9 +18,7 @@ prepare_child:
     mov     order_packet,1
     mov     dx,offset order_packet
     mov     cl,6
-    CALL    pctmp_call
-    call trace_state
-    db 49
+    call    pctmp_call
     or      ax,ax
     jnz     prepare_native
     mov     si,offset clicb_cmd
@@ -94,9 +92,7 @@ prepare_dos:
     ; FFh is safely rejected by historical translators. Never call the new
     ; function 9 until its exact signature and packet version are confirmed.
     mov     cl,0ffh
-    CALL    pctmp_call
-    call trace_state
-    db 50
+    call    pctmp_call
     cmp     ax,5244h
     jne     prepare_close_failed
     cmp     dx,1
@@ -247,51 +243,49 @@ execute_dos_child:
     mov     stream_output_seg,ax
     mov     launch_fcb_seg,ax
     mov     launch_clicb_seg,ax
-    mov ax,word ptr stream_packet
-    call trace_state
-    db 87
-    mov ax,stream_flags
-    call trace_state
-    db 87
-    mov ax,word ptr source_fcb
-    call trace_state
-    db 87
-    mov ax,word ptr source_fcb+2
-    call trace_state
-    db 87
-    mov ax,word ptr target_fcb
-    call trace_state
-    db 87
-    mov ax,word ptr target_fcb+2
-    call trace_state
-    db 87
     mov     dx,offset stream_packet
     mov     cl,9
-    CALL    pctmp_call
+    call    pctmp_call
+    push ax
+    mov es,word ptr pctmp_entry+2
+    mov bx,20644
+    mov ax,es:[bx]
     call trace_state
-    db 51
+    db 83
+    mov es,ax
+    mov bx,3564
+    mov ax,es:[bx]
+    call trace_state
+    db 68
+    mov bx,5785
+    mov ax,es:[bx]
+    call trace_state
+    db 70
+    mov bx,5788
+    mov ax,es:[bx]
+    call trace_state
+    db 73
+    mov bx,5803
+    mov ax,es:[bx]
+    call trace_state
+    db 79
+    pop ax
     or      ax,ax
     jnz     dos_close_failed
     mov     dx,offset launch_packet
     mov     cl,1
-    CALL    pctmp_call
-    call trace_state
-    db 52
+    call    pctmp_call
     push    ax
     or      ax,ax
     jnz     dos_cancel
     mov     cl,f_conattach
     int     bdos
     xor     cx,cx
-    CALL    pctmp_call
-    call trace_state
-    db 53
+    call    pctmp_call
  dos_cancel:
     xor     dx,dx
     mov     cl,9
-    CALL    pctmp_call
-    call trace_state
-    db 54
+    call    pctmp_call
     call    restore_user
     pop     ax
     or      ax,ax
