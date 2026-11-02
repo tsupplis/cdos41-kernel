@@ -65,7 +65,7 @@
 | 2D | Set time | DOS 1.x | Implemented | — | — |
 | 2E | Set verify-on-write | DOS 1.x | Implemented | AL=0/1 disables/enables additional system-wide physical write verification | NEW |
 | 2F | Get DTA | DOS 2.0 | Implemented | ES:BX=current DTA | — |
-| 30 | DOS version query | DOS 2.0 | Implemented | AX=0002h: DOS 2.0, not native CDOS version 4.1; other saved registers unchanged | — |
+| 30 | DOS version query | DOS 2.0 | Implemented | AX=0002h, BH=FFh (generic OEM), BL:CX=0 (serial); other saved registers preserved. Native CDOS version is separate | NEW (complete register returns) |
 
 
 ## INT 21h — DOS 2.x services
@@ -90,7 +90,7 @@ DOS 1.x FCB AL-status convention. Reserved slots are explicitly listed below.
 | 41 | Delete pathname | Implemented | Path parsing followed by native file deletion | — |
 | 42 | Seek handle | Implemented | Origins 0/1/2: beginning/current/end | — |
 | 43 | Get / set file attributes | Implemented | Translated native/FAT attributes; media-dependent semantics | — |
-| 44 | IOCTL | Partial | AL=0 validates the handle and describes its target; AL=6/7 queries input/output readiness. Files report EOF; CON/NUL/AUX/printer use device status. Other selectors return AX=1 | NEW |
+| 44 | IOCTL | Partial | AL=0 returns device/file information; AL=1 sets CON raw/cooked mode via DL bit 5 (DH must be zero). AH=3Fh/40h honor the mode; DUP/EXEC share it. AL=6/7 queries readiness. Other selectors/devices for AL=1 return AX=1 | NEW |
 | 45 / 46 | Duplicate / force duplicate handle | Implemented | Shared position and counted ownership; checked targets, self/alias duplication and close failures. Standard handles can be rebound | NEW (ownership and validation) |
 | 47 | Get current directory | Implemented | Reconstructs FAT path using the temporary P: directory mapping | — |
 | 48 / 49 / 4A | Allocate / free / resize memory | Implemented | DOS memory descriptor blocks, PSP ownership and largest-available-block errors | — |

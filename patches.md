@@ -865,3 +865,47 @@ redirection, append/echo and stderr isolation. Existing assembled DOS, EXEC
 and critical-error regressions pass; every packaged payload, boot track
 and image size verifies. Allocation arithmetic checks image plus loader,
 MINALLOC and ADDMEM for overflow before requesting memory.
+
+## DOS 2.x: complete version returns and CON raw/cooked handle I/O
+
+PCTMP `ms2.a86` function 30h still reports DOS 2.0 (AX=0002h), but now
+initializes the remaining version-query outputs: BH=FFh is the generic OEM
+value, and BL:CX=0 is the unspecified serial number. BX/CX no longer contain
+arbitrary caller inputs. Other saved registers remain intact. This does not
+change the native CDOS version or claim DOS 2.11 compatibility.
+
+IOCTL 4401h now sets/clears the raw-mode bit for an open CON handle. DH must
+be zero. Only DL bit 5 is writable; device identity and readiness bits remain
+derived. Invalid handles return 6; files, non-CON devices and nonzero DH
+return 1. IOCTL 4400h reflects the selected mode. IOCTL remains partial:
+control-string operations and raw-mode setters for other devices are absent.
+CON matching checks its complete name, distinguishing COM1; COM1 readiness
+uses the same native AUX status path as AUX.
+
+The internal raw bit belongs to the existing six-byte HCB. Duplicate handles
+and EXEC inheritance therefore share it without a new table or changed HCB
+layout. New root DOS launches clear the standard handles' raw bits. Freshly
+opened handles also start cooked. Switching mode does not discard an existing
+cooked input line; raw reads bypass that buffer until cooked mode resumes.
+
+AH=3Fh raw CON reads use PCTMP's native keyboard/extended-key state directly:
+no echo, line editing, Ctrl-Z EOF, or Ctrl-C filtering. They return the requested
+byte count. AH=40h raw CON writes use the existing native BDOS 50/BIOS 4 raw
+console bridge, so FDh/FEh/FFh are output bytes rather than BDOS 6 selectors.
+Raw reads/writes do not change native DMA. Zero-length character-device calls
+return immediately without opening a device or waiting for input. The existing
+cooked path is retained, and DOS legacy character calls retain their own
+semantics; the mode extension applies to handle I/O.
+
+Extended BREAK polling bypasses raw CON handle reads/writes even with BREAK
+checking enabled; other DOS calls retain their existing checks. No global
+console mode, BDOS change, XIOS change or helper command is required. Native
+console rendering still interprets its normal display controls.
+
+`tools/dos_console_check.py` executes the assembled routines with separate
+code/data segments: version registers, mode validation, complete device names,
+zero and bounded transfers, control/high bytes, buffer guards and BREAK routing.
+`tools/dos_console_live_check.py` drives disposable PCE media through real
+keys: raw Ctrl-C/Z/Backspace/CR, an extended arrow key, no echo, FDh-FFh output,
+cooked editing after reset, DUP/EXEC sharing, and cooked defaults in the next
+program. The source fixtures are in `kernel/rsp3/tests/dos_raw*.asm`.

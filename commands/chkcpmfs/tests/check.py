@@ -23,7 +23,7 @@ def entry(name, blocks=(), *, user=0, extent=0, records=0, module=0, wide=False)
     return bytes(result)
 
 
-def cases():
+def cases(version):
     system = [
         entry("CCPM.SYS", range(start, start + count), extent=extent, records=rc)
         for start, count, extent, rc in (
@@ -111,6 +111,49 @@ def cases():
         "Directory entries scanned: 0  block references checked: 0",
         "Consistency errors: 0",
     ]
+    yield "duplicate-extent", [
+        entry("SAME.DAT", [1], records=1),
+        entry("SAME.DAT", [2], records=1),
+    ], {}, [
+        "DUPLICATE EXTENT GROUP 0",
+        "Consistency errors: 1",
+    ]
+    yield "duplicate-extent-exm", [
+        entry("MASKED.DAT", [1], extent=0, records=128),
+        entry("MASKED.DAT", [2], extent=1, records=1),
+    ], {"EXM": 1}, [
+        "DUPLICATE EXTENT GROUP 0",
+        "Consistency errors: 1",
+    ]
+    yield "distinct-extent-groups-exm", [
+        entry("MASKED.DAT", [1], extent=0, records=128),
+        entry("MASKED.DAT", [2], extent=2, records=1),
+    ], {"EXM": 1}, [
+        "Consistency errors: 0",
+    ]
+    yield "same-name-different-users", [
+        entry("USERFILE.DAT", [1], user=0, records=1),
+        entry("USERFILE.DAT", [2], user=1, records=1),
+    ], {}, [
+        "Directory entries scanned: 2  block references checked: 2",
+        "Consistency errors: 0",
+    ]
+    readonly_name = bytearray(entry("ATTR.DAT", [2], records=1))
+    readonly_name[9] |= 0x80
+    yield "same-extent-ignore-attributes", [
+        entry("ATTR.DAT", [1], records=1),
+        bytes(readonly_name),
+    ], {}, [
+        "DUPLICATE EXTENT GROUP 0",
+        "Consistency errors: 1",
+    ]
+    yield "directory-table-limit", [], {
+        "DRM": 2048, "EXPECTED_SEARCHES": 0,
+        "EXPECTED_DMA_SETS": 1, "EXPECTED_RO_QUERIES": 0,
+        "EXPECTED_PROTECTS": 0, "EXPECTED_RESETS": 0,
+        "EXPECTED_FINAL_RO": 0, "EXPECTED_USER_SETS": 0,
+        "EXPECTED_USER_MASK": 0,
+    }, ["ERROR: directory exceeds duplicate-check capacity; scan stopped."]
     yield "write-protection-restored", [
         entry("SAFE.DAT", [1], records=1),
     ], {}, [
@@ -132,41 +175,57 @@ def cases():
     yield "write-protection-failure", [], {
         "PROTECT_FAIL": 1, "EXPECTED_RO_QUERIES": 2,
         "EXPECTED_PROTECTS": 1, "EXPECTED_RESETS": 0,
-        "EXPECTED_SEARCHES": 1, "EXPECTED_DMA_SETS": 3,
+        "EXPECTED_SEARCHES": 0, "EXPECTED_DMA_SETS": 1,
         "EXPECTED_FINAL_RO": 0,
+        "EXPECTED_USER_SETS": 0, "EXPECTED_USER_MASK": 0,
     }, [
         "ERROR: could not establish drive write protection; scan stopped.",
+        ("Check drive status with STAT; use Ctrl-C if needed."
+         if (version & 0xff) < 0x30 else
+         "Check drive status with SHOW; use SET A: [RW] if needed."),
     ]
-    yield "preserve-ro-on-protection-error", [], {
-        "PROTECT_FAIL": 2, "EXPECTED_RO_QUERIES": 2,
-        "EXPECTED_PROTECTS": 1, "EXPECTED_RESETS": 0,
-        "EXPECTED_SEARCHES": 1, "EXPECTED_DMA_SETS": 3,
-        "EXPECTED_FINAL_RO": 1,
+    yield "trust-protection-vector-over-status", [], {
+        "PROTECT_FAIL": 2, "EXPECTED_RO_QUERIES": 3,
+        "EXPECTED_PROTECTS": 1, "EXPECTED_RESETS": 1,
+        "EXPECTED_SEARCHES": 16, "EXPECTED_DMA_SETS": 2,
+        "EXPECTED_FINAL_RO": 0,
+        "EXPECTED_USER_SETS": 17, "EXPECTED_USER_MASK": 65535,
     }, [
-        "ERROR: could not establish drive write protection; scan stopped.",
-        "Check drive status with SHOW; use SET A: [RW] if needed.",
+        "No inconsistencies found in checked entries.",
     ]
     yield "write-protection-restore-failure", [
         entry("SAFE.DAT", [1], records=1),
     ], {
         "RESTORE_FAIL": 1, "EXPECTED_FINAL_RO": 1,
     }, [
-        "ERROR: drive write protection could not be restored; use SET A: [RW].",
-        "Scan completed with a drive protection error.",
+        ("ERROR: drive write protection could not be restored; use Ctrl-C."
+         if (version & 0xff) < 0x30 else
+         "ERROR: drive write protection could not be restored; use SET A: [RW]."),
+        "Scan completed with a state restoration error.",
     ]
-    yield "dos-media", [], {
-        "DOS_MEDIA": 1, "EXPECTED_SEARCHES": 1, "EXPECTED_DMA_SETS": 3,
-        "EXPECTED_RO_QUERIES": 0, "EXPECTED_PROTECTS": 0,
-        "EXPECTED_RESETS": 0,
-    }, ["DOS media detected; no CP/M filesystem scan performed."]
+    if (version & 0xff) >= 0x41:
+        yield "dos-media", [], {
+            "DOS_MEDIA": 1, "EXPECTED_SEARCHES": 0, "EXPECTED_DMA_SETS": 1,
+            "EXPECTED_RO_QUERIES": 0, "EXPECTED_PROTECTS": 0,
+            "EXPECTED_RESETS": 0, "EXPECTED_USER_SETS": 0,
+            "EXPECTED_USER_MASK": 0,
+        }, ["DOS media detected; no CP/M filesystem scan performed."]
+    else:
+        yield "dos-probe-gated", [
+            entry("SAFE.DAT", [1], records=1),
+        ], {"DOS_MEDIA": 1}, [
+            "Directory entries scanned: 1  block references checked: 1",
+            "Consistency errors: 0",
+        ]
     yield "unsupported-dpb", [], {
-        "BSH": 8, "EXPECTED_SEARCHES": 1, "EXPECTED_DMA_SETS": 3,
+        "BSH": 8, "EXPECTED_SEARCHES": 0, "EXPECTED_DMA_SETS": 1,
         "EXPECTED_RO_QUERIES": 0, "EXPECTED_PROTECTS": 0,
-        "EXPECTED_RESETS": 0,
+        "EXPECTED_RESETS": 0, "EXPECTED_USER_SETS": 0,
+        "EXPECTED_USER_MASK": 0,
     }, ["ERROR: unsupported DPB block shift; scan stopped."]
 
 
-def run_case(folder, image, name, entries, overrides, expected):
+def run_case(folder, image, version, name, entries, overrides, expected):
     assert image[0] == 1 and image[9] == 2, "unexpected CMD segment layout"
     code_size = struct.unpack_from("<H", image, 1)[0] * 16
     data_size = struct.unpack_from("<H", image, 10)[0] * 16
@@ -179,13 +238,19 @@ def run_case(folder, image, name, entries, overrides, expected):
     (folder / "directory.bin").write_bytes(directory)
     settings = {
         "DIR_ENTRIES": len(entries), "BSH": 4, "EXM": 1, "DSM": 157,
+        "DRM": 63,
         "AL0": 0x80, "AL1": 0, "DOS_MEDIA": 0, "INITIAL_DMA": 0x345,
-        "EXPECTED_SEARCHES": 2, "EXPECTED_DMA_SETS": 4,
+        "BDOS_VERSION": version, "EXPECTED_SEARCHES": 16, "EXPECTED_DMA_SETS": 2,
         "INITIAL_RO": 0, "PROTECT_FAIL": 0, "RESTORE_FAIL": 0,
         "EXPECTED_RO_QUERIES": 3, "EXPECTED_PROTECTS": 1,
         "EXPECTED_RESETS": 1, "EXPECTED_FINAL_RO": 0,
+        "INITIAL_USER": 5, "EXPECTED_USER_SETS": 17,
+        "EXPECTED_USER_MASK": 65535,
     }
     settings.update(overrides)
+    if (version & 0xff) >= 0x41:
+        settings["EXPECTED_SEARCHES"] += 1
+        settings["EXPECTED_DMA_SETS"] += 2
     (folder / "case.inc").write_text(
         "".join(f"%define {key} {value}\n" for key, value in settings.items()))
     subprocess.run(
@@ -203,7 +268,7 @@ def run_case(folder, image, name, entries, overrides, expected):
         assert text in output, (name, text, output)
     if "Consistency errors: 0" in expected:
         assert "ERROR:" not in output, (name, output)
-    if not overrides.get("DOS_MEDIA") and overrides.get("BSH", 4) <= 7:
+    if not (settings["DOS_MEDIA"] and (version & 0xff) >= 0x41) and settings["BSH"] <= 7:
         assert "skipped" not in output.lower(), (name, output)
     return output
 
@@ -213,10 +278,11 @@ def main():
     with tempfile.TemporaryDirectory(prefix="chkcpmfs-bdos-") as directory:
         folder = Path(directory)
         total = 0
-        for name, entries, overrides, expected in cases():
-            run_case(folder, image, name, entries, overrides, expected)
-            total += 1
-    print(f"PASS: {total} CHKCPMFS synthetic BDOS and DMA cases")
+        for version in (0x0022, 0x1431, 0x1441):
+            for name, entries, overrides, expected in cases(version):
+                run_case(folder, image, version, name, entries, overrides, expected)
+                total += 1
+    print(f"PASS: {total} CHKCPMFS synthetic BDOS and DMA cases across three OS versions")
 
 
 if __name__ == "__main__":

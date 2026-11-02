@@ -21,7 +21,7 @@ def check():
  mov word [0f804h],0
 '''
     count = 0
-    for kind in ['disk', 'CON', 'NUL', 'AUX', 'LPT1']:
+    for kind in ['disk', 'CON', 'NUL', 'AUX', 'COM1', 'LPT1']:
         for function in [0, 6, 7, 255]:
             for ready in [False, True]:
                 code = bytearray(original)
@@ -40,6 +40,7 @@ def check():
  mov word [0f123h],0
  mov byte [0f100h],2
 '''
+                body += 'mov byte [0f104h],32\n'  # parsed FCB names are space padded
                 for i, byte in enumerate(kind.encode()):
                     body += f'mov byte [{0xf101+i}],{byte}\n'
                 body += 'call far [cs:target]\n'

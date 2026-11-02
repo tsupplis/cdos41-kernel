@@ -20,6 +20,10 @@ boot:
 media: kernel boot
 	$(MAKE) -C media all
 
+.PHONY: chkcpmfs-live-images
+chkcpmfs-live-images: kernel boot
+	$(MAKE) -C media cdos86.img
+
 xios-alt:
 	$(MAKE) -C kernel xios-alt
 
@@ -33,6 +37,7 @@ check: all
 	python3 tools/pctmp_io_check.py
 	python3 tools/dos_stamp_check.py
 	python3 tools/dos_api_check.py
+	python3 tools/dos_console_check.py
 	python3 tools/dos_handles_check.py
 	python3 tools/dos_redirection_config_check.py
 	python3 tools/fat_recovery_check.py
@@ -147,6 +152,7 @@ check-historical: kernel
 	python3 tools/pctmp_io_check.py
 	python3 tools/dos_stamp_check.py
 	python3 tools/dos_api_check.py
+	python3 tools/dos_console_check.py
 	python3 tools/dos_handles_check.py
 	python3 tools/dos_redirection_config_check.py
 	python3 tools/fat_recovery_check.py
@@ -159,6 +165,7 @@ check-pctmp-live: all
 	python3 tools/pctmp_live_check.py
 	python3 tools/dos_stamp_live_check.py
 	python3 tools/dos_api_live_check.py
+	python3 tools/dos_console_live_check.py
 	python3 tools/dos_handles_live_check.py
 
 # Compare original and rebuilt commands on disposable CP/M and FAT media.
@@ -179,3 +186,9 @@ check-retcode: media
 .PHONY: check-exe
 check-exe: all
 	python3 tools/exe_header_check.py
+
+# Version-query and CON raw/cooked handle semantics; disposable PCE media.
+.PHONY: check-dos-console
+check-dos-console: all
+	python3 tools/dos_console_check.py
+	python3 tools/dos_console_live_check.py

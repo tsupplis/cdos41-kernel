@@ -82,6 +82,8 @@ TRUE		EQU	NOT FALSE
 	public check_error,check_error_again,critical_cleanup
 	public backdoor,getstat,ms_commit,printer_ready
 	public stream_read_byte,stream_write_byte,native_putchar
+	public native_conin,native_rawout
+	extrn raw_console_handle:near
 	extrn standard_stream_mask:near,standard_input_byte:near
 	extrn standard_input_status:near,standard_output_byte:near
 	extrn standard_line_begin:near,standard_line_end:near
@@ -2523,6 +2525,12 @@ not_terminate:
 	cmp ah,7 ! je break_no_poll
 	cmp ah,33h ! je break_no_poll
 	cmp ah,59h ! je break_no_poll
+	cmp ah,3fh ! je break_check_raw_handle
+	cmp ah,40h ! jne break_poll_enabled
+break_check_raw_handle:
+	call raw_console_handle		; raw handle I/O must not consume Ctrl-C
+	jc break_no_poll
+break_poll_enabled:
 	sti				; native console polling may yield
 	call extended_break_poll
 	cli
@@ -3422,6 +3430,7 @@ conin:
 conin_stream_done:
 	ret
 conin_console:
+native_conin:
 ;----
 					;read console character to al
 	mov ax,ros_char
@@ -3890,6 +3899,22 @@ native_putchar:
 	mov cl,FRAWIO
 	call bdos
 	pop cx
+	ret
+
+
+; Native raw console output through BDOS 50/BIOS 4. Unlike BDOS 6,
+; this bridge accepts FDh/FEh/FFh as output bytes, never input selectors.
+; CL=byte; preserve the handle loop's registers and resident segment.
+native_rawout:
+	push ax ! push bx ! push cx ! push dx ! push si ! push di ! push es
+	mov bfcb,4
+	mov bfcb+1,cl
+	mov bfcb+2,0
+	mov word ptr bfcb+3,0
+	lea dx,bfcb
+	mov cl,FBIOS_CALL
+	call bdos
+	pop es ! pop di ! pop si ! pop dx ! pop cx ! pop bx ! pop ax
 	ret
 
 

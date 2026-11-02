@@ -15,7 +15,7 @@ The assembly is based on partial 4.1 OEM sources corrected to align with Europea
 | Source rebuild | Kernel, four RSP families, boot sources and command tools |
 | Usability improvements | Command-line editing and recall, console shortcuts, paging and CLS |
 | Additional tools | ASM80, HEXCOM, Legacy CCP/M tools and floppy copy/compare commands |
-| DOS compatibility | Extended DOS APIs, inherited standard handles and PUT/GET/RDR console redirection for native CMD and DOS programs |
+| DOS compatibility | Extended DOS APIs, CON raw/cooked handle I/O, inherited standard handles and PUT/GET/RDR redirection for native CMD and DOS programs |
 | Date fixes | Patched native date/reporting utilities and corrected short-year input in DATE.EXE |
 
 
@@ -193,7 +193,7 @@ release-image provenance. Details are in `base/cdos411.json`.
 | `asm86` | 8086 assembler | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool |
 | `batch` | Run BAT command files | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Equivalent |
 | `chdir / mkdir` | Change or create directories | 4.11 | Recompiled from CDOS 4.1; shared D.A86 implementation | Byte-identical |
-| `chkcpmfs` | Read-only CP/M directory allocation consistency check | - | New PL/M-86 checker using the CDOS BDOS interface | Additional tool |
+| `chkcpmfs` | Read-only CP/M directory allocation consistency check | - | New shared PL/M-86 checker for CDOS, CCP/M-86 and CP/M-86 | Additional tool |
 | `rmdir` | Remove directories | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Equivalent |
 | `chset` | Inspect or change CMD header flags | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Behavior tested |
 | `cls` | Clear the terminal screen | - | New; TMP built-in; VT52 ESC-E | Additional tool |

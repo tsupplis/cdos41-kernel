@@ -52,4 +52,5 @@ check-bdos: all
 	python3 tests/check.py
 
 check-live: all
+	$(MAKE) -C ../.. chkcpmfs-live-images
 	python3 tests/live.py
