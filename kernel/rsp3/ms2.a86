@@ -20,8 +20,6 @@ pagesize 72					; Apr 29, 1985
 	cseg
 	public ms2_critical_error,restore_dta_state,restore_pdrive_state
 	extrn check_error:near,check_error_again:near,critical_cleanup:near
-	extrn in_int24_flag:byte,dos1_call:byte
-	extrn critical_ss:word,critical_sp:word,ms_ss:word,ms_sp:word,RET_AX:word
 	public	get_fcb_directory,set_fcb_directory
 	public	ms2_func_entry		; called from ms1 Int_21
 	public	ms2_terminate		; for memory and handle cleanup
@@ -31,7 +29,6 @@ pagesize 72					; Apr 29, 1985
 	public standard_stream_mask,standard_input_byte,standard_input_status
 	public standard_output_byte,standard_line_begin,standard_line_end
 	public ms2_redir_config,ms2_redir_launch,ms2_redir_apply,redir_active_flags
-	extrn cli_ds:word
 	extrn check_dos_media_fcb:near
 	extrn	convert_date:near	; dos to cpm date
 	extrn	convert_time:near	;   and time conversion
@@ -40,6 +37,10 @@ pagesize 72					; Apr 29, 1985
 ;	***  Shared Variables  ***
 
 	dseg
+; Shared data must be declared in DSEG: CSEG would select CS overrides.
+	extrn in_int24_flag:byte,dos1_call:byte
+	extrn critical_ss:word,critical_sp:word,ms_ss:word,ms_sp:word,RET_AX:word
+	extrn cli_ds:word
 	extrn	sysdat:word		; for faster proc desc
 	extrn	ms_dmaadr:word		; this makes it easier to
 	extrn	ms_dmabase:word		;   return these in func 2F

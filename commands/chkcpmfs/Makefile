@@ -29,7 +29,7 @@ chkcpmfs.cmd: chkcpmfs.h86 Makefile
 chkcpmfs.loc: chkcpmfs.obj scd.obj Makefile
 	$(INTEL_LINK86) scd.obj, chkcpmfs.obj to chkcpmfs.lnk
 	$(INTEL_LOC86) chkcpmfs.lnk 'od(sm(code,dats,data,stack,const))' \
-		'ad(sm(code(0),dats(10000h)))' 'ss(stack(+32))' to chkcpmfs.loc
+		'ad(sm(code(0),dats(10000h)))' 'ss(stack(+128))' to chkcpmfs.loc
 
 %.h86: %.loc Makefile
 	$(INTEL_OH86) $<

@@ -86,10 +86,7 @@ TRUE		EQU	NOT FALSE
 	extrn standard_input_status:near,standard_output_byte:near
 	extrn standard_line_begin:near,standard_line_end:near
 	extrn ms2_redir_config:near,ms2_redir_launch:near,ms2_redir_apply:near
-	extrn redir_active_flags:word
 	public cli_ds
-	extrn ctbr_state:byte,dos_internal:byte
-	extrn dos_error_code:word,dos_critical_code:word
 	public in_int24_flag,critical_ss,critical_sp,dos1_call
 	public ms_ss,ms_sp,RET_AX
 	extrn ms2_critical_error:near,restore_dta_state:near,restore_pdrive_state:near
@@ -7963,6 +7960,10 @@ dayfile_msg	db	' (User 0) PC-MODE',CR,LF
 eject
 
 		DSEG	PARA		; alignment needed for environment
+; Shared data must be declared in DSEG: CSEG would select CS overrides.
+	extrn redir_active_flags:word
+	extrn ctbr_state:byte,dos_internal:byte
+	extrn dos_error_code:word,dos_critical_code:word
 
 	public	sysdat			; for grabbing process desc
 	public	ms_dmaadr		; to speed up setting

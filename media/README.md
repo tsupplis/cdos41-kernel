@@ -10,11 +10,11 @@ disks contain CCPM.SYS; the remaining disks are data-only.
 | --- | --- | --- |
 | cdos86.img | Yes | Kernel, BATCH, SYSDISK, ERA/ERAQ, CHDIR/MKDIR/RMDIR, REN, DATE, SDIR, SHOW, SET, SUBMIT, TYPE, DIR, ED, STOP and PIP. |
 | cdostools.img | No | ASM80/ASM86, DDT86, GENCMD, GENCCPM, HEXCOM, HELP/HLP, SYSTAT, CHSET, GENLDR, WINDOW/WMENU, PUT/GET/RDR and PIP. |
-| cdosmaint.img | Yes | Kernel, SYSDISK, ERA, DSKMAINT, DCOPY, HDMAINT, INITDIR and CHKCPMFS, plus PIP. |
+| cdosmaint.img | Yes | Kernel, SYSDISK, ERA, DSKMAINT, DCOPY, HDMAINT and INITDIR, plus PIP. |
 | cdosmenu.img | No | SPL, PRINT, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP, menu/terminal data, window BAT examples, sample text and PIP. |
 | cdosdos.img | No | COPY.EXE, DATE.EXE, ERASE.EXE, PATH.EXE, TIME.EXE, REN.EXE, SETENV.EXE, LOADCCPM.COM and REDOS.COM, plus PIP. |
 | cdosextras.img | No | BACKREST commands, CARDFILE, DRTALK and their support files, plus PIP. |
-| cdosadmin.img | No | FUNCTION, DCOMP, SETPORT, SETUP, STOP, N with NATIONAL.MSG, FM with FM.CFG and TERM.DAT, plus PIP. |
+| cdosadmin.img | No | FUNCTION, DCOMP, SETPORT, SETUP, STOP, CHKCPMFS, N with NATIONAL.MSG, FM with FM.CFG and TERM.DAT, plus PIP. |
 
 Rebuilt command outputs are used wherever available. Remaining original
 binaries and data are explicit base/ prerequisites in the Makefile; there

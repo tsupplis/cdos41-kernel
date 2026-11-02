@@ -253,7 +253,27 @@ plmstart: procedure public;
             entry$user = dirbuf(dir$offset);
             if entry$user <= 15 and entry$user = scan$user then do;
                 file$count = file$count + 1;
-                call check$entry;
+                if dirbuf(dir$offset + 1) = 'C' and
+                   dirbuf(dir$offset + 2) = 'C' and
+                   dirbuf(dir$offset + 3) = 'P' and
+                   dirbuf(dir$offset + 4) = 'M' then do;
+                    call print$string(.('DBG slot/user $'));
+                    call decimal(dcnt);
+                    call put('/');
+                    call decimal(entry$user);
+                    call print$string(.(' RC/EX/S2 $'));
+                    call decimal(dirbuf(dir$offset + 15));
+                    call put('/');
+                    call decimal(dirbuf(dir$offset + 12));
+                    call put('/');
+                    call decimal(dirbuf(dir$offset + 14));
+                    call print$string(.(' blocks $'));
+                    do i = 16 to 31;
+                        call put(' ');
+                        call decimal(dirbuf(dir$offset + i));
+                    end;
+                    call newline;
+                end;
             end;
             dcnt = mon2(18,0);
         end;

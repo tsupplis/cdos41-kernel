@@ -24,7 +24,7 @@ TOOLS_COMMANDS = ../commands/putget/put.cmd ../commands/putget/get.cmd ../comman
 
 MAINT_COMMANDS = ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
     ../commands/dskmaint/dskmaint.cmd ../commands/disk/dcopy.cmd ../commands/hdmaint/hdmaint.cmd \
-    ../commands/initdir/initdir.cmd ../commands/chkcpmfs/chkcpmfs.cmd
+    ../commands/initdir/initdir.cmd
 
 MENU_COMMANDS = ../commands/spl/spl.cmd ../commands/print/print.cmd ../commands/dredix/dredix.cmd ../commands/copymenu/copymenu.cmd ../commands/editmenu/editmenu.cmd \
     ../commands/printmgr/printmgr.cmd ../commands/dsp/dsp.cmd ../base/term.dat \
@@ -47,7 +47,7 @@ ADMIN_COMMANDS = ../commands/function/function.cmd ../commands/disk/dcomp.cmd \
     ../commands/n/n.cmd ../base/national.msg \
     ../commands/setport/setport.cmd ../commands/setup/setup.cmd \
     ../commands/stop/stop.cmd \
-    ../extra/fm.cmd ../extra/fm.cfg ../base/term.dat
+    ../commands/chkcpmfs/chkcpmfs.cmd ../extra/fm.cmd ../extra/fm.cfg ../base/term.dat
 
 .PHONY: all check check-media check-pce test clean
 .DELETE_ON_ERROR:

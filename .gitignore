@@ -23,6 +23,7 @@
 **/*.raw
 /dist/
 /media/*.img
+/media/*.tmp
 !/media/base.img
 *.zip
 

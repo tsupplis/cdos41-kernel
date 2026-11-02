@@ -246,30 +246,6 @@ execute_dos_child:
     mov     dx,offset stream_packet
     mov     cl,9
     call    pctmp_call
-    push ax
-    mov es,word ptr pctmp_entry+2
-    mov bx,20644
-    mov ax,es:[bx]
-    call trace_state
-    db 83
-    mov es,ax
-    mov bx,3564
-    mov ax,es:[bx]
-    call trace_state
-    db 68
-    mov bx,5785
-    mov ax,es:[bx]
-    call trace_state
-    db 70
-    mov bx,5788
-    mov ax,es:[bx]
-    call trace_state
-    db 73
-    mov bx,5803
-    mov ax,es:[bx]
-    call trace_state
-    db 79
-    pop ax
     or      ax,ax
     jnz     dos_close_failed
     mov     dx,offset launch_packet
@@ -299,60 +275,4 @@ execute_dos_child:
     call    restore_user
  dos_failed:
     stc
-    ret
-
-trace_state:
-    pushf
-    push ax
-    push bx
-    push cx
-    push dx
-    push si
-    push di
-    push bp
-    push ds
-    push es
-    mov bp,sp
-    mov bx,ss:20[bp]
-    mov dl,cs:[bx]
-    inc word ptr 20[bp]
-    mov cl,6
-    int 0e0h
-    mov ax,ss:16[bp]
-    call trace_hex
-    mov ax,ds
-    call trace_hex
-    mov dl,' '
-    mov cl,6
-    int 0e0h
-    pop es
-    pop ds
-    pop bp
-    pop di
-    pop si
-    pop dx
-    pop cx
-    pop bx
-    pop ax
-    popf
-    ret
-trace_hex:
-    mov bx,ax
-    mov si,4
-trace_hex_loop:
-    mov cl,4
-    rol bx,cl
-    mov dl,bl
-    and dl,15
-    add dl,'0'
-    cmp dl,'9'
-    jbe trace_hex_digit
-    add dl,7
-trace_hex_digit:
-    mov cl,6
-    push bx
-    int 0e0h
-    pop bx
-    dec si
-    jnz trace_hex_loop
     ret
