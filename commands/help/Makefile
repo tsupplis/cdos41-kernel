@@ -1,4 +1,5 @@
 # HELP — Intel PL/M-86 / RASM86 build.
+# The indexed database (help.hlp) is built by ../helphlp.
 # all builds local outputs; check validates them; clean removes generated files.
 
 CMDINFO=cmdinfo
@@ -7,13 +8,12 @@ LINK86=pcdev_linkcmd
 INTEL_PLM86=intel_plm86
 
 TOOLS=help.cmd
-DATA=help.hlp
 OBJECTS=scd3.obj help3.obj
 
 .PHONY: all check clean
 .DELETE_ON_ERROR:
 
-all: $(TOOLS) $(DATA)
+all: $(TOOLS)
 check: all
 	@set -e; for f in $(TOOLS); do $(CMDINFO) $$f; done
 
@@ -32,7 +32,7 @@ $(OBJECTS): $(LOCAL_INCLUDES) Makefile
 
 # Remove generated outputs only; preserve sources and reference files.
 clean:
-	rm -f help.hlp *.sys *.loc *.cmd *.obj *.h86 *.hex *.sym *.lin *.lst *.prn *.log
+	rm -f *.sys *.loc *.cmd *.obj *.h86 *.hex *.sym *.lin *.lst *.prn *.log
 	rm -f *.mp? *.lnk *.map *.exe *.com
 
 help.cmd: $(OBJECTS) Makefile
@@ -41,12 +41,3 @@ help.cmd: $(OBJECTS) Makefile
 	@test -s $@
 	$(CMDINFO) $@
 
-# Same native HELP [C] indexer and temporary-text workflow as CCP/M.
-help.hlp: help.cmd help.dat Makefile
-	@set -e; tmp=$$(mktemp -d); \
-	trap 'rm -rf "$$tmp"' EXIT HUP INT TERM; \
-	cp help.cmd help.dat "$$tmp/"; \
-	unix2dos "$$tmp/help.dat"; \
-	(cd "$$tmp" && EMU2_CPM_VER=4.1 emu2 help.cmd '[C]'); \
-	cp "$$tmp/help.hlp" $@
-	@test -s $@

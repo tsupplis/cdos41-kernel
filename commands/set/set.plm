@@ -1,4 +1,4 @@
-$ TITLE('SET 3.1N: Sets CDOS file and drive attributes')
+$ TITLE('CONCURRENT SET 4.1N: Sets file and drive attributes')
 $ COMPACT
 
 /* Revised:
@@ -25,7 +25,7 @@ declare copyright (*) byte data (
   ' Copyright (c) 1983, Digital Research ');
 
 declare versiondate (*) byte data ('02/15/83');
-declare version     (*) byte data ('SET 3.1N',0);
+declare version     (*) byte data ('CONCURRENT SET 4.1N',0);
 
 
 

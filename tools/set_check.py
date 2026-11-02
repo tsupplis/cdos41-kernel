@@ -244,7 +244,7 @@ def screen(v, i):
 for i, c in enumerate(cases):
     a = screen("o", i)
     b = screen("n", i)
-    norm = lambda s: re.sub(r"SET (?:2\.1|3\.1N?)", "SET #", s)
+    norm = lambda s: re.sub(r"(?:CONCURRENT )?SET (?:2\.1|3\.1N?|4\.1N)", "SET #", s)
     assert norm(a) == norm(b), (i, c, a, b)
     if c.startswith("b: [") and any(x in c for x in ["name=", "protect=", "update="]):
         assert "requires CP/M media." in b, (c, b)

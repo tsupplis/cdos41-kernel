@@ -1,6 +1,6 @@
 # Enabled only after the local source build has passed.
 SUBDIRS=genccpm pip asm86 gencmd submit batch chdir \
-    mkdir rmdir sysdisk chset initdir help ddt86 \
+    mkdir rmdir sysdisk chset initdir help helphlp ddt86 \
     function dredix copymenu editmenu printmgr dsp dskmaint \
     genldr loadccpm redos copy datetime erase path rename setenv \
     asm80 era ren systat window date sdir show hexcom print set type dir ed disk putget setport hdmaint stop setup n spl

@@ -35,7 +35,7 @@
 
 # Distribution copies and generated indexes/host tests.
 /*.img
-/commands/help/help.hlp
+/commands/helphlp/help.hlp
 /commands/window/hostcheck
 
 /commands/dskmaint/dskmaint.raw

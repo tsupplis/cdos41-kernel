@@ -15,10 +15,10 @@ SYSTEM_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ..
     ../commands/submit/submit.cmd ../commands/type/type.cmd ../commands/dir/dir.cmd \
     ../commands/ed/ed.cmd ../commands/rename/ren.exe ../commands/stop/stop.cmd
 
-TOOLS_COMMANDS = ../commands/putget/put.cmd ../commands/putget/get.cmd ../commands/putget/rdr.cmd ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
+TOOLS_COMMANDS = ../commands/putget/put.cmd ../commands/putget/get.cmd ../commands/putget/rdr.cmd \
     ../commands/asm80/asm80.cmd ../commands/asm86/asm86.cmd ../commands/ddt86/ddt86.cmd ../commands/gencmd/gencmd.cmd \
     ../commands/genccpm/genccpm.cmd ../commands/hexcom/hexcom.cmd ../commands/help/help.cmd \
-    ../commands/help/help.hlp ../commands/systat/systat.cmd \
+    ../commands/helphlp/help.hlp ../commands/systat/systat.cmd \
     ../commands/chset/chset.cmd ../commands/genldr/genldr.cmd \
     ../commands/window/window.cmd ../commands/window/wmenu.cmd
 

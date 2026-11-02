@@ -195,7 +195,7 @@ commands/show/README.md.
 `commands/set/set.plm` matches OEM SET 3.1's CP/M-media checks before
 label access and label/XFCB writes. Private search storage and DMA restoration
 prevent DOS pseudo-labels being mistaken for CP/M label/password records.
-SET 3.1N retains the imported parser, attribute, protection and timestamp
+CONCURRENT SET 4.1N retains the imported parser, attribute, protection and timestamp
 logic. HELP removes unsupported MAKE/EDIT and documents ARCHIVE/F1-F4.
 `make check-set` compares OEM/rebuilt execution on disposable CP/M/FAT disks,
 including persisted attributes, interactive passwords and timestamp settings.

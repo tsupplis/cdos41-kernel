@@ -5298,7 +5298,7 @@
       "origin": "ccpm86-kernel/commands/set/Makefile",
       "sha256": "16eb02b05f235be191d01ef7be15aa2a312c116a95079986c43dbb76dabedc27",
       "original_sha256": "ce879f47b53841b050020a3dfaf2083081d1a549bc5cf3dc5abadf15efee51a0",
-      "modifications": "Adapted for SET 3.1 parity: CP/M-only label/XFCB media guards, SET 3.1N identifier and literal dependencies; see commands/set/README.md."
+      "modifications": "Adapted for SET 3.1 parity: CP/M-only label/XFCB media guards, CONCURRENT SET 4.1N identifier and literal dependencies; see commands/set/README.md."
     },
     {
       "path": "commands/set/copyrt.lit",
@@ -5320,7 +5320,7 @@
       "origin": "ccpm86-kernel/commands/set/set.plm",
       "sha256": "2235eaa98e50756253025550ee39436790d750a24966fec02d0740340284bb53",
       "original_sha256": "60cc64d60b7cd2130c9b7e44cae0e635d4df1e4d59a15231b82d4edbf60f33c1",
-      "modifications": "Adapted for SET 3.1 parity: CP/M-only label/XFCB media guards, SET 3.1N identifier and literal dependencies; see commands/set/README.md."
+      "modifications": "Adapted for SET 3.1 parity: CP/M-only label/XFCB media guards, CONCURRENT SET 4.1N identifier and literal dependencies; see commands/set/README.md."
     },
     {
       "path": "commands/set/uda.lit",
@@ -5506,8 +5506,8 @@
       "sha256": "fa1c7f19e71e74bcdc2fffbcefd6a2b94edbf68f4589bc934ee50f76cdf8c332"
     },
     {
-      "path": "commands/help/help.dat",
-      "origin": "ccpm86-kernel/commands/help/help.dat",
+      "path": "commands/helphlp/help.dat",
+      "origin": "ccpm86-kernel/commands/helphlp/help.dat",
       "sha256": "9098ec6b4d5b3126121a3365b738d8119caf7018c9e469eea21acbb86124ec75",
       "original_sha256": "be082138ed971b145f4e44678fb8add340002dbdb86a4bbfd640859428cb61c7",
       "modifications": "Reviewed 4.1 help, DIR bracket aliases and TMP/BATCH message consistency; see patches.md."

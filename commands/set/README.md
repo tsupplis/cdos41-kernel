@@ -1,9 +1,13 @@
 # SET
 
-Recompiled from CCP/M-86 3.1 and adapted for parity with the retained
-Concurrent SET 3.1 (07/09/84). The imported source identifies itself as
-SET 2.1 (02/15/83); the maintained build identifies itself as SET 3.1N.
-This is a source adaptation, not a byte-identical reproduction.
+Recompiled from the CCP/M-86 3.1 source; reference binary: CDOS SET 3.1
+`base/set.cmd`. The version string is `CONCURRENT SET 4.1N`.
+
+Shared source: `ccpm86-kernel` and `cdos41-kernel` carry identical copies
+(see `check_shared_commands`). The DOS-media code is inert on CCP/M 3.1,
+which is built without PCMODE: it never presents a DOS pseudo-label, never
+writes directory-label byte 15, and its block numbers stay below 8000h, so
+the FCB disk-map flag tests cannot match.
 
 ## Command line
 
@@ -28,65 +32,32 @@ to remove a file password/protection. The historical parser requires a comma
 after the empty password; `[PASSWORD=]` alone is rejected by both builds. Enable drive password protection before
 assigning file/label passwords or setting a default password.
 
-READ protects reading, writing, renaming and deletion. WRITE protects
-writing, renaming and deletion. DELETE protects renaming and deletion.
-The default password is copied back to the calling process, so subsequent
-commands can use it. Interactive password input supports Backspace, Ctrl-X
-and Ctrl-C, retaining the historical non-echoing behavior.
+READ protects reading, writing, renaming and deletion; WRITE protects
+writing, renaming and deletion; DELETE protects renaming and deletion. The
+default password is copied to the calling process. Creation and access
+stamping are mutually exclusive; stamping needs an INITDIR-formatted
+directory.
 
-File attributes work through BDOS on CP/M and DOS media, including DOS
-directory entries. DOS attribute translation is provided by the 4.1 kernel;
-CP/M F1-F4 flags are not four additional independent FAT attribute bits.
-CP/M ARCHIVE=ON means already archived, so it clears DOS's archive-needed
-bit; ARCHIVE=OFF sets that bit. This matches the OEM and kernel mapping.
-Labels, XFCB passwords and timestamp configuration require CP/M media.
-Creation and access timestamps are mutually exclusive; enabling either
-replaces the other, but requesting both together is rejected. Timestamp
-activation requires an INITDIR-formatted directory.
+## DOS media (CDOS)
 
-## Differences from the imported source
-
-The confirmed functional delta is SET 3.1's media protection. Its binary
-probes BLACK's DOS pseudo-label and rejects CP/M-only operations before
-reading/modifying a label or writing a label/XFCB. The source now performs
-those same three checks, using a private mutable FCB and buffer and restoring
-the previous DMA offset. Previously a DOS pseudo-label could cause an
-irrelevant password prompt and an INITDIR error.
-
-The option/message tables otherwise closely match. The larger version number
-does not imply an entirely new command implementation. Binary inspection
-also confirms the parent process offset (1Eh), UDA pointer (10h) and default
-password offset (12h) used by the imported source. No kernel layout changes
-are needed. Compiler/startup differences account for part of the binary delta.
-
-The help database previously advertised `[MAKE]` and `PROTECTION=EDIT`.
-Neither is supported here or by the OEM SET 3.1: those entries are removed;
-DELETE is the supported protection mode. Archive and F1-F4 are documented.
+File attributes work on DOS media through the kernel mapping (CP/M
+ARCHIVE=ON clears DOS's archive-needed bit). Labels, XFCB passwords and
+stamping need CP/M media: SET probes BLACK's DOS pseudo-label (private FCB and
+buffer, DMA offset restored) and prints `This command/option requires CP/M
+media.` instead of prompting for a password or failing in INITDIR.
 
 ## Verification
 
-`make check-set` runs the OEM and rebuilt executables on separate identical
-CP/M/FAT12 disk pairs under PCE. The test uses direct console snapshots and
-checks return to the shell after each command. It compares attributes,
-wildcards, DOS directory handling, media guards, labels, all four password
-protection modes, malformed options and drive RO/RW transitions.
+PCE regressions against the OEM binaries (`base/`) run from the CDOS
+root; CCP/M uses `make check` (structural) only.
+`make check-set` compares attributes, wildcards, DOS directories,
+media guards, labels, password modes and drive RO/RW on CP/M/FAT12 pairs.
+OEM SET 3.1 SHA-256:
+`e4ec4cdefafe7cd1793c3bc2fbbe5429046e87df8fd53ca720d72c5633616123`.
 
-Additional runs exercise formatted-directory creation/access/update flags
-and interactive password retry, Backspace, Ctrl-X, Ctrl-C, label-password
-removal and default-password inheritance by a subsequent TYPE command.
-Final CP/M directory records and FAT attributes are checked independently of
-SET's printed messages and compared between the two builds. Only software
-version identifiers and label timestamps are excluded from those comparisons.
+## FAT case metadata policy (CDOS)
 
-This coverage does not establish exhaustive parity for nested DOS paths,
-network drives, disk-full/write failures or concurrent directory changes.
-The retained `base/set.cmd` remains the regression reference.
-
-OEM SET 3.1 SHA-256: `e4ec4cdefafe7cd1793c3bc2fbbe5429046e87df8fd53ca720d72c5633616123`.
-
-## FAT case metadata policy
-
-The maintained kernel treats FAT byte 12 bits 3/4 as lowercase-name and
+The CDOS kernel treats FAT byte 12 bits 3/4 as lowercase-name and
 lowercase-extension flags. SET leaves those bits untouched: only legacy
 F1-F3 map to FAT, while F1-F4 remain available on CP/M disks. FAT F4 requests
 therefore have no effect. This intentional kernel change supersedes OEM

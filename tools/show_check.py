@@ -184,7 +184,7 @@ def check(no_label=False, create=False, access=False):
             old, new = outputs
 
             def normalize(text):
-                text = re.sub(r"SHOW (2\.1|3\.3)", "SHOW #", text)
+                text = re.sub(r"(?:CONCURRENT )?SHOW (?:2\.1|3\.3|4\.1N)", "SHOW #", text)
                 return re.sub(r"(Space:)\s+\d+k", r"\1 #k", text)
 
             assert normalize(old) == normalize(new), (tail, old, new)

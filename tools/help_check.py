@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 
 R = Path(__file__).resolve().parent.parent
-s = (R / "commands/help/help.dat").read_text()
+s = (R / "commands/helphlp/help.dat").read_text()
 topics = {
     m.upper().strip().split(" (")[0] for m in re.findall(r"(?m)^\s*///1([^\r\n]+)", s)
 }
@@ -64,7 +64,7 @@ for name in ["HELP.EDX", "LSN.EDX"]:
 assert not (R / "base/letter.txt").exists()
 assert "../base/letter.txt" not in media
 assert "../base/help.hlp" not in media, "Distributions must use the rebuilt help index"
-b = (R / "commands/help/help.hlp").read_bytes()
+b = (R / "commands/helphlp/help.hlp").read_bytes()
 roots = set()
 indexed = 0
 for a in range(0, 2048, 16):

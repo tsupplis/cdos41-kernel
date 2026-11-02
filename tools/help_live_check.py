@@ -15,8 +15,8 @@ def run(*a):
 
 shutil.copyfile(R / "media/cdos86.img", F / "cdos86.img")
 run("mformat", "-C", "-i", "fat.img", "-t", "40", "-h", "2", "-n", "8", "-c", "2", "::")
-for n in ["help.cmd", "help.hlp"]:
-    run("mcopy", "-i", "fat.img", str(R / "commands/help" / n), "::" + n)
+for p in ["help/help.cmd", "helphlp/help.hlp"]:
+    run("mcopy", "-i", "fat.img", str(R / "commands" / p), "::" + Path(p).name)
 cfg = (
     (R / "media/cdos86.cfg")
     .read_text()

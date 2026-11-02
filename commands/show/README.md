@@ -1,60 +1,39 @@
-# SHOW: Concurrent DOS compatibility
+# SHOW
 
-Recompiled from CCP/M-86 3.1 and adapted for parity with the retained OEM
-`base/show.cmd`. The reference utility reports SHOW 3.3 (12/10/84), with a
-Concurrent 3.2 startup header. The imported source's SHOW 2.1 identifier is
-retained in invalid-option output; this is the documented cosmetic difference.
-The original binary is used as a regression oracle, not as a build input.
+Recompiled from the CCP/M-86 3.1 source; reference binary: CDOS SHOW 3.3
+`base/show.cmd`. Identifies itself as `CONCURRENT SHOW 4.1N`.
 
-## Syntax and options
+Shared source: `ccpm86-kernel` and `cdos41-kernel` carry identical copies
+(see `check_shared_commands`). The DOS-media code is inert on CCP/M 3.1,
+which is built without PCMODE: it never presents a DOS pseudo-label, never
+writes directory-label byte 15, and its block numbers stay below 8000h, so
+the FCB disk-map flag tests cannot match.
 
-`SHOW {d:}{option}` accepts SPACE, DRIVE/DRIVES, USERS, LABEL and HELP.
-Options can be combined; bracketed forms such as `SHOW [SPACE]` are accepted.
-The historical parser dispatches by option prefix. Only the supported
-commands below are documented. OPEN is rejected, matching 3.3, rather than
-printing the old source's placeholder message.
+## Syntax
+
+`SHOW {d:}{option}`; options may be combined or bracketed.
 
 | Option | Meaning |
 | --- | --- |
-| SPACE or no option | Logged drives' RO/RW status and free space in kilobytes |
-| DRIVE / DRIVES | BDOS drive characteristics, including record capacity and block/directory geometry |
-| USERS | Current CP/M user and file counts by active user |
-| LABEL | CP/M directory label, password/stamping flags and label timestamps |
-| HELP | Display the supported option list |
+| SPACE or none | RO/RW status and free space of logged drives |
+| DRIVE / DRIVES | BDOS drive characteristics |
+| USERS | Current user and file counts per user |
+| LABEL | Directory label, protection/stamping flags, label timestamps |
+| HELP | Option list |
 
-SPACE and DRIVE support both CP/M and DOS media. USERS and LABEL require
-CP/M media; DOS disks print `This command/option requires CP/M media.`
-Default SPACE listings omit N:/O:/P:, matching the OEM command. An explicitly
-selected drive remains available to the original dispatch rules.
+## Changes from the imported source
 
-## Parity changes
-
-- A private search buffer detects BLACK's translated DOS pseudo-label
-  (20h at byte 0, 80h at byte 15). The previous DMA offset is restored.
-  This prevents DOS directory entries being interpreted as CP/M users/labels.
-- Implicit SPACE output matches 3.3's A:..M: drive limit.
-- Inactive option placeholders are removed; dispatch matches the OEM command.
-- The creation-stamping flag comes from label bit 10h, matching 3.3,
-  rather than an uninitialized local variable. Access stamping uses bit 40h.
-
-The imported DPB pointer and date handling are retained. Drive geometry is
-the BDOS view, including its DOS virtual DPB, rather than a raw FAT BPB dump.
-Free space uses BDOS 46's three-byte record count. Existing year formatting
-handles labels dated 2000 and 2026 in the regression fixtures.
+- Creation stamping is read from label bit 10h (was an uninitialised local).
+- The non-functional OPEN/LOCKED placeholders are removed; any `L` prefix
+  selects LABEL.
+- USERS and LABEL probe for BLACK's DOS pseudo-label (20h at byte 0, 80h at
+  byte 15) and print `This command/option requires CP/M media.` on DOS disks.
+- On CDOS only (BDOS version 41h), the implicit SPACE listing stops at M:, as
+  in SHOW 3.3. CCP/M keeps listing all logged drives.
 
 ## Verification
 
-`make check-show` runs the OEM and rebuilt commands under PCE on disposable
-CP/M/FAT12 images. It checks option/default/bracketed/multiple-command forms,
-DOS rejection for USERS/LABEL, explicit/default drive selection, CP/M user
-counts, label presence/absence, create/access stamping and dates across 2000.
-CP/M free space is
-calculated independently from allocation entries; FAT free space is calculated
-from FAT12 entries. Captures create one-cluster logs, which are accounted for
-rather than treated as a reporting difference. Drive capacities and ordinary
-output are compared directly; only software identifiers and changing capture
-space are normalized.
-
-Read-only output formatting follows the original code, but this regression
-does not yet force a disk into read-only mode. Very large virtual DPBs and
-concurrent changes to the filesystem are outside its current coverage.
+PCE regressions against the OEM binaries (`base/`) run from the CDOS
+root; CCP/M uses `make check` (structural) only.
+`make check-show` covers options, DOS rejection, drive selection,
+user counts, labels/stamping and free space on CP/M and FAT12.

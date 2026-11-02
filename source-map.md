@@ -228,14 +228,14 @@ The retained base/show.cmd is SHOW 3.3 with a Concurrent 3.2 startup header,
 SHA-256 0295f31a30830ab50e4e344175fe8ee44578b4d8cf71c92f2a153ddb7e7940b0.
 SHOW is recompiled from CCP/M-86 3.1 and adapted for parity: DOS-media guards,
 implicit drive selection and dispatch follow that binary. See the tool README
-and make check-show for the capacity/user/label/date comparisons. Its source
-SHOW 2.1 identifier remains a cosmetic difference in invalid-option output.
+and make check-show for the capacity/user/label/date comparisons. It is
+shared with CCP/M and identifies itself as CONCURRENT SHOW 4.1N.
 
 ## SET parity review
 
 `commands/set` retains the CCP/M-86 3.1 PL/M source lineage (SET 2.1),
 adapted against OEM SET 3.1 for CP/M-only label/XFCB operations on DOS media.
-The build is SET 3.1N. See `commands/set/README.md` and `make check-set`.
+The build is CONCURRENT SET 4.1N, shared with CCP/M. See `commands/set/README.md` and `make check-set`.
 
 ## Completed remaining import assessment
 

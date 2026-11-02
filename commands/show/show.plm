@@ -1,4 +1,4 @@
-$ TITLE('SHOW 3.3N: Show Disk Data')
+$ TITLE('CONCURRENT SHOW 4.1N: Show Disk Data')
 $ COMPACT
 
 
@@ -23,7 +23,8 @@ show:
 do;
 declare
     cpmversion literally '20h', /* requires 2.0 cp/m */
-    cpm3       literally '30h';
+    cpm3       literally '30h',
+    cdos       literally '41h';  /* BDOS 12 low byte: CCP/M 31h, CDOS 41h */
 
 
 declare copyright(*) byte data 
@@ -31,7 +32,7 @@ declare copyright(*) byte data
 
 
 declare verdate (*) byte data('10/19/82');
-declare version (*) byte data ('SHOW 2.1',0);
+declare version (*) byte data ('CONCURRENT SHOW 4.1N',0);
 
 
 
@@ -1198,9 +1199,9 @@ prstatus: procedure;
 		if fcb(0)-1 = d then
 	            call stat(rodisk);		/* do specific disk */
 	        end;
-	    else if d < 13 then do;
+	    else if d < 13 or cversion < cdos then do;
                 call select$disk(d);
-	        call stat(rodisk);       /* match 3.3 implicit A:..M: listing */
+	        call stat(rodisk);       /* CDOS: 3.3 A:..M: limit */
 	        end;
             end;
         login = shr(login,1); rodisk = shr(rodisk,1);

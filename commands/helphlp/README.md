@@ -4,7 +4,9 @@
 and the selected 4.1 PCTMP shell. It combines relevant original 4.1 material
 from `base/help.hlp` with the maintained CCP/M import documentation and local
 usability changes. The original binary database remains an archival reference;
-all distribution disks now use the rebuilt `commands/help/help.hlp`.
+all distribution disks now use the rebuilt `commands/helphlp/help.hlp`.
+The HELP program itself is built separately in `../help`; this directory
+only indexes `help.dat` with that program's native `[C]` indexer.
 
 The command catalogue distinguishes shell built-ins, aliases, external CMD
 and DOS programs, and resident system services. Obsolete unavailable tools

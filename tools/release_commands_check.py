@@ -69,7 +69,7 @@ def session(work, group, variant):
         put(ROOT / 'base' / name, name)
     for name in ('help.edx', 'lsn.edx'):
         put(ROOT / 'commands/dredix' / name, name)
-    put(ROOT / 'commands/help/help.hlp', 'help.hlp')
+    put(ROOT / 'commands/helphlp/help.hlp', 'help.hlp')
     put(ROOT / 'base/rmdir.cmd', 'sample.cmd')
     for name, data in [('keep.txt', b'line one\r\nline two\r\n\x1a'), ('gone.txt', b'g\r\n'),
                        ('test.bat', b'USER\r\nDIR B:KEEP.TXT\r\n\x1a')]:
