@@ -30,6 +30,8 @@ pagesize 72					; Apr 29, 1985
 	extrn stream_read_byte:near,stream_write_byte:near,native_putchar:near
 	public standard_stream_mask,standard_input_byte,standard_input_status
 	public standard_output_byte,standard_line_begin,standard_line_end
+	public ms2_redir_config,ms2_redir_launch,ms2_redir_apply,redir_active_flags
+	extrn cli_ds:word
 	extrn check_dos_media_fcb:near
 	extrn	convert_date:near	; dos to cpm date
 	extrn	convert_time:near	;   and time conversion
@@ -1872,6 +1874,8 @@ hcb_size	equ	6		; bytes per hcb
 hf_read		equ	01h		; file is opened for reading
 hf_write	equ	02h		; file is opened for writing
 hf_device	equ	04h		; character I/O device handle
+hf_echo_input equ 10h
+hf_echo_output equ 20h
 hf_dev_open	equ	08h		; char device has been opened
 
 
@@ -1993,6 +1997,8 @@ ms2_f_read_file:
 	mov	ah,ms_r_blk_read	; random block read
 	call	random_blk_rw		; shared with write code
 	call	swap_pdrive		; xchg hds pointers
+	mov al,hf_echo_input
+	call echo_file_transfer
 	ret				; successful return
 
 ms2_f_read_error:
@@ -2022,6 +2028,8 @@ ms2_f_write_file:
 	mov	ah,ms_r_blk_write	; random block write
 	call	random_blk_rw		; shared with read code
 	call	swap_pdrive		; xchg hds pointers
+	mov al,hf_echo_output
+	call echo_file_transfer
 	ret				; successful return (cf=0)
 
 ms2_f_write_error:
@@ -2464,6 +2472,28 @@ standard_status_done:
 	ret
 ; Skip a CR's following LF only if no other read/seek has moved this
 ; same handle in between line calls. Raw and block reads remain byte-exact.
+echo_stream_byte:
+	push ax ! push bx ! push cx ! push dx ! push si ! push di ! push es
+	mov cl,al
+	call native_putchar
+	pop es ! pop di ! pop si ! pop dx ! pop cx ! pop bx ! pop ax
+	ret
+echo_file_transfer:
+	test hcb_flags[bx],al ! jz echo_transfer_done
+	push ax ! push bx ! push cx ! push dx ! push si ! push di ! push es
+	mov cx,ms2_ret_ax
+	jcxz echo_transfer_restore
+	les di,ms2_ds_dx
+echo_transfer_loop:
+	mov al,es:[di]
+	inc di
+	call echo_stream_byte
+	loop echo_transfer_loop
+echo_transfer_restore:
+	pop es ! pop di ! pop si ! pop dx ! pop cx ! pop bx ! pop ax
+echo_transfer_done:
+	ret
+
 standard_line_begin:
 	push bx ! push dx ! push si
 	mov dx,line_input_hcb
@@ -2507,6 +2537,11 @@ standard_input_byte:
 	mov di,hcb_fcb_base[bx]
 	call stream_read_byte
 	call swap_pdrive
+	or ah,ah ! jnz standard_input_status_check
+	test hcb_flags[bx],hf_echo_input ! jz standard_input_done
+	call echo_stream_byte
+	jmps standard_input_done
+standard_input_status_check:
 	cmp ah,5 ! jne standard_input_done
 standard_input_error:
 	mov dos_error_code,no_access
@@ -2528,7 +2563,10 @@ standard_output_byte:
 	mov di,hcb_fcb_base[bx]
 	call stream_write_byte
 	call swap_pdrive
-	or ah,ah ! jz standard_output_done
+	or ah,ah ! jnz standard_output_error
+	test hcb_flags[bx],hf_echo_output ! jz standard_output_done
+	call echo_stream_byte
+	jmps standard_output_done
 standard_output_error:
 	mov dos_error_code,no_access
 	jmps standard_output_done
@@ -2536,6 +2574,233 @@ standard_output_closed:
 	mov dos_error_code,no_h_match
 standard_output_done:
 	pop es ! pop di ! pop bx ! pop ax
+	ret
+
+
+; Private PCTMP stream interface, version 1.
+; Caller DS:DX -> version, flags, input FCB far pointer, output FCB far pointer.
+; Flags 1=input, 2=output, 4=append, 8=echo input, 10h=echo output.
+; DX=0 cancels the caller's pending request. No caller pointer is retained.
+ms2_redir_config:
+	call get_pd
+	cmp redir_owner,0 ! je redir_owner_ok
+	cmp redir_owner,bx ! je $+5 ! jmp redir_busy
+redir_owner_ok:
+	or dx,dx ! jnz $+5 ! jmp redir_cancel
+	push bx
+	mov es,cli_ds
+	mov di,dx
+	cmp es:word ptr [di],1 ! je $+5 ! jmp redir_invalid_owner
+	mov ax,es:word ptr .2[di]
+	test ax,0ffe0h ! jnz redir_invalid_owner
+	mov redir_work_flags,ax
+	push es ! push di
+	mov cl,25
+	call ccpm
+	pop di ! pop es
+	mov redir_default_drive,al
+	test redir_work_flags,1 ! jz redir_config_output
+	push es ! push di
+	les si,es:dword ptr .4[di]
+	lea di,redir_work_input
+	call redir_fcb_name
+	pop di ! pop es
+	jc redir_invalid_owner
+redir_config_output:
+	test redir_work_flags,2 ! jz redir_config_ready
+	push es ! push di
+	les si,es:dword ptr .8[di]
+	lea di,redir_work_output
+	call redir_fcb_name
+	pop di ! pop es
+	jc redir_invalid_owner
+	mov ax,redir_work_flags
+	and ax,3
+	cmp ax,3 ! jne redir_config_ready
+	lea si,redir_work_input
+	lea di,redir_work_output
+redir_compare_paths:
+	mov al,[si]
+	cmp al,[di] ! jne redir_config_ready
+	inc si ! inc di
+	or al,al ! jnz redir_compare_paths
+	jmps redir_invalid_owner
+redir_config_ready:
+	pop bx
+	mov redir_owner,bx
+	mov ax,redir_work_flags
+	mov redir_pending_flags,ax
+	push ds ! pop es
+	lea si,redir_work_input
+	lea di,redir_pending_input
+	mov cx,30
+	cld
+	rep movsb
+	xor ax,ax
+	ret
+redir_invalid_owner:
+	pop bx
+	mov ax,no_data
+	ret
+redir_cancel:
+	mov redir_owner,0
+	mov redir_pending_flags,0
+	xor ax,ax
+	ret
+redir_busy:
+	mov ax,no_access
+	ret
+
+; Normalize a parsed 8.3 FCB to a fully specified DOS filename.
+redir_fcb_name:
+	mov al,es:[si]
+	and al,7fh
+	or al,al ! jnz redir_name_drive
+	mov al,redir_default_drive
+	inc al
+redir_name_drive:
+	cmp al,16 ! ja redir_bad_name
+	add al,'A'-1
+	mov [di],al
+	mov byte ptr .1[di],':'
+	add di,2
+	inc si
+	mov dx,di
+	mov cx,8
+redir_name_chars:
+	mov al,es:[si]
+	inc si
+	and al,7fh
+	cmp al,' ' ! je redir_name_next
+	call redir_name_char
+	jc redir_bad_name
+redir_name_next:
+	loop redir_name_chars
+	cmp di,dx ! je redir_bad_name
+	cmp es:byte ptr [si],' ' ! je redir_name_done
+	mov byte ptr [di],'.'
+	inc di
+	mov cx,3
+redir_ext_chars:
+	mov al,es:[si]
+	inc si
+	and al,7fh
+	cmp al,' ' ! je redir_ext_next
+	call redir_name_char
+	jc redir_bad_name
+redir_ext_next:
+	loop redir_ext_chars
+redir_name_done:
+	mov byte ptr [di],0
+	clc
+	ret
+redir_bad_name:
+	stc
+	ret
+redir_name_char:
+	cmp al,'?' ! je redir_bad_name
+	cmp al,'*' ! je redir_bad_name
+	cmp al,':' ! je redir_bad_name
+	cmp al,'/' ! je redir_bad_name
+	cmp al,5ch ! je redir_bad_name
+	cmp al,'a' ! jb redir_store_char
+	cmp al,'z' ! ja redir_store_char
+	and al,5fh
+redir_store_char:
+	mov [di],al
+	inc di
+	clc
+	ret
+
+; Consume configuration only for the requesting native process's launch.
+ms2_redir_launch:
+	push ax ! push bx ! push cx ! push si ! push di ! push es
+	mov redir_active_flags,0
+	call get_pd
+	cmp bx,redir_owner ! jne redir_launch_done
+	mov ax,redir_pending_flags
+	mov redir_active_flags,ax
+	mov redir_pending_flags,0
+	mov redir_owner,0
+	push ds ! pop es
+	lea si,redir_pending_input
+	lea di,redir_active_input
+	mov cx,30
+	cld
+	rep movsb
+redir_launch_done:
+	pop es ! pop di ! pop si ! pop cx ! pop bx ! pop ax
+	ret
+
+; Runs after DOS vectors are installed, in the launched native process.
+; File opens therefore acquire ownership in the process that will use them.
+ms2_redir_apply:
+	push ds ! push es ! push ax ! push bx ! push cx ! push dx ! push si ! push di
+	call get_data_seg
+	cmp redir_active_flags,0 ! jne $+5 ! jmp redir_apply_ok
+	test redir_active_flags,1 ! jz redir_apply_output
+	lea dx,redir_active_input
+	mov ax,3d00h
+	call ms1_func
+	jc redir_apply_error
+	xor cx,cx
+	call redir_bind_handle
+	jc redir_apply_error
+	mov bx,hcb_list
+	test redir_active_flags,8 ! jz redir_apply_output
+	or hcb_flags[bx],hf_echo_input
+redir_apply_output:
+	test redir_active_flags,2 ! jz redir_apply_ok
+	lea dx,redir_active_output
+	test redir_active_flags,4 ! jz redir_apply_create
+	mov ax,3d02h
+	call ms1_func
+	jnc redir_apply_append
+	cmp ax,no_file ! jne redir_apply_error
+redir_apply_create:
+	lea dx,redir_active_output
+	xor cx,cx
+	mov ah,3ch
+	call ms1_func
+	jc redir_apply_error
+	jmps redir_apply_bind_output
+redir_apply_append:
+	mov bx,ax
+	xor cx,cx ! xor dx,dx
+	mov ax,4202h
+	call ms1_func
+	jc redir_apply_error
+	mov ax,bx
+redir_apply_bind_output:
+	mov cx,1
+	call redir_bind_handle
+	jc redir_apply_error
+	mov bx,hcb_list+2
+	test redir_active_flags,10h ! jz redir_apply_ok
+	or hcb_flags[bx],hf_echo_output
+redir_apply_ok:
+	pop di ! pop si ! pop dx ! pop cx ! pop bx ! pop ax ! pop es ! pop ds
+	clc
+	ret
+redir_apply_error:
+	mov bx,2
+	lea dx,redir_failure_message
+	mov cx,redir_failure_length
+	mov ah,40h
+	call ms1_func
+	pop di ! pop si ! pop dx ! pop cx ! pop bx ! pop ax ! pop es ! pop ds
+	stc
+	ret
+redir_bind_handle:
+	mov bx,ax
+	push bx
+	mov ah,46h
+	call ms1_func
+	pop bx
+	pushf
+	mov ah,3eh
+	call ms1_func
+	popf
 	ret
 
 
@@ -3124,6 +3389,20 @@ eject
 ;****************************************
 
 	DSEG
+
+redir_owner dw 0
+redir_pending_flags dw 0
+redir_pending_input rb 15
+redir_pending_output rb 15
+redir_active_flags dw 0
+redir_active_input rb 15
+redir_active_output rb 15
+redir_work_flags dw 0
+redir_default_drive db 0
+redir_work_input rb 15
+redir_work_output rb 15
+redir_failure_message db 'DOS redirection: cannot open or bind stream',13,10
+redir_failure_length equ offset $ - offset redir_failure_message
 
 line_input_hcb dw 0
 line_input_pos dw 0,0

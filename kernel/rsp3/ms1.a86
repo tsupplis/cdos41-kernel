@@ -85,6 +85,9 @@ TRUE		EQU	NOT FALSE
 	extrn standard_stream_mask:near,standard_input_byte:near
 	extrn standard_input_status:near,standard_output_byte:near
 	extrn standard_line_begin:near,standard_line_end:near
+	extrn ms2_redir_config:near,ms2_redir_launch:near,ms2_redir_apply:near
+	extrn redir_active_flags:word
+	public cli_ds
 	extrn ctbr_state:byte,dos_internal:byte
 	extrn dos_error_code:word,dos_critical_code:word
 	public in_int24_flag,critical_ss,critical_sp,dos1_call
@@ -419,9 +422,14 @@ ms_func:
 	shl bx,1
 	mov ax,0FFFFH
 
+	cmp cl,0ffh ! je ms_stream_capability
 	cmp cl,MS_FUNC_TBL_END ! jae ms_func_exit
 	  call ms_func_tbl[bx]
 
+jmps ms_func_exit
+ms_stream_capability:
+	mov ax,5244h			; DR stream interface
+	mov dx,1			; packet version
 ms_func_exit:
 	mov bx,ax
 	pop ds ! pop es
@@ -446,8 +454,9 @@ ms_func_tbl	dw	ms_cleanup	;function 0
 		dw	ms_srch_order	;function 6
 		dw	ms_builtin_addr	;function 7
 		dw	ms_addmem_func	;function 8
+		dw ms2_redir_config	;function 9, stream configuration
 
-MS_FUNC_TBL_END	equ	offset $ - offset ms_func_tbl
+MS_FUNC_TBL_END	equ	(offset $ - offset ms_func_tbl)/2
 
 
 if IAPX286
@@ -464,6 +473,7 @@ endif
 eject
 
 ms_p_cli_func:
+	call ms2_redir_launch
 ;------------
 	push ds
 	mov ds,cli_ds
@@ -646,6 +656,7 @@ ms_cleanup1:
 	    call backdoor 		;if was in pcmode
 
 	    mov pcmode,FALSE
+	mov redir_active_flags,0
 
 not_in_pcmode:
 	push ds ! pop es			;es = ds = local segment
@@ -1306,6 +1317,7 @@ mstart:
 	    jmps tmp_ret		;return to tmp
 
 ms_p_cli_err:
+	mov redir_active_flags,0
 	  mov ax,0FFFFH ! mov bx,ax
 
 tmp_ret:
@@ -1536,6 +1548,12 @@ set_interrupt_loop:
 	  movs es:ax,cs:ax			;put in offset
 	  mov es:[di],cs			;segment
 	loop set_interrupt_loop
+	push bx
+	call ms2_redir_apply
+	pop bx
+	jnc redirection_started
+	jmp error_exit
+redirection_started:
 	mov es,bx				;restore es & ds
 	xor ax,ax ! mov bx,ax ! mov cx,ax
 	mov si,ax ! mov di,ax

@@ -4,6 +4,7 @@
  * This is a test program, not a distribution command.
  */
 #include "win.h"
+extern int w_command();
 static char *glass[]={
  "CH n=0 prow=2,pcol=4,nrows=2,ncols=30,fg=black,bg=white",
  "CH n=0 prow=9,pcol=2,nrows=24,ncols=65",
