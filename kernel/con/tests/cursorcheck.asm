@@ -36,6 +36,11 @@ bios:
     mov al,3
     iret
 probe_adapter:
+    cmp ah,1ah
+    jne ega_probe
+    xor al,al
+    iret
+ega_probe:
     cmp ah,12h
     jne failed
     cmp bx,0ff10h

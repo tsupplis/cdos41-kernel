@@ -869,9 +869,19 @@ reorg_mv2_code	equ	offset $
 
 ;	New XIOS function 31 used to support ROS video emulation
 pc_video:
+	test	al,80h
+	jnz	eg_video_entry
+	cmp	al,16
+	je	eg_video_entry
+	cmp	al,12
+	je	eg_video_entry
+	cmp	al,13
+	jne	eg_video_legacy
+eg_video_entry:
 	call	eg_try_video
-	jc	$+3
+	jc	eg_video_legacy
 	ret
+eg_video_legacy:
 	cmp	al,14			;this was bl at xios entry
 	jg	pc_video_err		;out of range function
 	cbw
@@ -1716,5 +1726,4 @@ pc_v_back:				;*
 	or	ax,ax			;* set ZF appropriately
 	ret
 
-	include	egvideo.lib
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 

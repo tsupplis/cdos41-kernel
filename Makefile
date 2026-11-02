@@ -28,6 +28,7 @@ xios-alt:
 	$(MAKE) -C kernel xios-alt
 
 check: all
+	python3 tools/graphics_unit_check.py
 	@set -e; for f in kernel/con/*.con kernel/rsp?/*.rsp; do cmdinfo $$f; done
 	$(MAKE) -C commands check
 	$(MAKE) -C kernel/sysgen check
@@ -192,3 +193,11 @@ check-exe: all
 check-dos-console: all
 	python3 tools/dos_console_check.py
 	python3 tools/dos_console_live_check.py
+
+# Enhanced EGA/VGA drawing; NASM fixtures and disposable PCE disks only.
+.PHONY: check-graphics
+check-graphics: all
+	python3 tools/graphics_unit_check.py
+	python3 tools/graphics_check.py
+	python3 tools/graphics_check.py ega
+	python3 tools/graphics_check.py cga

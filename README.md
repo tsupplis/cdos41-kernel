@@ -15,6 +15,7 @@ The assembly is based on partial 4.1 OEM sources corrected to align with Europea
 | Source rebuild | Kernel, four RSP families, boot sources and command tools |
 | Usability improvements | Command-line editing and recall, console shortcuts, paging and CLS |
 | Additional tools | ASM80, HEXCOM, Legacy CCP/M tools and floppy copy/compare commands |
+| Graphics | CGA plus EGA 0Dh/0Eh/10h and VGA 11h/12h/13h, with ROM-backed drawing and palette services |
 | DOS compatibility | Extended DOS APIs, CON raw/cooked handle I/O, inherited standard handles and PUT/GET/RDR redirection for native CMD and DOS programs |
 | Date fixes | Patched native date/reporting utilities and corrected short-year input in DATE.EXE |
 
