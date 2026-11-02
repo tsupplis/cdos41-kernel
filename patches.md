@@ -702,5 +702,111 @@ the file's byte length. Requesting exactly size+1 bytes could return a padding
 byte. The comparison now requires the byte length to exceed that index.
 This correction applies to DOS FCB and handle reads on both media types.
 
-GET/PUT/RDR still use their native CMD interface. DOS stream-call routing
-and the tools' DOS launch/binding interface are subsequent work.
+GET/PUT/RDR integration and stream-call routing are described below.
+
+## DOS console streams and GET/PUT/RDR launch integration
+
+This is a local extension beyond the original CDOS 4.1/4.11 interface. The
+implementation is confined to PCTMP (`kernel/rsp3/ms1.a86`, `ms2.a86`) and
+the shared launcher in `commands/putget`. No sibling project or external
+runtime participates in either build or execution.
+
+### Responsibility and dependency direction
+
+GET/PUT/RDR parse their existing bracket syntax, resolve the child using
+PCTMP ORDER and submit a stream configuration before calling the existing
+private DOS loader. They do not install their native INT E0 interceptor for
+DOS children. PCTMP copies and normalizes filenames, opens files in the
+launched process, binds standard handles and owns subsequent I/O and cleanup.
+The kernel retains no command buffer, code pointer or callback into the CMD.
+MS1/MS2 cross-calls are internal to the existing PCTMP link unit; neither
+module starts a helper command. Native CMD redirection retains its own
+existing hook and record-oriented behavior.
+
+### Private interface and lifetime
+
+PCTMP private selector FFh returns AX=5244h and DX=1. Historical translators
+safely reject FFh; callers must confirm both words before using selector 9.
+The private table bound is now an entry count rather than its byte length,
+preventing calls beyond the table.
+
+Selector 9 takes caller DS:DX pointing to six words: version (1), flags,
+input FCB offset/segment, output FCB offset/segment. Flags are 0001h=input,
+0002h=output, 0004h=append, 0008h=echo input, 0010h=echo output. Zero return
+means accepted; a nonzero return rejects the configuration. DX=0 cancels
+the caller's pending configuration. Parsed 8.3 FCBs become resident,
+explicit-drive, NUL-terminated filenames. Wildcards, path separators and
+identical input/output names are rejected. This interface does not add
+path syntax to the tools' existing FCB parser.
+
+The pending request records the requesting native process descriptor. Only
+that process's private function-1 launch consumes it. Filenames and flags
+are then copied into active per-console state, and the pending lease is
+cleared. Setup runs after DOS vectors are installed and before the target
+starts, acquiring native file ownership in the launched process. Failed
+loading clears the active configuration. Setup failure reports on handle 2
+and takes ordinary process cleanup. The wrapper cancels unused configuration
+and uses the existing attach/cleanup sequence after launch.
+
+### DOS I/O behavior
+
+INT 21h AH=01h/02h,06h/07h/08h/09h,0Ah/0Bh and the selected function of 0Ch
+route applicable standard input/output through handles 0/1. The selector
+applies only to public DOS console calls, not internal native BDOS calls or
+INT 24h handling. Status checks inspect file position and size without
+consuming data. Closed or inaccessible redirected handles cannot silently
+fall back to the keyboard or screen.
+
+Legacy byte I/O uses PCTMP's native record cache directly, avoiding recursive
+DOS dispatch. Native DMA state is restored after each operation. The cache-hit
+path now explicitly returns success; previously a stale return byte could
+be mistaken for a read error. Logical EOF follows the stored byte length,
+including the corrected size+1 boundary described above.
+
+AH=0Ah returns a count of zero at EOF. CR/LF line input consumes the LF of a
+preceding CR only when the same HCB and byte position still match; intervening
+raw reads or seeks preserve their exact bytes. AH=3Fh/40h remain binary:
+NUL and Ctrl-Z are ordinary bytes, and EOF returns a zero read count.
+
+Output overwrite uses create/truncate. Append opens an existing file and
+seeks to its true byte length, creating only when the file is absent. Echo
+flags live on the shared HCB and survive duplication and EXEC inheritance.
+Echo goes straight to the native console backend, bypassing redirected stdout
+so it cannot feed back into the output file. Readiness and EOF do not echo;
+block reads/writes echo only the bytes actually transferred.
+
+Handle 2 remains the console unless an application redirects it explicitly.
+BIOS video, direct screen writes and explicitly opened CON devices remain
+outside these standard streams. Shell `<`, `>` and `|` parsing is not added.
+EOF-aware legacy callers must still honor their API's EOF convention; a
+program that retries input forever can still loop at EOF.
+
+### Assembler data references and loader boundary
+
+Shared data externals must be declared in DSEG. Declaring them while CSEG is
+active makes RASM86 infer CS overrides even when the definition is resident
+data. The packet's caller segment and active flags exposed this in live tests;
+the shared break/error/critical-context declarations were audited and moved
+alongside the existing data externals. A separate-code/data regression guards
+the packet boundary, since a flat test image alone can mask this error.
+ASM86 command-side numeric memory operands use register-indirect addressing,
+matching the existing loader-discovery convention.
+
+The root DOS loader's historical EXE path reads headers in 512-byte sectors.
+The EXE regression uses a sector-aligned header, as the existing utilities do;
+this work does not claim support for arbitrary smaller MZ headers. That loader
+limitation is independent of stream routing and is retained as a known limit.
+
+### Verification
+
+The assembled handle regression covers forced duplication, self/alias cases,
+failed close, reference overflow, nested PSP ownership and exact EOF boundaries.
+It also exercises critical-abort continuation, vector/DTA/register restoration
+and release of child-only files. Disposable PCE tests cover nested EXEC and
+Ctrl-C return, legacy and block stream calls, binary data, append, echo,
+COM/EXE launch and return to the shell. Native PUT/GET/RDR regression is retained.
+Run `make check-redirection` for native and DOS stream cases,
+`make check-pctmp-live` for DOS/EXEC live checks, and `make check-historical`
+for assembled routines, including the separate-segment packet test.
+The live hardware critical-error path is not claimed by these tests: its
+cleanup continuation is tested directly in the assembled regression.
