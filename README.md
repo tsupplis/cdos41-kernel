@@ -4,8 +4,11 @@
 
 This project preserves Digital Research's Concurrent DOS 4.11, multitasking OS (CCP/M-86 follow up),
 including PC-MODE DOS 2.0 Compatibility, as a usable, rebuildable system for running and exploring
-classic 16-bit software. Runnable disks, development tools and patch notes
-accompany the sources, with CP/M-Plus-style usability improvements. The assembly is based on partial 4.1 OEM sources corrected to align with European 4.11 and a lot of fixes and enhancements.
+classic 16-bit software. It is also the last mainly CP/M-ish system produced. The successors will switch closer to DOS. 
+
+Runnable disks, development tools and patch notes accompany the sources, with CP/M-Plus-style usability improvements. 
+
+The assembly is based on partial 4.1 OEM sources corrected to align with European 4.11 and a lot of fixes and enhancements.
 
 | Goal | Distribution |
 | --- | --- |
@@ -21,7 +24,10 @@ accompany the sources, with CP/M-Plus-style usability improvements. The assembly
 <br><sub>Concurrent DOS 4.11 &nbsp;·&nbsp; Console windows</sub><br>
 <img src="images/setup.png" alt="XIOS configuration menu" width="48%">
 <img src="images/basic.png" alt="Microsoft BASIC 5.50A" width="48%">
-<br><sub>System setup &nbsp;·&nbsp; Microsoft BASIC 5.50A</sub>
+<br><sub>System setup &nbsp;·&nbsp; Microsoft BASIC 5.50A</sub><br>
+<img src="images/fm.png" alt="Concurrent DOS File Manager" width="48%">
+<img src="images/menu.png" alt="Concurrent DOS startup menu" width="48%">
+<br><sub>File Manager &nbsp;·&nbsp; Startup menu</sub>
 </p>
 
 The build follows the CCP/M project's source organization and toolchain.
@@ -39,8 +45,8 @@ The current version includes:
 - Ctrl+Alt+Esc opens an installed WMENU; Ctrl+keypad-Plus remains available.
 - Optional paging for TYPE, SDIR and DIR, alongside the built-in DIR's `/P` / `[P]`.
 - CP/M-Plus-style console redirection through PUT, GET and RDR for native commands.
-- A built-in CLS command and a common `Press any key to continue...` prompt.
-- DEL mapped to native ERA.CMD in both the shell and BATCH.
+- Extra built-in CLS and SYSDISK command.
+- DEL mapped to native ERA.CMD in both the shell and BATCH to keep CP/M as the main flavour.
 - Case-insensitive FAT short names, without interpreting modern case flags as CP/M compatibility attributes.
 - Support for DOS Environment Variable Setting (SETENV)
 
