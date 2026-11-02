@@ -4,6 +4,13 @@
 under Concurrent DOS 4.1. It scans ordinary file entries in user areas 0–15
 on the currently selected drive through BDOS. It does not modify the disk.
 
+Before scanning, it checks the drive's BDOS read-only state. If the drive is
+writable, CHKCPMFS temporarily sets it read-only and resets the drive afterward
+to restore write access. A drive that was already read-only remains so. If
+write protection cannot be established, the scan stops; if write access cannot
+be restored, CHKCPMFS reports the failure and instructs the operator to use
+`SET d: [RW]`.
+
 The checker uses the selected drive's DPB and reports record counts beyond
 128, extent reserved bits, allocation references beyond the DPB's maximum
 block, references to directory-reserved blocks, and duplicate block references.
@@ -12,9 +19,11 @@ count; zero slots are allowed for sparse files. `CCPM.SYS` is checked like any
 other file. The checker refuses DOS/FAT media identified by the CDOS
 pseudo-label.
 
-Run it only when the drive is idle. The checker does not hold an exclusive
-filesystem lock, so concurrent writes can make its results inconsistent. This
-version does not inspect deleted directory slots, validate
+Run it only when the drive is idle. BDOS read-only protection is software-level,
+not an exclusive lock against raw disk I/O or another process resetting the
+drive. The checker does not hold an exclusive filesystem lock, so concurrent
+activity can still make its results inconsistent. This version does not
+inspect deleted directory slots, validate
 timestamp/XFCB metadata, read data sectors, identify lost blocks, or repair
 anything. Its results are limited to the directory entries BDOS exposes.
 CP/M rebuilds its allocation vector from the directory when a disk is logged

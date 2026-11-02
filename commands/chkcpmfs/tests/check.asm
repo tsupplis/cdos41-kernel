@@ -57,8 +57,14 @@ bdos:
     je drive
     cmp cl,26
     je set_dma
+    cmp cl,28
+    je protect_drive
+    cmp cl,29
+    je get_ro_vector
     cmp cl,31
     je get_dpb
+    cmp cl,37
+    je reset_drive
     cmp cl,52
     je get_dma
     jmp failed
@@ -100,6 +106,41 @@ get_dpb:
     mov word [bp-2],dpb
     mov ax,cs
     mov [bp-14],ax
+    jmp done
+
+protect_drive:
+    inc byte [cs:protect_count]
+    cmp byte [cs:PROTECT_FAIL],0
+    je protection_succeeds
+    cmp byte [cs:PROTECT_FAIL],2
+    jne protection_fails
+protection_succeeds:
+    or word [cs:ro_vector],1
+    cmp byte [cs:PROTECT_FAIL],2
+    je protection_fails
+    xor ax,ax
+    jmp done
+protection_fails:
+    mov ax,00ffh
+    jmp done
+
+get_ro_vector:
+    inc byte [cs:ro_query_count]
+    mov ax,[cs:ro_vector]
+    mov [bp-2],ax
+    jmp done
+
+reset_drive:
+    inc byte [cs:reset_count]
+    cmp dx,1
+    jne failed
+    cmp byte [cs:RESTORE_FAIL],0
+    jne reset_fails
+    and word [cs:ro_vector],0fffeh
+    xor ax,ax
+    jmp done
+reset_fails:
+    mov ax,00ffh
     jmp done
 
 search_first:
@@ -174,6 +215,12 @@ finished:
     jne failed_exit
     cmp byte [cs:first_count],EXPECTED_SEARCHES
     jne failed_exit
+    cmp byte [cs:ro_query_count],EXPECTED_RO_QUERIES
+    jne failed_exit
+    cmp byte [cs:protect_count],EXPECTED_PROTECTS
+    jne failed_exit
+    cmp byte [cs:reset_count],EXPECTED_RESETS
+    jne failed_exit
     jmp exit
 failed_exit:
     mov byte [cs:exit_code],1
@@ -191,11 +238,15 @@ exit:
 dma: dw INITIAL_DMA
 dma_sets: db 0
 first_count: db 0
+ro_query_count: db 0
+protect_count: db 0
+reset_count: db 0
 search_offset: dw 0
 cursor: dw 0
 source: dw 0
 exit_code: db 0
 fcb_copy: times 33 db 0
+ro_vector: dw INITIAL_RO
 dpb:
     dw 32
     db BSH, ((1 << BSH)-1) & 0ffh, EXM

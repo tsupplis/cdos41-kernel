@@ -203,7 +203,11 @@ end dos$media;
 protect$drive: procedure byte;
     drive$mask = shl(1,disk);
     ro$vector = mon3(29,0);
-    if (ro$vector and drive$mask) <> 0 then return 0;
+    if (ro$vector and drive$mask) <> 0 then do;
+        call print$string(.('Drive was already read-only; preserving its RO state.$'));
+        call newline;
+        return 0;
+    end;
 
     protect$status = mon2(28,0);
     ro$vector = mon3(29,0);
