@@ -32,10 +32,10 @@ def check():
         commands = ['c f000000']
         names = {' ': 'Space', '\n': 'Return', '.': 'Period', '[': 'LeftBracket',
                  ']': 'RightBracket', ',': 'Comma'}
-        cases = [('put', 'put [a:capture.txt] type.cmd b:text.txt\n'),
-                 ('append', 'put [a:capture.txt,a] type.cmd b:text.txt\n'),
-                 ('get', 'get [b:getin.dat] pip.cmd\n'),
-                 ('rdr', 'rdr [b:rdrin.dat,a:session.log] pip.cmd\n')]
+        cases = [('put', 'b:put [a:capture.txt] type.cmd b:text.txt\n'),
+                 ('append', 'b:put [a:capture.txt,a] type.cmd b:text.txt\n'),
+                 ('get', 'b:get [b:getin.dat] pip.cmd\n'),
+                 ('rdr', 'b:rdr [b:rdrin.dat,a:session.log] pip.cmd\n')]
         for label, text in cases:
             for char in text:
                 key = '+Shift Semicolon -Shift' if char == ':' else names.get(char, char)
@@ -54,7 +54,7 @@ def check():
                              for at in range(0, 3840, 160))
             lines = [line.strip() for line in text.splitlines() if line.strip()]
             assert lines[-1] == 'A>', (label, text)
-            assert 'failed' not in text.lower() and 'Interrupt from' not in text, (label, text)
+            assert 'failed' not in text.lower() and 'Interrupt from' not in text and 'Concurrent Error:' not in text, (label, text)
         run('python3', twist, 'untwist', str(folder / 'cdos86.img'), str(logical))
         for name in ['capture.txt', 'got.txt', 'rdrcopy.txt', 'session.log']:
             run('cpmcp', '-f', 'ccpm86-320', str(logical), '0:' + name, str(folder / name))

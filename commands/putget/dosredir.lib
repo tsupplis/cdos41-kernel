@@ -229,15 +229,15 @@ execute_dos_child:
     cmp     cs:flag_append,0
     je      dos_echo_input
     or      stream_flags,4
- dos_echo_input:
+dos_echo_input:
     cmp     cs:flag_echo_in,0
     je      dos_echo_output
     or      stream_flags,8
- dos_echo_output:
+dos_echo_output:
     cmp     cs:flag_echo_out,0
     je      dos_configure
     or      stream_flags,10h
- dos_configure:
+dos_configure:
     mov     ax,ds
     mov     stream_input_seg,ax
     mov     stream_output_seg,ax
@@ -258,7 +258,7 @@ execute_dos_child:
     int     bdos
     xor     cx,cx
     call    pctmp_call
- dos_cancel:
+dos_cancel:
     xor     dx,dx
     mov     cl,9
     call    pctmp_call
@@ -268,11 +268,11 @@ execute_dos_child:
     jnz     dos_failed
     clc
     ret
- dos_close_failed:
+dos_close_failed:
     mov     cl,f_close
     mov     dx,offset program_fcb
     int     bdos
     call    restore_user
- dos_failed:
+dos_failed:
     stc
     ret

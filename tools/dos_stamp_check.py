@@ -7,6 +7,9 @@ from historical_check import symbols, payload
 def handles():
     binary = (RSP / 'pctmp.rsp').read_bytes()
     original = bytearray(binary[128:128 + int.from_bytes(binary[1:3], 'little') * 16])
+    # Load actual initialized DATA (including calendar tables) separately from code.
+    data_at=128+int.from_bytes(binary[1:3],'little')*16
+    initialized=binary[data_at:data_at+int.from_bytes(binary[10:12],'little')*16]
     names = syms('ms2')
     code_base, data_base = bases('ms2')
     c = lambda name: code_base + names[name]
@@ -30,7 +33,13 @@ def handles():
                  'mov byte [0f004h],1\nmov ax,' + ('255' if failure == 'write' else '0') + '\nret')
             expected = 0x747d if fat else 0x7460
             reached_write = failure in ['none', 'write']
+            at=len(code)
+            code+=initialized
             body = f'''
+ mov si,{at}
+ xor di,di
+ mov cx,{len(initialized)}
+ cs rep movsb
  mov di,0f000h
  mov cx,16
  xor ax,ax
@@ -63,7 +72,7 @@ def handles():
                     body += f'cmp word [{d("TEMP_DTA_BUF")+6}],5d7ch\njne failed\n'
                 else:
                     body += f'cmp word [{d("TEMP_DTA_BUF")+6}],3514h\njne failed\n'
-            near(code, c('MS2_F_SETDATE'), body)
+            separate_near(code, c('MS2_F_SETDATE'), body)
             cases += 1
     print(f'PASS: {cases} assembled FAT/CPM handle timestamp success/error and DTA/drive restoration cases')
 

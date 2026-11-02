@@ -28,15 +28,6 @@ def check(video):
         folder = Path(td)
         for name in ['cdos86.img', 'cdostools.img']:
             shutil.copyfile(MEDIA / name, folder / name)
-        # The released tools disk is full. Reserve space only in this disposable
-        # copy for BOOTCHK.CMD; none of the tests uses its HELP.HLP payload.
-        logical = folder / 'tools-logical.img'
-        subprocess.run(['python3', str(ROOT / 'tools/cpm86twist.py'), 'untwist',
-                        str(folder / 'cdostools.img'), str(logical)], check=True)
-        subprocess.run(['cpmrm', '-f', 'ccpm86-320', str(logical), '0:help.hlp'],
-                       cwd=MEDIA, check=True)
-        subprocess.run(['python3', str(ROOT / 'tools/cpm86twist.py'), 'twist',
-                        str(logical), str(folder / 'cdostools.img')], check=True)
         # Retain the launcher's CPU, ROMs and disk/controller configuration.
         # Only the host terminal/speaker drivers become null for this test.
         cfg = (MEDIA / 'cdos86.cfg').read_text()

@@ -7,11 +7,10 @@ on the currently selected drive through BDOS. It does not modify the disk.
 The checker uses the selected drive's DPB and reports record counts beyond
 128, extent reserved bits, allocation references beyond the DPB's maximum
 block, references to directory-reserved blocks, and duplicate block references.
-It refuses the DOS/FAT media identified by the CDOS pseudo-label.
-
-Allocation blocks for `CCPM.SYS` are skipped. Live CDOS BDOS search does not
-reliably expose that file's physical extent allocation list, so checking it
-would produce false cross-link and reserved-block reports.
+Every nonzero allocation slot is checked, including slots beyond the record
+count; zero slots are allowed for sparse files. `CCPM.SYS` is checked like any
+other file. The checker refuses DOS/FAT media identified by the CDOS
+pseudo-label.
 
 Run it only when the drive is idle. BDOS does not provide an exclusive
 filesystem lock for this scan, so concurrent writes can make its results

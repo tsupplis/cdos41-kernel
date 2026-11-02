@@ -125,14 +125,15 @@ access remain outside this interface. Details and limits are in the
 | Image | Bootable | Contents |
 | --- | --- | --- |
 | `cdos86.img` | Yes | Kernel, core file commands, ED, DATE, SDIR, SET, SHOW, SUBMIT, BATCH, SYSDISK, ERA/ERAQ, PIP and shell alias targets |
-| `cdostools.img` | No | ASM80/ASM86, DDT86, GENCMD, GENCCPM, HEXCOM, HELP, SYSTAT, CHSET, GENLDR, WINDOW/WMENU, PUT/GET/RDR and PIP |
+| `cdostools.img` | No | HELP, SYSTAT, CHSET, WINDOW/WMENU, PUT/GET/RDR, SYSDISK, ERA and PIP |
+| `cdosdev.img` | No | ASM80/ASM86, DDT86, GENCMD, HEXCOM, GENCCPM, GENLDR, ED, SUBMIT and PIP |
 | `cdosmaint.img` | Yes | Kernel, INITDIR, DSKMAINT, HDMAINT.CMD, DCOPY, SYSDISK, ERA and PIP |
 | `cdosmenu.img` | No | SPL, PRINT, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP, menu/terminal data, BAT examples and PIP |
 | `cdosdos.img` | No | COPY.EXE, DATE.EXE, ERASE.EXE, PATH.EXE, SETENV.EXE, LOADCCPM.COM, TIME.EXE, REN.EXE and REDOS.COM, core commands and PIP |
 | `cdosextras.img` | No | BACKREST, CARDFILE, DRTALK, their support files and PIP |
 | `cdosadmin.img` | No | FUNCTION, DCOMP, SETPORT, SETUP, STOP, CHKCPMFS, N with NATIONAL.MSG, FM with FM.CFG and TERM.DAT and PIP |
 
-`make dist` places these seven images and `disks.zip` at the repository root.
+`make dist` places these eight images and `disks.zip` at the repository root.
 Source distribution and history stay in Git.
 
 Boot the system or maintenance disk in A: and use the data disks in B:.

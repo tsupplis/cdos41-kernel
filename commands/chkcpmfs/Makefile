@@ -10,7 +10,7 @@ GENCMD=cpm86_gencmd
 
 TOOLS=chkcpmfs.cmd
 
-.PHONY: all check clean
+.PHONY: all check check-bdos check-live clean
 .DELETE_ON_ERROR:
 
 all: $(TOOLS)
@@ -45,5 +45,11 @@ clean:
 	rm -f *.sys *.loc *.cmd *.obj *.h86 *.sym *.lin *.lst *.prn
 	rm -f *.mp? *.lnk
 
-check: all
+check: all check-bdos
 	@set -e; for file in $(TOOLS); do $(CMDINFO) $$file; done
+
+check-bdos: all
+	python3 tests/check.py
+
+check-live: all
+	python3 tests/live.py

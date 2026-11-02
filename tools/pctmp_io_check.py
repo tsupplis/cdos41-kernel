@@ -26,7 +26,12 @@ def console():
   code=bytearray(BASE)
   stub(code,'CONIN','push bx\nmov bx,[0f000h]\nmov al,[bx]\ninc bx\nmov [0f000h],bx\npop bx\nret')
   stub(code,'CONBRK','xor ax,ax\nret');stub(code,'PUTCHAR','ret')
-  body=f'''mov word [0f000h],0f100h
+  ms2=syms('ms2');_,data2=bases('ms2')
+  body=f'''mov word [{D('LEGACY_IO_FLAGS')}],0
+ mov byte [{D('LINE_SKIP_LF')}],0
+ mov word [{data2+ms2['HCB_LIST']}],0
+ mov word [{data2+ms2['LINE_INPUT_HCB']}],0
+ mov word [0f000h],0f100h
  mov word [{D('RDBUF_DX')}],0f400h
  mov byte [{D('COLUMN')}],0
  mov byte [{D('COMPCOL')}],0

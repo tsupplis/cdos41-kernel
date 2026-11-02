@@ -5,8 +5,8 @@ chkcpmfs:
 do;
 
 declare
-    media$fcb (16) byte,
-    search$fcb (16) byte,
+    media$fcb (36) byte,
+    search$fcb (36) byte,
     dirbuf (128) byte,
     alloc$map (8192) byte,
     dpb$pointer pointer,
@@ -18,8 +18,8 @@ declare
     maxall literally 'dpb.mxa',
     dirblk literally 'dpb.dbl',
     (dir$offset, map$index, block$number,
-     records$per$block, needed$blocks, file$count, block$count,
-     error$count, skipped$count, original$dma) address,
+     records$per$block, needed$blocks, entry$count, block$count,
+     error$count, original$dma) address,
     (disk, dcnt, entry$user, rc,
      slots, slot, map$bit) byte;
 
@@ -131,21 +131,6 @@ check$entry: procedure;
         error$count = error$count + 1;
     end;
 
-    if (dirbuf(dir$offset + 1) and 7fh) = 'C' and
-       (dirbuf(dir$offset + 2) and 7fh) = 'C' and
-       (dirbuf(dir$offset + 3) and 7fh) = 'P' and
-       (dirbuf(dir$offset + 4) and 7fh) = 'M' and
-       (dirbuf(dir$offset + 5) and 7fh) = ' ' and
-       (dirbuf(dir$offset + 6) and 7fh) = ' ' and
-       (dirbuf(dir$offset + 7) and 7fh) = ' ' and
-       (dirbuf(dir$offset + 8) and 7fh) = ' ' and
-       (dirbuf(dir$offset + 9) and 7fh) = 'S' and
-       (dirbuf(dir$offset + 10) and 7fh) = 'Y' and
-       (dirbuf(dir$offset + 11) and 7fh) = 'S' then do;
-        skipped$count = skipped$count + 1;
-        return;
-    end;
-
     if maxall > 255 then slots = 8;
     else slots = 16;
     records$per$block = shl(1,blkshf);
@@ -156,29 +141,30 @@ check$entry: procedure;
         call print$string(.('RECORD COUNT EXCEEDS EXTENT ALLOCATION CAPACITY$'));
         call newline;
         error$count = error$count + 1;
-        needed$blocks = slots;
     end;
 
-    if needed$blocks <> 0 then do;
-    do slot = 0 to needed$blocks - 1;
+    do slot = 0 to slots - 1;
         if maxall > 255 then do;
             i = dir$offset + 16 + (slot * 2);
             block$number = dirbuf(i) +
                            shl(double(dirbuf(i + 1)),8);
         end;
         else block$number = dirbuf(dir$offset + 16 + slot);
+        if block$number <> 0 then do;
         block$count = block$count + 1;
 
         if block$number > maxall then
             call report$block(.('IS OUTSIDE THE DISK$'));
         else do;
-            if block$number < 8 then
+            if block$number < 8 then do;
                 if (low(dirblk) and shl(1,7 - block$number)) <> 0 then
                     call report$block(.('IS RESERVED FOR THE DIRECTORY$'));
-            else if block$number < 16 then
+            end;
+            else if block$number < 16 then do;
                 if (high(dirblk) and
-                    shl(1,15 - (block$number - 8))) <> 0 then
+                    shl(1,15 - block$number)) <> 0 then
                     call report$block(.('IS RESERVED FOR THE DIRECTORY$'));
+            end;
 
             map$index = shr(block$number,3);
             map$bit = shl(1,block$number and 7);
@@ -187,7 +173,7 @@ check$entry: procedure;
             else alloc$map(map$index) =
                  alloc$map(map$index) or map$bit;
         end;
-    end;
+        end;
     end;
 end check$entry;
 
@@ -202,7 +188,7 @@ dos$media: procedure byte;
     do i = 1 to 11;
         media$fcb(i) = '?';
     end;
-    do i = 12 to 15;
+    do i = 12 to 35;
         media$fcb(i) = 0;
     end;
     call mon1(26,.dirbuf);
@@ -250,14 +236,14 @@ plmstart: procedure public;
     do i = 0 to 8191;
         alloc$map(i) = 0;
     end;
-    file$count, block$count, error$count, skipped$count = 0;
+    entry$count, block$count, error$count = 0;
     original$dma = mon3(52,0);
 
     search$fcb(0) = '?';
     do i = 1 to 11;
         search$fcb(i) = '?';
     end;
-    do i = 12 to 15;
+    do i = 12 to 35;
         search$fcb(i) = 0;
     end;
     call mon1(26,.dirbuf);
@@ -267,7 +253,7 @@ plmstart: procedure public;
         dir$offset = shl(double(dcnt),5);
         entry$user = dirbuf(dir$offset);
         if entry$user <= 15 then do;
-            file$count = file$count + 1;
+            entry$count = entry$count + 1;
             call check$entry;
         end;
         dcnt = mon2(18,0);
@@ -275,24 +261,19 @@ plmstart: procedure public;
     call mon1(26,original$dma);
 
     call print$string(.('Directory entries scanned: $'));
-    call decimal(file$count);
+    call decimal(entry$count);
     call print$string(.('  block references checked: $'));
     call decimal(block$count);
     call newline;
     call print$string(.('Consistency errors: $'));
     call decimal(error$count);
     call newline;
-    if skipped$count <> 0 then do;
-        call print$string(.('CCPM.SYS allocation entries skipped: $'));
-        call decimal(skipped$count);
-        call newline;
-    end;
     if error$count = 0 then
         call print$string(.('No inconsistencies found in checked entries.$'));
     else
         call print$string(.('Review the reported directory-entry errors.$'));
     call newline;
-    call print$string(.('Not checked: CCPM.SYS blocks, deleted slots, timestamps, data sectors, or unreferenced blocks.$'));
+    call print$string(.('Not checked: deleted slots, timestamps, data sectors, or unreferenced blocks.$'));
     call newline;
     call terminate;
 end plmstart;

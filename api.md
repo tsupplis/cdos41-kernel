@@ -18,18 +18,18 @@
 | AH | Service | Reference version | Status | Limit / behaviour | Extension |
 | --- | --- | --- | --- | --- | --- |
 | 00 | Terminate | DOS 1.x | Implemented | Legacy termination; CS must identify PSP | — |
-| 01 | Console input with echo | DOS 1.x | Implemented | Follows standard handle 0/1; redirected status does not consume input | NEW (streams) |
-| 02 | Console output | DOS 1.x | Implemented | Follows standard handle 0/1; redirected status does not consume input | NEW (streams) |
+| 01 | Console input with echo | DOS 1.x | Implemented | Follows standard handle 0/1; status does not consume input | NEW (streams) |
+| 02 | Console output | DOS 1.x | Implemented | Follows standard handle 0/1; status does not consume input | NEW (streams) |
 | 03 | AUX input | DOS 1.x | Implemented | Native AUX input with CIO ownership | — |
 | 04 | AUX output | DOS 1.x | Implemented | Native AUX output with CIO ownership | — |
 | 05 | Printer output | DOS 1.x | Implemented | Native list output; assigned printer | — |
-| 06 | Direct console I/O | DOS 1.x | Implemented | Follows standard handle 0/1; redirected status does not consume input | NEW (streams) |
-| 07 | Console input without echo/check | DOS 1.x | Implemented | Follows standard handle 0/1; redirected status does not consume input | NEW (streams) |
-| 08 | Console input without echo, Ctrl-C check | DOS 1.x | Implemented | Follows standard handle 0/1; redirected status does not consume input | NEW (streams) |
-| 09 | Print dollar-terminated string | DOS 1.x | Implemented | Follows standard handle 0/1; redirected status does not consume input | NEW (streams) |
+| 06 | Direct console I/O | DOS 1.x | Implemented | Follows standard handle 0/1; status does not consume input | NEW (streams) |
+| 07 | Console input without echo/check | DOS 1.x | Implemented | Follows standard handle 0/1; status does not consume input | NEW (streams) |
+| 08 | Console input without echo, Ctrl-C check | DOS 1.x | Implemented | Follows standard handle 0/1; status does not consume input | NEW (streams) |
+| 09 | Print dollar-terminated string | DOS 1.x | Implemented | Follows standard handle 0/1; status does not consume input | NEW (streams) |
 | 0A | Buffered console input | DOS 1.x | Implemented | Standard handles 0/1; EOF and CR/LF line input | NEW (streams) |
-| 0B | Console input status | DOS 1.x | Implemented | Follows standard handle 0/1; redirected status does not consume input | NEW (streams) |
-| 0C | Flush input and read | DOS 1.x | Implemented | Follows standard handle 0/1; redirected status does not consume input | NEW (streams) |
+| 0B | Console input status | DOS 1.x | Implemented | Follows standard handle 0/1; status does not consume input | NEW (streams) |
+| 0C | Flush input and read | DOS 1.x | Implemented | Follows standard handle 0/1; status does not consume input | NEW (streams) |
 | 0D | Disk reset | DOS 1.x | Implemented | — | — |
 | 0E | Select default drive | DOS 1.x | Implemented | — | — |
 | 0F | FCB open | DOS 1.x | Implemented | FCB adapter → shared CP/M/FAT filesystem | — |

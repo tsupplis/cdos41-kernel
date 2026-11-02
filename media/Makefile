@@ -1,11 +1,11 @@
-# Build the seven distribution disks from local components and reference files.
+# Build the eight distribution disks from local components and reference files.
 # check validates image contents; test starts the configured PCE machine.
 
 PYTHON ?= python3
 FORMAT=ccpm86-320
 TWIST=$(PYTHON) ../tools/cpm86twist.py
 CPMCP=cpmcp -f $(FORMAT)
-IMAGES=cdos86.img cdostools.img cdosmaint.img cdosmenu.img cdosdos.img cdosextras.img cdosadmin.img
+IMAGES=cdos86.img cdostools.img cdosdev.img cdosmaint.img cdosmenu.img cdosdos.img cdosextras.img cdosadmin.img
 PIP=../commands/pip/pip4.cmd
 
 SYSTEM_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
@@ -15,12 +15,16 @@ SYSTEM_COMMANDS = ../commands/batch/batch.cmd ../commands/sysdisk/sysdisk.cmd ..
     ../commands/submit/submit.cmd ../commands/type/type.cmd ../commands/dir/dir.cmd \
     ../commands/ed/ed.cmd ../commands/rename/ren.exe ../commands/stop/stop.cmd
 
+# Development tools are kept separate from day-to-day utilities.
+DEV_COMMANDS = ../commands/asm80/asm80.cmd ../commands/asm86/asm86.cmd \
+    ../commands/ddt86/ddt86.cmd ../commands/gencmd/gencmd.cmd \
+    ../commands/hexcom/hexcom.cmd ../commands/genccpm/genccpm.cmd \
+    ../commands/genldr/genldr.cmd ../commands/ed/ed.cmd ../commands/submit/submit.cmd
+
 TOOLS_COMMANDS = ../commands/putget/put.cmd ../commands/putget/get.cmd ../commands/putget/rdr.cmd \
-    ../commands/asm80/asm80.cmd ../commands/asm86/asm86.cmd ../commands/ddt86/ddt86.cmd ../commands/gencmd/gencmd.cmd \
-    ../commands/genccpm/genccpm.cmd ../commands/hexcom/hexcom.cmd ../commands/help/help.cmd \
-    ../commands/helphlp/help.hlp ../commands/systat/systat.cmd \
-    ../commands/chset/chset.cmd ../commands/genldr/genldr.cmd \
-    ../commands/window/window.cmd ../commands/window/wmenu.cmd
+    ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
+    ../commands/help/help.cmd ../commands/helphlp/help.hlp ../commands/systat/systat.cmd \
+    ../commands/chset/chset.cmd ../commands/window/window.cmd ../commands/window/wmenu.cmd
 
 MAINT_COMMANDS = ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
     ../commands/dskmaint/dskmaint.cmd ../commands/disk/dcopy.cmd ../commands/hdmaint/hdmaint.cmd \
@@ -75,7 +79,15 @@ cdostools.img: cdos86base.img $(TOOLS_COMMANDS) $(PIP) Makefile
 	$(TWIST) untwist cdos86base.img $@.logical.tmp
 	$(CPMCP) $@.logical.tmp $(TOOLS_COMMANDS) 0:
 	$(CPMCP) $@.logical.tmp $(PIP) 0:PIP.CMD
-	cpmchattr -f $(FORMAT) $@.logical.tmp s 0:BATCH.CMD
+	cpmls -F -f $(FORMAT) $@.logical.tmp '0:*.*'
+	$(TWIST) twist $@.logical.tmp $@.tmp
+	mv $@.tmp $@
+	$(RM) $@.logical.tmp
+
+cdosdev.img: cdos86base.img $(DEV_COMMANDS) $(PIP) Makefile
+	$(TWIST) untwist cdos86base.img $@.logical.tmp
+	$(CPMCP) $@.logical.tmp $(DEV_COMMANDS) 0:
+	$(CPMCP) $@.logical.tmp $(PIP) 0:PIP.CMD
 	cpmls -F -f $(FORMAT) $@.logical.tmp '0:*.*'
 	$(TWIST) twist $@.logical.tmp $@.tmp
 	mv $@.tmp $@
@@ -138,6 +150,7 @@ check check-media: all
 	    case $$image in \
 	      cdos86.img) sources='../kernel/sysgen/ccpm.sys $(SYSTEM_COMMANDS)' ;; \
 	      cdostools.img) sources='$(TOOLS_COMMANDS)' ;; \
+	      cdosdev.img) sources='$(DEV_COMMANDS)' ;; \
 	      cdosmaint.img) sources='../kernel/sysgen/ccpm.sys $(MAINT_COMMANDS)' ;; \
 	      cdosmenu.img) sources='$(MENU_COMMANDS)' ;; \
 	      cdosdos.img) sources='$(DOS_COMMANDS)' ;; \
