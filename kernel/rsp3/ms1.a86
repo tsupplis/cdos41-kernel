@@ -88,6 +88,8 @@ TRUE		EQU	NOT FALSE
 	extrn ms2_critical_error:near,restore_dta_state:near,restore_pdrive_state:near
 	extrn	get_fcb_directory:near,set_fcb_directory:near
 	extrn	ms2_func_entry:near	; entry for all DOS 2.x functions
+	extrn ms2_handles_init:near,ms2_close_handles:near
+	extrn ms2_abort_ctrlc:near,prepare_critical_abort:near
 	extrn	ms2_terminate:near	; cleans up ms2 variables
 	public	get_data_seg		; shared with ms2
 	public	convert_date		; msdos to cpm date
@@ -627,6 +629,7 @@ dont_free_mem:
 ms_cleanup1:
 	call critical_cleanup		; release borrowed state on exit/abort too
 	cmp pcmode,TRUE ! jne not_in_pcmode
+	    call ms2_close_handles
 	    cld
 	    xor cx,cx			;restore origional interrupt vector
 	    mov es,cx
@@ -1448,6 +1451,11 @@ pass2:
 	add	ax,bx				; add in offset segment
 	mov	di,2ch				; offset of environment ptr
 	stosw					; store seg of env into PSP
+
+	push ax
+	mov ax,psp_base
+	call ms2_handles_init
+	pop ax
 
 ; European 24-Sep-1985 PC-MODE: DOS far-call entry at PSP:0050h.
 ; Programs may call this stub instead of issuing INT 21h directly.
@@ -2593,7 +2601,7 @@ int_23:
 	call get_data_seg
 	mov cl,CR ! call conout
 	mov cl,LF ! call conout
-	jmp error_exit
+	jmp ms2_abort_ctrlc
 
 
 eject
@@ -2761,6 +2769,7 @@ critical_dos1:
 	    pop di			;ignore is mapped into re-try
 	    jmp check_error_again		;retry the operation
 dont_retry:
+	    call prepare_critical_abort
 	    int 22h			; abort through the termination vector
 
 
@@ -5575,8 +5584,8 @@ ms_create_seg:
 	mov ds,ax	;BASE PAGE
 	mov si,offset TERMINATE_ADDRESS	;CURRENT BREAK,TERM
 	mov di,offset TERMINATE_O
-	mov cx,4
-	rep movsw	;BREAK,TERM SAVED HERE
+	mov cx,6
+	rep movsw	;inherit terminate, Ctrl-C and critical-error vectors
 	pop ds
 	sub dx,psp_base		;SEG DIFFERENCE
 	mov ax,psp_length
@@ -5835,7 +5844,7 @@ check_part:
 
 	    cmp dx,bx
 	    ja ok ! jb partial
-	    cmp cx,ax ! jae ok
+	    cmp cx,ax ! ja ok		; size must exceed the last requested index
 
 partial:
 		mov end_byte_lo,cx

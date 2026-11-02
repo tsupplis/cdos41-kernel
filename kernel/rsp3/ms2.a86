@@ -41,6 +41,7 @@ pagesize 72					; Apr 29, 1985
 	extrn	cur_dsk:byte		; short cut to default drive
 	extrn	bdos_ptr:dword		; for bdos calls around int E0
 	extrn	dmd_base:word		; points to first dos mem desc
+	public ms2_handles_init,ms2_close_handles,ms2_abort_ctrlc,prepare_critical_abort
 	public	active_psp		; psp of active program
 
 
@@ -622,12 +623,15 @@ ms2_critical_action:
 	pop di
 	jmp check_error_again		; retry only at the interrupted BDOS call
 ms2_critical_abort:
+	call prepare_critical_abort
 	int 22h				; terminate, not Ctrl-C processing
 
 ms1_func:
 	inc dos_internal
 	int	21h
-	dec dos_internal			; right back in
+	pushf
+	dec dos_internal
+	popf				; preserve the DOS result flags
 	ret
 
 
@@ -1933,28 +1937,34 @@ ms2_f_open_error:
 ;	*****************************
 
 ms2_f_close:
-	mov	al,hf_read + hf_write	; accept either or both
-	call	get_active_handle	; bx -> our hcb
-	jc	ms2_f_close_error	; if invalid
-
-	test	hcb_flags[bx],hf_device	; if handle is for char device
-	mov	al,no_h_match		;   return invalid handle error
-	jnz	ms2_f_close_error
-
-	mov	hcb_list[si],0		; free up our handle
-	dec	hcb_count[bx]		; if we are not the final owner
-	jnz	ms2_f_close_done	;   then just quit
-
-	call	swap_pdrive		; xchg hds pointers
-	call	close_fcb		; tell the system we're through
-	call	swap_pdrive		; xchg hds pointers
-	jc	ms2_f_close_error
-
-ms2_f_close_done:
-	ret				; successful return (cf=0)
-
+	mov al,hf_read + hf_write
+	call get_active_handle
+	jc ms2_f_close_error
+	push si
+	call release_hcb
+	pop si
+	jc ms2_f_close_error
+	mov hcb_list[si],0
+	ret
 ms2_f_close_error:
-	jmp	ms2_error_ret		; top level error handler
+	jmp ms2_error_ret
+
+; Release one owner. The final disk reference must close successfully
+; before the handle can be reused. A character device needs no file close.
+release_hcb:
+	cmp hcb_count[bx],1 ! jne release_hcb_count
+	test hcb_flags[bx],hf_device ! jnz release_hcb_count
+	call swap_pdrive
+	push bx
+	call close_fcb
+	pop bx
+	call swap_pdrive
+	jc release_hcb_done
+release_hcb_count:
+	dec hcb_count[bx]
+	clc
+release_hcb_done:
+	ret
 
 
 ;	*****************************
@@ -2165,10 +2175,11 @@ ms2_dup_handle:
 	jc	ms2_dup_error		; skip if invalid
 
 	push	bx
-	call	get_free_handle		; find an unused handle
+	call get_free_number		; duplicate shares the existing FCB
 	pop	bx
 	jc	ms2_dup_error		; skip if none left
 
+	shr si,1
 	mov	ms2_ret_ax,si		; return the new handle number
 	shl	si,1
 	mov	hcb_list[si],bx		; point new handle to active hcb
@@ -2185,24 +2196,32 @@ ms2_dup_error:
 ;	*****************************
 
 ms2_force_dup:
-	mov	al,hf_read + hf_write	; look for either
-	call	get_active_handle	; bx -> the active hcb
-	jc	ms2_force_error		; skip if invalid
-
-	push bx ! push ms2_bx		; here we set up the new handle
-	mov	ax,ms2_cx		;   as if it were passed from
-	mov	ms2_bx,ax		;   outside, and attempt a close
-	call	ms2_f_close		;   just in case CX is open,
-	pop ms2_bx ! pop bx		;   ignoring any errors.
-
-	mov	si,ms2_cx		; new handle number
-	shl	si,1
-	mov	hcb_list[si],bx		; point to the active hcb
-	inc	hcb_count[bx]		; add one to the owner count
-	ret				; correct any error ret now
-
+	cmp ms2_cx,num_hcb ! jb force_target_valid
+	mov al,no_h_match
+	jmp ms2_error_ret
+force_target_valid:
+	mov al,hf_read + hf_write
+	call get_active_handle
+	jc ms2_force_error
+	mov si,ms2_cx
+	shl si,1
+	cmp hcb_list[si],bx ! je force_duplicate_done
+	push bx ! push si
+	mov bx,hcb_list[si]
+	or bx,bx ! jz force_target_empty
+	call release_hcb
+	jmps force_target_released
+force_target_empty:
+	clc
+force_target_released:
+	pop si ! pop bx
+	jc ms2_force_error
+	mov hcb_list[si],bx
+	inc hcb_count[bx]
+force_duplicate_done:
+	ret
 ms2_force_error:
-	jmp	ms2_error_ret		; if active handle invalid
+	jmp ms2_error_ret
 
 
 ;	*****************************
@@ -2416,17 +2435,23 @@ eject
 ;		cf = 1, al = err code, if not
 
 get_free_handle:
-	mov	si,2 * rsv_hcb		; skip over reserved hcb's
-	mov	cx,num_hcb - rsv_hcb	; cx = num of hcb's to check
+	call get_free_number
+	jc get_free_error
+	jmps get_free_hcb
 
+; Return a free byte index in SI. Closing a standard handle makes its
+; number available, independently of whether another FCB can be allocated.
+get_free_number:
+	xor si,si
+	mov cx,num_hcb
 get_free_loop1:
-	mov	bx,hcb_list[si]		; pull an hcb from the list
-	test	bx,bx			; if it's zero, then
-	jz	get_free_hcb		;   we've found a free one
-
-	inc si ! inc si			; if not, check the next
-	loop	get_free_loop1
-	jmps	get_free_error
+	cmp hcb_list[si],0 ! je get_free_number_done
+	inc si ! inc si
+	loop get_free_loop1
+	mov al,no_handle
+	stc
+get_free_number_done:
+	ret
 
 get_free_hcb:
 	lea	bx,file_hcbs		; bx -> first file hcb
@@ -3003,15 +3028,15 @@ hcb_list	dw	hcb0,hcb1,hcb2,hcb3,hcb4
 
 ;	Handle Control Blocks
 
-hcb0		db	hf_device + hf_read,0			; input
+hcb0		db	hf_device + hf_read,1			; input
 		dw	0,hfcb0
-hcb1		db	hf_device + hf_write,0			; output
+hcb1		db	hf_device + hf_write,1			; output
 		dw	0,hfcb1
-hcb2		db	hf_device + hf_write,0			; error
+hcb2		db	hf_device + hf_write,1			; error
 		dw	0,hfcb2
-hcb3		db	hf_device + hf_read + hf_write,0	; aux
+hcb3		db	hf_device + hf_read + hf_write,1	; aux
 		dw	0,hfcb3
-hcb4		db	hf_device + hf_read + hf_write,0	; printer
+hcb4		db	hf_device + hf_read + hf_write,1	; printer
 		dw	0,hfcb4
 
 file_hcbs	rb	0
@@ -3412,6 +3437,12 @@ ms2_ctbr_set:
 ms2_exec:
 	sub	dx,dx			; dta is used all through here
 	call	save_set_dta		;   so save it right away
+	cmp ms2_al,1 ! ja exec_inheritance_ready
+	call check_handle_inheritance
+	jnc exec_inheritance_ready
+	mov al,no_handle
+	jmp ms2_exec_error
+exec_inheritance_ready:
 	call	file_path_prep		; chain path, open last
 	jc	ms2_exec_error		; if any error, then quit
 
@@ -3552,19 +3583,156 @@ ms2_term_mem_next:
 	  jmps ms2_term_mem_loop	;   and try again
 
 ms2_term_handle:
-	lea si,hcb_list + (2*rsv_hcb)	; skip over reserved hcb's
-	sub ax,ax			; a convenient zero
-ms2_term_handle_loop:
-	mov bx,[si] ! test bx,bx	; test an hcb from the list
-	jz ms2_term_handle_next		; if zero, check for another one
-	  mov [si],ax			; if not, zero the list entry
-	  mov hcb_count[bx],al		;   and the hcb count
-ms2_term_handle_next:
-	inc si ! inc si			; if not, check the next
-	cmp si,offset hcb_list + (2*num_hcb)
-	jb ms2_term_handle_loop
-
+	; Every child reference is released, including redirected 0/1/2.
+	call ms2_close_handles
+	mov ax,active_psp
+	or ax,ax ! jz terminated_handles_done
+	mov es,ax
+	call load_handle_table
+terminated_handles_done:
 	pop si ! pop bx ! pop ax ! pop es
+	ret
+
+
+; Initialize a newly launched root PSP. Parent zero ends the handle tree.
+; AX=PSP segment. All registers are preserved.
+ms2_handles_init:
+	push ax ! push bx ! push cx ! push dx ! push si ! push di ! push es
+	mov active_psp,ax
+	mov abort_pending,0
+	mov es,ax
+	mov es:psp_parent,0
+	lea si,hcb_list
+	lea bx,hcb0
+	mov cx,rsv_hcb
+root_handles:
+	mov [si],bx
+	mov hcb_count[bx],1
+	and hcb_flags[bx],not hf_dev_open
+	add si,2
+	add bx,hcb_size
+	loop root_handles
+	xor ax,ax
+	mov cx,num_hcb-rsv_hcb
+root_files:
+	mov [si],ax
+	add si,2
+	loop root_files
+	call save_handle_table
+	pop es ! pop di ! pop si ! pop dx ! pop cx ! pop bx ! pop ax
+	ret
+
+; ES=PSP. Save/restore the active table without changing its ownership.
+save_handle_table:
+	push ax ! push bx ! push cx ! push dx ! push si ! push di
+	lea si,hcb_list
+	mov di,18h
+	mov cx,num_hcb
+save_handle_slot:
+	lodsw
+	or ax,ax ! jz save_closed_slot
+	sub ax,offset hcb0
+	xor dx,dx
+	mov bx,hcb_size
+	div bx
+	jmps save_handle_byte
+save_closed_slot:
+	mov al,0ffh
+save_handle_byte:
+	stosb
+	loop save_handle_slot
+	pop di ! pop si ! pop dx ! pop cx ! pop bx ! pop ax
+	ret
+load_handle_table:
+	push ax ! push bx ! push cx ! push si ! push di
+	lea si,hcb_list
+	mov di,18h
+	mov cx,num_hcb
+load_handle_slot:
+	mov al,es:[di]
+	inc di
+	xor ah,ah
+	cmp al,num_hcb ! jae load_closed_slot
+	mov bl,hcb_size
+	mul bl
+	add ax,offset hcb0
+	jmps load_handle_word
+load_closed_slot:
+	xor ax,ax
+load_handle_word:
+	mov [si],ax
+	add si,2
+	loop load_handle_slot
+	pop di ! pop si ! pop cx ! pop bx ! pop ax
+	ret
+
+; Reference counts are bytes. Reject an EXEC before loading if any HCB
+; would overflow after adding one owner for each inherited handle slot.
+check_handle_inheritance:
+	push ax ! push bx ! push cx ! push dx ! push si ! push di
+	lea bx,hcb0
+	mov di,num_hcb
+check_inherited_block:
+	mov al,hcb_count[bx]
+	lea si,hcb_list
+	mov cx,num_hcb
+check_inherited_slot:
+	cmp [si],bx ! jne check_inherited_next
+	add al,1
+	jc inherited_count_full
+check_inherited_next:
+	add si,2
+	loop check_inherited_slot
+	add bx,hcb_size
+	dec di
+	jnz check_inherited_block
+	clc
+	jmps inherited_check_done
+inherited_count_full:
+	stc
+inherited_check_done:
+	pop di ! pop si ! pop dx ! pop cx ! pop bx ! pop ax
+	ret
+
+inherit_handles:
+	push ax ! push bx ! push cx ! push si ! push es
+	mov es,parents_psp
+	call save_handle_table
+	lea si,hcb_list
+	mov cx,num_hcb
+inherit_handle_slot:
+	lodsw
+	or ax,ax ! jz inherit_next_slot
+	mov bx,ax
+	inc hcb_count[bx]
+inherit_next_slot:
+	loop inherit_handle_slot
+	mov es,new_psp
+	call save_handle_table
+	pop es ! pop si ! pop cx ! pop bx ! pop ax
+	ret
+
+; Termination is best-effort: attempt every close, retaining a diagnostic
+; on failure. Native process termination remains the final disk cleanup.
+ms2_close_handles:
+	push ax ! push bx ! push cx ! push dx ! push si ! push di ! push es
+	lea si,hcb_list
+	mov cx,num_hcb
+close_owned_handle:
+	mov bx,[si]
+	or bx,bx ! jz close_next_handle
+	push cx ! push si
+	call release_hcb
+	jnc close_owned_released
+	dec hcb_count[bx]
+	mov dos_error_code,no_access
+close_owned_released:
+	pop si ! pop cx
+	mov word ptr [si],0
+close_next_handle:
+	add si,2
+	loop close_owned_handle
+	pop es ! pop di ! pop si ! pop dx ! pop cx ! pop bx ! pop ax
 	ret
 
 
@@ -3758,20 +3926,22 @@ exec_load_done:
 ;	exit:	dx = psp segment
 
 set_up_psp:
-	les	di,ms2_ss_sp		; es:di -> parents stack
-	mov	ax,es:[di]		; get return IP
-	mov	bx,es:.2[di]		; get return CS
-	sub	cx,cx
-	mov	es,cx			; es -> base page
-	mov	di,22h * 4		; terminate vector offset
-	stosw				; IP for int 22
-	xchg	ax,bx
-	stosw				; CS for int 22
-	xchg	ax,bx
-	stosw				; IP for int 23
-	xchg	ax,bx
-	stosw				; CS for int 23
-
+	cmp ms2_al,0 ! jne setup_load_only_vector
+	call save_exec_parent
+	xor ax,ax
+	mov es,ax
+	mov es:word ptr .88h,offset exec_parent_return
+	mov es:word ptr .8ah,cs
+	jmps setup_vector_done
+setup_load_only_vector:
+	les di,ms2_ss_sp
+	mov ax,es:[di]
+	mov bx,es:.2[di]
+	xor cx,cx
+	mov es,cx
+	mov es:word ptr .88h,ax
+	mov es:word ptr .8ah,bx
+setup_vector_done:
 	mov	ax,new_psp		; now that the load is successful
 	mov	active_psp,ax		;   we can update the active psp
 	mov	dx,ax			; save for make call
@@ -3804,6 +3974,7 @@ set_up_env:
 	mov	es:psp_env,ax		; store passed environment
 	mov	ax,parents_psp		; get parent's psp
 	mov	es:psp_parent,ax	;   and save it in child's psp
+	call inherit_handles
 
 	push ds ! push dx
 	mov	ds,dx			; ds -> psp
@@ -3812,6 +3983,88 @@ set_up_env:
 	call	ms1_func		; set child's dma address
 	pop dx ! pop ds
 	ret
+
+
+; Preserve the parent's register frame and DOS DTA on its own stack.
+; PSP:2Eh is the DOS saved SS:SP field. Each nesting level owns its frame.
+save_exec_parent:
+	push ax ! push bx ! push cx ! push dx ! push si ! push di ! push es
+	xor ax,ax
+	mov es,ax
+	mov si,es:word ptr .88h
+	mov dx,es:word ptr .8ah
+	mov es,ms2_ss
+	mov di,ms2_sp
+	sub di,26
+	mov bx,di
+	mov ax,save_dta_off ! stosw
+	mov ax,save_dta_seg ! stosw
+	mov ax,si ! stosw
+	mov ax,dx ! stosw
+	xor ax,ax ! stosw		; EXEC success returns AX=0
+	mov ax,ms2_bx ! stosw
+	mov ax,ms2_cx ! stosw
+	mov ax,ms2_dx ! stosw
+	mov ax,ms2_si ! stosw
+	mov ax,ms2_di ! stosw
+	mov ax,ms2_bp ! stosw
+	mov ax,ms2_ds ! stosw
+	mov ax,ms2_es ! stosw
+	mov es,parents_psp
+	mov es:word ptr .2eh,bx
+	mov ax,ms2_ss
+	mov es:word ptr .30h,ax
+	pop es ! pop di ! pop si ! pop dx ! pop cx ! pop bx ! pop ax
+	ret
+
+; Direct abort vectors bypass INT 20h. A nested EXEC return must release
+; the interrupted child before restoring its parent; root cleanup remains
+; responsible for a DOS program launched directly by PCTMP.
+ms2_abort_ctrlc:
+	mov return_code,0100h
+	mov abort_pending,1
+	int 22h
+prepare_critical_abort:
+	mov return_code,0200h
+	mov abort_pending,1
+	ret
+
+; INT 20h has released child ownership and restored the parent handle map.
+; Resume the parent's original INT 21h frame, independent of child registers.
+exec_parent_return:
+	call get_data_seg
+	cmp abort_pending,0 ! je exec_parent_resume
+	mov abort_pending,0
+	mov dos_internal,0
+	call critical_cleanup
+	; Direct abort skipped INT 20h vector restoration.
+	push ds
+	mov ds,active_psp
+	xor ax,ax
+	mov es,ax
+	mov si,0ah
+	mov di,88h
+	mov cx,6
+	cld
+	rep movsw
+	pop ds
+	call ms2_terminate
+exec_parent_resume:
+	mov es,active_psp
+	mov bx,es:word ptr .2eh
+	mov dx,es:word ptr .30h
+	cli
+	mov ss,dx
+	mov sp,bx
+	pop ms_dmaadr ! pop ms_dmabase
+	pop ax ! pop bx
+	xor cx,cx
+	mov es,cx
+	mov es:word ptr .88h,ax
+	mov es:word ptr .8ah,bx
+	pop ax ! pop bx ! pop cx ! pop dx
+	pop si ! pop di ! pop bp ! pop ds ! pop es
+	iret
 
 
 ;	Move params from parent to child
@@ -3894,6 +4147,8 @@ ctbr_state	db	0		; extended DOS break checking
 dos_internal db 0
 dos_error_code dw 0
 dos_critical_code dw 0
+
+abort_pending db 0
 
 active_psp	rw	1		; saves the new psp segment
 new_psp		rw	1		; temporarily saves new psp seg
