@@ -277,6 +277,10 @@ flush_out_done:
 ; Output: CF = 0 on success, CF = 1 on CLI execution failure
 ; -----------------------------------------------------------------------------
 execute_child_and_wait:
+    cmp     dos_child,0
+    je      execute_native_child
+    jmp     execute_dos_child
+execute_native_child:
     call    hook_int_e0
 
     ; Execute Child Command via BDOS 150 (p_cli)
@@ -937,6 +941,10 @@ p_cmd_copied:
     mov     si, offset bracket_buf
     clc
     ret
+
+; =============================================================================
+; DOS launch adapter (no native hook is installed for DOS children)
+; =============================================================================
 
 ; =============================================================================
 ; Shared CSEG Variables

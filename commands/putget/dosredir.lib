@@ -1,0 +1,275 @@
+; =============================================================================
+; DOS child launch adapter. The native INT E0 hook remains CMD-only.
+; Resolution follows PCTMP ORDER, with system-drive/user-zero SYS fallback.
+; PCTMP owns redirected DOS files; this CMD retains no DOS handle or callback.
+; =============================================================================
+
+; Resolve the command before opening native redirection files. If no PCTMP
+; ancestor is present, leave native CLI resolution unchanged. A DOS target
+; stays open for private function 1, which consumes its FCB.
+prepare_child:
+    mov     dos_child,0
+    mov     cl,32
+    mov     dx,255
+    int     bdos
+    mov     saved_user,al
+    call    find_pctmp
+    jc      prepare_native
+    mov     order_packet,1
+    mov     dx,offset order_packet
+    mov     cl,6
+    call    pctmp_call
+    or      ax,ax
+    jnz     prepare_native
+    mov     si,offset clicb_cmd
+    mov     di,offset program_template
+    call    parse_filename
+    jc      prepare_failed
+    mov     explicit_type,0
+    cmp     program_template+9,' '
+    je      prepare_search
+    mov     explicit_type,1
+prepare_search:
+    mov     order_index,0
+prepare_candidate:
+    push    ds
+    pop     es
+    mov     si,offset program_template
+    mov     di,offset program_fcb
+    mov     cx,18
+    cld
+    rep     movsw
+    cmp     explicit_type,0
+    jne     prepare_open
+    xor     bx,bx
+    mov     bl,order_index
+    mov     al,bl
+    shl     bl,1
+    add     bl,al
+    mov     ax,word ptr order_packet+1[bx]
+    mov     word ptr program_fcb+9,ax
+    mov     al,order_packet+3[bx]
+    mov     program_fcb+11,al
+prepare_open:
+    call    find_program
+    jnc     prepare_found
+    cmp     explicit_type,0
+    jne     prepare_native
+    inc     order_index
+    cmp     order_index,4
+    jb      prepare_candidate
+prepare_native:
+    call    restore_user
+    clc
+    ret
+prepare_found:
+    mov     ax,word ptr program_fcb+9
+    and     ax,7f7fh
+    cmp     ax,4f43h                 ; CO(M)
+    jne     prepare_exe
+    mov     al,program_fcb+11
+    and     al,7fh
+    cmp     al,'M'
+    je      prepare_dos
+prepare_exe:
+    mov     ax,word ptr program_fcb+9
+    and     ax,7f7fh
+    cmp     ax,5845h                 ; EX(E)
+    jne     prepare_close_native
+    mov     al,program_fcb+11
+    and     al,7fh
+    cmp     al,'E'
+    je      prepare_dos
+prepare_close_native:
+    mov     dx,offset program_fcb
+    mov     cl,f_close
+    int     bdos
+    call    restore_user
+    clc
+    ret
+prepare_dos:
+    ; FFh is safely rejected by historical translators. Never call the new
+    ; function 9 until its exact signature and packet version are confirmed.
+    mov     cl,0ffh
+    call    pctmp_call
+    cmp     ax,5244h
+    jne     prepare_close_failed
+    cmp     dx,1
+    jne     prepare_close_failed
+    mov     dos_child,1
+    clc
+    ret
+prepare_close_failed:
+    mov     dx,offset program_fcb
+    mov     cl,f_close
+    int     bdos
+prepare_failed:
+    call    restore_user
+    stc
+    ret
+
+; Current user/default drive first. Implicit system-drive and user-zero
+; matches must have SYS set. An explicit drive never searches elsewhere.
+find_program:
+    mov     cl,f_open
+    mov     dx,offset program_fcb
+    int     bdos
+    cmp     al,255
+    jne     program_found
+    cmp     program_template,0
+    jne     program_missing
+    mov     es,cs:sysdat_seg
+    mov     al,es:009dh
+    inc     al
+    cmp     al,16
+    ja      program_missing
+    mov     program_fcb,al
+    mov     dx,offset program_fcb
+    mov     cl,f_open
+    int     bdos
+    cmp     al,255
+    je      program_try_zero
+    test    program_fcb+10,80h
+    jnz     program_found
+    mov     cl,f_close
+    int     bdos
+program_try_zero:
+    cmp     saved_user,0
+    je      program_missing
+    xor     dx,dx
+    mov     cl,32
+    int     bdos
+    mov     dx,offset program_fcb
+    mov     cl,f_open
+    int     bdos
+    cmp     al,255
+    je      program_missing_restore
+    test    program_fcb+10,80h
+    jnz     program_found_zero
+    mov     cl,f_close
+    int     bdos
+program_missing_restore:
+    call    restore_user
+program_missing:
+    stc
+    ret
+program_found:
+    mov     cli_user_zero,0
+    clc
+    ret
+program_found_zero:
+    mov     cli_user_zero,255
+    clc
+    ret
+restore_user:
+    xor     dx,dx
+    mov     dl,saved_user
+    mov     cl,32
+    int     bdos
+    ret
+
+; Bound parent-chain traversal avoids hanging on malformed descriptors.
+; Entry 3 in the PCTMP initial code segment is its existing private API.
+find_pctmp:
+    mov     cl,f_version
+    int     bdos
+    cmp     al,41h
+    jne     pctmp_absent
+    test    ah,4
+    jz      pctmp_absent
+    mov     cl,f_getpdadr
+    int     bdos
+    mov     di,64
+pctmp_parent:
+    or      bx,bx
+    jz      pctmp_absent
+    cmp     es:word ptr 8[bx],4350h
+    jne     pctmp_next
+    cmp     es:word ptr 10[bx],6d54h
+    jne     pctmp_next
+    cmp     es:byte ptr 12[bx],'p'
+    je      pctmp_found
+pctmp_next:
+    mov     bx,es:p_parent[bx]
+    dec     di
+    jnz     pctmp_parent
+pctmp_absent:
+    stc
+    ret
+pctmp_found:
+    mov     es,es:word ptr 10h[bx]
+    mov     ax,es:word ptr 50h
+    or      ax,ax
+    jz      pctmp_absent
+    mov     word ptr pctmp_entry,3
+    mov     word ptr pctmp_entry+2,ax
+    clc
+    ret
+pctmp_call:
+    push    ds
+    push    es
+    push    si
+    push    di
+    push    bp
+    callf   pctmp_entry
+    pop     bp
+    pop     di
+    pop     si
+    pop     es
+    pop     ds
+    ret
+
+; Register the stream names, then launch with the existing loader packet.
+; Native files have not been opened, so all file ownership is in PCTMP.
+execute_dos_child:
+    mov     stream_flags,tool_streams
+    cmp     cs:flag_append,0
+    je      dos_echo_input
+    or      stream_flags,4
+ dos_echo_input:
+    cmp     cs:flag_echo_in,0
+    je      dos_echo_output
+    or      stream_flags,8
+ dos_echo_output:
+    cmp     cs:flag_echo_out,0
+    je      dos_configure
+    or      stream_flags,10h
+ dos_configure:
+    mov     ax,ds
+    mov     stream_input_seg,ax
+    mov     stream_output_seg,ax
+    mov     launch_fcb_seg,ax
+    mov     launch_clicb_seg,ax
+    mov     dx,offset stream_packet
+    mov     cl,9
+    call    pctmp_call
+    or      ax,ax
+    jnz     dos_close_failed
+    mov     dx,offset launch_packet
+    mov     cl,1
+    call    pctmp_call
+    push    ax
+    or      ax,ax
+    jnz     dos_cancel
+    mov     cl,f_conattach
+    int     bdos
+    xor     cx,cx
+    call    pctmp_call
+ dos_cancel:
+    xor     dx,dx
+    mov     cl,9
+    call    pctmp_call
+    call    restore_user
+    pop     ax
+    or      ax,ax
+    jnz     dos_failed
+    clc
+    ret
+ dos_close_failed:
+    mov     cl,f_close
+    mov     dx,offset program_fcb
+    int     bdos
+    call    restore_user
+ dos_failed:
+    stc
+    ret

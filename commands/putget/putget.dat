@@ -18,8 +18,30 @@ out_sector_buffer   rb 128
 clicb:
 clicb_net           db 0
 clicb_cmd           rb 128
+clicb_reserved      db 0,0,0,0,0 ; PCTMP copies a full 134-byte CLICB
 
 hook_stack         rb 512
 hook_stack_top      equ offset $
 stack_space         rb 512
 stack_top           equ offset $
+
+; Local launch state. No kernel retains a pointer into this command.
+dos_child           db 0
+saved_user          db 0
+explicit_type       db 0
+order_index         db 0
+pctmp_entry         dw 0,0
+order_packet        db 1,'CMD','COM','EXE','BAT'
+program_template    rb 36
+program_fcb         rb 36
+stream_packet       dw 1
+stream_flags        dw 0
+                    dw offset source_fcb
+stream_input_seg    dw 0
+                    dw offset target_fcb
+stream_output_seg   dw 0
+launch_packet       dw offset program_fcb
+launch_fcb_seg      dw 0
+                    dw offset clicb
+launch_clicb_seg    dw 0
+cli_user_zero       dw 0

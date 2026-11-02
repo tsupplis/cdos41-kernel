@@ -17,7 +17,7 @@ all: $(TOOLS)
 	$(CMDINFO) $@
 
 # Assemble absolute groups for GENCMD.
-%.h86: %.a86 putget.def putget.lib Makefile
+%.h86: %.a86 putget.def putget.lib putget.dat dosredir.lib Makefile
 	$(ASM86) $<
 
 # Remove generated outputs only; preserve sources and reference files.

@@ -2592,7 +2592,7 @@ redir_owner_ok:
 	mov di,dx
 	cmp es:word ptr [di],1 ! je $+5 ! jmp redir_invalid_owner
 	mov ax,es:word ptr .2[di]
-	test ax,0ffe0h ! jnz redir_invalid_owner
+	test ax,0ffe0h ! jz $+5 ! jmp redir_invalid_owner
 	mov redir_work_flags,ax
 	push es ! push di
 	mov cl,25
