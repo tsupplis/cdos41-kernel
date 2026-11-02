@@ -887,27 +887,10 @@ bad_header:
 
 
 good_header:
-
-	mov bx,exe_final
-
-	cmp bx,4
-	jne not_4
-	    xor bx,bx	; Microsoft recommends we ignore a 4
-
-not_4:
-	and bx,1FFH			;ensure modulo 512
-	mov ax,exe_size	;IN 512'S
-
-	or bx,bx ! jz dont_dec_size
-	    dec ax			;adjust for add of para's in last 512byte record
-
-dont_dec_size:
-	mov cl,5
-	shl ax,cl			;convert file size into para's
-	dec cl
-	add bx,0Fh			;round byte count to next paragraph boundry
-	shr bx,cl ! add ax,bx		;adjust size by para's in last record
-	sub ax,exe_header_pars		;SIZE IN PARS
+	call prepare_exe_reader
+	jnc exe_image_size_valid
+	jmp bad_header
+exe_image_size_valid:
 	mov exe_par_count,ax		;SAVE IT
 	add ax,S_PD+S_UDA+S_DMD+S_PSP	; bias by PD, UDA, MD and PSP
 	add ax,exe_hi_pars		;AT END
@@ -996,68 +979,10 @@ load_exe:	;exe_seg IS SET
 	mov com_type,FALSE		;not .COM
 	call setup_pd_uda_psp
 
-	xor dx,dx
-	mov cl,FSETDMA
-	call bdos	;ALWAYS 0
-
-	mov ax,exe_seg
-	mov next_exe_seg,ax
-	mov ax,exe_par_count
-	add ax,7
-	mov cl,3 ! shr ax,cl
-	mov exe_count_down,ax
-	mov ax,exe_header_pars
-	mov dx,10H
-	mul dx	;=BYTES
-	mov cx,512
-	div cx
-	mov cx,512/80H
-	mul cx
-	mov exe_r0,ax
-	mov exe_r2,0
-	mov dx,128
-	call set_multi_sector
-
-exe_load_loop:
-	    mov cl,FSETDMAB
-	    mov dx,next_exe_seg
-	    call bdos			;SET SEG
-
-	    mov ax,400h
-	    mov di,128
-	    cmp exe_count_down,di ! jnb not_less_than_128
-		mov di,exe_count_down
-		mov dx,di
-		call set_multi_sector
-		mov ax,di ! shl ax,1
-		shl ax,1 ! shl ax,1
-
-not_less_than_128:
-	    mov dx,offset fcb
-	    mov si,dx
-	    add next_exe_seg,ax
-	    mov ax,exe_r0
-	    mov CPM_R01[si],ax
-	    mov al,exe_r2
-	    mov CPM_R2[si],al
-	    add exe_r0,di
-	    adc exe_r2,0
-
-	    mov cl,FRREAD
-	    call bdos
-
-	    or al,al ! jz good_exe_read
-	    cmp al,1 ! je good_exe_read	;if end of file then assume good read
-		mov cx,29			;bad return from bdos read
-		jmp ms_p_cli_err
-
-good_exe_read:
-	sub exe_count_down,di ! jnz exe_load_loop
-
-	mov dx,1
-	call set_multi_sector
-
-eject
+; The DOS Plus-era reader rounded header bytes down to 512-byte pages.
+; Use the exact header boundary, including tails within a 128-byte record.
+	jmp load_exe_image_exact
+exe_image_loaded:
 
 ;*
 ;*	Fixup time
@@ -1085,6 +1010,108 @@ rel_loop:
 
 rel_done:
 	jmp goto_program
+
+; Exact MZ image bounds. Header size is in paragraphs, not 512-byte pages.
+; Keep the legacy final-page value 4 convention; reject empty/overflow images.
+; Returns AX=rounded image paragraphs and the exact DWORD byte count in DATA.
+prepare_exe_reader:
+	cmp exe_signature,5a4dh ! je $+5 ! jmp exe_reader_invalid
+	mov ax,exe_size
+	or ax,ax ! jnz $+5 ! jmp exe_reader_invalid
+	mov bx,exe_final
+	cmp bx,512 ! jbe $+5 ! jmp exe_reader_invalid
+	cmp bx,4 ! jne exe_reader_last_page
+	xor bx,bx			; retain the original loader convention
+exe_reader_last_page:
+	or bx,bx ! jz exe_reader_full_pages
+	dec ax
+exe_reader_full_pages:
+	mov cx,512
+	mul cx
+	add ax,bx ! adc dx,0
+	mov si,ax ! mov di,dx		; declared file bytes
+	mov ax,exe_header_pars
+	cmp ax,2 ! jae $+5 ! jmp exe_reader_invalid
+	mov cx,16
+	mul cx
+	sub si,ax ! sbb di,dx
+	jnc $+5 ! jmp exe_reader_invalid
+	mov ax,si ! or ax,di
+	jnz $+5 ! jmp exe_reader_invalid
+	mov exe_image_bytes,si
+	mov exe_image_bytes+2,di
+	mov ax,si ! mov dx,di
+	add ax,15 ! adc dx,0
+	mov cx,4
+exe_reader_round_paragraphs:
+	shr dx,1 ! rcr ax,1
+	loop exe_reader_round_paragraphs
+	or dx,dx ! jz exe_reader_size_ok
+exe_reader_invalid:
+	stc
+	ret
+exe_reader_size_ok:
+	clc
+	ret
+
+; Read via console-private scratch, preserving record zero for relocations.
+; Non-final copies are multiples of 16 bytes; only the final copy may be short.
+; This handles headers inside a record and prevents record padding overruns.
+load_exe_image_exact:
+	mov ax,exe_header_pars
+	mov dx,ax ! and dx,7
+	mov cl,4 ! shl dx,cl
+	mov exe_reader_skip,dx
+	mov cl,3 ! shr ax,cl
+	mov exe_reader_record,ax
+	mov exe_reader_record+2,0
+	mov ax,exe_image_bytes
+	mov exe_reader_left,ax
+	mov ax,exe_image_bytes+2
+	mov exe_reader_left+2,ax
+	mov ax,exe_seg
+	mov next_exe_seg,ax
+	mov dx,1
+	call set_multi_sector
+exe_reader_record_loop:
+	push ds ! pop es
+	mov dx,offset exe_image_scratch
+	call set_dma_ptr
+	mov si,offset fcb
+	mov ax,exe_reader_record
+	mov CPM_R01[si],ax
+	mov ax,exe_reader_record+2
+	mov CPM_R2[si],al
+	mov dx,si
+	mov cl,FRREAD
+	call bdos
+	or al,al ! jz exe_reader_record_ready
+	jmp bad_header			; EOF before the declared image is an error
+exe_reader_record_ready:
+	mov cx,128
+	sub cx,exe_reader_skip
+	cmp exe_reader_left+2,0 ! jne exe_reader_count_ready
+	cmp cx,exe_reader_left ! jbe exe_reader_count_ready
+	mov cx,exe_reader_left
+exe_reader_count_ready:
+	mov exe_reader_count,cx
+	mov si,offset exe_image_scratch
+	add si,exe_reader_skip
+	mov es,next_exe_seg
+	xor di,di
+	cld
+	rep movsb
+	mov ax,exe_reader_count
+	sub exe_reader_left,ax ! sbb exe_reader_left+2,0
+	mov dx,exe_reader_left ! or dx,exe_reader_left+2
+	jz exe_reader_image_done
+	mov cl,4 ! shr ax,cl
+	add next_exe_seg,ax
+	add exe_reader_record,1 ! adc exe_reader_record+2,0
+	mov exe_reader_skip,0
+	jmp exe_reader_record_loop
+exe_reader_image_done:
+	jmp exe_image_loaded
 
 get_rel_pointer:
 	mov bx,exe_rel_pointer
@@ -8242,6 +8269,14 @@ BUFFER_END	equ	offset $
 
 		db	0	;extra byte for going off end of buffer
 ;	ORG	BUFFER_END
+ ; Per-console image reader state; scratch never aliases EXE_HEADER.
+exe_image_bytes     dw 0,0
+exe_reader_left     dw 0,0
+exe_reader_record   dw 0,0
+exe_reader_skip     dw 0
+exe_reader_count    dw 0
+exe_image_scratch   rb 128
+
 exe_rel_count_down dw	0
 exe_count_down	dw	0
 next_exe_seg	dw	0
