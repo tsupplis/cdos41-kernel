@@ -1,85 +1,60 @@
-# STOP - assemble the labelled 8086 source and restore the release encodings.
+# STOP - build the reconstructed PL/M command and the assembly reference.
 ASM86=cpm86_asm86
 GENCMD=cpm86_gencmd
-INTEL_ASM86=intel_asm86
+RASM86=pcdev_rasm86
+LINK86=pcdev_linkcmd
 INTEL_PLM86=intel_plm86
-INTEL_LINK86=intel_link86
-INTEL_LOC86=intel_loc86
-INTEL_OH86=intel_oh86
 PYTHON=python3
 REF=../../base/stop.cmd
 
-.PHONY: all check check-plm clean
+.PHONY: all check check-asm check-plm check-live clean
 .DELETE_ON_ERROR:
 
 all: stop.cmd
 
-stop.h86: stop.a86 Makefile
-	@$(ASM86) $< > stop.log 2>&1; result=$$?; cat stop.log; test $$result -eq 0
-	@grep -qiE 'NUMBER OF ERRORS: +0' stop.log
+stoporg.h86: stoporg.a86 Makefile
+	@$(ASM86) $< > stoporg.log 2>&1; result=$$?; cat stoporg.log; test $$result -eq 0
+	@grep -qiE 'NUMBER OF ERRORS: +0' stoporg.log
 	@test -s $@
 
-stop.cmd: stop.h86 Makefile encodings.py
+stoporg.cmd: stoporg.h86 Makefile encodings.py
 	$(GENCMD) $<
-	$(PYTHON) encodings.py
+	$(PYTHON) encodings.py $@
 	@test -s $@
 
-scd86.obj: ../systat/scd.a86 Makefile
-	@EMU2_DRIVE_E="$(abspath ../systat)" $(INTEL_ASM86) 'E:\SCD.A86' \
-	  'object(scd86.obj)' 'print(scd86.lst)' > scd86.log 2>&1; \
-	  result=$$?; cat scd86.log; test $$result -eq 0
-	@grep -qi 'ASSEMBLY COMPLETE, NO ERRORS FOUND' scd86.log
+# Assemble the shared 1984 startup without copying or modifying its source.
+scd3.obj: ../help/scd3.a86 Makefile
+	@set -e; tmp=$$(mktemp -d); \
+	  trap 'rm -f "$$tmp/scd3.a86" "$$tmp/scd3.obj" "$$tmp/scd3.lst" "$$tmp/scd3.sym"; rmdir "$$tmp"' EXIT HUP INT TERM; \
+	  ln -s "$(abspath $<)" "$$tmp/scd3.a86"; \
+	  (cd "$$tmp" && $(RASM86) scd3.a86) > scd3.log 2>&1 || { cat scd3.log; exit 1; }; \
+	  cat scd3.log; grep -qiE 'Number of errors: +0\.' scd3.log; \
+	  test -s "$$tmp/scd3.obj"; mv "$$tmp/scd3.obj" $@
+
+stop.obj: stop.plm Makefile
+	@$(INTEL_PLM86) $< debug 'optimize(3)' xref > stop.log 2>&1; \
+	  result=$$?; cat stop.log; test $$result -eq 0
+	@grep -qiE 'COMPILATION COMPLETE[.[:space:]]+[0-9]+ WARNINGS,[[:space:]]+0 ERRORS' stop.log
 	@test -s $@
 
-stop_plm.obj: stop_plm.plm Makefile
-	@$(INTEL_PLM86) $< debug 'optimize(3)' xref > stop_plm.log 2>&1; \
-	  result=$$?; cat stop_plm.log; test $$result -eq 0
-	@grep -qiE 'COMPILATION COMPLETE[.[:space:]]+[0-9]+ WARNINGS,[[:space:]]+0 ERRORS' stop_plm.log
+stop.cmd: scd3.obj stop.obj Makefile
+	@$(LINK86) 'stop=scd3,stop[data[origin[0],max[0]]]' > stop-link.log 2>&1; \
+	  result=$$?; cat stop-link.log; test $$result -eq 0
+	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' stop-link.log
 	@test -s $@
 
-stop_plm.lnk: scd86.obj stop_plm.obj Makefile
-	@$(INTEL_LINK86) scd86.obj, stop_plm.obj to $@ > stop_plm-link.log 2>&1; \
-	  result=$$?; cat stop_plm-link.log; test $$result -eq 0
-	@! grep -qiE '(^|[[:space:]])(ERROR[[:space:]]+[0-9]|FATAL)' stop_plm-link.log
-	@test -s $@
+check: all check-asm check-plm
 
-stop_plm.loc: stop_plm.lnk Makefile
-	@$(INTEL_LOC86) $< 'od(sm(code,dats,data,stack,const))' \
-	  'ad(sm(code(0),dats(10000h)))' 'ss(stack(+200h))' to $@ > stop_plm-loc.log 2>&1; \
-	  result=$$?; cat stop_plm-loc.log; test $$result -eq 0
-	@! grep -qiE '(^|[[:space:]])(ERROR[[:space:]]+[0-9]|FATAL)' stop_plm-loc.log
-	@test -s $@ && test -s stop_plm.mp2
+check-asm: stoporg.cmd $(REF)
+	cmp stoporg.cmd $(REF)
 
-stop_plm.h86: stop_plm.loc Makefile
-	@$(INTEL_OH86) $< > stop_plm-oh.log 2>&1; \
-	  result=$$?; cat stop_plm-oh.log; test $$result -eq 0
-	@grep -qi 'CONVERSION COMPLETE, NO ERRORS' stop_plm-oh.log
-	@test -s stop_plm.hex
-	mv stop_plm.hex $@
+check-plm: stop.cmd tests/stopcheck.asm tests/stop_check.py $(REF)
+	$(PYTHON) tests/stop_check.py $(REF) stop.cmd
 
-PARA = sub(/H$$/,"",s); sub(/.$$/,"",s); sub(/^0+/,"",s); print tolower(s); exit
-GENCMD_BASE = $(shell awk '/DATS +DATA/{s=$$1; $(PARA)}' stop_plm.mp2)
-GENCMD_MEM = $(shell awk '/MEMORY +MEMORY/{s=$$1; $(PARA)}' stop_plm.mp2)
-GENCMD_MIN = $(shell printf '%x' $$((0x$(GENCMD_MEM)-0x$(GENCMD_BASE))))
-
-stop_plm.cmd: stop_plm.h86 stop_plm.loc Makefile
-	@test -n "$(GENCMD_BASE)" -a -n "$(GENCMD_MEM)" || \
-	  { echo "stop: cannot derive DATS/MEMORY from stop_plm.mp2" >&2; exit 1; }
-	@$(GENCMD) $< 'data[b$(GENCMD_BASE) m$(GENCMD_MIN) xfff]' > stop_plm-gencmd.log 2>&1; \
-	  result=$$?; cat stop_plm-gencmd.log; test $$result -eq 0
-	@! grep -qiE '(^|[[:space:]])(ERROR|FATAL|INVALID)' stop_plm-gencmd.log
-	@grep -qiE 'RECORDS WRITTEN[[:space:]]+[1-9][0-9]*' stop_plm-gencmd.log
-	@test -s $@
-
-check: all check-plm $(REF)
-	cmp stop.cmd $(REF)
-
-check-plm: stop_plm.cmd tests/stopcheck.asm tests/stop_check.py $(REF)
-	$(PYTHON) tests/stop_check.py $(REF) stop_plm.cmd
+check-live: stop.cmd tests/live.py $(REF)
+	$(PYTHON) tests/live.py
 
 clean:
-	$(RM) stop.cmd stop.h86 stop.log stop.lst stop.sym
-	$(RM) scd86.obj scd86.lst scd86.log
-	$(RM) stop_plm.cmd stop_plm.obj stop_plm.lnk stop_plm.loc stop_plm.hex stop_plm.h86
-	$(RM) stop_plm.lst stop_plm.mp? stop_plm.log stop_plm-link.log stop_plm-loc.log
-	$(RM) stop_plm-oh.log stop_plm-gencmd.log
+	$(RM) stop.cmd stop.obj stop.log stop.lst stop-link.log
+	$(RM) stoporg.cmd stoporg.h86 stoporg.log stoporg.lst stoporg.sym
+	$(RM) scd3.obj scd3.log

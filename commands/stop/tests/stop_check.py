@@ -95,6 +95,12 @@ OVERFLOW_REPORT = memory_report(
 REORDERED_REPORT = memory_report(
     b"         2000:0          1K\r\n         1000:0          3K\r\n", 2, 6,
 )
+SHARED_LIMIT_REPORT = HEADING + (
+    b"\r\nContiguous Blocks of Free Memory\r\n"
+    b"            None"
+    b"\r\nFree Shared Code  ==    65K"
+    b"\r\nTotal Free Memory ==    65K Bytes\r\n"
+)
 
 
 @dataclass(frozen=True)
@@ -119,6 +125,8 @@ CASES = (
     Case("no-processes", fixture="no-processes", expected_report=NO_PROCESSES_REPORT),
     Case("empty-group-count", fixture="empty-group", expected_report=EMPTY_GROUP_REPORT),
     Case("both-shared", fixture="both-shared", expected_report=BOTH_SHARED_REPORT),
+    Case("shared-owner-chain", fixture="shared-owner-chain"),
+    Case("shared-snapshot-limit", fixture="many-shared", expected_report=SHARED_LIMIT_REPORT),
     Case("wrapping-free-extents", fixture="wrap", expected_report=WRAP_REPORT),
     Case("fractional-memory", fixture="fractional", expected_report=FRACTIONAL_REPORT),
     Case("memory-total-overflow", fixture="overflow", expected_report=OVERFLOW_REPORT),
@@ -187,9 +195,23 @@ def cmd_groups(path):
     return groups
 
 
+def verify_startup(reference, candidate):
+    if len(reference) < 0x100 or len(candidate) < 0x100:
+        raise ValueError("STOP CODE group is too small for the SCD3 startup")
+    original = bytearray(reference[:0x100])
+    rebuilt = bytearray(candidate[:0x100])
+    for start, end in ((9, 11), (14, 16), (0x70, 0x80)):
+        rebuilt[start:end] = original[start:end]
+    if rebuilt != original:
+        offset = next(i for i, (a, b) in enumerate(zip(original, rebuilt)) if a != b)
+        raise AssertionError(f"SCD3 startup differs at CODE:{offset:04X}")
+    print("PASS SCD3 startup matches release except relocated addresses and serial")
+
+
 def system_image(fixture):
     many_rows = fixture in ("many-rows", "many-rows-65", "many-rows-66")
-    image = bytearray(0x5000 if many_rows else 0x1000)
+    many_shared = fixture == "many-shared"
+    image = bytearray(0x5000 if many_rows or many_shared else 0x1000)
     group_a = bytearray(32)
     group_b = bytearray(32)
 
@@ -213,6 +235,19 @@ def system_image(fixture):
         image[offset + 0x20] = console
 
     if fixture == "empty":
+        return image, group_a, group_b
+
+    if many_shared:
+        word(SYS_OFFSET + 0x70, 0x1000)
+        group_a[0], group_a[9] = 1, 1
+        for index in range(66):
+            pd_offset = 0x1000 + index * 0x30
+            owner_offset = 0x3000 + index * 0x10
+            md_offset = 0x4000 + index * 0x10
+            next_pd = pd_offset + 0x30 if index < 65 else 0
+            process(pd_offset, next_pd, f"SHRD{index:04}".encode(), owner_offset, 0)
+            owner(owner_offset, 0, md_offset)
+            descriptor(md_offset, 0, GROUP_A_SEG, 0x40)
         return image, group_a, group_b
 
     if many_rows:
@@ -268,6 +303,10 @@ def system_image(fixture):
         group_a[0], group_a[1284] = 0, 2
     elif fixture == "both-shared":
         group_b[9] = 1
+    elif fixture == "shared-owner-chain":
+        owner(0xA00, 0xA20, 0x300)
+        owner(0xA20, 0xA30, 0x310)
+        owner(0xA30, 0, 0x300)
     elif fixture == "wrap":
         descriptor(0x200, 0x210, 0xFFF0, 0x20)
         descriptor(0x210, 0x220, 0x0010, 0x40)
@@ -400,6 +439,7 @@ def main():
     args = parser.parse_args()
     reference = cmd_groups(args.reference)
     candidate = cmd_groups(args.candidate)
+    verify_startup(reference[0], candidate[0])
     with tempfile.TemporaryDirectory(prefix="stop-check-") as temp:
         directory = Path(temp)
         for case in CASES:

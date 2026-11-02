@@ -45,9 +45,11 @@ dcl group$pointer pointer,
     group$parts structure (offset word, segment word) at (@group$pointer);
 dcl group$bytes based group$pointer (1) byte;
 
-dcl extents (81) structure (base word, length word);
+dcl extents (81) structure (base word, length word, reserved word);
+dcl shared$rows (65) structure (
+    name (8) byte, size word, pd word, reserved (4) byte);
 dcl rows (65) structure (
-    console byte, pd word, size word, name (8) byte);
+    console byte, reserved byte, pd word, size word, name (8) byte);
 dcl abort$block structure (
     pd word, term word, console byte, pad byte, name (8) byte);
 
@@ -101,7 +103,7 @@ hex$word: procedure (value);
 end hex$word;
 
 snapshot: procedure;
-  dcl (i,j) word, (shared$only, count$groups) word;
+  dcl (i,j,shared$row) word, (shared$only, count$groups) word;
 
   free$count, row$count, owner$count = 0;
   free$total, shared$total = 0;
@@ -133,9 +135,15 @@ snapshot: procedure;
   pd$parts.offset = roots.shared$head;
   do while (pd$parts.offset <> 0) and (owner$count < 65);
     if (pd.memory <> 0) and ((pd.flags and 2) <> 2) then do;
+      shared$row = owner$count;
       owner$count = owner$count + 1;
+      do j = 0 to 7;
+        shared$rows(shared$row).name(j) = pd.name(j);
+      end;
+      shared$rows(shared$row).pd = pd$parts.offset;
       owner$parts.offset = pd.memory;
       md$parts.offset = owner.memory;
+      shared$rows(shared$row).size = md.length;
       group$parts.segment = md.base;
       group$parts.offset = 0;
       count$groups = group$bytes(0);
@@ -151,6 +159,16 @@ snapshot: procedure;
       if shared$only <> 0 then do;
         shared$total = shared$total + md.length;
         free$total = free$total + md.length;
+      end;
+      previous$md = md$parts.offset;
+      do while owner.next <> 0;
+        next$owner = owner.next;
+        md$parts.offset = owner.memory;
+        owner$parts.offset = next$owner;
+        if md$parts.offset <> previous$md then do;
+          shared$rows(shared$row).size = shared$rows(shared$row).size + md.length;
+          previous$md = md$parts.offset;
+        end;
       end;
     end;
     pd$parts.offset = pd.thread;
@@ -186,11 +204,20 @@ end snapshot;
 
 headings: procedure;
   call newline;
-  call print(.('  Entry   Program   Memory   Window$'));
+  call print(.('  Entry $'));
+  call print(.('  Program $'));
+  call print(.('  Memory $'));
+  call print(.('  Window$'));
   call newline;
-  call print(.('  Number  Name      Used     Number $'));
+  call print(.('  Number$'));
+  call print(.('  Name    $'));
+  call print(.('  Used   $'));
+  call print(.('  Number $'));
   call newline;
-  call print(.('  ------  --------  -------  -------$'));
+  call print(.('  ------$'));
+  call print(.('  --------$'));
+  call print(.('  -------$'));
+  call print(.('  -------$'));
 end headings;
 
 report: procedure;
@@ -240,7 +267,7 @@ report: procedure;
   call newline;
 end report;
 
-plmstart: procedure public;
+plm: procedure public;
   dcl version word, selection word, (pos, char, i) byte;
 
   version = mon3(12,0);
@@ -293,6 +320,6 @@ plmstart: procedure public;
     end;
   end;
   call mon1(143,0);
-end plmstart;
+end plm;
 
 end stop;

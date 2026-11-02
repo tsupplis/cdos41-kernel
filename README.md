@@ -234,10 +234,10 @@ release-image provenance. Details are in `base/cdos411.json`.
 | `show` | Display disk space and drive information | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |
 | `submit` | Run SUB command files | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool |
 | `spl` | Manage the print spool queues and dispatch jobs to DSP | 4.11 | Reconstructed C from CDOS 4.11; DRC 1.11 build, ASM86 reference retained | Behavior tested |
-| `stop` | List processes and stop a selected entry | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical |
+| `stop` | List processes and stop a selected entry | 4.11 | Reconstructed PL/M from CDOS 4.11; byte-identical assembly reference retained | Behavior tested |
 | `sysdisk` | Display or change the system search path | 4.11 | Recompiled from CDOS 4.1; SD-mode D.A86 wrapper | Byte-identical |
 | `systat` | Inspect processes and system resources | 4.1 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |
-| `time.exe` | Display or set the time through DOS | 4.11 | Reverse Engineered from CDOS 4.11 and patched | Behavior tested |
+| `time.exe` | Display or set the time through DOS | 4.11 | Reconstructed assembly from CDOS 4.11; release MZ fields restored | Byte-identical |
 | `type` | Display a text file | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |
 | `window` | Control console windows from commands | 4.11 | C rewrite, adapted for parity; shared modules in commands/window | Behavior tested |
 | `wmenu` | Interactive console-window manager | 4.11 | C rewrite, adapted for parity; shared modules in commands/window | Behavior tested |
@@ -249,8 +249,9 @@ DOS DATE.EXE has the same short-year pivot as native DATE.CMD: 00–77 maps to
 2000–2077 and 78–99 to 1978–1999, subject to DOS calendar validation.
 The regression runs 54 command-line/interactive cases without changing a clock.
 Native DATE.CMD is in `commands/date`; DOS DATE.EXE and its tests are in
-`commands/datetime`. TIME.EXE is rebuilt from `pctime.a86` and packaged from `commands/datetime`.
-Its time/prompt formatting is tested; see the tool README for coverage.
+`commands/datetime`. TIME.EXE is rebuilt from the reconstructed `pctime.a86`.
+Its complete file is compared with the 4.11 reference, and its time/prompt
+formatting is tested; see the tool README for coverage.
 
 ## Kernel and RSP patches
 

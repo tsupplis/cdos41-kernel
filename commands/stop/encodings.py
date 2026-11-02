@@ -3,6 +3,7 @@
 Offsets are relative to CODE. Each entry names the mnemonic and both encodings.
 The input is the local ASM86/GENCMD output. No reference binary is read here.
 """
+import argparse
 from pathlib import Path
 
 # (ASM86 encoding, release encoding, CODE offsets)
@@ -52,7 +53,9 @@ ENCODINGS = [
     ]),
 ]
 
-path = Path('stop.cmd')
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('command', type=Path)
+path = parser.parse_args().command
 image = bytearray(path.read_bytes())
 if len(image) != 7168 or image[:3] != bytes.fromhex('01e100'):
     raise ValueError('Unexpected STOP command layout')

@@ -26,7 +26,7 @@ def check():
         (folder/'payload.bin').write_bytes(image)
         for h,m,s,hs in cases:
             (folder/'expected.bin').write_bytes(
-                f'Current time is {h:02}:{m:02}:{s:02}.{hs:02}\r\nEnter new time: '.encode())
+                f'Current time is {h:2}:{m:02}:{s:02}.{hs:02}\r\nEnter new time: '.encode())
             values=dict(EXE_SS=ss+0x2000,EXE_SP=sp,EXE_IP=ip,EXE_CS=cs+0x2000,
                         TAIL_LEN=0,HOUR=h,MINUTE=m,SECOND=s,HUNDREDTH=hs)
             (folder/'case.inc').write_text(''.join(f'%define {n} {v}\n' for n,v in values.items()))

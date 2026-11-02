@@ -2,7 +2,7 @@
 
 Each enabled command has a Makefile using the same conventions as the CCP/M
 project. SETPORT and SETUP share their reconstructed HELP assembly; STOP's
-alternative PL/M build and check reuse SYSTAT's startup interface. These
+PL/M build reuses HELP's startup interface. These
 shared inputs avoid maintaining duplicate sources.
 
 - `make` / `make all` builds the local outputs.
@@ -56,7 +56,7 @@ Only Pending and Known gap entries are active work.
 
 | Command/group | Parity | Remaining work |
 | --- | --- | --- |
-| CHDIR, MKDIR, SYSDISK, HDMAINT, REN.EXE, LOADCCPM, REDOS.COM, STOP.CMD, TIME.EXE | Byte-identical | None for release equivalence |
+| CHDIR, MKDIR, SYSDISK, HDMAINT, REN.EXE, LOADCCPM, REDOS.COM, TIME.EXE | Byte-identical | None for release equivalence |
 | SETPORT | Equivalent | None; 39 equivalent instruction encodings checked |
 | INITDIR | Equivalent | None; overwritten runtime word checked |
 | COPY.EXE, ERASE.EXE | Equivalent | None; exact serial/header/padding exceptions checked |
@@ -65,6 +65,7 @@ Only Pending and Known gap entries are active work.
 | WINDOW/WMENU | Behavior tested | No known fix pending; immediate colour repaint now checked against actual screen bytes |
 | SHOW, SET, TYPE | Behavior tested | No known fix pending; retain documented regression coverage |
 | SYSTAT | Behavior tested | Compared against the retained 4.1 original; no known fix pending |
+| STOP | Behavior tested | Paired synthetic BDOS and live CDOS tests; assembly reference is byte-identical, with two documented PL/M safety differences |
 | ERA, REN.CMD | Behavior tested | Import review complete against retained originals; release not established |
 | SUBMIT | No reference | CCP/M-86 3.1 original unavailable. No active work. |
 | DSKMAINT | Behavior tested | 512-byte loader matches 4.11. Format, cold boot and help navigation pass. See [DSKMAINT](dskmaint/README.md). |

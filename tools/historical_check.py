@@ -73,13 +73,13 @@ def check():
   run(code,s['CHECK_ALL_MEDIA'],body+f'call far [cs:target]\ncmp word [0f000h],{expected}\njne failed\n')
  print('PASS: shared buffer chains, selected/other drive and clean/dirty buffers (6 cases)')
  s=symbols('squid');code=payload('xios');stub=len(code);code+=b'\xb8\x34\x12\xc3'
- for i in range(39):code[s['FUNCTIONTABLE']+2*i:s['FUNCTIONTABLE']+2*i+2]=word(stub)
+ for i in range(40):code[s['FUNCTIONTABLE']+2*i:s['FUNCTIONTABLE']+2*i+2]=word(stub)
  run(code,s['ENTRY'],'''xor si,si
 next_function:
  mov ax,si
  call far [cs:target]
  mov dx,0ffffh
- cmp si,38
+ cmp si,39
  ja expect_result
  mov dx,1234h
 expect_result:
