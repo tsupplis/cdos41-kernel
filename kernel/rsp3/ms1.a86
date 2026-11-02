@@ -81,6 +81,9 @@ TRUE		EQU	NOT FALSE
 
 	public check_error,check_error_again,critical_cleanup
 	public backdoor,getstat,ms_commit,printer_ready
+	public stream_read_byte,stream_write_byte,native_putchar
+	extrn standard_stream_mask:near,standard_input_byte:near
+	extrn standard_input_status:near,standard_output_byte:near
 	extrn ctbr_state:byte,dos_internal:byte
 	extrn dos_error_code:word,dos_critical_code:word
 	public in_int24_flag,critical_ss,critical_sp,dos1_call
@@ -671,6 +674,7 @@ fill_FF_loop:
 	mov in_int24_flag,FALSE
 	mov dos_internal,0
 	mov commit_mode,FALSE
+	mov word ptr legacy_io_flags,0
 
 	mov word ptr ros_char,0
 	mov first_write,TRUE
@@ -2553,7 +2557,10 @@ bdos_re_entry:				;ENTER WITH ah,ds,dx SET
 
 	mov es,ms_ds_save
 
+	push word ptr legacy_io_flags
+	call select_legacy_streams
 	call cs:functab[bx]
+	pop word ptr legacy_io_flags
 
 bdos_int_exit:
 	pop bp ! pop di ! pop es
@@ -3116,6 +3123,36 @@ ms_conin_return:
 	ret
 
 
+; Select streams only at a public DOS console entry. Internal FCB/CON
+; operations and critical-error console I/O keep their explicit device.
+select_legacy_streams:
+	push ax ! push cx
+	mov word ptr legacy_io_flags,0
+	cmp dos_internal,0 ! jne legacy_selected
+	cmp in_int24_flag,TRUE ! je legacy_selected
+	mov cl,ah
+	call standard_stream_mask
+	cmp cl,1 ! je legacy_both
+	cmp cl,0ah ! je legacy_both
+	cmp cl,6 ! je legacy_direct
+	cmp cl,7 ! je legacy_input
+	cmp cl,8 ! je legacy_input
+	cmp cl,0bh ! je legacy_input
+	cmp cl,2 ! je legacy_output
+	cmp cl,9 ! jne legacy_selected
+legacy_output:
+	and al,2
+	jmps legacy_both
+legacy_direct:
+	cmp dl,0ffh ! jne legacy_output
+legacy_input:
+	and al,1
+legacy_both:
+	mov legacy_io_flags,al
+legacy_selected:
+	pop cx ! pop ax
+	ret
+
 eject
 
 ms_conout:
@@ -3331,6 +3368,14 @@ ms_const:
 eject
 
 conin:
+	test legacy_io_flags,1 ! jz conin_console
+	call standard_input_byte
+	mov legacy_eof,ah
+	or ah,ah ! jz conin_stream_done
+	mov al,1ah
+conin_stream_done:
+	ret
+conin_console:
 ;----
 					;read console character to al
 	mov ax,ros_char
@@ -3391,6 +3436,9 @@ ret0:
 eject
 
 conbrk:
+	test legacy_io_flags,1 ! jz conbrk_console
+	jmp getstat
+conbrk_console:
 ;-----
 					;check for character
 	call getstat ! jz conbrk_exit	;return if no character
@@ -3566,7 +3614,8 @@ readnx:
 	push cx ! push bx		;blen,cmax,bx saved
 readn0:
 	call conin			;next char in al
-	pop bx ! pop cx			;reactivate counters
+	pop bx ! pop cx
+	cmp legacy_eof,0 ! jne eofre			;reactivate counters
 	cmp al,CR ! jnz l_19
 eofre:
 	  jmp readen
@@ -3749,6 +3798,11 @@ c_term:
 
 
 getstat:
+	test legacy_io_flags,1 ! jz getstat_console
+	call standard_input_status
+	or al,al
+	ret
+getstat_console:
 	mov ax,ros_char
 	or ax,ax ! jnz getstat_exit
 	  push cx
@@ -3765,6 +3819,9 @@ getstat_exit:
 
 
 putchar:
+	test legacy_io_flags,2 ! jz native_putchar
+	jmp standard_output_byte
+native_putchar:
 	push cx
 	mov dl,cl
 	mov cl,FRAWIO
@@ -3809,6 +3866,7 @@ drain_buf:
 al_OK:
 	mov ah,al
 	inc sp ! inc sp			;KILL RETURN ADDR
+	pop word ptr legacy_io_flags
 	jmp bdos_re_entry
 
 
@@ -5318,6 +5376,107 @@ check_equal:	;ret Z IF FCB=BUFFER FCB
 	    cmp al,buffer_rec_hi
 	    ret
 
+
+
+; DI points to a local DOS byte-record FCB. Return AH=0 on success,
+; AH=1 at EOF, AH=5 for an error; AL is the byte. Saved DOS register
+; frames are untouched, so console functions can call this directly.
+stream_read_byte:
+	mov stream_operation,0
+	jmps stream_byte_entry
+stream_write_byte:
+	mov stream_operation,1
+	mov stream_byte,cl
+stream_byte_entry:
+	push bx ! push cx ! push dx ! push si ! push di ! push es
+	mov stream_fcb,di
+	mov ax,last_dmaadr ! mov stream_dma,ax
+	mov ax,last_dmabase ! mov stream_dma+2,ax
+	cmp stream_operation,0 ! jne stream_find_fcb
+	mov ax,es:MS_RAN_REC+2[di]
+	cmp ax,es:MS_FILE_SIZE+2[di] ! jb stream_find_fcb
+	ja stream_byte_eof
+	mov ax,es:MS_RAN_REC[di]
+	cmp ax,es:MS_FILE_SIZE[di] ! jae stream_byte_eof
+stream_find_fcb:
+	push ds ! pop es
+	call find_fcb_pub
+	jc stream_byte_error
+	mov cpm_fcb,si
+	mov di,stream_fcb
+	mov ax,MS_RAN_REC[di]
+	mov dx,MS_RAN_REC+2[di]
+	mov bx,ax
+	and bx,7fh
+	mov stream_index,bx
+	mov cx,7
+stream_record_shift:
+	shr dx,1 ! rcr ax,1
+	loop stream_record_shift
+	mov CPM_RAN_REC[si],ax
+	mov CPM_RAN_REC+2[si],dl
+	call activate_buffer
+	cmp stream_operation,0 ! jne stream_write_buffer
+	or al,al ! jnz stream_byte_error
+	mov bx,stream_index
+	mov al,buffer[bx]
+	mov stream_byte,al
+	jmps stream_advance
+stream_write_buffer:
+	or al,al ! jz stream_buffer_ready
+	cmp al,1 ! je stream_new_record
+	cmp al,4 ! jne stream_byte_error
+stream_new_record:
+	lea di,buffer
+	push ds ! pop es
+	mov cx,128
+	xor ax,ax
+	cld
+	rep stosb
+	mov buffer_activeb,TRUE
+	mov dl,0ffh
+	call get_set_user
+	mov buffer_user_no,al
+stream_buffer_ready:
+	mov bx,stream_index
+	mov al,stream_byte
+	mov buffer[bx],al
+	mov buffer_writtenb,TRUE
+	mov si,cpm_fcb
+	mov cpm_written[si],TRUE
+	cmp first_write,TRUE ! jne stream_advance
+	call flush_buffer
+	or al,al ! jnz stream_byte_error
+	mov first_write,FALSE
+stream_advance:
+	mov di,stream_fcb
+	add word ptr MS_RAN_REC[di],1
+	adc word ptr MS_RAN_REC+2[di],0
+	cmp stream_operation,0 ! je stream_byte_success
+	mov dx,MS_RAN_REC+2[di]
+	mov ax,MS_RAN_REC[di]
+	cmp dx,MS_FILE_SIZE+2[di] ! jb stream_byte_success
+	ja stream_extend_size
+	cmp ax,MS_FILE_SIZE[di] ! jbe stream_byte_success
+stream_extend_size:
+	mov MS_FILE_SIZE[di],ax
+	mov MS_FILE_SIZE+2[di],dx
+stream_byte_success:
+	mov al,stream_byte
+	xor ah,ah
+	jmps stream_byte_restore
+stream_byte_eof:
+	mov ax,011ah
+	jmps stream_byte_restore
+stream_byte_error:
+	mov ax,051ah
+stream_byte_restore:
+	push ax
+	les dx,dword ptr stream_dma
+	call set_dma_ptr
+	pop ax
+	pop es ! pop di ! pop si ! pop dx ! pop cx ! pop bx
+	ret
 
 
 flush_buffer:
@@ -7901,6 +8060,14 @@ attribute		db	0	;CURRENT attribute
 				;BIT 1 = HIDDEN
 				;BIT 2 = SYSTEM
 dir_attr		db	0
+legacy_io_flags db 0
+legacy_eof db 0
+stream_operation db 0
+stream_byte db 0
+stream_fcb dw 0
+stream_index dw 0
+stream_dma dw 0,0
+
 commit_mode		db	0	; partial close from DOS commit
 commit_fcb rb 36			; valid native FCB across SET ATTRIBUTES
 last_dmaadr		dw	0	;LAST DMA SET
@@ -7931,7 +8098,7 @@ psp_length		dw	0
 dma_adr			dw	0
 
 
-			RB	80		;STACK space
+			RB	256		;DOS console/file call stack
 
 ms_bp			dw	0		;MUST push IN THIS ORDER
 ms_di			dw	0		;es:di POINTER

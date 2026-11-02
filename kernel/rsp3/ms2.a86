@@ -27,6 +27,9 @@ pagesize 72					; Apr 29, 1985
 	public	ms2_terminate		; for memory and handle cleanup
 	extrn	get_data_seg:near	; shared with ms1
 	extrn backdoor:near,getstat:near,ms_commit:near,printer_ready:near
+	extrn stream_read_byte:near,stream_write_byte:near,native_putchar:near
+	public standard_stream_mask,standard_input_byte,standard_input_status
+	public standard_output_byte
 	extrn check_dos_media_fcb:near
 	extrn	convert_date:near	; dos to cpm date
 	extrn	convert_time:near	;   and time conversion
@@ -2418,6 +2421,87 @@ date_invalid:
 ms2_f_date_error:
 	call	swap_pdrive		; xchg hds pointers
 	jmp	ms2_error_ret		; set cf and exit
+
+
+; Device/closed checks are centralized here; legacy console code only
+; selects which standard streams its public DOS function is using.
+standard_stream_mask:
+	push bx
+	xor al,al
+	mov bx,hcb_list
+	or bx,bx ! jz standard_input_file
+	test hcb_flags[bx],hf_device ! jnz standard_output_check
+standard_input_file:
+	or al,1
+standard_output_check:
+	mov bx,hcb_list+2
+	or bx,bx ! jz standard_output_file
+	test hcb_flags[bx],hf_device ! jnz standard_mask_done
+standard_output_file:
+	or al,2
+standard_mask_done:
+	pop bx
+	ret
+standard_input_status:
+	push bx ! push si
+	xor ax,ax
+	mov bx,hcb_list
+	or bx,bx ! jz standard_status_done
+	test hcb_flags[bx],hf_read ! jz standard_status_done
+	mov si,hcb_fcb_base[bx]
+	mov ax,fcb_rand_rec2[si]
+	cmp ax,fcb_byte_size2[si] ! jb standard_status_ready
+	ja standard_status_empty
+	mov ax,fcb_rand_rec[si]
+	cmp ax,fcb_byte_size[si] ! jb standard_status_ready
+standard_status_empty:
+	xor ax,ax
+	jmps standard_status_done
+standard_status_ready:
+	mov ax,00ffh
+standard_status_done:
+	pop si ! pop bx
+	ret
+standard_input_byte:
+	push bx ! push di ! push es
+	mov bx,hcb_list
+	or bx,bx ! jz standard_input_closed
+	test hcb_flags[bx],hf_read ! jz standard_input_error
+	call swap_pdrive
+	push ds ! pop es
+	mov di,hcb_fcb_base[bx]
+	call stream_read_byte
+	call swap_pdrive
+	cmp ah,5 ! jne standard_input_done
+standard_input_error:
+	mov dos_error_code,no_access
+	mov ax,051ah
+	jmps standard_input_done
+standard_input_closed:
+	mov dos_error_code,no_h_match
+	mov ax,061ah
+standard_input_done:
+	pop es ! pop di ! pop bx
+	ret
+standard_output_byte:
+	push ax ! push bx ! push di ! push es
+	mov bx,hcb_list+2
+	or bx,bx ! jz standard_output_closed
+	test hcb_flags[bx],hf_write ! jz standard_output_error
+	call swap_pdrive
+	push ds ! pop es
+	mov di,hcb_fcb_base[bx]
+	call stream_write_byte
+	call swap_pdrive
+	or ah,ah ! jz standard_output_done
+standard_output_error:
+	mov dos_error_code,no_access
+	jmps standard_output_done
+standard_output_closed:
+	mov dos_error_code,no_h_match
+standard_output_done:
+	pop es ! pop di ! pop bx ! pop ax
+	ret
 
 
 eject
