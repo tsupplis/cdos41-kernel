@@ -11,6 +11,10 @@ import sys
 
 REFERENCE_SHA256 = '0facfea0a25a91a5182799fec4612a0f5f1eb9e2cdffe362b39ff5ff2efcde01'
 ROOT = Path(__file__).resolve().parent
+HELP_INCLUDES = {
+    f'E:{name.upper()}': ROOT.parent / 'function' / 'shared' / name
+    for name in ('helpcode.lib', 'helpdata.lib', 'helpwork.lib')
+}
 
 
 def equivalent(old, new):
@@ -46,15 +50,31 @@ def expected_image(reference):
     return bytes(expected)
 
 
+def source_lines(path, stack=()):
+    path = path.resolve()
+    if path in stack:
+        raise ValueError(f'{path}: recursive assembly include')
+    for number, raw in enumerate(path.read_text().splitlines(), 1):
+        line = raw.split(';', 1)[0].strip()
+        include = re.fullmatch(r'include\s+(\S+)', line, re.IGNORECASE)
+        if include:
+            name = include[1].upper()
+            if name not in HELP_INCLUDES:
+                raise ValueError(f'{path}:{number}: unexpected assembly include {name}')
+            yield from source_lines(HELP_INCLUDES[name], stack + (path,))
+        else:
+            yield path, number, raw
+
+
 def check_source(path):
     code = False
     instructions = 0
     data_label = None
     allowed = {'copyright', 'utility_alignment', 'help_copyright', 'code_padding'}
-    for number, raw in enumerate(path.read_text().splitlines(), 1):
+    for source, number, raw in source_lines(path):
         line = raw.split(';', 1)[0].strip().lower()
         if re.search(r'\b(?:loc|field|item|record|data)_[0-9a-f]{4}\b', line):
-            raise ValueError(f'{path}:{number}: anonymous address-derived label')
+            raise ValueError(f'{source}:{number}: anonymous address-derived label')
         if not line:
             continue
         if line == 'cseg':
@@ -79,7 +99,7 @@ def check_source(path):
             continue
         if line.split()[0] in ('db', 'dw', 'rb', 'rw'):
             if data_label not in allowed:
-                raise ValueError(f'{path}:{number}: raw data inside executable code')
+                raise ValueError(f'{source}:{number}: raw data inside executable code')
         else:
             instructions += 1
     if instructions != 2950:

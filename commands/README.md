@@ -1,7 +1,9 @@
 # Command builds
 
-Each enabled command has a self-contained Makefile using the same conventions
-as the CCP/M project. No build reads files from a sibling project.
+Each enabled command has a Makefile using the same conventions as the CCP/M
+project. SETPORT and SETUP share their reconstructed HELP assembly; STOP's
+alternative PL/M build and check reuse SYSTAT's startup interface. These
+shared inputs avoid maintaining duplicate sources.
 
 - `make` / `make all` builds the local outputs.
 - `make check` builds first and validates them; documented behavioral or
@@ -19,7 +21,7 @@ header handling remain local and documented. `.PHONY` and `.DELETE_ON_ERROR`
 keep administrative targets reliable and remove failed outputs. Compiler logs
 are checked where the historical tools do not reliably report failure.
 
-Reconstructed commands keep a frozen original source and explicit comparison
+Reconstructed commands keep a frozen reconstruction and explicit comparison
 rules. SETPORT's README lists its 39 equivalent ASM86 encoding exceptions;
 its check permits no other byte differences. PRINT and WINDOW use wildcard
 object cleanup like the other tools.
@@ -54,14 +56,14 @@ Only Pending and Known gap entries are active work.
 
 | Command/group | Parity | Remaining work |
 | --- | --- | --- |
-| CHDIR, MKDIR, SYSDISK, HDMAINT, REN.EXE, LOADCCPM, REDOS.COM, STOP.CMD | Byte-identical | None for release equivalence |
+| CHDIR, MKDIR, SYSDISK, HDMAINT, REN.EXE, LOADCCPM, REDOS.COM, STOP.CMD, TIME.EXE | Byte-identical | None for release equivalence |
 | SETPORT | Equivalent | None; 39 equivalent instruction encodings checked |
 | INITDIR | Equivalent | None; overwritten runtime word checked |
 | COPY.EXE, ERASE.EXE | Equivalent | None; exact serial/header/padding exceptions checked |
 | RMDIR | Equivalent | None; copyright relocation checked, diagnostics aligned |
 | SDIR | Behavior tested | No known fix pending; 27 option and 7 path/current-directory cases |
 | WINDOW/WMENU | Behavior tested | No known fix pending; immediate colour repaint now checked against actual screen bytes |
-| SHOW, SET, TYPE, TIME.EXE | Behavior tested | No known fix pending; retain documented regression coverage |
+| SHOW, SET, TYPE | Behavior tested | No known fix pending; retain documented regression coverage |
 | SYSTAT | Behavior tested | Compared against the retained 4.1 original; no known fix pending |
 | ERA, REN.CMD | Behavior tested | Import review complete against retained originals; release not established |
 | SUBMIT | No reference | CCP/M-86 3.1 original unavailable. No active work. |

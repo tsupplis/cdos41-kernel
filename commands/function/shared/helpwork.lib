@@ -1,0 +1,102 @@
+; Shared HELP index, topic, and editor workspace for SETUP and SETPORT.
+help_index_cache	rb	400h	; zero-filled workspace
+help_saved_index	dw	0h
+help_version	dw	0h
+help_index_step	dw	0h
+help_index_pointer	dw	0h
+help_global_index	dw	0h
+help_index_position	dw	0h
+help_listing_position	dw	0h
+help_listing_cursor	dw	0h
+help_listing_delta	dw	0h
+help_listing_stride	dw	0h
+help_displayed_topics	dw	0h
+help_search_cursor	dw	0h
+help_list_mode	db	0h
+help_no_page_mode	db	0h
+help_create_mode	db	0h
+help_extract_mode	db	0h
+help_page_mode	db	0h
+help_file_status	db	0h
+help_end_of_data	db	0h
+
+; Retained HELP utility secondary FCB workspace.
+help_secondary_fcb	rb	24h	; zero-filled workspace
+help_token_count	dw	0h
+help_search_level	db	0h
+
+; Space-padded subtopic name.
+help_subtopic_name	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
+
+; Eleven 15-byte topic slots (12-character name and three work bytes).
+help_topic_tokens	rb	0a5h	; zero-filled workspace
+
+; Temporary topic name.
+help_name_buffer	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
+help_parent_level	db	0h
+help_level	dw	0h
+help_page_length	db	0h
+
+; Console clear-screen string and associated buffer space.
+help_clear_screen	db	1bh,45h,24h,0h,0h,0h,0h,0h,0h,0h,0h,0h
+	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
+	db	0h,0h
+help_compare_result	db	0h
+help_compare_index	db	0h
+help_records_per_block	dw	0h
+help_step_count	db	0h
+help_record_number	db	0h
+help_record_index	db	0h
+help_page_stop	db	0h
+help_parse_index	db	0h
+help_parse_level	db	0h
+help_input_index	db	0h
+help_token_character_index	dw	0h
+help_parse_done	db	0h
+help_option_seen	db	0h
+help_listing_level	db	0h
+help_listing_character	dw	0h
+help_listing_top_level	db	0h
+help_listing_heading_shown	db	0h
+
+; Topic name assembled for display; terminator follows.
+help_listing_text	db	0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h,0h
+	db	0h
+help_listing_terminator	db	0h
+help_last_token	db	0h
+help_search_done	db	0h
+help_search_failed	db	0h
+help_search_restart	db	0h
+help_search_matched	db	0h
+help_search_passed_name	db	0h
+help_parent_token_saved	db	0h
+help_compare_byte	db	0h
+help_token_display_index	db	0h
+help_token_indent	db	0h
+help_text_index	db	0h
+help_delimiter_count	db	0h
+help_text_character	dw	0h
+
+; Up to three consecutive delimiter bytes.
+help_delimiter_buffer	db	0h,0h,0h
+help_prompt_tokens	db	0h
+help_open_status	dw	0h
+
+; Retained workspace/alignment between records.
+help_reserved_byte_4	db	0h
+help_printer_number	db	0h
+
+; Retained printer-status diagnostic.
+help_printer_busy	db	0h,0dh,0ah
+	db	'Printer Busy'
+	db	0dh,0ah,24h
+help_pending_key	dw	0h
+help_extended_key	db	0h
+help_retype_width	db	0h
+
+; Retained workspace/alignment between records.
+help_edit_padding	db	0h
+help_prompt_column	db	0h
+help_editor_sp	dw	0h
+help_editor_buffer	dw	0h
+help_editor_es	dw	0h

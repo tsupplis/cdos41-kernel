@@ -3,7 +3,9 @@
 New DOS EXE for Concurrent DOS, built with DR C and RASM86. Its Makefile
 uses the existing compiler and DOS LINK86 wrappers. The small-model compiler
 initialization library is staged from the installed toolchain, not another
-project; DRC_LIBDIR can override that location.
+project; DRC_LIBDIR can override that location. Forced rebuilds can restage
+the read-only library, and reported compiler errors fail the build even when
+the compiler wrapper returns success.
 
 ```
 SETENV

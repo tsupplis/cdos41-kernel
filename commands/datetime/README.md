@@ -7,6 +7,10 @@ pivot fix. Its original regression test is retained in tests/datecheck.asm;
 Native DATE.CMD is separate in commands/date. This directory is reserved for
 DOS-family DATE.EXE and TIME.EXE.
 
-TIME uses bounded two-digit formatting for HH:MM:SS.hh. `make check-time`
-checks the complete current-time line and input prompt at five synthetic
-times, including midnight and 23:59:59.99, without setting any clock.
+TIME.EXE is reconstructed from the CDOS 4.11 executable, not recovered OEM
+source. After assembly and linking, `normalize_time.py` checks the LINK86
+output and restores the release's MZ size, stack segment and checksum fields.
+`make check-time` compares the complete executable with `base/time.exe` and
+checks the current-time line and input prompt at five synthetic times without
+setting a clock. The release space-pads single-digit hours and zero-pads the
+other fields.

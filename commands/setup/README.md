@@ -38,6 +38,10 @@ version 4.1 on the 4.11 release disk.
 `setup.a86` is the maintained disassembly and `setuporg.a86` is the frozen
 reconstruction. Run `make check` to assemble both with ASM86 and compare
 each complete CMD against the reference from CDOS 4.11 disk 2 (16,256 bytes).
+The maintained source shares its reconstructed HELP code, initialized data
+and workspace with SETPORT in `../function/shared/`. The Makefile maps that
+directory to the assembler's E: drive. These shared files are not a compiled
+copy of the archived HELP PL/M source.
 
 CODE contains SETUP through 0A94h and embedded HELP from 0AA0h. The nine
 menu dispatch tables are symbolic words. Two instructions at 0202h and

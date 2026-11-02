@@ -9,6 +9,8 @@ PYTHON=python3
 
 TOOLS=setup.cmd setuporg.cmd
 REF=../../base/setup.cmd
+HELP_DIR=../function/shared
+HELP_SHARED=$(addprefix $(HELP_DIR)/,helpcode.lib helpdata.lib helpwork.lib)
 
 .PHONY: all check clean
 .DELETE_ON_ERROR:
@@ -20,12 +22,16 @@ all: $(TOOLS)
 	$(PYTHON) pack.py $@
 	$(CMDINFO) $@
 
+setup.h86: $(HELP_SHARED)
+
 %.h86: %.a86 Makefile
-	@$(ASM86) $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
+	@EMU2_DRIVE_E="$(abspath $(HELP_DIR))" $(ASM86) $< > $*.log 2>&1; \
+	  result=$$?; cat $*.log; test $$result -eq 0
 	@grep -qiE 'NUMBER OF ERRORS: +0' $*.log
+	@test -s $@
 
 # Validate both the frozen reconstruction and maintained version, including headers.
-check: $(TOOLS)
+check: $(TOOLS) $(REF)
 	cmp setuporg.cmd $(REF)
 	cmp setup.cmd $(REF)
 	@echo "PASS: both complete CMD files match $(REF)"

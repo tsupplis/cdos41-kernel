@@ -12,7 +12,8 @@ OBJECTS=pccopy.obj
 .DELETE_ON_ERROR:
 
 all: $(TOOLS)
-check: all check.py
+check: all check.py ../../base/copy.exe ../../tools/pctmp_recovery_check.py ../../tools/fat_recovery_check.py
+	@for f in $(TOOLS); do test -s "$$f" || { echo "error: $$f is missing or empty" >&2; exit 1; }; done
 	$(PYTHON) check.py
 
 LOCAL_INCLUDES=$(wildcard *.a86 *.lib *.equ *.dat *.def *.h *.dcl)
@@ -22,11 +23,12 @@ $(OBJECTS): $(LOCAL_INCLUDES) Makefile
 %.obj: %.a86 Makefile $(wildcard *.lib *.equ *.def *.inc)
 	@$(RASM86) $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
 	@grep -qiE 'Number of errors: +0\.' $*.log
+	@test -s $@
 
 # Remove generated outputs only; preserve sources and reference files.
 clean:
-	rm -f *.sys *.loc *.cmd *.obj *.h86 *.hex *.sym *.lin *.lst *.prn *.log
-	rm -f *.mp? *.lnk *.map *.exe *.com
+	$(RM) *.sys *.loc *.cmd *.obj *.h86 *.hex *.sym *.lin *.lst *.prn *.log
+	$(RM) *.mp? *.lnk *.map *.exe *.com
 
 copy.exe: $(OBJECTS) Makefile
 	@$(LINK86) 'copy=pccopy[nop]' > copy-link.log 2>&1; result=$$?; cat copy-link.log; test $$result -eq 0

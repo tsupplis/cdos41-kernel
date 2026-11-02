@@ -1,5 +1,5 @@
-; Run the rebuilt DOS DATE.EXE with synthetic DOS/BDOS calls under emu2.
-; Capture function 2Bh instead of changing any real clock.
+; Run TIME.EXE with synthetic DOS/BDOS calls under emu2.
+; Capture function 2Ch instead of changing any real clock.
 bits 16
 cpu 8086
 org 100h

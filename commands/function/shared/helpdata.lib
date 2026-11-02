@@ -1,0 +1,91 @@
+; Shared HELP base-page and initialized data for SETUP and SETPORT.
+base_page	rb	15h	; zero-filled workspace
+
+; STACK segment supplied by the CMD loader.
+base_stack_segment	dw	0h
+
+; Remaining loader base-page fields, initially zero.
+base_page_reserved	rb	69h	; zero-filled workspace
+
+; Length of the command tail at 81h.
+command_tail	db	0h
+
+; CP/M command tail, supplied by the command processor.
+command_tail_text	rb	7fh	; zero-filled workspace
+
+; HELP switches SS to DATA and uses SP=180h for its private stack.
+help_stack_space	rb	80h	; zero-filled workspace
+help_stack_guard	db	0h
+help_system_disk	db	0h
+
+; Standard FCB through the current sequential-record byte.
+help_fcb	rb	21h	; zero-filled workspace
+help_random_record	db	0h
+help_random_record_middle	db	0h
+help_random_record_high	db	0h
+
+; Input length byte; also the normal DMA buffer.
+help_input_buffer	db	0h
+help_input_text	rb	7fh	; zero-filled workspace
+help_system_segment	dw	0h
+help_output_column	db	21h
+help_saved_ax	dw	0h
+help_saved_bx	dw	0h
+help_saved_cx	dw	0h
+help_saved_dx	dw	0h
+help_caller_sp	dw	0h
+help_caller_ss	dw	0h
+help_context_padding	db	0h
+help_error_prefix	db	0dh,0ah
+	db	'ERROR:  $'
+help_newline	db	0dh,0ah,24h
+help_read_error	db	'Reading file HELP.HLP.$'
+help_continue_prompt	db	0dh,0ah
+	db	'Press RETURN to continue $'
+help_erase_prompt	db	0dh
+	db	'                             '
+	db	0dh,24h
+help_blank_topic	db	'             '
+	db	0dh,24h
+help_topics_heading	db	0dh
+	db	'Topics available:$'
+help_subtopics_heading	db	0dh
+	db	'For more information, type a period and one of the following '
+	db	'subtopics:$'
+
+; Retained workspace/alignment between records.
+help_heading_newline	db	0dh,24h,0dh
+help_short_newline	db	0ah,24h
+help_indent_string	db	20h,20h,24h
+help_topic_read_error	db	'Reading file HELP.HLP.$'
+
+; Maximum input size used by the local line editor.
+help_input_limit	db	80h
+help_topic_prompt	db	0dh
+	db	'HELP (Enter topic, ESC to exit)> $'
+
+; FCB prefix: drive, eight-character HELP name (attribute bit retained), HLP, extent.
+help_filename	db	0h
+	db	'HELP '
+	db	0a0h
+	db	'  HLP'
+	db	0h
+help_intro	db	0dh,0ah
+	db	'HELP UTILITY V2.0'
+	db	0dh,0ah,0ah
+	db	'At "HELP (Enter topic, ESC to exit)> " enter topic {,subtopic}...'
+	db	0dh,0ah,0ah
+	db	'EXAMPLE:  HELP (Enter topic, ESC to exit)> DIR EXAMPLES'
+	db	0dh,0ah,24h
+
+; Space-padded topic comparison token.
+help_question_token	db	'?           '
+
+; Space-padded topic comparison token.
+help_command_token	db	'HELP        '
+
+; Space-padded topic comparison token.
+help_intro_token	db	'HELP        '
+help_topic_heading	db	'Topic:$'
+help_not_found	db	'Not found$'
+help_file_missing	db	'No HELP.HLP file on the default drive.$'

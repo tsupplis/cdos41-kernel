@@ -12,13 +12,13 @@ make check
 make clean
 ```
 
-The build uses `cpm86_asm86`, `cpm86_gencmd`, `cmdinfo` and Python 3, with
-only local project inputs. Every one of the 2,950 loaded instructions is
+The build uses `cpm86_asm86`, `cpm86_gencmd`, `cmdinfo` and Python 3.
+SETPORT and SETUP share the reconstructed HELP code, initialized data and
+workspace in `../function/shared/`; the Makefile maps that directory to
+the assembler's E: drive. Every one of the 2,950 loaded instructions is
 written as assembly. Data directives contain copyrights, strings, tables,
-workspace and padding only. Indirect menu/token handlers have labels too.
-Code branches and DATA records use semantic names; `check.py` rejects the
-former anonymous address-derived labels. String literals retain complete
-text, including the three-character function-key legends.
+workspace and padding only. `check.py` expands and checks the shared
+includes as well as the local source.
 
 The rebuilt command is **not strictly byte-identical**: ASM86 chooses 39
 semantically identical, same-length encodings in the embedded HELP module.
@@ -64,9 +64,10 @@ UART detection, divisor/format packing, token scanning, length-prefixed string
 output and menu rendering follow the same design. It adds a main menu,
 per-port input/output protocol menus, protocol tokens, and an embedded HELP
 V2.0 engine with console image save/restore and a local line editor. The HELP
-engine shares structure with the available HELP PL/M source; this remains a
-reconstruction of the actual SETPORT binary, not a replacement compiled from
-that other source. The version test requires BDOS 163 value 1441h.
+engine shares structure with the archived HELP PL/M source. The common
+assembly is reconstructed from SETPORT and SETUP; it is not the archived
+PL/M compiled into these commands. The version test requires BDOS 163 value
+1441h.
 
 ## Original CMD layout
 
