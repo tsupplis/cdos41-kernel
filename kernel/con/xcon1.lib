@@ -393,6 +393,8 @@ screen_regular_mode:
 screen_get:
 	mov	al,vs_screen_mode	; get our current state
 	mov	ah,80d			;   and our column width
+	cmp	al,50h			; enhanced modes report their native number
+	jae	screen_get_done
 	test	al,0Fh			; if in alpha mode
 	jnz	screen_get_done		;   tell the truth
 					; but don't admit to graphics
@@ -504,7 +506,7 @@ screen_set_go:
 ; Older kernels reject function 30 through that back door without output.
 screen_palette:
 	cmp	vs_screen_mode,50h
-	jnz	screen_cga_palette
+	jb	screen_cga_palette
 	jmp	screen_not_sup		; use CH=3 for native EGA colors
 screen_cga_palette:
 	mov	al,vs_bit
@@ -566,7 +568,9 @@ screen_ega_palette:
 	cmp	dh,40h
 	jae	screen_ega_bad
 	cmp	vs_screen_mode,50h
-	jnz	screen_ega_unsupported
+	jb	screen_ega_unsupported
+	cmp	vs_screen_mode,0A0h
+	jae	screen_ega_unsupported
 	mov	al,vs_bit
 	test	graphic_bits,al
 	jz	screen_ega_unsupported
@@ -596,9 +600,9 @@ alpha_vector	dw	screen_bad_param, general_alpha
 graph_vector	dw	screen_bad_param, general_graph
 		dw	color_320, black_white_320
 		dw	black_white_640, ega_640_350
-		dw	screen_not_sup, screen_not_sup
-		dw	screen_not_sup, screen_not_sup
-		dw	screen_not_sup, screen_not_sup
+		dw	eg_320_200, eg_640_200
+		dw	eg_vga_mono, eg_vga_color
+		dw	eg_vga_256, screen_not_sup
 		dw	screen_not_sup, screen_not_sup
 		dw	screen_not_sup, screen_not_sup
 
@@ -733,6 +737,7 @@ color_graph_init:
 	jz	enhanced_graph_init
 	inc	al			; mode 6, 640 x 200
 enhanced_graph_init:
+enhanced_graph_init:
 	sub	ah,ah
 	mov	bios_graphics,1
 	call	video_bios
@@ -814,6 +819,11 @@ video_bios:
 	mov	ax,video_bios_ax
 	pushf
 	callf cs:dword ptr video_rom
+	; Capture ROM results while interrupts remain masked by the PIC.
+	mov	cs:video_result_ax,ax
+	mov	cs:video_result_bx,bx
+	mov	cs:video_result_cx,cx
+	mov	cs:video_result_dx,dx
 	cli
 	push	cs ! pop ds
 	mov	ax,video_bios_ss

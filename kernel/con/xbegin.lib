@@ -672,6 +672,14 @@ xios_v1_graph_caps:
 	mov	ax,4745h
 	sub	bx,bx
 	mov	bl,enhanced_ega
+	cmp	enhanced_video,0
+	je	egcaps_no_ega
+	or	bl,2			; modes 0D/0E, including 64 KB EGA
+egcaps_no_ega:
+	cmp	enhanced_vga,0
+	je	egcaps_done
+	or	bl,4			; VGA 11/12/13 and 256-entry DAC
+egcaps_done:
 	ret
 
 ;	restore normal status line operation
