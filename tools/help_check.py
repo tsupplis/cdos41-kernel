@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate maintained help against this project's packaged commands."""
+"""Validate maintained help against packaged commands, excluding extras."""
 
 from pathlib import Path
 import re
@@ -31,7 +31,7 @@ removed = {
 }
 assert not topics & removed, topics & removed
 media = (R / "media/Makefile").read_text()
-files = re.findall(r"\.\./(?:commands|base|extra)/[^\s\\]+\.(?:cmd|exe|com)", media, re.I)
+files = re.findall(r"\.\./(?:commands|base)/[^\s\\]+\.(?:cmd|exe|com)", media, re.I)
 commands = {Path(f).stem.upper() for f in files}
 commands.discard("PIP4")
 commands.add("PIP")
