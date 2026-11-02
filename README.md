@@ -94,7 +94,7 @@ and built-in DIR retain their respective option syntax.
 `ORDER` provides command-order configuration in 4.1. SETDEF will not be ported;
 system-path configuration remains with SYSDISK.
 
-- **EXE headers:** fixes the same [DOS Plus loader defect](https://www.seasip.info/Cpm/dosplus_exe.html); valid headers need not be 512-byte aligned.
+EXE loading fixes the same [DOS Plus defect](https://www.seasip.info/Cpm/dosplus_exe.html): headers need not be 512-byte aligned.
 
 See [the shell command and alias table](ccp.md) and `HELP` for command syntax.
 See [the API inventory](api.md) for native, DOS, BIOS and graphics interfaces.

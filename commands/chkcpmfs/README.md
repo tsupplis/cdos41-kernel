@@ -9,7 +9,10 @@ writable, CHKCPMFS temporarily sets it read-only and resets the drive afterward
 to restore write access. A drive that was already read-only remains so. If
 write protection cannot be established, the scan stops; if write access cannot
 be restored, CHKCPMFS reports the failure and instructs the operator to use
-`SET d: [RW]`.
+`SET d: [RW]`. CDOS may refuse the protection request when another process has
+files open on the drive. The normal cleanup resets the drive; its next access
+may require a re-login. If the command is interrupted, verify the state with
+`SHOW` and use `SET d: [RW]` if needed.
 
 The checker uses the selected drive's DPB and reports record counts beyond
 128, extent reserved bits, allocation references beyond the DPB's maximum

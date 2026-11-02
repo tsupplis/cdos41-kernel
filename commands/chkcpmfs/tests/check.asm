@@ -110,13 +110,13 @@ get_dpb:
 
 protect_drive:
     inc byte [cs:protect_count]
-    cmp byte [cs:PROTECT_FAIL],0
+    cmp byte [cs:protect_fail],0
     je protection_succeeds
-    cmp byte [cs:PROTECT_FAIL],2
+    cmp byte [cs:protect_fail],2
     jne protection_fails
 protection_succeeds:
     or word [cs:ro_vector],1
-    cmp byte [cs:PROTECT_FAIL],2
+    cmp byte [cs:protect_fail],2
     je protection_fails
     xor ax,ax
     jmp done
@@ -134,7 +134,7 @@ reset_drive:
     inc byte [cs:reset_count]
     cmp dx,1
     jne failed
-    cmp byte [cs:RESTORE_FAIL],0
+    cmp byte [cs:restore_fail],0
     jne reset_fails
     and word [cs:ro_vector],0fffeh
     xor ax,ax
@@ -221,6 +221,8 @@ finished:
     jne failed_exit
     cmp byte [cs:reset_count],EXPECTED_RESETS
     jne failed_exit
+    cmp word [cs:ro_vector],EXPECTED_FINAL_RO
+    jne failed_exit
     jmp exit
 failed_exit:
     mov byte [cs:exit_code],1
@@ -247,6 +249,8 @@ source: dw 0
 exit_code: db 0
 fcb_copy: times 33 db 0
 ro_vector: dw INITIAL_RO
+protect_fail: db PROTECT_FAIL
+restore_fail: db RESTORE_FAIL
 dpb:
     dw 32
     db BSH, ((1 << BSH)-1) & 0ffh, EXM

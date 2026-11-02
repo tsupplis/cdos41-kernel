@@ -34,7 +34,7 @@ def check(start):
         twist=str(ROOT/'tools/cpm86twist.py')
         shutil.copyfile(MEDIA/(SYSTEM+'.img'),folder/(SYSTEM+'.img'))
         logical=folder/'logical.img'
-        run('python3',twist,'untwist',str(MEDIA/'base.img'),str(logical))
+        run('python3',twist,'untwist',str(MEDIA/(SYSTEM+'base.img')),str(logical))
         assert logical.exists(), ('twist output missing',list(folder.iterdir()))
         for local,(header_bytes,image_bytes,kind) in enumerate(cases):
             number=start+local

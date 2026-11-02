@@ -86,7 +86,7 @@ def prepare_fat(folder, name, *, label=False, sentinel=False):
     return image
 
 
-def boot(folder, system, second, drive):
+def boot(folder, system, second, drive, *, initially_read_only=False):
     shutil.copyfile(system, folder / "system.img")
     shutil.copyfile(second, folder / "second.img")
     before_system = (folder / "system.img").read_bytes()
@@ -109,9 +109,10 @@ def boot(folder, system, second, drive):
     if drive == "B":
         type_command("b:\n")
         type_command("cls\n")
-        type_command("a:chkcpmfs\n")
-    else:
-        type_command("chkcpmfs\n")
+    if initially_read_only:
+        type_command(f"a:set {drive.lower()}: [ro]\n")
+    type_command("a:chkcpmfs\n")
+    type_command(f"a:show {drive.lower()}:\n")
     commands.extend(['save "screen.bin" bin b800:0000 fa0', "q"])
     result = subprocess.run(
         ["pce-ibmpc", "-c", "cdos86.cfg", "-t", "null", "-g", "vga"],
@@ -146,29 +147,40 @@ def main():
                 f"block references checked: {references}") in screen, screen
         assert "Consistency errors: 0" in screen and "ERROR:" not in screen, screen
         assert "skipped" not in screen.lower(), screen
+        assert "A: RW" in screen, screen
 
         screen = boot(folder, system, clean, "B")
         assert "Drive B  DPB block shift" in screen, screen
         assert "Directory entries scanned: 3  block references checked: 3" in screen, screen
         assert "Consistency errors: 0" in screen and "ERROR:" not in screen, screen
+        assert "B: RW" in screen, screen
 
         screen = boot(folder, system, MEDIA / "cdos86base.img", "B")
         assert "Drive B  DPB block shift" in screen, screen
         assert "Directory entries scanned: 0  block references checked: 0" in screen, screen
         assert "Consistency errors: 0" in screen and "ERROR:" not in screen, screen
+        assert "B: RW" in screen, screen
+
+        screen = boot(folder, system, clean, "B", initially_read_only=True)
+        assert "Drive was already read-only; preserving its RO state." in screen, screen
+        assert "B: RO" in screen, screen
+        assert "Consistency errors: 0" in screen, screen
 
         screen = boot(folder, system, bad, "B")
         assert "Drive B  DPB block shift" in screen, screen
         assert re.search(r"USER 1 FILE SECOND\s+\.DAT: BLOCK "
                          + str(shared) + r" IS REFERENCED MORE THAN ONCE", screen), screen
         assert "Consistency errors: 1" in screen, screen
+        assert "B: RW" in screen, screen
 
         for fat in (fat_empty, fat_label, fat_file):
             screen = boot(folder, system, fat, "B")
             assert "DOS media detected; no CP/M filesystem scan performed." in screen, screen
             assert "Directory entries scanned:" not in screen, screen
+            assert "B: RW" in screen, screen
     print(f"PASS: live CDOS system ({entries} entries, {references} references), "
-          "all-user and empty CP/M disks, cross-link, FAT refusal; images unchanged")
+          "all-user and empty CP/M disks, automatic RO restore/preservation, "
+          "cross-link, FAT refusal; images unchanged")
 
 
 if __name__ == "__main__":

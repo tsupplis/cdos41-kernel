@@ -124,6 +124,7 @@ def cases():
     ], {
         "INITIAL_RO": 1, "EXPECTED_RO_QUERIES": 1,
         "EXPECTED_PROTECTS": 0, "EXPECTED_RESETS": 0,
+        "EXPECTED_FINAL_RO": 1,
     }, [
         "Drive was already read-only; preserving its RO state.",
         "Consistency errors: 0",
@@ -131,32 +132,35 @@ def cases():
     yield "write-protection-failure", [], {
         "PROTECT_FAIL": 1, "EXPECTED_RO_QUERIES": 2,
         "EXPECTED_PROTECTS": 1, "EXPECTED_RESETS": 0,
-        "EXPECTED_SEARCHES": 1, "EXPECTED_DMA_SETS": 2,
+        "EXPECTED_SEARCHES": 1, "EXPECTED_DMA_SETS": 3,
+        "EXPECTED_FINAL_RO": 0,
     }, [
         "ERROR: could not establish drive write protection; scan stopped.",
     ]
-    yield "restore-after-protection-error", [], {
-        "PROTECT_FAIL": 2, "EXPECTED_RO_QUERIES": 3,
-        "EXPECTED_PROTECTS": 1, "EXPECTED_RESETS": 1,
-        "EXPECTED_SEARCHES": 1, "EXPECTED_DMA_SETS": 2,
+    yield "preserve-ro-on-protection-error", [], {
+        "PROTECT_FAIL": 2, "EXPECTED_RO_QUERIES": 2,
+        "EXPECTED_PROTECTS": 1, "EXPECTED_RESETS": 0,
+        "EXPECTED_SEARCHES": 1, "EXPECTED_DMA_SETS": 3,
+        "EXPECTED_FINAL_RO": 1,
     }, [
         "ERROR: could not establish drive write protection; scan stopped.",
+        "Check drive status with SHOW; use SET A: [RW] if needed.",
     ]
     yield "write-protection-restore-failure", [
         entry("SAFE.DAT", [1], records=1),
     ], {
-        "RESTORE_FAIL": 1,
+        "RESTORE_FAIL": 1, "EXPECTED_FINAL_RO": 1,
     }, [
         "ERROR: drive write protection could not be restored; use SET A: [RW].",
         "Scan completed with a drive protection error.",
     ]
     yield "dos-media", [], {
-        "DOS_MEDIA": 1, "EXPECTED_SEARCHES": 1, "EXPECTED_DMA_SETS": 2,
+        "DOS_MEDIA": 1, "EXPECTED_SEARCHES": 1, "EXPECTED_DMA_SETS": 3,
         "EXPECTED_RO_QUERIES": 0, "EXPECTED_PROTECTS": 0,
         "EXPECTED_RESETS": 0,
     }, ["DOS media detected; no CP/M filesystem scan performed."]
     yield "unsupported-dpb", [], {
-        "BSH": 8, "EXPECTED_SEARCHES": 1, "EXPECTED_DMA_SETS": 2,
+        "BSH": 8, "EXPECTED_SEARCHES": 1, "EXPECTED_DMA_SETS": 3,
         "EXPECTED_RO_QUERIES": 0, "EXPECTED_PROTECTS": 0,
         "EXPECTED_RESETS": 0,
     }, ["ERROR: unsupported DPB block shift; scan stopped."]
@@ -179,7 +183,7 @@ def run_case(folder, image, name, entries, overrides, expected):
         "EXPECTED_SEARCHES": 2, "EXPECTED_DMA_SETS": 4,
         "INITIAL_RO": 0, "PROTECT_FAIL": 0, "RESTORE_FAIL": 0,
         "EXPECTED_RO_QUERIES": 3, "EXPECTED_PROTECTS": 1,
-        "EXPECTED_RESETS": 1,
+        "EXPECTED_RESETS": 1, "EXPECTED_FINAL_RO": 0,
     }
     settings.update(overrides)
     (folder / "case.inc").write_text(

@@ -211,8 +211,9 @@ protect$drive: procedure byte;
 
     protect$status = mon2(28,0);
     ro$vector = mon3(29,0);
-    if (ro$vector and drive$mask) <> 0 then changed$ro = 1;
-    if protect$status = 0ffh or changed$ro = 0 then return 0ffh;
+    if protect$status = 0ffh or
+       (ro$vector and drive$mask) = 0 then return 0ffh;
+    changed$ro = 1;
     return 0;
 end protect$drive;
 
@@ -234,6 +235,7 @@ end restore$drive;
 
 terminate: procedure;
     call restore$drive;
+    call mon1(26,original$dma);
     call mon1(0,0);
 end terminate;
 
@@ -241,6 +243,7 @@ plmstart: procedure public;
     declare i address;
 
     changed$ro, restore$failed = 0;
+    original$dma = mon3(52,0);
     call print$string(.('CHKCPMFS 1.0 - READ-ONLY CP/M FILESYSTEM CHECK$'));
     call newline;
     call print$string(.('Scans ordinary file entries through BDOS on the current drive.$'));
@@ -276,10 +279,13 @@ plmstart: procedure public;
         alloc$map(i) = 0;
     end;
     entry$count, block$count, error$count = 0;
-    original$dma = mon3(52,0);
 
     if protect$drive <> 0 then do;
         call print$string(.('ERROR: could not establish drive write protection; scan stopped.$'));
+        call newline;
+        call print$string(.('Check drive status with SHOW; use SET $'));
+        call put(disk + 'A');
+        call print$string(.(': [RW] if needed.$'));
         call newline;
         call terminate;
     end;
@@ -303,7 +309,6 @@ plmstart: procedure public;
         end;
         dcnt = mon2(18,0);
     end;
-    call mon1(26,original$dma);
     call restore$drive;
 
     call print$string(.('Directory entries scanned: $'));

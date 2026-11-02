@@ -893,7 +893,9 @@ good_header:
 exe_image_size_valid:
 	mov exe_par_count,ax		;SAVE IT
 	add ax,S_PD+S_UDA+S_DMD+S_PSP	; bias by PD, UDA, MD and PSP
+	jnc $+5 ! jmp bad_exe_length
 	add ax,exe_hi_pars		;AT END
+	jnc $+5 ! jmp bad_exe_length
 
 	mov bx,ax
 	mov si,offset fcb+1
@@ -920,6 +922,7 @@ no_match:
 	cmp di,BUILTIN_TBL_END ! jne builtin_scan
 
 	    add ax,ms_addmem		;bias memory request by addmem.
+	jnc $+5 ! jmp bad_exe_length
 
 mem_ok:
 	push es

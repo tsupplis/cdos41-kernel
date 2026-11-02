@@ -38,9 +38,10 @@ def check(group):
             run('mcopy', '-i', 'fat.img', name+'.com', '::')
         run('nasm', '-f', 'bin', '-DEXE', str(FIXTURES/'dos_emit.asm'), '-o', 'exe.bin')
         image = (folder/'exe.bin').read_bytes()
-        size = len(image)+512
-        header = struct.pack('<14H', 0x5a4d, size%512, (size+511)//512, 0, 32,
-                             0x100, 0xffff, 0, len(image)-2, 0, 0, 0, 0x1c, 0) + b'\0'*(512-28)
+        header_bytes = 32
+        size = len(image)+header_bytes
+        header = struct.pack('<14H', 0x5a4d, size%512, (size+511)//512, 0, header_bytes//16,
+                             0x100, 0xffff, 0, len(image)-2, 0, 0, 0, 0x1c, 0) + b'\0'*(header_bytes-28)
         (folder/'emit.exe').write_bytes(header+image)
         run('mcopy', '-i', 'fat.img', 'emit.exe', '::')
         for name, content in [('stream.in', b'\0\x1aZONE\r\nTWO\r\n'),
