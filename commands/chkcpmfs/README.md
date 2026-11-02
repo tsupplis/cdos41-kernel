@@ -1,0 +1,16 @@
+# CHKCPMFS
+
+`CHKCPMFS.CMD` is a read-only first-pass consistency checker for CP/M media
+under Concurrent DOS 4.1. It scans ordinary file entries in user areas 0–15
+on the currently selected drive through BDOS. It does not modify the disk.
+
+The checker uses the selected drive's DPB and reports record counts beyond
+128, extent reserved bits, allocation references beyond the DPB's maximum
+block, references to directory-reserved blocks, and duplicate block references.
+It refuses the DOS/FAT media identified by the CDOS pseudo-label.
+
+Run it only when the drive is idle. BDOS does not provide an exclusive
+filesystem lock for this scan, so concurrent writes can make its results
+inconsistent. This version does not inspect deleted directory slots, validate
+timestamp/XFCB metadata, read data sectors, identify lost blocks, or repair
+anything. Its results are limited to the directory entries BDOS exposes.

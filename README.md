@@ -125,7 +125,7 @@ mechanism. [PUT/GET/RDR notes](commands/putget/README.md).
 | --- | --- | --- |
 | `cdos86.img` | Yes | Kernel, core file commands, ED, DATE, SDIR, SET, SHOW, SUBMIT, BATCH, SYSDISK, ERA/ERAQ, PIP and shell alias targets |
 | `cdostools.img` | No | ASM80/ASM86, DDT86, GENCMD, GENCCPM, HEXCOM, HELP, SYSTAT, CHSET, GENLDR, WINDOW/WMENU, PUT/GET/RDR and PIP |
-| `cdosmaint.img` | Yes | Kernel, INITDIR, DSKMAINT, HDMAINT.CMD, DCOPY, SYSDISK, ERA and PIP |
+| `cdosmaint.img` | Yes | Kernel, INITDIR, DSKMAINT, HDMAINT.CMD, DCOPY, CHKCPMFS, SYSDISK, ERA and PIP |
 | `cdosmenu.img` | No | SPL, PRINT, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP, menu/terminal data, BAT examples and PIP |
 | `cdosdos.img` | No | COPY.EXE, DATE.EXE, ERASE.EXE, PATH.EXE, SETENV.EXE, LOADCCPM.COM, TIME.EXE, REN.EXE and REDOS.COM, core commands and PIP |
 | `cdosextras.img` | No | BACKREST, CARDFILE, DRTALK, their support files and PIP |
@@ -189,6 +189,7 @@ release-image provenance. Details are in `base/cdos411.json`.
 | `asm86` | 8086 assembler | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool |
 | `batch` | Run BAT command files | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Equivalent |
 | `chdir / mkdir` | Change or create directories | 4.11 | Recompiled from CDOS 4.1; shared D.A86 implementation | Byte-identical |
+| `chkcpmfs` | Read-only CP/M directory allocation consistency check | - | New PL/M-86 checker using the CDOS BDOS interface | Additional tool |
 | `rmdir` | Remove directories | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Equivalent |
 | `chset` | Inspect or change CMD header flags | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Behavior tested |
 | `cls` | Clear the terminal screen | - | New; TMP built-in; VT52 ESC-E | Additional tool |

@@ -24,7 +24,7 @@ TOOLS_COMMANDS = ../commands/putget/put.cmd ../commands/putget/get.cmd ../comman
 
 MAINT_COMMANDS = ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
     ../commands/dskmaint/dskmaint.cmd ../commands/disk/dcopy.cmd ../commands/hdmaint/hdmaint.cmd \
-    ../commands/initdir/initdir.cmd
+    ../commands/initdir/initdir.cmd ../commands/chkcpmfs/chkcpmfs.cmd
 
 MENU_COMMANDS = ../commands/spl/spl.cmd ../commands/print/print.cmd ../commands/dredix/dredix.cmd ../commands/copymenu/copymenu.cmd ../commands/editmenu/editmenu.cmd \
     ../commands/printmgr/printmgr.cmd ../commands/dsp/dsp.cmd ../base/term.dat \
