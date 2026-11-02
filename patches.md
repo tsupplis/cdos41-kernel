@@ -858,3 +858,10 @@ for disposable test programs; production assembly tools remain unchanged.
 
 The reported DOS version is unchanged. Fixing MZ loading does not establish
 full DOS 2.11 API compatibility.
+
+Verification: all 18 EXE cases and six COM recovery runs pass on CDOS and
+CCP/M independently. CDOS also passes the 32-byte-header FAT EXE with
+redirection, append/echo and stderr isolation. Existing assembled DOS, EXEC
+and critical-error regressions pass; every packaged payload, boot track
+and image size verifies. Allocation arithmetic checks image plus loader,
+MINALLOC and ADDMEM for overflow before requesting memory.
