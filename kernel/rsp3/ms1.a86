@@ -3620,6 +3620,10 @@ readnx:
 readn0:
 	call conin			;next char in al
 	pop bx ! pop cx
+	cmp line_skip_lf,0 ! je line_character_ready
+	mov line_skip_lf,0
+	cmp al,LF ! je readnx
+line_character_ready:
 	cmp legacy_eof,0 ! jne eofre			;reactivate counters
 	cmp al,CR ! jnz l_19
 eofre:
@@ -5322,7 +5326,10 @@ activate_buffer:
 						;HAS IT NOT BEEN STARTED?
 						;IF NOT,JUST FILL IT
 	    call check_equal			;FLUSH IT IF DIFFERENT
-	    RETE				;LEAVE IF SAME
+	jne activate_different
+	xor ax,ax				; cache hits return success at every record
+	ret
+activate_different:
 		call flush_buffer
 		mov al,erflag
 		or al,al ! jnz xactivate
@@ -5443,7 +5450,8 @@ stream_record_shift:
 stream_write_buffer:
 	or al,al ! jz stream_buffer_ready
 	cmp al,1 ! je stream_new_record
-	cmp al,4 ! jne stream_byte_error
+	cmp al,4 ! je $+5
+	jmp stream_byte_error
 stream_new_record:
 	lea di,buffer
 	push ds ! pop es

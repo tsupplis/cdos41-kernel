@@ -64,8 +64,9 @@ kernel data layout is changed.
 XIOS services and exports. `wmenu.c` implements the manager. `xios.a86`
 provides the C/far-memory bridge; `format.c` supplies small-model formatting.
 `hostcheck.c` checks parsing/service dispatch against simulated data;
-`livetest.c` exercises GLASS geometry/colors/TOP against the real XIOS and
-restores the original state. These test programs are not distribution tools.
+`livetest.c` exercises GLASS geometry, colors, viewport/tracking preservation
+and TOP against the real XIOS, then verifies full state restoration. These test
+programs are not distribution tools.
 
 `make check-window` runs OEM and rebuilt commands on disposable CDOS/FAT
 images. It checks VIEW, CDOS 1..4 bounds, geometry/colors, all three export modes,
