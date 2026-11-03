@@ -13,7 +13,7 @@ disks contain CCPM.SYS; the remaining disks are data-only.
 | cdosdev.img | No | ASM80/ASM86, DDT86, GENCMD, GENCCPM, GENLDR, HEXCOM, ED, SUBMIT and PIP. |
 | cdosmaint.img | Yes | Kernel, SYSDISK, ERA, DSKMAINT, HDMAINT and INITDIR, plus PIP. |
 | cdosmenu.img | No | SPL, PRINT, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP, menu/terminal data, window BAT examples, sample text and PIP. |
-| cdosdos.img | No | SETENV.CMD, COPY.EXE, DATE.EXE, ERASE.EXE, PATH.EXE, TIME.EXE, REN.EXE, LOADCCPM.COM and REDOS.COM, plus PIP. |
+| cdosdos.img | No | SETENV.CMD, COPY.EXE, DATE.EXE, ERASE.EXE, PATH.CMD, TIME.EXE, REN.EXE, LOADCCPM.COM and REDOS.COM, plus PIP. |
 | cdosextras.img | No | BACKREST commands, CARDFILE, DRTALK and their support files, plus PIP. |
 | cdosadmin.img | No | FUNCTION, DCOPY/DCOMP, SETPORT, SETUP, STOP, CHKCPMFS, N with NATIONAL.MSG, FM with FM.CFG and TERM.DAT, plus PIP. |
 
