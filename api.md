@@ -95,7 +95,7 @@ describe this kernel’s implementation. See Microsoft’s
 | 3F / 40 | Read / write handle | Implemented | Byte counts and shared position; EOF reads stop at the logical byte length, including size-plus-one requests | NEW (EOF boundary fix) |
 | 41 | Delete pathname | Implemented | Path parsing followed by native file deletion | — |
 | 42 | Seek handle | Implemented | Origins 0/1/2: beginning/current/end | — |
-| 43 | Get / set file attributes | Implemented | Translated native/FAT attributes; media-dependent semantics | — |
+| 43 | Get / set file attributes | Partial | RO/SYSTEM/ARCHIVE translation; HIDDEN writes are not yet adapted to native BDOS 230 | — |
 | 44 | IOCTL | Partial | AL=0 returns device/file information; AL=1 sets CON raw/cooked mode via DL bit 5 (DH must be zero). AH=3Fh/40h honor the mode; DUP/EXEC share it. AL=6/7 queries readiness. Other selectors/devices for AL=1 return AX=1 | NEW |
 | 45 / 46 | Duplicate / force duplicate handle | Implemented | Shared position and counted ownership; checked targets, self/alias duplication and close failures. Standard handles can be rebound | NEW (ownership and validation) |
 | 47 | Get current directory | Implemented | Reconstructs FAT path using the temporary P: directory mapping | — |
@@ -270,7 +270,7 @@ Sources: [xcon1.lib](kernel/con/xcon1.lib), [xcon2.lib](kernel/con/xcon2.lib),
 | 10 | 16 | file close | BDOS | Implemented | — |
 | 11 | 17 | search first | BDOS | Implemented; FAT raw search returns the physical-root label as 20h metadata regardless of position/current subdirectory | NEW (FAT label isolation) |
 | 12 | 18 | search next | BDOS | Implemented; FAT raw file records exclude volume/LFN metadata | NEW (FAT label isolation) |
-| 13 | 19 | file delete | BDOS | Implemented | — |
+| 13 | 19 | file delete | BDOS | Implemented; FAT HIDDEN/SYSTEM do not prevent deletion; READ-ONLY and ownership checks retained | NEW (HIDDEN parity) |
 | 14 | 20 | file read seq | BDOS | Implemented | — |
 | 15 | 21 | file write seq | BDOS | Implemented | — |
 | 16 | 22 | file make | BDOS | Implemented | — |
@@ -396,7 +396,40 @@ Sources: [xcon1.lib](kernel/con/xcon1.lib), [xcon2.lib](kernel/con/xcon2.lib),
 | A8 / A9 | 168 / 169 | Set / get AUX device | CIO | Implemented | — |
 | AA / AB | 170 / 171 | AUX input / output status | CIO | Implemented; also available as 07h/08h | — |
 | AC / AD | 172 / 173 | AUX block input / output | CIO | Implemented | — |
-| AE–FF | 174–255 | Unassigned (including F0h) | SUP | Illegal; error 2; no CCP/M project SETDEF extension | — |
+| AE–E5 | 174–229 | Unassigned | SUP | Illegal; error 2 | — |
+| E6 | 230 | FAT file attributes | BDOS | Implemented; versioned capabilities, GET and masked SET; ordinary FAT files only | NEW (project-local) |
+| E7–FF | 231–255 | Unassigned (including F0h) | SUP | Illegal; error 2; no CCP/M project SETDEF extension | — |
+
+## INT E0h / CL=E6h (230 decimal) — FAT file attributes
+
+Project-local extension, not a historical DRI assignment. Set CH=0 and
+CL=230; DS:DX addresses this 16-byte packet of eight little-endian words:
+
+| Offset | Field | Contract |
+| --- | --- | --- |
+| 0 | Size | 16 |
+| 2 | Version | 1 |
+| 4 | Operation | 0=capabilities, 1=GET, 2=masked SET |
+| 6 / 8 | FCB offset / segment | Far pointer to drive/name/type (first 12 FCB bytes); input-only; ignored by capabilities |
+| 10 | Mask | SET input: selected bits; success output: supported mask 0027h |
+| 12 | Values | SET input: desired bits; GET/SET output: actual FAT attributes; capabilities output: 4146h (`FA`) |
+| 14 | Reserved | Must be zero |
+
+AX=BX=0 and CX=0 on success. Returning errors use AX=BX=FFFFh and CX=reason;
+DS/SI/DI/BP are preserved, ES/DX are unspecified, flags are not a status
+interface. Physical/lock failures follow the existing BDOS error mode and
+use native reasons 1–12. Local reasons: 80h malformed packet, 81h CP/M
+media, 82h file not found, 83h invalid FCB/name, 84h directory.
+
+Mask 27h permits RO=01h, HIDDEN=02h, SYSTEM=04h and ARCHIVE=20h (DOS polarity).
+Unselected bits, FAT case/compatibility bytes, data and timestamps remain
+unchanged. No filename wildcards, labels or directory targets; drive 0 means
+current drive, 1–16 means A:–P:. Packet/FCB ranges must not wrap their segments.
+The current per-drive directory is used without changing it, the default
+drive, user number or caller DMA. SET follows normal disk RO/cache/lock checks.
+Capabilities performs no disk access. Before use, require a successful
+capabilities call, signature 4146h and the required supported mask bits;
+older kernels reject 230 (FFFFh/error 2). BDOS 30 and F5′–F8′ are unchanged.
 
 ## INT E0h / CL=32h (50 decimal) — direct BIOS gateway
 

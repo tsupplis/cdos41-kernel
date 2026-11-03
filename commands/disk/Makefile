@@ -11,9 +11,9 @@ TOOLS=dcopy.cmd dcomp.cmd
 .DELETE_ON_ERROR:
 all: $(TOOLS)
 
-dcopy.obj: dcopy.a86 ccpmio.a86 Makefile
+dcopy.obj: dcopy.a86 ccpmio.a86 geom.a86 Makefile
 
-dcomp.obj: dcomp.a86 ccpmio.a86 Makefile
+dcomp.obj: dcomp.a86 ccpmio.a86 geom.a86 Makefile
 
 # Both utilities use an 8080-model CMD: one CODE group holding code, data and stack,
 # with the base page at 0-0FFh.  Collapsing the data group keeps it that way.

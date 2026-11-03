@@ -61,10 +61,10 @@ stack_size	equ	512
 
 ; Floppy geometry and BIOS requests (eight 512-byte sectors per head).
 cylinder_limit           equ     40
-bios_read_track          equ     0208h
-bios_write_track         equ     0308h
-bios_verify_track        equ     0408h
-bios_format_track        equ     0508h
+bios_read_track          equ     0200h
+bios_write_track         equ     0300h
+bios_verify_track        equ     0400h
+bios_format_track        equ     0500h
 
 ; State bits carried across the buffer and disk-swap loops.
 flag_one_drive           equ     1
@@ -96,6 +96,7 @@ start:
 ; Alternate which disk occupies the large buffer to reduce swaps on a
 ; single-drive system.
 compare_again:
+	call geometry_reset
 	mov	dx,offset msg_insert_first
 	call	puts
 	test	byte ptr compare_flags,flag_one_drive
@@ -246,6 +247,12 @@ show_insert_and_wait:
 ; DH is a cylinder count on entry, then becomes the BIOS head number. CH
 ; returns the exclusive end.
 read_tracks:
+	cmp current_cylinder,0
+	jne compare_geometry_ready
+	push dx
+	call geometry_detect
+	pop dx
+compare_geometry_ready:
 	mov	byte ptr read_retries,0h
 	mov	bp,es
 	mov	cl,1h
@@ -259,8 +266,10 @@ read_tracks:
 	mov	byte ptr batch_end_cylinder,cylinder_limit
 
 read_track_attempt:
+	call clear_track_slot
 	xor	bx,bx
 	mov	ax,bios_read_track
+	mov	al,track_sectors
 	call	disk_io
 	jc	read_track_failed
 
@@ -292,7 +301,7 @@ probe_second_side:
 ; Eight 512-byte sectors consume 100h paragraphs; increment the cylinder
 ; when heads wrap.
 advance_read_buffer:
-	add	bp,100h
+	add	bp,200h
 	mov	es,bp
 	xchg	dh,next_head
 	or	dh,dh
@@ -337,7 +346,7 @@ retry_disk_not_ready:
 	jmp	read_track_attempt
 
 discard_side_probe_buffer:
-	sub	bp,100h
+	sub	bp,200h
 	mov	es,bp
 
 ; Skip head-one reads and keep the small buffer covering two single-sided
@@ -419,7 +428,7 @@ compare_buffers:
 	mov	si,word ptr small_buffer_offset
 	mov	es,word ptr bulk_compare_segment
 	xor	di,di
-	mov	cx,2000h                        ; Each small-buffer comparison covers 8 KiB.
+	mov	cx,4000h                        ; Each small-buffer comparison covers 8 KiB.
 
 compare_next_span:
 	jcxz	advance_compare_buffer
@@ -432,7 +441,7 @@ compare_next_span:
 ; contained.
 advance_compare_buffer:
 	mov	ax,word ptr bulk_compare_segment
-	add	ax,200h                         ; Advance the large-buffer cursor by one 8 KiB span.
+	add	ax,400h                         ; Advance the large-buffer cursor by one 8 KiB span.
 	mov	word ptr bulk_compare_segment,ax
 	ret
 
@@ -444,7 +453,7 @@ report_mismatch:
 	or	byte ptr compare_flags,flag_mismatch_seen
 	mov	dl,current_cylinder
 	mov	dh,30h
-	cmp	cx,0FFFh
+	cmp	cx,1FFFh
 	ja	mismatch_first_span
 ; A mismatch in the second span completes this small-buffer comparison.
 	xor	cx,cx
@@ -463,11 +472,11 @@ mismatch_next_cylinder:
 ; avoid duplicate reports.
 mismatch_first_span:
 	mov	bp,word ptr bulk_compare_segment
-	add	bp,100h
+	add	bp,200h
 	mov	es,bp
 	add	si,cx
 ; Skip the remainder of the first span after reporting its first mismatch.
-	mov	cx,1000h
+	mov	cx,2000h
 	sub	si,cx
 	xor	di,di
 
@@ -653,6 +662,7 @@ allocate_compare_buffers:
 	jz	buffer_backend_ready
 	call	ccpm_lock
 buffer_backend_ready:
+	call disk_setup
 	jmp	begin_comparison
 
 begin_comparison:
@@ -737,6 +747,11 @@ flush_key:
 	jmp	flush_key
 read_key:
 	mov	dl,0ffh
+	cmp os_mode,0
+	je prompt_raw_ready
+; Sleep for PIN on native systems; priority 150 must not busy-poll PIN 185.
+	mov dl,0fdh
+prompt_raw_ready:
 	mov	cl,f_rawio
 	call	bdos
 	or	al,al
@@ -753,6 +768,7 @@ key_return:
 ; the program and its transfer block.  No return through a DOS PSP is used.
 cleanup:
 doexit:
+	call disk_restore
 	cmp	byte ptr os_mode,0
 	jz	exit_cpm
 	call	ccpm_finish
@@ -782,7 +798,10 @@ parse_args:
 	mov	cl,byte ptr .80h
 	mov	si,81h
 arg_next:
-	jcxz	args_done
+	or cx,cx
+	jnz args_remaining_1
+	jmp args_done
+args_remaining_1:
 	lodsb
 	dec	cx
 	cmp	al,' '
@@ -817,27 +836,50 @@ arg_switch:
 	lodsb
 	dec	cx
 	cmp	al,'1'
-	jnz	arg_bad
+	jz arg_single_side
+	cmp al,'8'
+	je arg_sectors
+	cmp al,'9'
+	jne arg_bad
+arg_sectors:
+	sub al,'0'
+	cmp sector_override,0
+	je arg_set_sectors
+	cmp al,sector_override
+	jne arg_bad
+arg_set_sectors:
+	mov sector_override,al
+	jmps arg_switch_end
+arg_single_side:
 	or	byte ptr compare_flags,flag_one_side
-	jcxz	args_done
+arg_switch_end:
+	or cx,cx
+	jnz args_remaining_2
+	jmp args_done
+args_remaining_2:
 	cmp	byte ptr [si],']'
 	jnz	arg_delimiter
 	inc	si
 	dec	cx
 	jmp	arg_delimiter
 arg_delimiter:
-	jcxz	args_done
+	or cx,cx
+	jnz args_remaining_3
+	jmp args_done
+args_remaining_3:
 	mov	al,[si]
 	cmp	al,'['
-	jz	arg_next
+	jz	arg_continue
 	cmp	al,' '
-	jz	arg_next
+	jz	arg_continue
 	cmp	al,9
-	jz	arg_next
+	jz	arg_continue
 arg_bad:
 	jmp	parameter_error
 arg_bad_drive:
 	jmp	invalid_drive_exit
+arg_continue:
+	jmp arg_next
 args_done:
 	or	bl,bl
 	jnz	args_have_drive
@@ -882,14 +924,14 @@ alloc_buffer:
 memory_reserved:
 	mov	dx,mem_segment
 	mov	bx,dx
-	add	dx,0ffh
-	and	dx,0ff00h
+	add	dx,1ffh
+	and	dx,0fe00h
 	sub	bx,dx
 	neg	bx		; paragraphs lost to DMA alignment
 	mov	ax,mem_length
 	sub	ax,bx
 	jc	memory_error
-	mov	cl,8
+	mov	cl,9
 	shr	ax,cl
 	cmp	ax,80
 	jbe	buffer_sized
@@ -905,8 +947,8 @@ buffer_sized:
 	mov	cl,4
 	shr	bx,cl
 	add	ax,bx
-	add	ax,0ffh
-	and	ax,0ff00h
+	add	ax,1ffh
+	and	ax,0fe00h
 	mov	small_buffer_segment,ax
 	mov	bx,ds
 	sub	ax,bx
@@ -931,6 +973,7 @@ mem_ext	db	0
 stack_space	rs	stack_size
 stack_top:
 ; Up to 4 KiB padding aligns the 8 KiB read buffer for BIOS DMA.
-small_buffer	rs	3000h
+small_buffer	rs	6000h
 	include	ccpmio.a86
+	include	geom.a86
 	end

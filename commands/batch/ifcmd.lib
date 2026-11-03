@@ -159,6 +159,14 @@ condition_report:
 ; non-destructive: DOS AH=4Dh remains available to DOS callers.
 batch_capture_status:
         mov al,batch_status_pending
+; CALL also diagnoses inability to locate BATCH.CMD before P_CLI is reached.
+        cmp call_pending,0
+        je batch_capture_pending
+        mov call_pending,0
+        or al,al
+        jnz batch_capture_pending
+        mov batch_errorlevel,1
+batch_capture_pending:
         mov batch_status_pending,0
         cmp al,1
         je batch_capture_native
@@ -566,7 +574,9 @@ condition_search_name:
         cmp byte ptr condition_fcb+1,'.'
         jne condition_search_first
         cmp condition_fat,1
-        jne condition_missing
+        je condition_dot_fat
+        jmp condition_missing
+condition_dot_fat:
         cmp condition_directory,1
         jne condition_missing
         call condition_open_directory
@@ -616,6 +626,15 @@ condition_open_failed:
         jnz condition_io_error
         jmps condition_missing
 condition_found:
+; FOR requests a bounded snapshot using this same native search context.
+        cmp for_collecting,0
+        je condition_predicate_found
+        call for_collect_file
+        jc condition_collect_failed
+        jmp condition_search_next
+condition_collect_failed:
+        jmp condition_cleanup
+condition_predicate_found:
         mov condition_result,1
 condition_missing:
         jmp condition_cleanup

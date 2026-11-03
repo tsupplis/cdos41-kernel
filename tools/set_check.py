@@ -26,6 +26,9 @@ run(
     str(R / "media/cdos86.img"),
     "seed.img",
 )
+# The distribution can fill its boot disk as BATCH grows. Free space only
+# in this disposable fixture; ED is unrelated to SET compatibility tests.
+run("cpmrm", "-f", "ccpm86-320", "seed.img", "0:ED.CMD")
 (F / "fixture.txt").write_bytes(b"fixture\r\n\x1a")
 for n in ["one.txt", "two.txt"]:
     run("cpmcp", "-f", "ccpm86-320", "seed.img", "fixture.txt", "0:" + n)
@@ -244,6 +247,10 @@ for i, c in enumerate(cases):
     a = screen("o", i)
     b = screen("n", i)
     norm = lambda s: re.sub(r"(?:CONCURRENT )?SET (?:2\.1|3\.1N?|4\.1N)", "SET #", s)
+    if c == "[help]":
+        added = "set *.dat [hidden=on|off] (FAT media; BDOS 230 required)\n"
+        assert added in b, b
+        b = b.replace(added, "", 1)
     if c == "b: [name=test]":
         assert "requires CP/M media." in a and "Volume label for drive B: TEST" in b, (
             c,

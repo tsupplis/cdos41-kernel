@@ -2057,6 +2057,34 @@ IF BATCH
 ; Cached external-program status; built-ins and IF never reset it.
 batch_errorlevel dw 0
 batch_status_pending db 0	; 0=none, 1=native CMD, 2=DOS COM/EXE
+; FOR state is BATCH-local; no resident shell structure or API is changed.
+for_kind db 0                   ; 0=inactive, 1=list/snapshot, 2=signed range
+for_variable_name db 0
+for_collecting db 0
+for_finished db 0
+for_quoted db 0
+for_negative db 0
+for_file_mode db 0
+for_count dw 0
+for_set_start dw 0
+for_cursor dw 0
+for_end dw 0
+for_current dw 0
+for_last dw 0
+for_step dw 0
+for_body rs 128
+for_body_empty rs 128
+for_value rs 144
+for_line rs 128
+for_prefix rs 128
+for_items rs 4096
+; CALL wrapper workspace; script and iteration state remain untouched.
+call_pending db 0
+call_source rs 128
+call_line rs 128
+call_target_end_pointer dw 0
+call_parse_packet dw offset condition_spec,offset call_fcb
+call_fcb rs 36
 batch_echo db TRUE
 batch_hide db FALSE
 goto_scan db FALSE

@@ -1,0 +1,174 @@
+;*******************************************************************************
+; BATCH CALL - run another BAT in a native child BATCH process, then return.
+;
+; CALL [drive:]name[.BAT] [arguments]
+;
+; Called after IF stripping and FOR recognition, before ordinary CLI parsing.
+; Validate one unquoted, non-wildcard native 8.3 BAT filespec, verify it using
+; the existing native file predicate, and rewrite into BATCH.CMD plus the
+; original tail. The ordinary native CMD loader owns process creation, console
+; reacquisition and BDOS 108 result capture. No second expansion, kernel API,
+; private return stack or DOS invocation is added here. Bare BAT stays a chain.
+;
+; A child has its own arguments, SHIFT/FOR/echo state. The per-console
+; environment remains shared. This accepts CP/M or mapped FAT directories,
+; like direct BATCH.CMD invocation; full FAT paths and CALL :label are absent.
+;*******************************************************************************
+        cseg
+
+; Carry clear leaves the original command, or a complete native BATCH command.
+; Carry set consumes an invalid CALL. A rejected CALL sets ERRORLEVEL to 1.
+batch_call:
+        mov si,offset clicb_cmd
+        call lang_spaces
+        mov di,offset call_word
+        call lang_word
+        jc call_command
+        clc
+        ret
+call_command:
+        cmp byte ptr [si],' '
+        je call_target_spaces
+        cmp byte ptr [si],TAB
+        je call_target_spaces
+        jmp call_syntax
+call_target_spaces:
+; An empty substituted target must not consume its first argument as a name.
+        call condition_rhs_spaces
+        jnc call_target
+        jmp call_syntax
+call_target:
+        cmp byte ptr [si],0
+        jne call_save_source
+        jmp call_syntax
+call_save_source:
+        push si
+        mov di,offset call_source
+call_copy_source:
+        lodsb
+        stosb
+        or al,al
+        jnz call_copy_source
+        pop si
+        mov di,offset condition_spec
+call_copy_target:
+        lodsb
+        or al,al
+        jz call_target_end
+        cmp al,' '
+        je call_target_end
+        cmp al,TAB
+        je call_target_end
+        cmp al,'"'
+        je call_invalid
+        cmp al,'\'
+        je call_invalid
+        cmp al,'/'
+        je call_invalid
+        cmp al,';'
+        je call_invalid
+        stosb
+        jmps call_copy_target
+call_invalid:
+        jmp call_syntax
+call_target_end:
+        cmp di,offset condition_spec
+        je call_invalid
+        xor al,al
+        stosb
+        mov call_target_end_pointer,di
+        mov dx,offset call_parse_packet
+        mov cl,152
+        call ccpm
+        or cx,cx
+        jnz call_invalid
+        or bx,bx
+        jnz call_invalid
+        cmp byte ptr call_fcb+1,' '
+        je call_invalid
+        mov si,offset call_fcb+1
+        mov cx,11
+call_no_wildcards:
+        lodsb
+        cmp al,'?'
+        je call_invalid
+        loop call_no_wildcards
+        cmp word ptr call_fcb+9,'  '
+        jne call_explicit_type
+        cmp byte ptr call_fcb+11,' '
+        jne call_explicit_type
+        mov di,call_target_end_pointer
+        dec di
+        mov ax,'B.'              ; RASM word literal: memory bytes .B
+        stosw
+        mov ax,'TA'              ; memory bytes AT
+        stosw
+        xor al,al
+        stosb
+        jmps call_check_file
+call_explicit_type:
+        cmp word ptr call_fcb+9,'AB'
+        jne call_invalid
+        cmp byte ptr call_fcb+11,'T'
+        jne call_invalid
+call_check_file:
+        mov condition_directory,0
+        call condition_probe
+        cmp condition_error,0
+        jne call_not_found
+        cmp condition_result,0
+        je call_not_found
+; Build separately and commit only a complete command of at most 127 bytes.
+; The longer wrapper must fit even when the original CALL itself fitted.
+        mov si,offset call_prefix
+        mov di,offset call_line
+call_prefix_copy:
+        mov al,cs:[si]
+        inc si
+        or al,al
+        jz call_tail_begin
+        stosb
+        jmps call_prefix_copy
+call_tail_begin:
+        mov si,offset call_source
+call_tail_copy:
+        lodsb
+        or al,al
+        jz call_commit
+        cmp di,offset call_line+127
+        jae call_too_long
+        stosb
+        jmps call_tail_copy
+call_commit:
+        mov call_pending,1       ; nextcommand detects pre-launch lookup failure
+        stosb
+        sub di,offset call_line
+        mov ax,di
+        mov read_blen,al
+        mov cx,di
+        mov si,offset call_line
+        mov di,offset clicb_cmd
+        push ds ! pop es
+        rep movsb
+        clc
+        ret
+call_syntax:
+        mov dx,offset call_syntax_message
+        jmps call_report
+call_not_found:
+        mov dx,offset call_missing_message
+        jmps call_report
+call_too_long:
+        mov dx,offset call_long_message
+call_report:
+        mov batch_errorlevel,1
+        call print_string
+        call crlf
+        stc
+        ret
+
+call_word db 'CALL',0
+call_prefix db 'BATCH.CMD ',0
+call_syntax_message db 'CALL [drive:]name[.BAT] [arguments]; native 8.3 BAT name required.$'
+call_missing_message db 'CALL cannot find or inspect the BAT file; command skipped.$'
+call_long_message db 'CALL needs room for BATCH.CMD plus its tail (127 characters maximum).$'

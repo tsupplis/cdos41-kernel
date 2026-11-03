@@ -2,7 +2,7 @@
 ; Shell text output and the deliberately small BATCH language.
 ; PCTMP: ECHO text only. BATCH: ECHO[=ON|OFF], @ECHO, SHIFT, :label/GOTO, EXIT.
 ; BATCH expansion/conditions are in expand.lib/ifcmd.lib. No general @ prefix.
-; String comparisons are in ifcmd.lib; ERRORLEVEL is in ifcmd.lib; FOR and CALL are absent.
+; IF predicates/status tests: ifcmd.lib; FOR: forcmd.lib; CALL: callcmd.lib.
 ; This include is identical in the resident and standalone source trees.
 ;*******************************************************************************
         cseg
@@ -357,6 +357,7 @@ goto_save_done:
         cmp di,offset goto_target
         je lang_syntax
         mov byte ptr [di],0
+        call for_cancel          ; a valid GOTO leaves the current FOR
         mov goto_scan,TRUE
         mov goto_eof,FALSE
         mov subsavelow,0

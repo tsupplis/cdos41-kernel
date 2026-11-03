@@ -109,6 +109,7 @@ cat	equ	02eh
 
 	DSEG
 
+	EXTRN fatattr_packet:WORD
 	EXTRN	arecord:BYTE
 	EXTRN 	attributes:BYTE
 	EXTRN	bdrwflg:BYTE
@@ -233,6 +234,7 @@ eject
 	PUBLIC pc_chkrec
 	PUBLIC pcsearch
 	PUBLIC renamef
+	PUBLIC pc_fat_attributes
 	PUBLIC setattsf
 	PUBLIC setstamp
 	PUBLIC truncatef
@@ -1621,8 +1623,12 @@ far2:
 	jnz del3			;     {
 	push ax
 	call tst_olist			;       tst_olist();
-	mov bx,dirp			;       if (dirp->datts & 0x03)
-	test byte ptr datts[bx],003h	;	   exterr(0x03ff);
+	mov bx,dirp
+; HIDDEN and SYSTEM control browsing, not permission to delete a FAT file.
+; Keep READ-ONLY and the existing disk/ownership/password checks. Native
+; ERA/ERAQ and DOS deletion share this backend; no attribute-clearing call
+; or BDOS 230 dependency is needed. CP/M's separate delete path is unchanged.
+	test byte ptr datts[bx],001h	; READ-ONLY: exterr(0x03ff);
 	jz $+5
 del25:
 	jmp roferror
@@ -1928,6 +1934,50 @@ ren4:
 ren5:
 	jmp wrdir			;wrdir();
 	
+; BDOS 230 backend. The packet/FCB have already been validated/reselected.
+; Read real FAT attributes, preserving the distinction between HIDDEN/SYS.
+; Ordinary file lookup excludes labels/LFN; directories are rejected here.
+; Masked updates neither change compatibility/case bytes nor allocate data.
+; Do NOT apply CP/M type-bit encoding here: FAT HIDDEN=02h and SYS=04h
+; remain distinct, and FAT ARCHIVE=20h keeps DOS's archive-needed polarity.
+; GET reports the original byte. SET preserves bits outside mask 27h,
+; including directory/volume/reserved bits (non-file targets are rejected).
+; No timestamps, file data, size, cluster chain or parent mapping is edited.
+; The common BDOS caller owns MXdisk throughout lookup/check/write/flush.
+; checkwrite handles disk RO; chk_olist applies standard ownership rules.
+; A no-op write avoids dirtying the directory, but still checks permission.
+pc_fat_attributes:
+        call setenddir
+        mov cx,2 ! call getdir
+        or ax,ax ! jnz pc_attr_found
+        mov word ptr lret,82ffh ! ret
+pc_attr_found:
+        mov bx,dirp
+        test byte ptr datts[bx],10h ! jz pc_attr_file
+        mov word ptr lret,84ffh ! ret
+pc_attr_file:
+        cmp fatattr_packet+4,1 ! je pc_attr_result
+        call checkwrite
+        mov attributes,0         ; no inherited FCB interface controls
+        call chk_olist
+        mov bx,dirp
+        mov al,byte ptr fatattr_packet+10
+        mov ah,al ! not al
+        and al,datts[bx]
+        and ah,byte ptr fatattr_packet+12
+        or al,ah
+        cmp al,datts[bx] ! je pc_attr_result
+        mov datts[bx],al
+        call wrdir
+        call flush
+pc_attr_result:
+        mov bx,dirp
+        xor ax,ax ! mov al,datts[bx]
+        mov fatattr_packet+12,ax
+        mov fatattr_packet+10,27h
+        mov word ptr lret,0
+        ret
+
 setattsf:
 
 	call setenddir			;dcnt = 0xffff;

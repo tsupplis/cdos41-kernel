@@ -1,0 +1,616 @@
+;*******************************************************************************
+; BATCH FOR - lists, inclusive signed ranges, and native file snapshots.
+;
+; FOR %%I IN (A, "AA AA") DO command     (source spelling before expansion)
+; FOR %%I IN (-2..2) DO command
+; FOR %%I IN (FILES B:\TOOLS\*.CMD) DO command
+;
+; expand.lib has already changed %%I into %I and expanded environment/arguments
+; once. This module replaces only the selected one-letter loop variable; it
+; never recursively expands values. Quoted items retain their quotes. One
+; active FOR is supported. GOTO and BAT replacement abandon that loop; EXIT
+; terminates normally. Every generated line uses the ordinary IF/CLI dispatcher.
+;
+; File mode reuses ifcmd.lib's native path/search context, collecting regular
+; files before dispatch. Its 4096-byte NUL-separated snapshot prevents child
+; commands and IF probes from disturbing enumeration. Duplicate CP/M extents
+; are suppressed; overflow aborts the whole FOR before any body is executed.
+;*******************************************************************************
+        cseg
+
+; Carry set: FOR consumed (or diagnosed); clear: ordinary line, unchanged.
+batch_for:
+        mov si,offset clicb_cmd
+        call lang_spaces
+        mov di,offset for_word
+        call lang_word
+        jc for_command
+        clc
+        ret
+for_command:
+        cmp for_kind,0
+        je for_parse
+        mov dx,offset for_nested_message
+        jmp for_report
+for_parse:
+        call condition_require_space
+        jnc for_variable
+        jmp for_syntax
+for_variable:
+        lodsb
+        cmp al,'%'
+        je for_variable_letter
+        jmp for_syntax
+for_variable_letter:
+        lodsb
+        mov for_variable_name,al
+        call lang_upper
+        cmp al,'A'
+        jb for_bad_variable
+        cmp al,'Z'
+        jbe for_variable_end
+for_bad_variable:
+        jmp for_syntax
+for_variable_end:
+        call condition_require_space
+        jnc for_in
+        jmp for_syntax
+for_in:
+        mov di,offset for_in_word
+        call lang_word
+        jc for_in_space
+        jmp for_syntax
+for_in_space:
+        call condition_require_space
+        jnc for_open
+        jmp for_syntax
+for_open:
+        lodsb
+        cmp al,'('
+        je for_set
+        jmp for_syntax
+for_set:
+        mov for_end,offset for_items
+        mov for_cursor,offset for_items
+        mov for_count,0
+        mov for_finished,0
+        mov for_quoted,0
+        call lang_spaces
+        mov for_set_start,si
+        mov di,offset for_files_word
+        call lang_word
+        jnc for_list
+        cmp byte ptr [si],' '
+        je for_file_operand
+        cmp byte ptr [si],TAB
+        je for_file_operand
+        mov si,for_set_start
+for_list:
+        mov si,for_set_start
+for_item_separator:
+        call lang_spaces
+        cmp byte ptr [si],','
+        jne for_item_begin
+        inc si
+        jmps for_item_separator
+for_item_begin:
+        cmp byte ptr [si],')'
+        jne for_item_present
+        inc si
+        jmp for_do
+for_item_present:
+        cmp byte ptr [si],0
+        jne for_item_copy_begin
+        jmp for_syntax
+for_item_copy_begin:
+        mov di,for_end
+        xor dl,dl
+        inc for_count
+for_item_copy:
+        lodsb
+        or al,al
+        jnz for_item_character
+        jmp for_syntax
+for_item_character:
+        cmp al,'"'
+        jne for_item_delimiter
+        xor dl,1
+        mov for_quoted,1
+        jmps for_item_store
+for_item_delimiter:
+        or dl,dl
+        jnz for_item_store
+        cmp al,'('
+        jne for_item_close
+        jmp for_syntax
+for_item_close:
+        cmp al,')'
+        je for_item_end
+        cmp al,','
+        je for_item_end
+        cmp al,' '
+        je for_item_end
+        cmp al,TAB
+        je for_item_end
+for_item_store:
+        stosb                   ; source line is bounded to 127 bytes
+        jmps for_item_copy
+for_item_end:
+        dec si
+        xor al,al
+        stosb
+        mov for_end,di
+        jmp for_item_separator
+
+; FILES takes exactly one native CP/M/FAT filespec. Preserve its prefix for
+; returned values before condition_probe splits the working path in place.
+for_file_operand:
+        call lang_spaces
+        mov di,offset condition_spec
+        xor dl,dl
+for_file_copy:
+        lodsb
+        cmp al,'"'
+        jne for_file_character
+        xor dl,1
+        jmps for_file_copy
+for_file_character:
+        or al,al
+        jnz for_file_delimiter
+        jmp for_syntax
+for_file_delimiter:
+        or dl,dl
+        jnz for_file_store
+        cmp al,')'
+        je for_file_end
+        cmp al,' '
+        je for_file_end
+        cmp al,TAB
+        je for_file_end
+        cmp al,','
+        jne for_file_store
+        jmp for_syntax
+for_file_store:
+        stosb
+        jmps for_file_copy
+for_file_end:
+        dec si
+        cmp di,offset condition_spec
+        jne for_file_nonempty
+        jmp for_syntax
+for_file_nonempty:
+        xor al,al
+        stosb
+        call lang_spaces
+        lodsb
+        cmp al,')'
+        je for_file_prefix
+        jmp for_syntax
+for_file_prefix:
+        push si
+        mov si,offset condition_spec
+        mov bx,si
+for_prefix_scan:
+        lodsb
+        or al,al
+        jz for_prefix_copy
+        cmp al,':'
+        je for_prefix_boundary
+        cmp al,'\'
+        je for_prefix_boundary
+        cmp al,'/'
+        jne for_prefix_scan
+for_prefix_boundary:
+        mov bx,si
+        jmps for_prefix_scan
+for_prefix_copy:
+        sub bx,offset condition_spec
+        mov cx,bx
+        mov si,offset condition_spec
+        mov di,offset for_prefix
+        rep movsb
+        xor al,al
+        stosb
+        pop si
+        mov for_file_mode,1
+        jmp for_do_start
+
+for_do:
+        mov for_file_mode,0
+for_do_start:
+        call lang_spaces
+        mov di,offset for_do_word
+        call lang_word
+        jc for_body_space
+        jmp for_syntax
+for_body_space:
+        call condition_require_space
+        jnc for_body_start
+        jmp for_syntax
+for_body_start:
+        cmp byte ptr [si],0
+        jne for_body_save
+        jmp for_syntax
+for_body_save:
+        mov bx,si
+        sub bx,offset clicb_cmd
+        push si
+        mov si,offset expand_empty_positions
+        add si,bx
+        mov di,offset for_body_empty
+        mov cx,128
+        sub cx,bx
+        rep movsb
+        pop si
+        mov di,offset for_body
+for_body_copy:
+        lodsb
+        stosb
+        or al,al
+        jnz for_body_copy
+        cmp for_file_mode,0
+        je for_range_check
+        mov condition_directory,0
+        mov for_collecting,1
+        call condition_probe
+        mov for_collecting,0
+        cmp condition_error,0
+        je for_list_ready
+        mov dx,offset for_search_message
+        jmp for_report
+for_range_check:
+        cmp for_count,1
+        jne for_list_ready
+        cmp for_quoted,0
+        jne for_list_ready
+        mov si,offset for_items
+        mov al,[si]
+        cmp al,'-'
+        je for_range_scan
+        cmp al,'+'
+        je for_range_scan
+        cmp al,'0'
+        jb for_list_ready
+        cmp al,'9'
+        ja for_list_ready
+for_range_scan:
+        lodsb
+        or al,al
+        jz for_list_ready
+        cmp al,'.'
+        jne for_range_scan
+        cmp byte ptr [si],'.'
+        jne for_range_scan
+        mov si,offset for_items
+        call for_integer
+        jnc for_range_separator
+        jmp for_syntax
+for_range_separator:
+        mov for_current,ax
+        cmp word ptr [si],'..'
+        je for_range_last
+        jmp for_syntax
+for_range_last:
+        add si,2
+        call for_integer
+        jnc for_range_complete
+        jmp for_syntax
+for_range_complete:
+        cmp byte ptr [si],0
+        je for_range_ready
+        jmp for_syntax
+for_range_ready:
+        mov for_last,ax
+        mov for_step,1
+        cmp for_current,ax
+        jle for_range_ascending
+        mov for_step,-1
+for_range_ascending:
+        mov for_kind,2
+        stc
+        ret
+for_list_ready:
+        mov for_kind,1
+        stc
+        ret
+for_syntax:
+        mov dx,offset for_syntax_message
+for_report:
+        call print_string
+        call crlf
+        stc
+        ret
+
+; Strict signed decimal 16-bit integer. SI ends at the first nondigit.
+; Carry clear and AX=value; carry set on empty/overflow input.
+for_integer:
+        mov for_negative,0
+        cmp byte ptr [si],'-'
+        jne for_integer_plus
+        mov for_negative,1
+        inc si
+        jmps for_integer_begin
+for_integer_plus:
+        cmp byte ptr [si],'+'
+        jne for_integer_begin
+        inc si
+for_integer_begin:
+        xor dx,dx
+        xor cx,cx
+for_integer_digit:
+        mov al,[si]
+        cmp al,'0'
+        jb for_integer_end
+        cmp al,'9'
+        ja for_integer_end
+        cmp dx,3276
+        ja for_integer_bad
+        sub al,'0'
+        xor ah,ah
+        mov bx,dx
+        shl dx,1
+        shl bx,1 ! shl bx,1 ! shl bx,1
+        add dx,bx
+        add dx,ax
+        cmp dx,32768
+        ja for_integer_bad
+        inc cx
+        inc si
+        jmps for_integer_digit
+for_integer_end:
+        or cx,cx
+        jz for_integer_bad
+        mov ax,dx
+        cmp for_negative,0
+        jne for_integer_minus
+        cmp ax,32767
+        ja for_integer_bad
+        clc
+        ret
+for_integer_minus:
+        neg ax
+        clc
+        ret
+for_integer_bad:
+        stc
+        ret
+
+; Carry clear supplies a generated command; carry set reads the script next.
+; A completed range is marked before increment, avoiding endpoint overflow.
+for_next:
+        push ds ! pop es
+        cmp for_kind,0
+        jne for_next_active
+        stc
+        ret
+for_next_active:
+        cmp for_kind,2
+        je for_next_range
+        mov si,for_cursor
+        cmp si,for_end
+        jb for_next_item
+        jmp for_cancel_done
+for_next_item:
+        mov di,offset for_value
+for_value_copy:
+        lodsb
+        stosb
+        or al,al
+        jnz for_value_copy
+        mov for_cursor,si
+        jmp for_render
+for_next_range:
+        cmp for_finished,0
+        je for_range_value
+        jmp for_cancel_done
+for_range_value:
+        mov ax,for_current
+        mov di,offset for_value
+        or ax,ax
+        jns for_decimal_unsigned
+        neg ax
+        mov byte ptr [di],'-'
+        inc di
+for_decimal_unsigned:
+        xor cx,cx
+        mov bx,10
+for_decimal_divide:
+        xor dx,dx
+        div bx
+        push dx
+        inc cx
+        or ax,ax
+        jnz for_decimal_divide
+for_decimal_emit:
+        pop ax
+        add al,'0'
+        stosb
+        loop for_decimal_emit
+        xor al,al
+        stosb
+        mov ax,for_current
+        cmp ax,for_last
+        jne for_range_increment
+        mov for_finished,1
+        jmps for_render
+for_range_increment:
+        add ax,for_step
+        mov for_current,ax
+for_render:
+        mov di,offset expand_empty_positions
+        mov cx,128
+        xor al,al
+        rep stosb
+        mov si,offset for_body
+        mov di,offset for_line
+for_render_next:
+        mov bx,si
+        sub bx,offset for_body
+        push bx
+        mov bx,di
+        sub bx,offset for_line
+        pop dx
+        xchg bx,dx
+        mov al,for_body_empty[bx]
+        mov bx,dx
+        or expand_empty_positions[bx],al
+        lodsb
+        or al,al
+        jz for_render_end
+        cmp al,'%'
+        jne for_render_character
+        mov al,[si]
+        cmp al,for_variable_name
+        jne for_render_percent
+        inc si
+        push si
+        mov si,offset for_value
+        cmp byte ptr [si],0
+        jne for_render_value
+        pop bx
+        push bx
+        cmp byte ptr [bx],0
+        je for_render_empty
+        cmp byte ptr [bx],' '
+        je for_render_empty
+        cmp byte ptr [bx],TAB
+        jne for_render_value
+for_render_empty:
+        mov bx,di
+        sub bx,offset for_line
+        mov expand_empty_positions[bx],1
+for_render_value:
+        lodsb
+        or al,al
+        jz for_render_value_end
+        cmp di,offset for_line+127
+        jae for_render_value_overflow
+        stosb
+        jmps for_render_value
+for_render_value_end:
+        pop si
+        jmp for_render_next
+for_render_value_overflow:
+        pop si
+        jmp for_render_overflow
+for_render_percent:
+        mov al,'%'
+for_render_character:
+        cmp di,offset for_line+127
+        jae for_render_overflow
+        stosb
+        jmp for_render_next
+for_render_end:
+        stosb
+        sub di,offset for_line
+        mov ax,di
+        mov read_blen,al
+        mov cx,di
+        mov si,offset for_line
+        mov di,offset clicb_cmd
+        rep movsb
+        clc
+        ret
+for_render_overflow:
+        mov dx,offset for_overflow_message
+        call print_string
+        call crlf
+for_cancel_done:
+        mov for_kind,0
+        stc
+        ret
+for_cancel:
+        mov for_kind,0
+        ret
+
+; condition_found calls with DS:BX pointing at a normalized native directory
+; entry. Return carry set to stop collection and use the ordinary cleanup.
+for_collect_file:
+        push ds ! pop es
+        push bx
+        mov si,offset for_prefix
+        mov di,offset for_value
+for_collect_prefix:
+        lodsb
+        stosb
+        or al,al
+        jnz for_collect_prefix
+        dec di
+        pop si
+        inc si
+        mov cx,8
+for_collect_name:
+        lodsb
+        and al,7fh
+        cmp al,' '
+        je for_collect_name_next
+        stosb
+for_collect_name_next:
+        loop for_collect_name
+        mov cx,3
+        mov al,[si]
+        and al,7fh
+        cmp al,' '
+        je for_collect_finish
+        mov al,'.'
+        stosb
+for_collect_type:
+        lodsb
+        and al,7fh
+        cmp al,' '
+        je for_collect_type_next
+        stosb
+for_collect_type_next:
+        loop for_collect_type
+for_collect_finish:
+        xor al,al
+        stosb
+; Linear deduplication also handles repeated extents on CP/M disks.
+        mov si,offset for_items
+for_collect_check:
+        cmp si,for_end
+        jae for_collect_append
+        mov di,offset for_value
+for_collect_compare:
+        lodsb
+        cmp al,[di]
+        jne for_collect_different
+        inc di
+        or al,al
+        jnz for_collect_compare
+        clc
+        ret
+for_collect_different:
+        or al,al
+        jz for_collect_check
+for_collect_skip:
+        lodsb
+        or al,al
+        jnz for_collect_skip
+        jmps for_collect_check
+for_collect_append:
+        mov si,offset for_value
+        mov di,for_end
+for_collect_store:
+        cmp di,offset for_items+4096
+        jae for_collect_full
+        lodsb
+        stosb
+        or al,al
+        jnz for_collect_store
+        mov for_end,di
+        clc
+        ret
+for_collect_full:
+        mov condition_error,3
+        stc
+        ret
+
+for_word db 'FOR',0
+for_in_word db 'IN',0
+for_do_word db 'DO',0
+for_files_word db 'FILES',0
+for_syntax_message db 'FOR %%I IN (list, A..B, or FILES filespec) DO command; range -32768..32767.$'
+for_nested_message db 'Nested FOR is not supported; command skipped.$'
+for_search_message db 'FOR file search failed or exceeds its 4096-byte snapshot; command skipped.$'
+for_overflow_message db 'FOR expanded command exceeds 127 characters; loop stopped.$'

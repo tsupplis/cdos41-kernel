@@ -213,8 +213,12 @@ display$file$info: procedure;
     if file$info.subdir then call print(.('      $'));
     else call p3byte(.file$info.recs$lword,1);          /* records               */
     call printb;
-    if rol(file$info.name(f$dirsys-1),1) then      /* Type                  */
-       call print(.('Sys$'));
+    /* Selection groups SYS/HIDDEN together; display keeps their identity. */
+    if file$info.hidden then do;
+        if rol(file$info.name(f$dirsys-1),1) then call print(.('S+H$'));
+        else call print(.('Hid$'));
+    end;
+    else if rol(file$info.name(f$dirsys-1),1) then call print(.('Sys$'));
     else call print(.('Dir$'));
     call printb;
     if rol(file$info.name(f$rw-1),1) then

@@ -61,6 +61,11 @@ cases = [
     ("languages batch if files", "Directories do not satisfy EXIST"),
     ("languages batch if strings", 'IF "%NAME%TOTO"=="TOTO" command'),
     ("languages batch if status", "True if the last program status is at least"),
+    ("languages batch for", "FOR %%I IN (1..10) DO command"),
+    ("languages batch for files", "All names are saved before executing the body"),
+    ("languages batch for control", "Only one FOR is active"),
+    ("languages batch call", "CALL [drive:]name[.BAT] [arguments]"),
+    ("languages batch call state", "Each called BAT is a native child process"),
     ("languages batch variables", "Undefined names become empty"),
     ("set", "[PASSWORD=] alone"),
     ("setenv", "Native SETENV.CMD"),
@@ -71,12 +76,14 @@ cases = [
 import sys
 if "--path" in sys.argv: cases = [x for x in cases if x[0] == "path"]
 if "--batch" in sys.argv: cases = [x for x in cases if x[0] == "batch" or x[0].startswith("languages batch")]
-if "--labels" in sys.argv:
+if "--labels" in sys.argv or "--fat-attributes" in sys.argv:
     cases = [("set", "SET d: [NAME=] removes the FAT label"),
              ("show", "LABEL displays the physical-root volume name on FAT")]
+if "--fat-attributes" in sys.argv:
+    cases = [("set", "HIDDEN=ON/OFF changes only the FAT hidden attribute")]
 for topic, _ in cases:
     command("cls", "clear-" + topic)
-    if "--labels" in sys.argv:
+    if "--labels" in sys.argv or "--fat-attributes" in sys.argv:
         command("put [" + topic + ".txt] help.cmd " + topic + " [nopage]", topic)
     else:
         command("help " + topic + " [nopage]", topic)
@@ -99,7 +106,7 @@ for topic, expected in cases:
         for j in range(0, 3840, 160)
     )
     (F / (topic + ".txt")).write_text(s)
-    if "--labels" in sys.argv:
+    if "--labels" in sys.argv or "--fat-attributes" in sys.argv:
         s = run("mtype", "-i", "fat.img", "::" + topic + ".txt").stdout.decode("ascii", "replace")
     assert expected in s, (topic, s)
 print(

@@ -187,7 +187,8 @@ PAUSE and REM, and the CD/MD/RD, DEL/DELQ and RENAME aliases. DEL invokes
 native ERA.CMD. Ordinary program lines use the executable search order.
 BATCH supports ECHO, ECHO=ON/OFF, @ECHO, SHIFT, labels/GOTO, EXIT and
 IF [NOT] EXIST/DIREXIST, string equality (==), and ERRORLEVEL.
-See HELP LANGUAGES BATCH for syntax. FOR and CALL are unsupported.
+FOR supports lists, ranges and FILES searches. CALL runs a child BAT and returns.
+See HELP LANGUAGES BATCH for syntax.
 
 Native command/substitution files for SUBMIT use the separate .SUB format.
 
@@ -793,6 +794,11 @@ direct-printing utility imported from CCP/M.
     A>ERA C:LETTER.*
     A>ERA D:*.BAK
     A>ERA B:*.*
+
+
+On DOS media, HIDDEN and SYSTEM do not prevent deletion. READ-ONLY,
+password and lock protection still apply. Wildcards may match files
+omitted by ordinary DIR. No HIDDEN attribute change is required first.
 
 ///1ERAQ
     Syntax:
@@ -1768,6 +1774,7 @@ A line beginning with a semicolon or period is also a comment.
 
 ///1SET
 SET filespec [RO|RW,DIR|SYS,ARCHIVE=ON|OFF,F1=ON|OFF,...,F4=ON|OFF]
+SET filespec [HIDDEN=ON|OFF]
 SET filespec[;password] [PASSWORD=newpassword,PROTECT=READ|WRITE|DELETE|NONE]
 SET {d:} [NAME=label.typ]
 SET {d:} [RO|RW]
@@ -1786,6 +1793,11 @@ SET d: [NAME="MY DISK"] accepts spaces, up to eleven characters.
 SET d: [NAME=] removes the FAT label. The physical root is used even
 from a subdirectory; ordinary files with the same name are unaffected.
 CP/M directory-label behavior is unchanged.
+
+HIDDEN=ON/OFF changes only the FAT hidden attribute. Wildcards and other
+file options may be combined. Requires actual DOS media and the BDOS 230
+capability handshake; older kernels are rejected. DIR/SDIR visibility and
+ERA/RM behavior are unchanged.
 
 XFCB passwords and timestamp settings require CP/M media. Enable
 drive protection before assigning passwords or a default password:
@@ -2303,7 +2315,9 @@ Bare BAT invocation chains to the replacement script; it does not return.
 
 BATCH supports ECHO, SHIFT, :label, GOTO, EXIT and %NAME% expansion.
 IF supports file/directory predicates and string equality (==).
-FOR, CALL and ordinary quoted argument grouping are unsupported.
+FOR supports lists, integer ranges and FILES searches. See BATCH FOR.
+CALL runs another BAT and resumes; bare BAT invocation chains.
+Ordinary quoted argument grouping is unsupported.
 Only @ECHO is recognized: @DIR and arbitrary @command are unsupported.
 
 ///3ECHO
@@ -2408,6 +2422,67 @@ Variable substitution and nested IF are supported; no ELSE or blocks.
 EXIT n returns n; bare EXIT and normal EOF return 0, not the cached status.
 Requires matching rebuilt PCTMP; DOS AH=4Dh remains available unchanged.
 
+///3FOR
+FOR %%I IN (A, B, "%VAL%", "AA AA") DO command
+FOR %%I IN (1..10) DO command
+FOR %%I IN (FILES C:\*.COM) DO command
+
+BATCH only. Choose one case-sensitive letter; %%I in the body is replaced.
+Lists use commas/spaces/tabs outside balanced quotes; quotes remain in values.
+Empty sets do nothing. Quote "1..10" to use it as a literal list item.
+Ranges are inclusive signed integers -32768 to 32767, stepping up/down by 1.
+FILES matches regular CP/M/FAT files; full/relative FAT paths are supported.
+Directories/labels are excluded; hidden/system/empty files are included.
+See FOR FILES for search limits and FOR CONTROL for body/flow rules.
+
+///4FILES
+FOR %%I IN (FILES filespec) DO command
+
+One filespec; wildcards in the final component only. No recursive search.
+Native CP/M drive names and full/relative FAT paths, including .., work.
+Returned values keep the drive/path prefix and an 8.3 name. CP/M extents
+are deduplicated. No matches runs no body; order is native directory order.
+All names are saved before executing the body, so IF/children cannot alter
+the search cursor. A search error or snapshot over 4096 bytes skips FOR.
+An ordinary list does not expand wildcards; quote "FILES" for a literal item.
+
+///4CONTROL
+Environment/positional expansion happens once over the whole original line.
+Loop replacement does not rescan percent text inside substituted values.
+Bodies use ordinary IF/built-in/native/DOS dispatch and ERRORLEVEL handling.
+Generated commands are limited to 127 characters; overflow stops the loop.
+Only one FOR is active. Nested FOR is diagnosed; the outer loop continues.
+GOTO leaves the loop; another BAT replaces it; EXIT terminates BATCH normally.
+No multiline bodies, blocks, custom step or /F parser is added.
+CALL can run a child BAT with its own independent FOR.
+FOR does not itself reset ERRORLEVEL. Quoted arguments are not grouped for
+other commands unless that command implements its own grouping.
+
+///3CALL
+CALL [drive:]name[.BAT] [arguments]
+
+BATCH only. Run a child BATCH process, then resume at the next caller line.
+The target is an unquoted, non-wildcard native 8.3 BAT name; .BAT is optional.
+Use CP/M or a mapped FAT directory. Full paths and CALL :label are unsupported.
+The script is checked in the named drive/current directory, without PATH or
+system-drive fallback. BATCH.CMD uses ordinary native command searching.
+Child EOF/bare EXIT returns 0; EXIT n becomes the caller's ERRORLEVEL.
+Invalid syntax, missing script/interpreter or rejected launch sets 1.
+CALL does not add another percent-expansion pass. The BATCH.CMD wrapper and
+its tail must fit 127 characters; overflow runs no child.
+See CALL STATE for arguments, FOR, environment, echo and child chaining.
+
+///4STATE
+Each called BAT is a native child process, with its own arguments, SHIFT,
+script position, FOR and echo state. A FOR body can CALL a child with a FOR.
+Child echo starts ON; use @ECHO=OFF there if needed. Caller echo is preserved.
+The console environment remains shared; child SETENV/PATH changes persist.
+A bare BAT command chains, replacing that child; its eventual exit returns
+to the original caller. There is no private script-return stack; nesting
+uses native process/memory resources. No CHAIN keyword is necessary.
+EXIT ends the current BATCH process, so a CALL parent resumes. No EXIT /B,
+GOTO :EOF, CALL :label, general command CALL or new quoted grouping is added.
+
 ///3EXIT
 EXIT
 EXIT n
@@ -2418,7 +2493,8 @@ status. The native parent reads the result through BDOS function 108.
 EXIT does not terminate the resident PCTMP and is not an interactive command.
 
 Signs, hex, values above 255 and extra operands report an error without
-terminating. There is no automatic return-last-status or CALL return stack.
+terminating. There is no automatic return-last-status rule.
+If this BATCH was started by CALL, its native parent resumes with that status.
 
 ///1CHKCPMFS
 CHKCPMFS

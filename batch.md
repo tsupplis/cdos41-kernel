@@ -27,8 +27,51 @@ keep each expanded command within 127 characters.
 Reaching EOF ends BATCH with status 0, irrespective of the last command's
 status. Invoking another BAT file **chains** to it: the
 replacement receives its own arguments and execution does not return to the
-calling script. CALL and a nested script-return stack are not implemented.
+calling script. Use CALL to run another BAT and resume afterward.
 EXIT ends the BATCH process explicitly; there is no implicit `:EOF` label.
+
+## CALL and chaining
+
+```bat
+CALL OTHER.BAT argument1 argument2
+CALL B:OTHER argument1
+```
+
+CALL is BATCH-only. It runs a native child BATCH process and resumes the
+caller after that process finishes. The target is one unquoted native 8.3
+`[drive:]name[.BAT]`; omitting the extension means BAT. Other extensions,
+wildcards, passwords, quoted target names and full FAT paths are rejected.
+Use a CP/M drive or a FAT drive already mapped to the required directory.
+CALL checks the named script in that drive's current directory; it does
+not search ORDER, DOS PATH or the system drive for the script argument.
+The BATCH.CMD interpreter itself uses ordinary native command searching.
+
+| Form inside a BAT file | Effect |
+| --- | --- |
+| `OTHER.BAT args` | Chain: replace this script and arguments; never return |
+| `CALL OTHER.BAT args` | Run another BATCH and then resume at the next line |
+| `BATCH.CMD OTHER.BAT args` | Explicit child-interpreter invocation, without CALL's validation |
+
+A child's `%0`–`%9`, SHIFT, script cursor, FOR state and command echo belong
+to that child. The caller retains its own state, so a FOR body can CALL a
+script which runs its own FOR. A child starts with command echo ON; use
+`@ECHO=OFF` in it when needed. Changing its echo state does not change the
+caller's. The console environment remains shared: SETENV/PATH changes are
+visible when the caller expands subsequent lines.
+
+Child EOF or bare EXIT returns status 0; `EXIT n` returns n to the caller's
+ERRORLEVEL. If that child chains to another BAT, the replacement's eventual
+exit returns to the original CALL. Nested calls use native process/memory
+resources rather than a private script-return stack; native allocation or
+launch failures report status 1. Invalid CALL syntax, a missing/unreadable
+script or failure to locate BATCH.CMD also sets 1 and continues the caller.
+
+Environment/argument and FOR substitution happen through the usual single
+pass before CALL dispatch. CALL introduces no second percent-expansion pass
+and no new argument grouping. `BATCH.CMD ` plus the original CALL tail must
+fit the existing 127-character command limit; overflow executes no child.
+CALL is supported after IF and in FOR bodies. CALL :label, EXIT /B and
+GOTO :EOF are not implemented. No additional CHAIN command is needed.
 
 ## Arguments and substitution
 
@@ -60,7 +103,7 @@ command echo, including messages and comments. It can supply a command name
 as well as arguments. Inserted values and positional arguments retain case;
 percent signs inside them are never expanded again. `%10` means `%1` followed
 by a literal `0`, not argument ten. `%%NAME%%` prints literal `%NAME%`.
-An unmatched `%` remains literal. `%*`, `%~1` and FOR variables are unsupported.
+An unmatched `%` remains literal. `%*` and `%~1` are unsupported. FOR uses `%%I` loop placeholders as described below.
 
 `%NAME%` reads the owning console's shared environment, also used by PATH and
 SETENV. Each line gets a fresh snapshot, so changes made by a previous command
@@ -177,7 +220,7 @@ rules also apply after removing an outer true IF and to missing `%0`–`%9`.
 
 This quote handling applies to comparison operands only. It does not change
 positional argument splitting or add quoted filenames to EXIST/DIREXIST.
-ELSE, blocks, FOR and CALL remain unimplemented.
+ELSE and blocks remain unimplemented.
 
 ## IF ERRORLEVEL
 
@@ -210,6 +253,63 @@ Testing never consumes the status. EXIT and normal end-of-file retain their
 separate rules: `EXIT n` returns n; bare EXIT and EOF return zero, regardless
 of the last program's status. This feature requires the matching rebuilt
 PCTMP, whose read-only native query leaves DOS AH=4Dh untouched.
+
+## FOR iteration
+
+```bat
+FOR %%I IN (A, B, "%VAL%", "AA AA") DO ECHO %%I
+FOR %%I IN (1..10) DO ECHO %%I
+FOR %%I IN (FILES C:\*.COM) DO ECHO %%I
+```
+
+The outer `FOR %%I IN (...) DO command` follows DOS batch spelling. Choose
+one letter (`A`–`Z` or `a`–`z`); its case matters, so `%%i` and `%%I` are
+different variables. Only BATCH implements FOR. Write the doubled percent
+in the BAT file; ordinary expansion produces the internal single-percent
+placeholder. The loop variable is not an environment variable.
+
+| Set form | Iteration |
+| --- | --- |
+| `(A, B, "AA AA")` | Discrete items separated by commas, spaces or tabs outside double quotes |
+| `(A..B)` | Inclusive signed decimal integer range, from -32768 to 32767; counts up or down by one |
+| `(FILES filespec)` | Snapshot of regular files matching one native CP/M/FAT filespec |
+
+Quoted list items retain their quotes in the substituted value, as with DOS
+FOR. `"A,B"` and `"A)B"` are each one item; `""` is one quoted empty item.
+An empty set performs no iterations. A numeric range must be the sole,
+unquoted item; quote `"1..10"` to iterate over that literal text instead.
+Leading signs/zeros are accepted in ranges and output is canonical decimal.
+Wildcards in an ordinary list remain literal; use FILES for file searching.
+FILES is special only when followed by whitespace and its filespec; quote
+`"FILES"` when using it as a list item.
+
+FILES accepts native CP/M drive/filespecs and full or relative FAT paths,
+including dot and parent components. Wildcards are allowed in the final
+component. Directory entries and volume labels are excluded; empty, hidden
+and system files are included. Returned values keep the supplied drive/path
+prefix and use an 8.3 basename. CP/M extents do not produce duplicate items.
+No matches performs no iterations. Search order is native directory order.
+
+All matches are collected before the body runs, so IF or external programs
+cannot disturb the search cursor. The NUL-separated snapshot is bounded to
+4096 bytes; a search failure or overflow skips the entire FOR. This is not
+a recursive search. Use an absolute path if the body changes directories
+and later iterations must still refer to the original location.
+
+Environment and positional arguments are expanded once over the original
+FOR line, including its body. Each iteration then replaces occurrences of
+that loop variable without another environment/argument expansion pass.
+Values containing percent signs are not rescanned. Body commands use the
+ordinary dispatcher: IF, ECHO, drive changes, native CMD and DOS programs all
+work, and ERRORLEVEL reflects each completed external program normally.
+Generated commands retain the 127-character limit; overflow stops the loop.
+
+This first implementation supports one active FOR. A nested FOR is diagnosed
+and skipped while the outer loop continues. A valid GOTO leaves the loop;
+BAT replacement abandons it; EXIT terminates BATCH with its normal rules.
+There are no multiline bodies, blocks, /F parser or custom steps. A called
+child BATCH can have its own independent FOR.
+FOR does not automatically set or clear ERRORLEVEL.
 
 ## ECHO and command echo
 
@@ -276,7 +376,8 @@ EXIT publishes the status through native BDOS function 108 before terminating
 with function 0. The native parent can read it through function 108; this does
 not change DOS AH=4Dh or PCTMP's private shell status. EXIT is BATCH-only and
 does not terminate the resident PCTMP. It ends the whole BATCH process; there
-is no CALL stack to return through.
+is no private CALL stack: when launched by CALL, the native parent resumes
+and receives the status.
 
 Signs, hexadecimal notation, values above 255 and extra operands are rejected.
 Invalid EXIT syntax reports an error and continues reading the script; it
@@ -374,9 +475,8 @@ its byte-length semantics.
 | Feature | Status |
 | --- | --- |
 | IF ELSE / blocks | Not implemented; file/directory and string conditions are supported |
-| IF ERRORLEVEL | BATCH-only unsigned `status >= n` test; optional NOT; no automatic stop-on-error |
-| FOR | Not implemented |
-| CALL and return to a calling BAT | Not implemented; bare BAT invocation chains |
+| Nested FOR, FOR /F, multiline bodies | Not implemented; single-line lists, ranges and FILES searches are supported |
+| CALL :label, EXIT /B, GOTO :EOF | Not implemented; CALL runs a separate BAT process, and bare BAT invocation chains |
 | Interactive `%NAME%` expansion | Not implemented in PCTMP; supported in BATCH only |
 | Quoted argument grouping and general escaping | Not implemented by BATCH; individual programs can parse their own arguments |
 | General `@command` suppression | Intentionally restricted to @ECHO |
@@ -384,8 +484,8 @@ its byte-length semantics.
 | Interactive EXIT | Not implemented; EXIT is deliberately BATCH-only |
 | DOS redirection operators and pipelines | Not implemented; use GET/PUT/RDR for external programs |
 
-An ordinary command error is not a structured language exception. There is
-no conditional program-status test or automatic success/failure branching.
+An ordinary command error is not a structured language exception. Use explicit
+IF ERRORLEVEL tests for status branching; errors do not automatically stop a script.
 Missing GOTO labels and fatal script-read failures stop BATCH.
 
 Build/source notes are in [commands/batch/README.md](commands/batch/README.md).

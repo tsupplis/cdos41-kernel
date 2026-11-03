@@ -1966,5 +1966,106 @@ dio_discard:
 endif
 	ret
 
+
+; BDOS 230 / E6h -- project-local FAT file attributes, version 1.
+; DS:DX (caller segment) -> eight words: size, version, operation,
+; FCB offset, FCB segment, mask, values, reserved. FCB is input-only.
+; Packet words (byte offsets):
+;   +0 size=16, +2 version=1, +4 operation, +6/+8 FCB offset/segment,
+;   +10 change mask, +12 values, +14 reserved=0.
+; Operations: 0 capabilities, 1 get, 2 masked update. Only ordinary files.
+; Capabilities: ignore FCB, no disk I/O, output mask=27h, values=4146h ('FA').
+; GET/SET: output mask=27h and values=actual FAT byte, high byte zero.
+; Require AX=BX=0 plus the FA signature and needed mask bits before use;
+; old kernels return FFFFh/error 2, and an unrelated zero-return handler
+; cannot pass the signature gate. No DOS/PC-MODE version-number assumption.
+;
+; CCP/M context: F1'-F4' are compatibility/file flags; F5'-F8' are existing
+; interface/internal controls (including byte-count and extended-FCB modes).
+; None is borrowed here. BDOS 30 preserves its historical semantics.
+; This local service is not a portable DRI assignment and is not added to
+; the CCP/M kernel, whose current PC-MODE build has no FAT support.
+;
+; Entry is serialized by MXdisk before reading the packet, uses the common
+; BDOS stack and selects the caller's current per-drive directory through
+; reselectx. The far FCB contributes only drive/name/type; it is never
+; opened, modified or returned. No DMA use and no process CAT/HDS edits.
+; Drive=0 means current, 1..16 means A:..P:. Wildcards are rejected so one
+; request can never change multiple entries; SET enumerates its own mask.
+; Non-FAT media return 81h, rather than reinterpret HIDDEN as CP/M SYS.
+; Normal physical-error mode, read-only media and lock checks still apply.
+; The changed byte is computed as (old AND NOT mask) OR (values AND mask).
+; Returned values replace input values only on successful completion.
+; Attribute mask 27h = RO/HIDDEN/SYSTEM/ARCHIVE, with DOS archive polarity.
+; Packet and FCB must not wrap their segments. No DMA or default-drive edit.
+; Internal failures are AH:FF; the module entry converts to AX=BX=FFFFh,
+; CX=reason. Native disk/lock errors retain their existing reasons; local
+; 80h=bad packet, 81h=not FAT, 82h=missing file, 83h=bad FCB, 84h=directory.
+func230:
+        cmp info,0fff0h ! jbe $+5 ! jmp fatattr_bad_packet
+        push ds ! pop es
+        mov si,info
+        mov di,offset fatattr_packet
+        push ds ! mov ds,parametersegment
+        mov cx,8 ! rep movsw
+        pop ds
+        cmp fatattr_packet,16 ! je $+5 ! jmp fatattr_bad_packet
+        cmp fatattr_packet+2,1 ! je $+5 ! jmp fatattr_bad_packet
+        cmp fatattr_packet+14,0 ! je $+5 ! jmp fatattr_bad_packet
+        cmp fatattr_packet+4,2 ! jbe $+5 ! jmp fatattr_bad_packet
+        mov ax,fatattr_packet+10
+        test ax,0ffd8h ! jz $+5 ! jmp fatattr_bad_packet
+        cmp fatattr_packet+4,0 ! jne $+5 ! jmp fatattr_capabilities
+        cmp fatattr_packet+4,2 ! jne fatattr_copy_fcb
+        test fatattr_packet+12,0ff00h ! jz fatattr_copy_fcb
+        jmp fatattr_bad_packet
+fatattr_copy_fcb:
+        cmp fatattr_packet+6,0fff4h ! jbe $+5 ! jmp fatattr_bad_fcb
+        ; Copy only the drive/name/type. Other FCB fields are irrelevant.
+        mov di,offset info_fcb
+        mov cx,20 ! xor ax,ax ! rep stosw
+        mov si,fatattr_packet+6
+        mov di,offset info_fcb
+        push ds ! mov ds,fatattr_packet+8
+        mov cx,12 ! rep movsb
+        pop ds
+        cmp info_fcb,16 ! jbe $+5 ! jmp fatattr_bad_fcb
+        cmp info_fcb+1,' ' ! jne $+5 ! jmp fatattr_bad_fcb
+        mov si,offset info_fcb+1
+        mov cx,11
+fatattr_name_check:
+        lodsb ! and al,7fh
+        cmp al,20h ! jae $+5 ! jmp fatattr_bad_fcb
+        cmp al,'?' ! jne $+5 ! jmp fatattr_bad_fcb
+        cmp al,'*' ! jne $+5 ! jmp fatattr_bad_fcb
+        mov byte ptr -1[si],al
+        loop fatattr_name_check
+        call reselectx
+        cmp media_format,0 ! jne fatattr_on_fat
+        mov ah,81h ! jmp fatattr_error
+fatattr_on_fat:
+        mov rd_dir_flag,0f0h    ; read current directory before locating entry
+        call pc_fat_attributes
+        test lret,0ffh ! jz fatattr_success
+        ret
+fatattr_capabilities:
+        mov fatattr_packet+10,27h
+        mov fatattr_packet+12,4146h ; 'FA' capability signature, not attributes
+fatattr_success:
+        ; Only the two output words change. Caller FCB is never copied back.
+        mov es,parametersegment
+        mov di,info ! add di,10
+        mov si,offset fatattr_packet+10
+        mov cx,2 ! rep movsw
+        mov aret,0
+        ret
+fatattr_bad_packet:
+        mov ah,80h ! jmps fatattr_error
+fatattr_bad_fcb:
+        mov ah,83h
+fatattr_error:
+        mov al,0ffh ! mov aret,ax
+        ret
+
 ;********** end bdos file system part 4 **********
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     

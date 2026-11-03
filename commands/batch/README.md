@@ -10,7 +10,8 @@ USER omits the redundant CP/M-media note and PAUSE uses
 `Press any key to continue...`. DIR accepts native slash options and CP/M
 brackets, including a final omitted ]. BATCH is not a full COMMAND.COM:
 IF supports EXIST/DIREXIST, case-sensitive string equality and ERRORLEVEL
-thresholds, all with optional NOT. FOR and CALL remain unimplemented. BATCH
+thresholds, all with optional NOT. FOR supports lists, ranges and native file
+snapshots. CALL runs a child BAT and resumes the caller. BATCH
 expands `%NAME%` from the current console environment before dispatch.
 
 `make check-batch-live` checks messages, CLS/DEL and an unrelated sentinel
@@ -98,3 +99,39 @@ stale status before a new root program runs. No INT 21h call is added to BATCH.
 native and DOS termination on disposable CP/M/FAT script media. The linked-byte
 `tools/batch_string_unit_check.py` also covers threshold boundaries and malformed
 syntax. See the root `batch.md` for the complete language contract.
+
+FOR lives in `forcmd.lib`, with BATCH-only data appended in `tmpdir.lib`.
+`batch_for` recognizes a fully expanded line after IF stripping. `for_next`
+feeds generated commands to the existing read/echo/dispatch path without
+reading another BAT record or expanding the text again. Signed ranges test
+the endpoint before increment to avoid 16-bit wraparound. Quoted list items
+remain quoted; a separate body metadata map retains missing-operand checks.
+
+FILES uses `condition_probe`'s existing native BDOS directory traversal and
+cleanup, with a narrowly scoped collection callback at `condition_found`.
+It saves all regular-file names before executing any body, deduplicates CP/M
+extents and restores drive/DMA/error mode and FAT mapping first. The snapshot
+is bounded to 4096 bytes; failure prevents partial loop execution. This adds
+no DOS interrupt dependency, resident FOR parser or kernel API. GOTO and BAT
+replacement cancel the loop; nesting is diagnosed rather than overwriting it.
+
+`tools/batch_for_unit_check.py` executes the linked expansion/parser/renderer
+bytes; `tools/batch_for_check.py` validates real CP/M/FAT enumeration, IF/child
+search isolation, native/DOS bodies, status and loop termination on copied
+images. Run both through the root `make check-batch-for` target.
+
+CALL resides in `callcmd.lib`. After IF/FOR processing it validates one
+native non-wildcard BAT filespec through BDOS 152 and `condition_probe`, then
+atomically constructs `BATCH.CMD ` plus the original tail. There is no second
+expansion pass. The existing native CMD loader and console-reattachment path
+perform execution and BDOS 108 status capture. A small `call_pending` marker
+also detects interpreter lookup failures before P_CLI is reached. Invalid or
+failed CALL sets ERRORLEVEL 1; ordinary bare BAT chaining remains unchanged.
+
+Each level has a native process and independent script/argument/SHIFT/FOR/echo
+state; the PCTMP environment stays shared. EOF/EXIT terminates that child and
+resumes its caller. The initial implementation accepts `[drive:]name[.BAT]`
+in CP/M or mapped FAT directories, with no full-path or label-subroutine syntax.
+See root `batch.md` for precise search, echo and command-length contracts.
+`make check-batch-call` checks production wrapper bytes and disposable native
+emulator runs, including nesting, child chains, DOS execution and loop return.

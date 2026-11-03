@@ -146,6 +146,12 @@ illfunc:				;illegal function number
 	jmp i_ent
 
 netchk:
+; Project-local BDOS 230 bypasses the compact historical function table.
+; It remains a native BDOS service, serialized by the disk mutex.
+        cmp cl,230 ! jne native_historical_ranges
+        mov ax,(bdos * 0100h)+49
+        jmp localfunc
+native_historical_ranges:
 ;	enter here for network check
 ;	check for function numbers represented in function table,
 ;	ENTTAB_TABLE.  Table space is saved by making the functions

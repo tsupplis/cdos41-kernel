@@ -347,6 +347,9 @@ msg_spb		dw	0	;link	Error Message sync parameter block
 		dw	0	;wait
 		dw	0	;next
 
+; Local BDOS 230 packet, protected by MXdisk. Never overlaid on user DMA.
+fatattr_packet  rw 8
+
 ; local variables used by PC_BDOS
 
 bdrwflg		db	0		;bdosrw flags

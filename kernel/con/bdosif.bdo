@@ -26,6 +26,7 @@ if PCMODE
 	EXTRN chk_pcfcb:NEAR
 	EXTRN pc_chkrec:NEAR
 	EXTRN pcsearch:NEAR
+	PUBLIC fatattr_packet
 	EXTRN pc_set_label:NEAR
 	EXTRN renamef:NEAR
 	EXTRN setattsf:NEAR
@@ -122,6 +123,8 @@ bf_fcb36	equ	001000b		;36 byte fcb flag
 bf_resel	equ	010000b		;disk reselect flag
 bf_hdirfx	equ	100000b		;hierarchical dir fx
 
+	EXTRN pc_fat_attributes:NEAR
+
 	; bdos function table
 
 functab dw func13   ! db 000001b  ; fxi13  equ 00h  ;disk reset
@@ -173,6 +176,7 @@ ftab16	dw func16   ! db 110101b  ! fxi16  equ 03h  ;close file
 	dw pr_term  ! db 000001b  ! fxi143 equ 2Eh  ;terminate process
 	dw funcdio  ! db 000001b  ; fxi??? equ 2Fh  ;direct disk I/O
 	dw pr_create ! db 00000b  ; fxi??? equ 30h  ;create process
+	dw func230 ! db 000001b ; local 31h, packet rather than automatic FCB
 
 ;=====
 entry:		; bdos module entry point
@@ -188,8 +192,19 @@ entry:		; bdos module entry point
 	add si,offset functab
 	test cs:btab_flag[si],bf_getmx
 	jz nomx
-	  call getdiskmx
-	  jmps exit
+          cmp cl,49 ! je fatattr_entry
+          call getdiskmx
+          jmps exit
+; Normal file errors use AH:FF internally. Normalize this new packet API
+; only after the common mutex/stack/error cleanup, so CX survives cleanup.
+fatattr_entry:
+        call getdiskmx
+        xor cx,cx
+        or bx,bx ! jz exit
+        mov cx,bx
+        mov cl,ch ! xor ch,ch
+        mov bx,0ffffh
+        jmps exit
 nomx:
 	xor bx,bx			;initialize return parameter
 	call cs:btab_addr[si]

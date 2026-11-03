@@ -1355,3 +1355,106 @@ full native words, strict decimal parsing, expansion and nested dispatch.
 `tools/batch_status_check.py` exercises real CMD/COM/EXE termination, CP/M/FAT
 scripts, repeated tests, status persistence, INT 20h reset and conditional
 EXIT 23 on disposable emulator media.
+
+### BATCH FOR lists, signed ranges and native file snapshots
+
+Local BATCH-only `FOR %%I IN (set) DO command` uses DOS's outer spelling and
+one-letter case-sensitive placeholders. Sets support discrete quoted items,
+inclusive signed 16-bit A..B ranges in either direction, and explicit FILES
+searches on CP/M or full/relative FAT paths. Quotes remain in list values;
+ordinary wildcards stay literal. There is one active loop; GOTO/BAT replacement
+cancel it, EXIT keeps its established contract, and nested FOR is diagnosed.
+Environment/argument expansion occurs once over the original line; only the
+loop placeholder is replaced per iteration. The 127-byte command limit and
+missing-operand provenance map remain enforced; no recursive expansion occurs.
+
+`forcmd.lib` owns parser/renderer/iteration state. Generated commands enter the
+existing dispatcher rather than a second execution API. FILES adds a scoped
+callback to IF's native path/search helper, collecting a NUL-separated snapshot
+before any body runs. It deduplicates CP/M extents and excludes directory/label
+entries. The 4096-byte limit or a search error aborts before partial execution;
+normal helper cleanup restores drive, DMA, error mode and temporary FAT mapping.
+No kernel API, INT 21h call or resident FOR implementation is added. Shared
+language copies stay identical; their GOTO cancellation call is BATCH-only.
+
+Validation uses production-byte expansion/FOR/renderer tests plus disposable
+CP/M/FAT emulator cases for lists/quotes, range endpoints, multi-extent files,
+hidden/system files, paths, IF search isolation, native/DOS bodies, status,
+malformed commands, GOTO, BAT replacement and EXIT. See `check-batch-for`.
+
+## BDOS 230: native FAT attributes and SET HIDDEN
+
+Function E6h/230 is a project-local native BDOS extension, independent of
+PCTMP. SUP recognizes the isolated number before compressing the historical
+function ranges; BDOS internal entry 49 uses the existing MXdisk mutex,
+stack, media selection, directory cache and error cleanup. Existing compact
+SYSENT entries retain their numbering. `modfunc.def` names `f_fatattr`.
+
+A version-1, 16-byte packet supplies operation (capabilities/GET/masked SET),
+a far FCB, mask and values. Capabilities touches no disk and returns mask
+27h plus signature 4146h. GET returns actual attributes; SET changes only
+selected RO/HIDDEN/SYSTEM/ARCHIVE bits. It preserves other directory bytes,
+case flags, cluster/size and timestamps. Labels/LFN are excluded by ordinary
+lookup; directories, wildcards, invalid drives, wrapped pointers, malformed
+packets and unsupported mask bits are rejected. The caller FCB is input-only.
+The current per-drive directory is retained, as are DMA/default-drive/user.
+Native AH:FF disk/lock results are normalized after common cleanup to
+AX=BX=FFFFh/CX=reason, preserving existing disk error-mode behavior. Local
+reasons 80h–84h distinguish packet/media/missing/FCB/directory failures.
+The exact packet and calling conventions are documented in api.md.
+
+SET adds `[HIDDEN=ON|OFF]`, retaining identical sources in CDOS and CCP/M.
+It gates on actual FAT, then requires success, the FA signature and the
+HIDDEN capability bit. Older kernels or unrelated function-230 handlers
+cannot be accepted merely because they return zero. A tiny `getds` PL/M
+helper fills the explicit FCB segment. HIDDEN-only requests never invoke
+BDOS 30; combined options retain their normal behavior. No F7′/F8′ reuse,
+on-disk attribute convention change, DOS AH=43h adaptation or listing/
+delete policy change is included. HELP.HLP is rebuilt from maintained data.
+
+### BATCH CALL through native child-interpreter invocation
+
+BATCH-only `CALL [drive:]name[.BAT] [arguments]` validates a non-wildcard native
+8.3 BAT name and checks existence through the existing BDOS file predicate.
+`callcmd.lib` then builds `BATCH.CMD ` plus the unchanged tail in a bounded
+buffer and enters ordinary native CMD dispatch. No second percent expansion,
+DOS helper, kernel API or private script-return stack is introduced. Bare BAT
+invocation keeps its existing chain behavior. Full FAT paths, target passwords,
+CALL :label and general command CALL are deliberately outside this grammar.
+
+Native process creation preserves the caller's script cursor, arguments/SHIFT,
+FOR and echo state. A child starts with echo ON and may change its own setting;
+the console environment remains shared. Nested child calls and child chains
+return through the normal native termination path. EOF/bare EXIT yields 0;
+EXIT n reaches caller ERRORLEVEL through BDOS 108. Syntax/search/launch errors
+set 1 and continue. `call_pending` detects failure to find BATCH.CMD before the
+normal P_CLI result path; successful launches use existing status capture.
+The complete wrapper must fit 127 characters, with no partial dispatch.
+
+Validation executes the linked wrapper with controlled BDOS parser/search
+results for exact bounds, validation and caller-state preservation. Disposable
+CP/M/FAT live tests use real BDOS 152 and CLI, including nested calls, argument
+case and SHIFT isolation, parent/child FOR, DOS children on both sides of CALL,
+shared environment, child chaining, omitted BAT extension, EOF/EXIT status and
+invalid/missing targets. See `make check-batch-call`.
+
+Verification: 52 assembled packet/backend cases cover capabilities, GET,
+masked updates, far FCBs, malformed fields, pointer bounds, CP/M rejection,
+labels/directories, read-only disks and lock errors; eight more check the
+normalized AX/BX/CX convention. Sequential disposable PCE fixtures exercise
+native GET/SET and preserved registers, SET individual/wildcard/combined
+options and subdirectory targets. Copied kernels with the 230 dispatch
+removed, or with an unrelated zero-return handler, both cause SET to reject
+the request with unchanged FAT metadata. Shared SET sources and helper are
+byte-identical between projects and both command builds pass.
+
+## HIDDEN parity, step 2: FAT deletion
+
+BLACK DELETEF now rejects only FAT READ-ONLY (01h), not HIDDEN (02h).
+SYSTEM and HIDDEN are listing attributes, not delete protection. The
+existing two-pass validation, disk RO, ownership/lock checks, wildcard
+selection, volume-label exclusion and directory rules remain in place.
+CP/M's separate deletion path is unchanged. ERA/ERAQ need no program edit;
+BDOS 19 and its DOS adapters reach the corrected backend. This change does
+not call BDOS 230, clear HIDDEN first or alter listing policy. Rename keeps
+its existing behavior. Browser/RM filtering is handled in later steps.

@@ -719,9 +719,12 @@ IF BATCH
 ; Read before displaying a prompt: Ctrl-Z/EOF must not echo an empty
 ; command. sublin exits at EOF; its length includes the line terminator.
 	    push ds ! pop es
+	    call for_next
+	    jnc for_line_ready
 	    call sublin
 	    call batch_expand
 	    jc noclearline
+for_line_ready:
 	    cmp read_blen,1 ! jbe noclearline
 	    call batch_prepare
 	    mov si,offset clicb_cmd
@@ -835,6 +838,14 @@ delret:
         jnc condition_dispatch_ready
         jmp nextcommand
 condition_dispatch_ready:
+        call batch_for
+        jnc for_dispatch_ready
+        jmp nextcommand
+for_dispatch_ready:
+        call batch_call
+        jnc call_dispatch_ready
+        jmp nextcommand
+call_dispatch_ready:
 	    mov bx,offset clicb
 	    xor cx,cx
 	    mov cl,read_blen
@@ -2398,6 +2409,7 @@ EJECT
 ; parameter list - storing each parameter in a table
 ;
 batchinit:
+	call for_cancel		; BAT replacement abandons the current loop
 	call clearsub		; else initialize submit buffers
 	call initsub			; move fcb into subfcb and init rrn
 	call	savehd			; save off current location of x.BAT

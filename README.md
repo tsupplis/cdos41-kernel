@@ -53,6 +53,8 @@ The current version includes:
 - DEL mapped to native ERA.CMD in both the shell and BATCH to keep CP/M as the main flavour.
 - Case-insensitive FAT short names, without interpreting modern case flags as CP/M compatibility attributes.
 - FAT volume labels remain metadata during raw CP/M directory scans, regardless of their root-directory position.
+- Native FAT attribute GET/masked SET through BDOS 230; SET supports `[HIDDEN=ON|OFF]`.
+- FAT HIDDEN files follow SYSTEM deletion rules; READ-ONLY and locks remain protected.
 - Support for DOS Environment Variable Setting (SETENV)
 - Full Batch Language Support with Extensions (In Progress)
 
@@ -148,7 +150,7 @@ Stock DOS Plus 1.2 versus this CDOS rebuild.
 | Command processor | COMMAND.COM | PCTMP and BATCH |
 | Startup scripts | AUTOEXEC.BAT | Per-console startup scripts |
 | Batch arguments | `%0`–`%9`, SHIFT | `%0`–`%9`, SHIFT |
-| Batch control and messages | IF, GOTO, FOR, ECHO | ECHO, labels/GOTO, SHIFT, EXIT and IF EXIST/DIREXIST/==/ERRORLEVEL; FOR and CALL deferred |
+| Batch control and messages | IF, GOTO, FOR, ECHO | ECHO, labels/GOTO, SHIFT, EXIT, IF EXIST/DIREXIST/==/ERRORLEVEL, FOR lists/ranges/files and CALL |
 | Echo control | ECHO ON/OFF | BATCH-only ECHO=ON/OFF and @ECHO; interactive ECHO prints text |
 | EXIT | COMMAND.COM command | BATCH-only; optional 0–255 status, otherwise 0 |
 | Environment variables | SET and `%NAME%` expansion | SETENV and BATCH `%NAME%` expansion; no interactive expansion |
@@ -166,13 +168,11 @@ The internal-interface count uses the nine services identified in [api.md](api.m
 
 | DOS Plus commands without a matching CDOS command | CDOS alternative or gap |
 | --- | --- |
-| FOR | Missing from BATCH |
 | PROMPT, BREAK, VERIFY, SLICE | No corresponding shell commands |
+| LABEL, BACKG, FSET | Mapped to SET/SHOW, SYSTAT/STOP and SET respectively; command syntax differs |
 | ALARM, GRAFTABL, DEVICE | No direct command equivalents |
 | CHKDSK | CHKCPMFS checks CP/M allocation; no equivalent FAT checker |
-| LABEL  | LABEL is implemented using SET/SHOW |
 | MODE | SETUP/SETPORT cover some configuration functions; no complete MODE equivalent |
-| BACKG, FSET | Related functions are available through SYSTAT/STOP and SET respectively; command syntax differs |
 
 ## Distributions
 
@@ -293,11 +293,11 @@ case handling.
 | `ren` | Rename files | - | Recompiled from CCP/M-86 3.1 and adapted for parity | Additional tool | — |
 | `ren.exe` | Rename files through DOS | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical | — |
 | `sdir` | Detailed, sorted directory listing | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested | — |
-| `set` | Set file, drive and label attributes | 4.11 | Recompiled from CCP/M-86 3.1, adapted for parity and enhanced with FAT labels | Equivalent | — |
+| `set` | Set file, drive and label attributes | 4.11 | Recompiled from CCP/M-86 3.1, adapted for parity and enhanced with FAT labels and HIDDEN control | Equivalent | — |
 | `setenv` | Display and edit the 1 KB per-console DOS environment | None | New native C implementation for CDOS 4.11 | Additional tool | KEEP |
 | `setport` | Configure serial ports and protocols | 4.11 | Reverse Engineered from CDOS 4.11 and patched | Equivalent | — |
 | `setup` | Customize system hardware settings | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical | — |
-| `show` | Display disk space, drive and label information | 4.11 | Recompiled from CCP/M-86 3.1, adapted for parity and enhanced with FAT labels | Equivalent | — |
+| `show` | Display disk space, drive and label information | 4.11 | Recompiled from CCP/M-86 3.1, adapted for parity and enhanced with FAT labels and HIDDEN control | Equivalent | — |
 | `submit` | Run SUB command files | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool | — |
 | `spl` | Manage the print spool queues and dispatch jobs to DSP | 4.11 | Reconstructed C from CDOS 4.11; DRC 1.11 build, ASM86 reference retained | Behavior tested | — |
 | `stop` | List processes and stop a selected entry | 4.11 | Reconstructed PL/M from CDOS 4.11; byte-identical assembly reference retained | Behavior tested | — |
@@ -350,6 +350,8 @@ system and the live regression checks.
 | `make check-tree` | TREE statistics and private FAT directory traversal |
 | `make check-batch-strings` | Case-sensitive IF equality, quotes, empty operands and variable concatenation |
 | `make check-batch-status` | Native/DOS return-status thresholds and persistence in BATCH |
+| `make check-batch-for` | FOR lists, ranges, file snapshots and ordinary command dispatch |
+| `make check-batch-call` | Child BAT return, arguments, loop state, status and failure handling |
 | `make check-batch-if` | File/directory predicates, full FAT paths and directory-state preservation |
 | `make check-batch-expand` | Environment/argument expansion, bounds and per-console isolation |
 | `make check-batch-exit` | Explicit/default BATCH status through native BDOS 108 |

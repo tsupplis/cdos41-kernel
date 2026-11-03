@@ -27,3 +27,12 @@ functional patch is needed. ERAQ remains the unchanged native CDOS source.
 The light ERA check also passed eight OEM/rebuilt command cases on disposable
 CP/M/FAT media, including wildcard deletion, passwords, retry, missing files
 and preservation of unrelated files. `make check-era` repeats these checks.
+
+## FAT HIDDEN files
+
+The CDOS BDOS 19 backend permits HIDDEN just as SYSTEM. ERA/ERAQ need no
+attribute-clearing operation or BDOS 230 dependency. READ-ONLY, disk RO,
+password and ownership rules retain their existing behavior. Exact names
+and wildcard patterns can match SYSTEM/HIDDEN files, even when ordinary
+DIR omits them. ERA's all-files confirmation and ERAQ's per-file prompt
+remain unchanged. This kernel change does not affect the CP/M disk path.

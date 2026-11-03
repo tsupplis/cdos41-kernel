@@ -46,9 +46,12 @@ check: all
 	python3 tools/cmdtail_check.py
 	python3 tools/batch_expand_unit_check.py
 	python3 tools/batch_string_unit_check.py
+	python3 tools/batch_for_unit_check.py
+	python3 tools/batch_call_unit_check.py
 	python3 tools/fat_recovery_check.py
 	python3 tools/fat_label_unit_check.py
 	python3 tools/fat_label_write_unit_check.py
+	python3 tools/fat_attributes_unit_check.py
 	python3 tools/pctmp_context_check.py
 	python3 tools/pctmp_critical_check.py
 	$(MAKE) -C boot check
@@ -270,3 +273,18 @@ check-batch-strings: all
 check-batch-status: all
 	python3 tools/batch_string_unit_check.py
 	python3 tools/batch_status_check.py
+
+.PHONY: check-batch-for
+check-batch-for: all
+	python3 tools/batch_for_unit_check.py
+	python3 tools/batch_for_check.py
+
+.PHONY: check-batch-call
+check-batch-call: all
+	python3 tools/batch_call_unit_check.py
+	python3 tools/batch_call_check.py
+
+.PHONY: check-fat-attributes
+check-fat-attributes: all
+	python3 tools/fat_attributes_unit_check.py
+	python3 tools/fat_attributes_check.py
