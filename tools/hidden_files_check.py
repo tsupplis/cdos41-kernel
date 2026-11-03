@@ -83,6 +83,8 @@ def session(d, cases):
     (d / "cfg").write_text(cfg)
     keys = {
         " ": "Space",
+        "\r": "Return",
+        "\x04": "+Ctrl d -Ctrl",
         ":": "+Shift Semicolon -Shift",
         ".": "Period",
         "[": "LeftBracket",

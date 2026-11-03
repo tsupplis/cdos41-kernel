@@ -1519,3 +1519,8 @@ reads use raw function 6/FDh to sleep for PIN instead of starving its lower
 priority in a busy loop. Cleanup restores the original INT 1Eh vector, locks,
 priority, console state and media login records. Each project owns its sources,
 Makefile and simulations, without sibling build dependencies.
+
+BIOS-format correction: CP/M INT 13h/AH=05h reads the sector-ID count from
+the INT 1Eh table. DCOPY now selects eight/nine there for each format call,
+then restores nine for geometry probes without changing returned AX/CF.
+The regression harness checks this count; native XIOS formatting is unchanged.
