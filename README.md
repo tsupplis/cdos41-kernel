@@ -267,6 +267,7 @@ case handling.
 | `ddt86` | 8086 interactive debugger | - | Recompiled from CCP/M-86 3.1 | Additional tool | — |
 | `dir` | List directory contents | - | Recompiled from CCP/M-86 3.1 and adapted; separate CDOS 4.1 TMP built-in | Additional tool | — |
 | `dredix` | Full-screen text editor | 4.11 | Recompiled from CDOS 4.1 | Behavior tested | — |
+| `dform` | Command-line CP/M and 360K FAT12 floppy formatter | — | Adapted from CCP/M-86 DFORM | — | — |
 | `dskmaint` | Format, verify and copy diskettes | 4.11 | Recompiled from CDOS 4.1 with reconstructed 4.11 DOS boot sector | Behavior tested | — |
 | `dsp` | Inspect print-spool information | 4.11 | Recompiled from CDOS 4.1 | Behavior tested | — |
 | `echo` | Write text to the native console | None | New native RASM86 implementation | Additional tool | KEEP |

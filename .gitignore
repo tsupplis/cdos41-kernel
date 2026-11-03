@@ -64,3 +64,6 @@
 !/extra/fm.cmd
 !/extra/compaq.cmd
 !/extra/load6300.com
+
+# DFORM generated assembler data
+/commands/dform/*.inc

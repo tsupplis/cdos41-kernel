@@ -28,7 +28,7 @@ TOOLS_COMMANDS = ../commands/submit/submit.cmd ../commands/tree/tree.cmd ../comm
     ../commands/chset/chset.cmd ../commands/window/window.cmd ../commands/window/wmenu.cmd
 
 MAINT_COMMANDS = ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
-    ../commands/dskmaint/dskmaint.cmd ../commands/hdmaint/hdmaint.cmd \
+    ../commands/dskmaint/dskmaint.cmd ../commands/dform/dform.cmd ../commands/hdmaint/hdmaint.cmd \
     ../commands/initdir/initdir.cmd
 
 MENU_COMMANDS = ../commands/spl/spl.cmd ../commands/print/print.cmd ../commands/dredix/dredix.cmd ../commands/copymenu/copymenu.cmd ../commands/editmenu/editmenu.cmd \

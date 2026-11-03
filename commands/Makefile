@@ -1,14 +1,14 @@
 # Enabled only after the local source build has passed.
 SUBDIRS=genccpm pip asm86 gencmd submit batch chdir \
     mkdir rmdir sysdisk chset initdir help helphlp ddt86 \
-    function dredix copymenu editmenu printmgr dsp dskmaint \
+    function dredix copymenu editmenu printmgr dsp dskmaint dform \
     genldr loadccpm redos copy datetime erase path rename setenv \
     asm80 era ren systat window date sdir show hexcom print set type dir ed disk putget setport hdmaint stop setup n spl chkcpmfs tree echo
 
 CMDS=genccpm/genccpm.cmd asm86/asm86.cmd ddt86/ddt86.cmd gencmd/gencmd.cmd submit/submit.cmd batch/batch.cmd \
     chdir/chdir.cmd mkdir/mkdir.cmd rmdir/rmdir.cmd sysdisk/sysdisk.cmd chset/chset.cmd \
     initdir/initdir.cmd era/eraq.cmd help/help.cmd function/function.cmd dredix/dredix.cmd \
-    copymenu/copymenu.cmd editmenu/editmenu.cmd printmgr/printmgr.cmd dsp/dsp.cmd dskmaint/dskmaint.cmd \
+    copymenu/copymenu.cmd editmenu/editmenu.cmd printmgr/printmgr.cmd dsp/dsp.cmd dskmaint/dskmaint.cmd dform/dform.cmd \
     genldr/genldr.cmd pip/pip4.cmd \
     asm80/asm80.cmd era/era.cmd ren/ren.cmd systat/systat.cmd \
     window/window.cmd window/wmenu.cmd date/date.cmd sdir/sdir.cmd show/show.cmd \

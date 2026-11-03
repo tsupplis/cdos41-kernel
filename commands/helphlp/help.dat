@@ -566,6 +566,12 @@ Use ERA for its command reference. ERASE.EXE is a separate DOS executable.
 DELQ filespec
 Alias for native ERAQ.CMD, which asks before deleting each matching file.
 
+///1DFORM
+  DFORM drive: [options]
+  [DOS] formats a 360K FAT12 data disk. [V] verifies every track.
+  The default is CP/M 320K; [1] selects CP/M 160K.
+  Example: DFORM B:[DOS] [V]. Confirm the target before answering Y.
+
 ///1DIR
 Built-in shell/BATCH syntax:
   DIR {filespec} {/L|/W} {/S} {/P} {/Gn}

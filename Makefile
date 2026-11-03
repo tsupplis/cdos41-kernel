@@ -305,3 +305,7 @@ check-disk:
 
 check-disk-live: all
 	python3 tools/disk_live_check.py
+
+.PHONY: check-dform-live
+check-dform-live: all
+	python3 tools/dform_live_check.py
