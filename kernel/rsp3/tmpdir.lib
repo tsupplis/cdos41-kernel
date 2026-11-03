@@ -2004,6 +2004,15 @@ ENDIF
 
 
 
+; BATCH language state belongs after the native basepage and TMP data.
+IF BATCH
+batch_echo db TRUE
+batch_hide db FALSE
+goto_scan db FALSE
+goto_eof db FALSE
+goto_target rs 128
+ENDIF
+
 dataend		rb	0
 
 		org	(((offset dataend - offset databeg)+0fh) and 0fff0h)

@@ -51,11 +51,14 @@ cases = [
     ("dir", "[S]"),
     ("batch", "ECHO=ON/OFF"),
     ("tree", "TREE {d:}"),
-    ("echo", "BATCH-only controls"),
+    ("echo", "Only BATCH has ECHO=ON/OFF"),
     ("languages batch echo", "equals sign changes state"),
     ("languages batch shift", "old %1 becomes %0"),
     ("languages batch goto", "GOTO :label"),
+    ("languages batch exit", "decimal 0-255"),
+    ("languages batch variables", "Undefined names become empty"),
     ("set", "[PASSWORD=] alone"),
+    ("setenv", "Native SETENV.CMD"),
     ("wmenu", "Ctrl-Alt-Esc"),
     ("order", "ORDER="),
 ]
@@ -83,7 +86,7 @@ for topic, expected in cases:
     (F / (topic + ".txt")).write_text(s)
     assert expected in s, (topic, s)
 print(
-    "PASS: native HELP reads TREE/ECHO, nested LANGUAGES BATCH ECHO/SHIFT/GOTO and existing topics, including text beyond 64 KiB",
+    "PASS: native HELP reads TREE/ECHO, nested LANGUAGES BATCH ECHO/SHIFT/GOTO/EXIT/VARIABLES and existing topics, including text beyond 64 KiB",
     flush=True,
 )
 shutil.rmtree(F)

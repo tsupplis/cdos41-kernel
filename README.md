@@ -159,7 +159,7 @@ Stock DOS Plus 1.2 versus this CDOS rebuild.
 | Volume labels (LABEL role) | DOS volume-label utility on some system disks | SET d: [NAME=label.typ] and SHOW d: [LABEL] for CP/M disks; FAT label editing remains missing |
 | Native resident extensions | RSX loading; GENRSX supplied on some system disks | Resident System Processes (RSPs); no compatible RSX loader or GENRSX equivalent |
 | Input/output redirection and append | DOS pattern: `<`, `>`, `>>` | CP/M-Plus pattern: GET/PUT/RDR, extended to both native and DOS programs |
-| Command pipelines | `command1 \| command2` using temporary files | Not implemented |
+| Command pipelines | `command1 \| command2` using temporary files | CP/M-Plus pattern: GET/PUT/RDR |
 | Internal DOS interfaces | Not supported as a compatibility interface | 2 of 9 fully implemented (22%); 1 partial; 6 missing or stubbed |
 
 The internal-interface count uses the nine services identified in [api.md](api.md):

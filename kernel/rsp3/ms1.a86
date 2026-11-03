@@ -454,6 +454,7 @@ ms_func_tbl	dw	ms_cleanup	;function 0
 		dw	ms_builtin_addr	;function 7
 		dw	ms_addmem_func	;function 8
 		dw ms2_redir_config	;function 9, stream configuration
+		dw ms_environment_func	;function 10, read-only environment query
 
 MS_FUNC_TBL_END	equ	(offset $ - offset ms_func_tbl)/2
 
@@ -618,6 +619,18 @@ move_srch_tbl:
 
 
 eject
+
+; Read-only environment discovery for native clients (local extension).
+; AX/BX = paragraph-aligned environment segment, DX = capacity in bytes.
+; No packet, no mutation, no INT 21h call and no fixed layout in the caller.
+ms_environment_func:
+        mov ax,ds
+        mov bx,offset environment
+        mov cl,4
+        shr bx,cl
+        add ax,bx
+        mov dx,env_size
+        ret
 
 ms_builtin_addr:
 ;--------------

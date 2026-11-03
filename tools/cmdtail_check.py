@@ -6,7 +6,7 @@ from historical_check import symbols, payload, run
 ROOT=Path(__file__).resolve().parent.parent
 
 def check():
-    for name in ['putget/put', 'putget/get', 'putget/rdr', 'echo/echo', 'batch/batch']:
+    for name in ['putget/put', 'putget/get', 'putget/rdr', 'echo/echo', 'batch/batch', 'setenv/setenv']:
         assert (ROOT/f'commands/{name}.cmd').read_bytes()[127]&2,name
     s=symbols('sup');code=payload('sup')
     # Complete the tail loop with its normal length store and a test return.

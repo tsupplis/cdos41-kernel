@@ -3,11 +3,11 @@
 
 RASM86=pcdev_rasm86
 DRC86=drccpm_cc
-DRCLINK86=pcdev_linkexe
-LINK86=$(DRCLINK86)
+DRCLINK86=drccpm_link
+CMDINFO=cmdinfo
+CMDMOD=cmdmod
 
-DRC_LIBDIR ?= $(dir $(shell command -v $(DRC86)))../share/drc86cpm
-TOOLS=setenv.exe
+TOOLS=setenv.cmd
 OBJECTS=start.obj setenv.obj
 
 .PHONY: all check clean
@@ -15,25 +15,22 @@ OBJECTS=start.obj setenv.obj
 
 all: $(TOOLS)
 check: all setenv.c setenv.h hostcheck.c
-	@for f in $(TOOLS); do test -s "$$f" || { echo "error: $$f is missing or empty" >&2; exit 1; }; done
+	$(CMDINFO) setenv.cmd
+	@python3 -c "from pathlib import Path; assert Path('setenv.cmd').read_bytes()[127] & 2, 'Expected CMD TAIL=KEEP flag'"
 	$(CC) -std=gnu89 -DHOST_TEST -Wno-deprecated-non-prototype setenv.c hostcheck.c -o hostcheck
 	./hostcheck
 
-setenv.exe: $(OBJECTS) clears.l86 Makefile
-	@$(LINK86) 'setenv=start,setenv[nop]' > setenv-link.log 2>&1; result=$$?; cat setenv-link.log; test $$result -eq 0
+setenv.cmd: $(OBJECTS) Makefile
+	@$(DRCLINK86) 'setenv=start,setenv' > setenv-link.log 2>&1; result=$$?; cat setenv-link.log; test $$result -eq 0
 	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' setenv-link.log
 	@test -s $@
-	@test "$$(od -An -tx1 -N2 $@ | tr -d ' \n')" = 4d5a
+	$(CMDMOD) -f 1=1 $@
+	$(CMDINFO) $@
 
 start.obj: start.a86 Makefile
 	@$(RASM86) $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
 	@grep -qiE 'Number of errors: +0\.' $*.log
 	@test -s $@
-
-# DR C emits a small-model initialization-library request even without libc.
-# Stage it from the installed compiler, never from another project.
-clears.l86: $(DRC_LIBDIR)/clears.l86
-	cp -f "$<" "$@"
 
 %.obj: %.c Makefile $(wildcard *.h)
 	@$(DRC86) -o$@ $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0

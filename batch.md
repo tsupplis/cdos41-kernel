@@ -2,7 +2,7 @@
 
 This describes the BATCH.CMD shipped by this CDOS rebuild. It runs native
 CMD programs, DOS COM/EXE programs and shell commands from a `.BAT` file.
-It includes the local ECHO, SHIFT, labels/GOTO and EXIT extensions. It is distinct
+It includes the local ECHO, SHIFT, labels/GOTO, EXIT and environment-substitution extensions. It is distinct
 from SUBMIT's `.SUB` language and is not a complete COMMAND.COM replacement.
 
 ## Starting and ending a script
@@ -36,6 +36,7 @@ EXIT ends the BATCH process explicitly; there is no implicit `:EOF` label.
 | `%0` | Script name as supplied in the invocation, until shifted |
 | `%1` … `%9` | Positional arguments; absent arguments expand to empty text |
 | `%%` | A literal percent sign |
+| `%NAME%` | Current console environment value; names match without case, undefined names expand to empty text |
 | `SHIFT` | Advance the argument list: old `%1` becomes `%0`, old `%2` becomes `%1`, and so on |
 
 Initial arguments are split on spaces, commas and exclamation marks. Use
@@ -53,12 +54,34 @@ SHIFT
 ECHO %1
 ```
 
-Substitution happens while reading a line, before command dispatch, including
-ECHO messages and comments. Inserted argument text is not recursively expanded.
-Only the forms above are supported. `%10` means `%1` followed by a literal
-`0`, not a tenth-argument reference. `%NAME%`, `%*`, `%~1` and FOR variables
-are not supported substitutions. Write `%%` for a literal percent
-in script text; do not rely on other percent forms being copied unchanged.
+Substitution is one pass over each complete line before command dispatch and
+command echo, including messages and comments. It can supply a command name
+as well as arguments. Inserted values and positional arguments retain case;
+percent signs inside them are never expanded again. `%10` means `%1` followed
+by a literal `0`, not argument ten. `%%NAME%%` prints literal `%NAME%`.
+An unmatched `%` remains literal. `%*`, `%~1` and FOR variables are unsupported.
+
+`%NAME%` reads the owning console's shared environment, also used by PATH and
+SETENV. Each line gets a fresh snapshot, so changes made by a previous command
+are visible. Other consoles keep their own environments. For example:
+
+```bat
+@ECHO=OFF
+SETENV DEST=B:
+ECHO Copying to %DEST%
+PIP %DEST%=A:*.TXT
+```
+
+BATCH remains a native CP/M program. It discovers the environment through the
+owning PCTMP's read-only native `ms_func` query; it does not call INT 21h or
+launch a DOS helper for expansion. Older PCTMP versions without the query
+still support positional arguments and `%%`; a named expansion reports an
+unavailable environment and skips that command.
+
+Double quotes are ordinary text during expansion; they do not group BATCH
+arguments or suppress substitution. A raw or expanded line longer than 127
+characters is reported and skipped entirely, rather than executed truncated.
+GOTO searches raw labels without substitution. IF remains unimplemented.
 
 ## ECHO and command echo
 
@@ -180,7 +203,7 @@ native command queues. An explicit filename/extension requests the disk form.
 
 PATH is **not** a BATCH or PCTMP built-in. PATH.EXE edits the DOS environment's
 PATH variable; SYSDISK.CMD controls native system searching. SET changes
-file/disk attributes, while SETENV.EXE edits DOS environment variables.
+file/disk attributes, while SETENV.CMD edits DOS environment variables.
 
 ## Case handling and redirection
 
@@ -192,7 +215,7 @@ preserves them. BATCH.CMD is built with KEEP, so positional arguments retain
 their supplied case through substitution and SHIFT. This is independent of whether
 a script is stored on a FAT volume using lowercase name flags.
 
-The shipped **BATCH.CMD, ECHO.CMD, PUT.CMD, GET.CMD and RDR.CMD** use TAIL=KEEP.
+The shipped **BATCH.CMD, ECHO.CMD, PUT.CMD, GET.CMD, RDR.CMD and SETENV.CMD** use TAIL=KEEP.
 KEEP preserves argument text; it does not make filenames or wrapper options
 case-sensitive. A native child still follows its own TAIL setting. DOS
 COM/EXE tails do not use this native CMD-header flag. See
@@ -220,7 +243,7 @@ its byte-length semantics.
 | IF ERRORLEVEL | Not implemented; no conditional status test or stop-on-error language switch |
 | FOR | Not implemented |
 | CALL and return to a calling BAT | Not implemented; bare BAT invocation chains |
-| `%NAME%` environment expansion | Not implemented in BATCH or PCTMP |
+| Interactive `%NAME%` expansion | Not implemented in PCTMP; supported in BATCH only |
 | Quoted argument grouping and general escaping | Not implemented by BATCH; individual programs can parse their own arguments |
 | General `@command` suppression | Intentionally restricted to @ECHO |
 | PROMPT | Not implemented |

@@ -1,0 +1,235 @@
+;*******************************************************************************
+; BATCH line expansion - native CP/M command processor extension.
+;
+; %0..%9 and %% retain their existing meanings. %NAME% reads the owning
+; PCTMP console environment through ms_func selector 0Ah. No DOS process
+; or INT 21h service is involved. Environment names match without case;
+; values and arguments retain case and are never recursively expanded.
+;
+; Read one bounded environment snapshot per line. Build the complete result
+; separately; an unavailable environment or overflow skips the whole command.
+; GOTO searches raw records and never calls this expansion pass.
+;*******************************************************************************
+        cseg
+
+; Carry clear: clicb_cmd replaced, read_blen includes its terminating NUL.
+; Carry set: diagnostic issued; caller must read the next script line.
+batch_expand:
+        push ax ! push bx ! push cx ! push dx
+        push si ! push di ! push bp ! push es
+        cmp long_line,TRUE
+        jne expand_begin
+        mov long_line,FALSE
+        jmp expand_too_long
+expand_begin:
+        call expand_snapshot
+        mov si,offset clicb_cmd
+        mov di,offset expand_line
+expand_next:
+        lodsb
+        or al,al
+        jnz expand_character
+        jmp expand_commit
+expand_character:
+        cmp al,'%'
+        je expand_percent
+expand_emit:
+        call expand_put
+        jnc expand_next
+        jmp expand_too_long
+expand_percent:
+        mov al,[si]
+        cmp al,'%'
+        jne expand_not_literal
+        inc si
+        jmps expand_emit
+expand_not_literal:
+        cmp al,'0'
+        jb expand_named
+        cmp al,'9'
+        ja expand_named
+        inc si
+        sub al,'0'
+        call expand_argument
+        jnc expand_next
+        jmp expand_too_long
+expand_named:
+        mov bx,si
+expand_find_close:
+        cmp byte ptr [bx],0
+        je expand_unmatched
+        cmp byte ptr [bx],'%'
+        je expand_name_ready
+        inc bx
+        jmps expand_find_close
+expand_unmatched:
+        mov al,'%'
+        jmps expand_emit
+expand_name_ready:
+        cmp expand_available,TRUE
+        je expand_name_available
+        mov dx,offset expand_no_environment
+        jmp expand_error
+expand_name_available:
+        mov expand_name,si
+        mov expand_name_end,bx
+        inc bx
+        mov expand_resume,bx
+        call expand_lookup
+        or si,si
+        jz expand_value_done
+expand_value:
+        lodsb
+        or al,al
+        jz expand_value_done
+        call expand_put
+        jc expand_too_long
+        jmps expand_value
+expand_value_done:
+        mov si,expand_resume
+        jmp expand_next
+expand_commit:
+        xor al,al
+        stosb
+        mov cx,di
+        sub cx,offset expand_line
+        mov read_blen,cl
+        mov si,offset expand_line
+        mov di,offset clicb_cmd
+        rep movsb
+        clc
+        jmps expand_return
+expand_too_long:
+        mov dx,offset expand_overflow
+expand_error:
+        call print_string
+        call crlf
+        stc
+expand_return:
+        pop es ! pop bp ! pop di ! pop si
+        pop dx ! pop cx ! pop bx ! pop ax
+        ret
+
+; Append one character, reserving byte 128 for the final NUL.
+expand_put:
+        cmp di,offset expand_line+127
+        jae expand_put_full
+        stosb
+        clc
+        ret
+expand_put_full:
+        stc
+        ret
+
+; AL is a decimal argument index. Preserve the source script cursor.
+expand_argument:
+        push si
+        mov dl,al
+        mov si,offset subparms
+expand_argument_seek:
+        or dl,dl
+        jz expand_argument_copy
+        lodsb
+        or al,al
+        jz expand_argument_empty
+        cmp al,' '
+        jne expand_argument_seek
+        dec dl
+        jmps expand_argument_seek
+expand_argument_copy:
+        lodsb
+        or al,al
+        jz expand_argument_empty
+        cmp al,' '
+        je expand_argument_empty
+        call expand_put
+        jc expand_argument_return
+        jmps expand_argument_copy
+expand_argument_empty:
+        clc
+expand_argument_return:
+        pop si
+        ret
+
+; Snapshot only the advertised capacity, never a hardcoded PCTMP address.
+; Older PCTMP versions reject selector 0Ah with AX=FFFFh. Positional and
+; literal-percent expansion continue to work; named expansion reports it.
+expand_snapshot:
+        mov expand_available,FALSE
+        mov cl,0ah
+        callf ms_func_jmp_addr
+        push ds ! pop es
+        cmp ax,0ffffh
+        je expand_snapshot_done
+        or ax,ax
+        jz expand_snapshot_done
+        cmp dx,2
+        jb expand_snapshot_done
+        cmp dx,1024
+        ja expand_snapshot_done
+        mov expand_capacity,dx
+        push ds
+        mov ds,ax
+        xor si,si
+        mov di,offset expand_environment
+        mov cx,dx
+        cld
+        rep movsb
+        pop ds
+        mov si,offset expand_environment
+        mov cx,expand_capacity
+expand_validate:
+        lodsb
+        dec cx
+        jz expand_snapshot_done
+        or al,al
+        jnz expand_validate
+        cmp byte ptr [si],0
+        jne expand_validate
+        mov expand_available,TRUE
+expand_snapshot_done:
+        ret
+
+; Find NAME= in the validated, double-NUL-terminated snapshot. Return SI
+; pointing to its value, or zero for an undefined variable. Preserve DI.
+expand_lookup:
+        mov si,offset expand_environment
+expand_entry:
+        cmp byte ptr [si],0
+        je expand_undefined
+        mov bp,si
+        mov bx,expand_name
+expand_compare:
+        cmp bx,expand_name_end
+        je expand_equals
+        mov al,[bx]
+        call lang_upper
+        mov ah,al
+        mov al,[si]
+        call lang_upper
+        cmp al,ah
+        jne expand_skip_entry
+        or al,al
+        jz expand_undefined
+        inc bx
+        inc si
+        jmps expand_compare
+expand_equals:
+        cmp byte ptr [si],'='
+        jne expand_skip_entry
+        inc si
+        ret
+expand_skip_entry:
+        mov si,bp
+expand_skip_character:
+        lodsb
+        or al,al
+        jnz expand_skip_character
+        jmps expand_entry
+expand_undefined:
+        xor si,si
+        ret
+
+expand_overflow db 'BATCH expanded command exceeds 127 characters; skipped.$'
+expand_no_environment db 'BATCH environment unavailable; command skipped.$'
+; State and buffers are allocated in tmpdir.lib before dataend.

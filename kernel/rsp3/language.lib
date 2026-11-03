@@ -1,7 +1,7 @@
 ;*******************************************************************************
 ; Shell text output and the deliberately small BATCH language.
 ; PCTMP: ECHO text only. BATCH: ECHO[=ON|OFF], @ECHO, SHIFT, :label/GOTO, EXIT.
-; No general @ prefix, variable expansion, IF, FOR or CALL is introduced.
+; BATCH expansion is in expand.lib. No general @ prefix, IF, FOR or CALL.
 ; This include is identical in the resident and standalone source trees.
 ;*******************************************************************************
         cseg
@@ -341,11 +341,6 @@ lang_echo_is_on db 'ECHO=ON$'
 lang_echo_is_off db 'ECHO=OFF$'
 lang_syntax_message db 'Invalid BATCH command syntax.$'
 lang_no_label db 'Label not found; BATCH stopped.',CR,LF,'$'
-        dseg
-batch_echo db TRUE
-batch_hide db FALSE
-goto_scan db FALSE
-goto_eof db FALSE
-goto_target rs 128
+; Per-process state is allocated with TMP data, before dataend.
 ENDIF
         cseg

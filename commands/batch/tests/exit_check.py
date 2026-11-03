@@ -60,13 +60,10 @@ for invalid in ["-1", "+1", "256", "65535", "99999999", "0x10", "7x", "1 2", "=7
 # Chaining must retain the explicit status of the replacement script.
 cases.append(("@ECHO=OFF\r\nB:REPLACE.BAT\r\nEXIT 99\r\n", 23, True))
 
-index = ["cases:"]
-for number, (_, expected, _) in enumerate(cases):
-    index.append(f"        dw offset command_{number},{expected}")
-index.append("        dw 0,0")
-for number in range(len(cases)):
-    index.append(f"command_{number} db 0,'A:BATCH B:X{number:02}.BAT',0")
-(FOLDER / "excases.lib").write_bytes(("\r\n".join(index) + "\r\n").encode())
+# Test-only observer layout: public PD parent link and the local native status word.
+pd = (ROOT / "kernel/con/black.sym").read_text(errors="replace")
+assert re.search(r"001E\s+P_PARENT\b", pd), "parent PD offset changed"
+assert re.search(r"002C\s+P_RETCODE\b", pd), "return-code PD offset changed"
 for name in ["exittest", "set77"]:
     run("pcdev_rasm86", name + ".a86")
     run("pcdev_linkcmd", f"{name}={name}[data[origin[0],max[0]]]")
@@ -111,10 +108,17 @@ cfg = re.sub(
 )
 (FOLDER / "test.cfg").write_text(cfg)
 commands = ["c f000000"]
-for ch in "b:exittest\n":
-    key = {":": "+Shift Semicolon -Shift", "\n": "Return"}.get(ch, ch)
-    commands += ["key " + key, "c 200000"]
-commands += ["c f000000", "c f000000", 'save "screen.bin" bin b800:0000 fa0', "q"]
+def command(text):
+    for ch in text + "\n":
+        key = {":": "+Shift Semicolon -Shift", " ": "Space", "\n": "Return"}.get(ch, ch)
+        commands.extend(["key " + key, "c 200000"])
+    commands.append("c 8000000")
+for number, (_, expected, _) in enumerate(cases):
+    command("cls")
+    command(f"a:batch b:x{number:02}.bat")
+    command(f"b:exittest {expected}")
+    commands.append(f'save "screen-{number}.bin" bin b800:0000 fa0')
+commands.append("q")
 with (FOLDER / "pce.log").open("wb") as log:
     subprocess.run(
         ["pce-ibmpc", "-c", "test.cfg", "-t", "null", "-g", "vga"],
@@ -122,16 +126,17 @@ with (FOLDER / "pce.log").open("wb") as log:
         input=("\n".join(commands) + "\n").encode(),
         stdout=log,
         stderr=log,
-        timeout=90,
+        timeout=300,
         check=True,
     )
-video = (FOLDER / "screen.bin").read_bytes()
-screen = "\n".join(
-    bytes(video[i : i + 160 : 2]).decode("cp437").rstrip() for i in range(0, 3840, 160)
-)
-(FOLDER / "screen.txt").write_text(screen)
-assert "BATCH EXIT PASS" in screen and "BATCH EXIT FAIL" not in screen, screen
-assert "EXIT-DID-NOT-STOP" not in screen, screen
+for number in range(len(cases)):
+    video = (FOLDER / f"screen-{number}.bin").read_bytes()
+    screen = "\n".join(
+        bytes(video[i : i + 160 : 2]).decode("cp437").rstrip() for i in range(0, 3840, 160)
+    )
+    (FOLDER / f"screen-{number}.txt").write_text(screen)
+    assert "BATCH EXIT PASS" in screen and "BATCH EXIT FAIL" not in screen, (number, screen)
+    assert "EXIT-DID-NOT-STOP" not in screen, (number, screen)
 print(
     f"PASS: {len(cases)} BATCH EXIT/EOF/invalid-status/chain cases through native BDOS 108"
 )

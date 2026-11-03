@@ -1,4 +1,4 @@
-/* DOS SETENV. Environment editing is independent of the far-memory bridge. */
+/* Native SETENV. Environment editing is independent of the far-memory bridge. */
 #include "setenv.h"
 char envbuf[ENV_MAX] = {0}, result[ENV_MAX] = {0};
 
@@ -77,7 +77,9 @@ main()
     n = tailread(tail);
     name = tail;
     while (*name == ' ' || *name == '\t') ++name;
-    if (*name == '?' || (*name == '/' && name[1] == '?')) {
+    if (name[0] == '[' && upper(name[1]) == 'H' &&
+        upper(name[2]) == 'E' && upper(name[3]) == 'L' &&
+        upper(name[4]) == 'P' && name[5] == ']' && !name[6]) {
         line("SETENV [NAME[=value]]  (empty value removes NAME)");
         return;
     }

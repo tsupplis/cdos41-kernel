@@ -1,32 +1,38 @@
-        title 'SETENV DOS entry and environment bridge'
-; DOS EXE startup: save PSP, establish DATA and call the DR C small-model main.
-; Environment access uses PSP:002Ch and PATH's 16-byte capacity header.
+        title 'SETENV - native entry and PCTMP environment bridge'
+;*******************************************************************************
+; Native CMD startup and DR C small-model bridge. SS=DS permits near pointers
+; to local arrays. There is no DOS runtime, PSP or INT 21h dependency.
+;
+; Locate the owning PCTmp through the native process-parent chain. Its entry
+; at code offset 3 accepts ms_func selector 0Ah: AX/BX=environment segment,
+; DX=capacity. Unknown selectors return FFFFh. The query itself does not edit
+; memory; ENVWRITE commits the C editor's validated result to that shared block.
+;*******************************************************************************
         public BDOS,ENVREAD,ENVWRITE,TAILREAD
         extrn MAIN:near
         dseg
+        org 100h
 DGROUP group DATA
-psp dw 0
 env_segment dw 0
 env_capacity dw 0
-signature db 'Environ Size ='
-; DR C small model requires SS=DS so pointers to local arrays are near.
+ms_entry rd 0
+        dw 3,0
+owner_name db 'PCTmp'
 stack_area rs 1024
 stack_top rs 0
         cseg
 start:
-        mov bx,ds
-        mov ax,seg psp
-        mov ds,ax
+        mov ax,ds
         mov es,ax
         cli
         mov ss,ax
         mov sp,offset stack_top
         sti
-        mov psp,bx
         cld
         call MAIN
-        mov ax,4c00h
-        int 21h
+        xor cx,cx
+        xor dx,dx
+        int 0e0h
 
 TAILREAD:
         push bp
@@ -34,7 +40,7 @@ TAILREAD:
         push si
         push di
         push es
-        mov es,psp
+        push ds ! pop es
         xor cx,cx
         mov bx,80h
         mov cl,es:[bx]
@@ -60,8 +66,9 @@ TAILREAD:
         pop bp
         ret
 
-; Return capacity (2..1024) or zero for an unsupported environment. Read-only
-; until the portable editor has validated the terminators and prepared an edit.
+; Return capacity, or zero without reading/writing an unsupported environment.
+; Keep the parent's process descriptor layout confined to discovery; the
+; environment location and size come from PCTMP, never a hardcoded offset.
 ENVREAD:
         push bp
         mov bp,sp
@@ -69,27 +76,43 @@ ENVREAD:
         push di
         push es
         mov env_capacity,0
-        mov es,psp
-        mov bx,2ch
-        mov ax,es:[bx]
+        mov cl,156
+        int 0e0h
+        mov dx,64
+find_owner:
+        or bx,bx
+        jz unsupported
+        push dx
+        mov di,bx
+        add di,8
+        mov si,offset owner_name
+        mov cx,5
+        repe cmpsb
+        pop dx
+        je owner_found
+        mov bx,es:1eh[bx]
+        dec dx
+        jnz find_owner
+        jmps unsupported
+owner_found:
+        mov ax,es:10h[bx]
+        mov es,ax
+        mov ax,es:word ptr .50h
+        mov word ptr ms_entry+2,ax
+        mov cl,0ah
+        callf ms_entry
+        cmp ax,0ffffh
+        je unsupported
         or ax,ax
         jz unsupported
-        mov env_segment,ax
-        dec ax
-        mov es,ax
-        xor di,di
-        mov si,offset signature
-        mov cx,14
-        repe cmpsb
-        jne unsupported
-        mov ax,es:[di]
-        cmp ax,2
+        cmp dx,2
         jb unsupported
-        cmp ax,1024
+        cmp dx,1024
         ja unsupported
-        mov env_capacity,ax
-        mov cx,ax
-        mov es,env_segment
+        mov env_segment,ax
+        mov env_capacity,dx
+        mov es,ax
+        mov cx,dx
         xor bx,bx
         mov di,4[bp]
 read_bytes:
@@ -109,6 +132,9 @@ read_done:
         pop bp
         ret
 
+; The portable editor checks the double NUL, names and capacity, then builds
+; a complete replacement in a separate buffer. Only a successful edit reaches
+; this bounded commit; preserve the environment header and surrounding memory.
 ENVWRITE:
         push bp
         mov bp,sp
@@ -120,6 +146,7 @@ ENVWRITE:
         mov es,env_segment
         xor di,di
         mov si,4[bp]
+        cld
         rep movsb
 write_done:
         pop es
@@ -128,21 +155,19 @@ write_done:
         pop bp
         ret
 
-; Existing C output helper interface: function 2 writes DL. Use DOS output.
+; Full native BDOS bridge, preserving the C frame/index registers and ES.
 BDOS:
         push bp
         mov bp,sp
         push si
         push di
         push es
+        mov cx,4[bp]
         mov dx,6[bp]
-        mov ah,2
-        int 21h
+        int 0e0h
         pop es
         pop di
         pop si
         pop bp
         ret
-        sseg
-        rs 1024
         end start

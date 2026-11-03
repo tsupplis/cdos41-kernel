@@ -128,10 +128,10 @@ describe this kernel’s implementation. See Microsoft’s
 | Native FAT search results | BLACK translates entries into CP/M-style records. Bytes 16 and 17 repeat flags: bit 80h indicates DOS representation, bit 40h a directory. Check the byte-0 XFCB guard before interpreting allocation bytes this way |
 | FAT names and F4 | Short names are matched without case. FAT byte 12 case bits do not activate CP/M F4 compatibility in the patched kernel; genuine CP/M F4 remains supported |
 | CP/M-only metadata | User areas, XFCB passwords and configurable directory labels/stamping are CP/M facilities; see SET/SHOW command notes for rejected FAT operations |
-| Native CMD tail case (NEW) | Local header extension: byte 7Fh bit 1 (02h) opts into case preservation. Clear means historical uppercase conversion. CHSET TAIL=KEEP/UPPER edits the flag; filenames/default FCBs still use normal parsing. BATCH/ECHO/PUT/GET/RDR opt in; DOS INT 21h is unchanged |
+| Native CMD tail case (NEW) | Local header extension: byte 7Fh bit 1 (02h) opts into case preservation. Clear means historical uppercase conversion. CHSET TAIL=KEEP/UPPER edits the flag; filenames/default FCBs still use normal parsing. BATCH/ECHO/PUT/GET/RDR/SETENV opt in; DOS INT 21h is unchanged |
 | Program loading | Native CLI (E0h/96h) loads native programs; the shell separately selects CMD/BAT/COM/EXE and uses the PC-MODE loader for DOS programs. DOS EXEC is a third, DOS-caller interface |
 | Write verification | Direct XIOS AL=27h (39 decimal), CH=0/1 sets additional verification, CH=FFh queries; AX=BX returns 0/1. Local extension beyond 4.1; boot-time floppy and per-volume hard-disk verification remain additive |
-| Environment | Per-console DOS environment is 1,024 bytes in this build; DOS PSP exposes its segment. SETENV.EXE edits it; this is not an extra INT E0h function |
+| Environment | Per-console DOS environment is 1,024 bytes in this build; DOS PSP exposes its segment. SETENV.CMD edits it through the native PCTMP environment query; this is not an extra INT E0h function |
 | Console redirection | GET/PUT/RDR support native BDOS console calls and DOS standard input/output, including legacy INT 21h calls; shell `<`, `>` and `|` parsing is not implemented |
 
 ## Graphics modes and entry points
@@ -418,9 +418,9 @@ This is the OEM shell/loader interface in `ms1.a86`, not an INT E0h function
 and not a DOS INT 21h service. The PCTMP entry jump at code offset 3 routes
 to `ms_func`; callers must locate their owning PCTMP and use its matching ABI.
 CL selects the operation; DS:DX is the packet for packet operations. Results
-are returned in AX/BX. Selectors 0–8 are historical; 9 and FFh are local
-extensions beyond CDOS 4.1/4.11. Confirm FFh before calling 9. The range guard
-now checks the number of entries; unknown selectors return FFFFh.
+are returned in AX/BX. Selectors 0–8 are historical; 9, 0Ah and FFh are local
+extensions beyond CDOS 4.1/4.11. Confirm FFh before calling 9. Selector 0Ah
+returns FFFFh when unavailable. The range guard now checks the number of entries; unknown selectors return FFFFh.
 
 | CL | Service | Contract / limit |
 | --- | --- | --- |
@@ -434,6 +434,7 @@ now checks the number of entries; unknown selectors return FFFFh.
 | 7 | Built-in table address | Internal table offset returned in DX; not a standalone application service |
 | 8 | Additional memory | DX=FFFFh queries; other values set additional memory |
 | 9 | DOS stream configuration (NEW) | Version-1 six-word packet: version, flags, input FCB far pointer, output FCB far pointer. Flags 1=input, 2=output, 4=append, 8=echo input, 10h=echo output. AX=0 accepted; DX=0 cancels the caller’s pending request |
+| 0A | Environment query (NEW) | No packet. AX/BX=paragraph-aligned shared environment segment (offset 0), DX=capacity in bytes, currently 1024. Query does not mutate memory; native editors may commit validated changes through the returned pointer. Caller must bound access by capacity and validate double-NUL termination; no locking. Unknown selector returns FFFFh on earlier builds |
 | FF | DOS stream capability (NEW) | AX=5244h, DX=1; historical kernels safely reject this selector |
 
 CDOS uses this ORDER facility. The CCP/M project's E0h/F0h SETDEF packet is

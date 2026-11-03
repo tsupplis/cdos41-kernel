@@ -333,14 +333,14 @@ Aliases:
   CD -> CHDIR.CMD    MD -> MKDIR.CMD    RD -> RMDIR.CMD
   DEL -> ERA.CMD     DELQ -> ERAQ.CMD   RENAME -> REN.EXE
 
-Native commands supplied across the seven disks:
+Native commands supplied across the eight disks:
   ASM80 ASM86 BACK BATCH BRINST CHDIR CHSET COPYMENU DATE DCOMP DCOPY DDT86
   DIR DREDIX DSKMAINT DSP ED EDITMENU ERA ERAQ FM FUNCTION
   GENCCPM GENCMD GENLDR GET HDMAINT HELP HEXCOM INITDIR MKDIR N PIP
-  PRINT PRINTMGR PUT RDR REN REST RMDIR SDIR SET SETPORT SETUP SHOW
+  PRINT PRINTMGR PUT RDR REN REST RMDIR SDIR SET SETENV SETPORT SETUP SHOW
   SPL STOP SUBMIT SYSDISK SYSTAT WINDOW WMENU
 
-DOS executables: COPY.EXE DATE.EXE ERASE.EXE PATH.EXE REN.EXE SETENV.EXE TIME.EXE.
+DOS executables: COPY.EXE DATE.EXE ERASE.EXE PATH.EXE REN.EXE TIME.EXE.
 LOADCCPM.COM loads Concurrent from DOS; REDOS.COM installs PC DOS system files on a prepared hard disk.
 Use an explicit extension to distinguish DATE.CMD from DATE.EXE.
 
@@ -1788,17 +1788,19 @@ independent. A bare filespec is not a query: use SDIR or SHOW to inspect.
 
 ///1SETENV
   SETENV [NAME[=value]]
+  SETENV [HELP]
 
-  DOS SETENV.EXE manages the current console's DOS environment. With no
+  Native SETENV.CMD manages the current console's shared environment. With no
   arguments it lists all variables; NAME displays one. NAME=value adds or
   replaces a variable; NAME= removes it. Names are case-insensitive and new
-  names are stored uppercase. Values preserve case and spaces.
+  names are always stored uppercase. TAIL=KEEP preserves value case and spaces.
 
   The environment has 1024 bytes including names, values and terminators.
   An oversized change is rejected without changing the existing environment.
-  Changes persist for subsequent DOS programs on this console until reboot.
+  Changes persist for native and DOS programs on this console until reboot.
   PATH edits the PATH variable in this same block. SET manages file/disk
-  attributes and is unrelated. SETENV requires Concurrent DOS 4.1.
+  attributes and is unrelated. SETENV requires this rebuild's PCTMP environment
+  query; earlier kernels are rejected without changing memory.
 
 ///1SETPORT
 SETPORT
@@ -2274,8 +2276,8 @@ Runs native and DOS commands. %0 names the BAT file and %1 through %9
 substitute arguments. %% produces a literal percent sign.
 Bare BAT invocation chains to the replacement script; it does not return.
 
-BATCH supports ECHO, SHIFT, :label, GOTO and EXIT. IF, FOR, CALL, environment
-expansion and quoted argument grouping remain outside this implementation.
+BATCH supports ECHO, SHIFT, :label, GOTO, EXIT and %NAME% expansion.
+IF, FOR, CALL and quoted argument grouping remain unimplemented.
 Only @ECHO is recognized: @DIR and arbitrary @command are unsupported.
 
 ///3ECHO
@@ -2306,6 +2308,17 @@ Labels occupy their own lines, are case-insensitive and are not echoed.
 GOTO searches from the start of the current script and resumes after the
 matching label. It supports forward and backward jumps. A missing label
 reports an error and stops this BAT file. Label text is one word.
+
+///3VARIABLES
+%NAME% substitutes the current console environment value before execution
+and command echo. Names are case-insensitive; values retain their case.
+Undefined names become empty. SETENV changes are visible on the next line.
+%0 through %9 substitute arguments, %% emits a literal percent sign, and
+%10 means %1 followed by 0. Inserted text is never expanded a second time.
+%%NAME%% emits literal %NAME%. An unmatched percent sign remains literal.
+Quotes do not prevent expansion or group BATCH arguments. GOTO searches
+raw labels. Commands above 127 characters are reported and skipped.
+This is native BATCH expansion via PCTMP, not interactive substitution.
 
 ///3EXIT
 EXIT

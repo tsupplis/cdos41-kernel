@@ -1,40 +1,37 @@
 # SETENV
 
-New DOS EXE for Concurrent DOS, built with DR C and RASM86. Its Makefile
-uses the existing compiler and DOS LINK86 wrappers. The small-model compiler
-initialization library is staged from the installed toolchain, not another
-project; DRC_LIBDIR can override that location. Forced rebuilds can restage
-the read-only library, and reported compiler errors fail the build even when
-the compiler wrapper returns success.
+Native CMD for Concurrent DOS, built with DR C, RASM86 and the same native
+LINKCMD wrapper as the other C commands. TAIL=KEEP preserves the command tail.
+There is no DOS runtime, PSP or INT 21h dependency.
 
-```
+```text
 SETENV
 SETENV NAME
 SETENV NAME=value
 SETENV NAME=
-SETENV /?
+SETENV [HELP]
 ```
 
 List all variables, display one, add/replace, or delete respectively. Names
-are case-insensitive and stored uppercase; values retain case and spaces.
-No percent-variable expansion or quoting language is added. The command tail
-limits one assignment to 127 characters. Changes affect the calling console's
-DOS environment and persist until reboot. They are not saved to disk.
+are case-insensitive and always stored uppercase when added or replaced;
+values retain case and spaces. For example, `SETENV Temp=Mixed Case` stores
+`TEMP=Mixed Case`. Empty values remove variables. The command tail limits
+one assignment to 127 characters. SETENV itself adds no quoting or expansion
+language; BATCH performs its own substitutions before launching a command.
 
-The kernel reserves 1024 bytes per PCTMP, 896 more than the original 128.
-COMSPEC, PATH and OS defaults remain unchanged. PATH.EXE and DOS programs use
-this same environment through PSP:002Ch. Native CMD command tails are
-uppercased by the shell, so this command is
-an EXE to retain mixed-case values. Its startup saves the DOS PSP and reads
-the environment segment at PSP:002Ch. It verifies the complete PATH-style
-`Environ Size =` header before accessing the block, accepting capacities from
-2 to 1024 bytes. It works with the original 128-byte block within that limit.
+The owning PCTMP is found through the native process-parent chain. Its private
+ms_func selector 0Ah returns the shared environment segment and capacity.
+The query does not mutate memory; SETENV uses that pointer for its validated
+commit. Unsupported PCTMP versions return an error without a write. The build
+reserves 1024 bytes per console; PATH.EXE and DOS programs see the same block
+through PSP:002Ch. Changes persist until reboot and are not saved to disk.
 
-Edits are assembled in a separate buffer. Invalid blocks and insufficient
-space cause no writes. This is a per-console shared environment, not a private
-copy for each program. Concurrent writers on the same console are not locked.
+Edits are built in a separate buffer. Invalid blocks and insufficient space
+cause no writes. This is a shared per-console environment, not a private copy
+for each program. Concurrent writers on one console are not locked.
 
-`make check` builds the DOS command and tests addition, case-insensitive
-replacement/deletion, exact-fit capacity, overflow and malformed blocks with
-the host compiler. Root `make check-setenv` runs the emulator test for the PSP bridge,
-mixed-case persistence, deletion, more than 128 bytes and DOS PATH interoperability.
+`make check` validates the CMD header, TAIL=KEEP and the portable editor's
+addition, replacement/deletion, uppercase names, exact-fit capacity, overflow
+and malformed blocks. Root `make check-setenv` tests native discovery,
+mixed-case values, uppercase names, deletion, more than 128 bytes and DOS PATH
+interoperability on disposable emulator disks.

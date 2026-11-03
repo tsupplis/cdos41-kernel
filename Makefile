@@ -43,6 +43,7 @@ check: all
 	python3 tools/dos_handles_check.py
 	python3 tools/dos_redirection_config_check.py
 	python3 tools/cmdtail_check.py
+	python3 tools/batch_expand_unit_check.py
 	python3 tools/fat_recovery_check.py
 	python3 tools/pctmp_context_check.py
 	python3 tools/pctmp_critical_check.py
@@ -233,3 +234,8 @@ check-cmdtail: all
 .PHONY: check-batch-exit
 check-batch-exit: all
 	python3 commands/batch/tests/exit_check.py
+
+.PHONY: check-batch-expand
+check-batch-expand: all
+	python3 tools/batch_expand_unit_check.py
+	python3 tools/batch_expand_check.py

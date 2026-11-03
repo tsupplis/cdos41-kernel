@@ -717,6 +717,8 @@ IF BATCH
 ; command. sublin exits at EOF; its length includes the line terminator.
 	    push ds ! pop es
 	    call sublin
+	    call batch_expand
+	    jc noclearline
 	    cmp read_blen,1 ! jbe noclearline
 	    call batch_prepare
 	    mov si,offset clicb_cmd
@@ -2176,8 +2178,8 @@ EJECT
 
 ;------------------------------------------------------------------------------
 ; movchar gets a character from the submit buffer and puts it into the command
-; line. Movechar automatically handles % symbols by substituting the parameter
-; for the %n where n represents the number of the parm in the command line.
+; line. Percent forms remain raw here: expand.lib performs one bounded
+; substitution pass after the complete line has been read.
 ;
 
 movchar:
@@ -2204,27 +2206,7 @@ bufok:
 		mov dl,CR				;put a carriage return in dl
 
 notend:
-	    cmp goto_scan,TRUE ! je notpct
-	    cmp dl,'%' ! jnz notpct			;is it a percent sign?
-		inc si					;yes - point si to parm number
-		cmp si,offset subbuf+128 ! jb bufok1
-							;if si is past end of buffer
-		    add subsavelow,1			;increment saved rrn's
-		    adc subsavehigh,0			;
-		    push bx
-		    call getbuf				;continue on.
-		    pop bx
-
-bufok1:
-		mov dl,byte ptr [si]			;is parm number another %
-		cmp dl,'%' ! jz notpct			;yes - continue
-		    push si ! push bx
-		    call subparm			;corresponding parameter
-		    pop bx ! pop si			;restore buffer pointer
-		    dec di				;do not put blank in com line
-		    dec ah				;decrement pointers
-		    ret					;return
-
+; Substitution is a bounded, single pass over the complete line in expand.lib.
 notpct:
 	cmp ah,081h ! jae notpct1
 	    mov byte ptr [di],dl				;move character into com line
@@ -2322,47 +2304,6 @@ reedok:
 	mov si,offset subbuf		;reset si to beginning of buffer
 	pop ax
 	ret
-
-
-EJECT
-
-;------------------------------------------------------------------------------
-; subparm is called during BATCH processing when a % is encountered. it is 
-; with the next character in dl. subparm then reduces that character to a 
-; number and inserts the corresponding parameter in the buffer subprm into
-; the command line.	
-;
-
-subparm:
-	sub dl,30h			;dl now a number
-	mov si,offset subparms		;si -> subparms
-
-sub2:
-	cmp dl,0 ! jz fondit		;if dl = 0 then  si is pointing
-					;to proper parm, else inc si
-	    mov al,byte ptr [si]	;until another space is found,
-	    or al,al ! jz subdon	; exhausted arguments stay empty
-
-	    cmp al,' ' ! jz nxtprm	;dec di and try again
-	    cmp al,0 ! jnz goagn
-nxtprm:
-		dec dl
-goagn:
-	    inc si
-	    jmp sub2			;di not zero yet
-
-fondit:
-	mov dl,byte ptr [si]		;now move parm into command line
-	cmp dl,' ' ! jz subdon		;is dl a blank?
-	cmp dl,0 ! jz subdon		;is dl a zero?
-	    mov byte ptr [di],dl	;else move character into line
-	    inc ah			;inc si, inc di and do it again
-	    inc si ! inc di
-	    jmp fondit
-
-subdon:
-	mov dl,' '			;when done with parm insert a
-	ret				;blank at the end
 
 
 EJECT

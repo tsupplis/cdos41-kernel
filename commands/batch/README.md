@@ -9,7 +9,8 @@ It implements DIR, CLS, USER and the other supported TMP built-ins.
 USER omits the redundant CP/M-media note and PAUSE uses
 `Press any key to continue...`. DIR accepts native slash options and CP/M
 brackets, including a final omitted ]. BATCH is not a full COMMAND.COM:
-IF/FOR/CALL and environment expansion remain unimplemented.
+IF/FOR/CALL remain unimplemented. BATCH expands `%NAME%` from the current
+console environment before command dispatch.
 
 `make check-batch-live` checks messages, CLS/DEL and an unrelated sentinel
 on disposable CP/M images. `make check-dir-options` also executes a BAT
@@ -51,3 +52,11 @@ optional decimal byte, writes it through BDOS 108 and terminates through BDOS
 0. Normal EOF explicitly returns 0 instead of leaking a preceding child's
 status. This does not add a resident-shell EXIT or change the kernel APIs.
 Run root make check-batch-exit for real parent/child status verification.
+
+Expansion is implemented in expand.lib. It takes one bounded snapshot through
+PCTMP ms_func 0Ah, then handles positional arguments, literal percent signs and
+named variables in a single pass. Overlong commands are skipped. Language
+state and expansion buffers are allocated in tmpdir.lib before dataend, after
+the native basepage and existing TMP data; includes must not allocate state
+before tmpdir.lib resets the data origin. Run make check-batch-expand for live
+CP/M/FAT scripts and per-console environment isolation.

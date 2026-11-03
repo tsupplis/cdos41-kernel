@@ -1095,7 +1095,56 @@ script-disappeared paths explicitly return 0 instead of leaking the previous
 child status. Kernel-fatal and Ctrl-C termination paths are unchanged.
 
 The PCTMP assembly condition excludes EXIT entirely: its rebuilt binary is
-unchanged. There is no new kernel API or DOS return-code conversion. A native
-parent fixture verifies explicit/bare EXIT, EOF after a child returns 77,
-invalid syntax and chain replacement through real BDOS 108, including repeat
-reads. Documentation is in batch.md and HELP LANGUAGES BATCH EXIT.
+unchanged by EXIT. There is no new kernel API or DOS return-code conversion.
+The shell launches the real BATCH and child programs; a native observer
+verifies its parent PCTMP's BDOS 108 status word for explicit/bare EXIT, EOF
+after a child returns 77, invalid syntax and chain replacement. Documentation
+is in batch.md and HELP LANGUAGES BATCH EXIT.
+
+### Native environment query and SETENV.CMD
+
+PCTMP's private `ms_func` selector 0Ah returns the console's shared environment
+segment in AX/BX and capacity in DX. The query has no mutation or packet and
+adds no BDOS/INT 21h function. Existing selectors retain their contracts;
+older builds reject the new selector with FFFFh. Native readers and editors
+must bound accesses and validate termination. Editors may write the shared
+block after validating a separate replacement; there is no writer lock.
+
+SETENV is now a native DR C/RASM86 CMD with TAIL=KEEP. It locates its owning
+PCTMP through the native parent chain, queries the block and uses BDOS output
+and termination. The portable editor and its transactional capacity checks
+are retained. Added/replaced variable names are uppercase; lookup/deletion
+ignore name case and values preserve case/spaces. PATH.EXE and DOS children
+continue to see the same 1024-byte per-console environment. The distribution
+uses SETENV.CMD in place of SETENV.EXE. Host editor tests and the native PCE
+interoperability test cover names, values, deletion, capacity and DOS PATH.
+
+### BATCH native environment substitution
+
+PCTMP ms_func selector 0Ah is a local extension beyond stock 4.1/4.11. It
+returns AX/BX=environment segment at offset zero and DX=capacity. It is a
+read-only discovery operation over the existing per-console environment;
+it adds no BDOS or INT 21h function, allocation or extra environment store.
+Existing selector numbers and FFh stream capability results are unchanged.
+Unknown selectors on older PCTMP return FFFFh. See api.md for the contract.
+
+BATCH expands %NAME% from a fresh bounded snapshot before command dispatch
+and command echo. Names match ASCII case-insensitively; missing names become
+empty text. Values and %0..%9 arguments retain case and are not recursively
+expanded. %% emits one percent; unmatched percent signs remain literal.
+Quotes remain ordinary text. GOTO scans raw labels. IF is not added.
+
+Raw/expanded commands exceeding 127 characters are reported and skipped,
+never executed truncated. An unsupported or malformed environment similarly
+skips named-expansion commands; positional and literal-percent forms work
+without an environment. The original reader now supplies raw complete lines
+so all percent forms share one bounded expansion pass, including across
+128-byte BAT record boundaries.
+
+The language include previously allocated its small state block before
+tmpdir.lib reset the data origin. Enlarging that block with expansion buffers
+would overlap TMP data. State and buffers now reside together before dataend
+with the original data declarations, outside the native basepage.
+Resident PCTMP has no BATCH state or interactive variable substitution.
+Tests cover CP/M/FAT scripts, case, undefined/nonrecursive values, refresh,
+CMD child tails, positional/SHIFT behavior, bounds and console isolation.
