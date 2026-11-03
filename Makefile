@@ -295,3 +295,11 @@ check-hidden-files: all
 	python3 tools/fat_delete_unit_check.py
 	python3 tools/hidden_files_check.py delete
 	python3 tools/hidden_files_check.py list
+
+# Raw floppy maintenance checks; live tests use disposable images only.
+.PHONY: check-disk check-disk-live
+check-disk:
+	$(MAKE) -C commands/disk check
+
+check-disk-live: all
+	python3 tools/disk_live_check.py
