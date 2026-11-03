@@ -2,7 +2,7 @@
 
 This describes the BATCH.CMD shipped by this CDOS rebuild. It runs native
 CMD programs, DOS COM/EXE programs and shell commands from a `.BAT` file.
-It includes the local ECHO, SHIFT and labels/GOTO extensions. It is distinct
+It includes the local ECHO, SHIFT, labels/GOTO and EXIT extensions. It is distinct
 from SUBMIT's `.SUB` language and is not a complete COMMAND.COM replacement.
 
 ## Starting and ending a script
@@ -23,10 +23,11 @@ is ignored. FAT files can also end at their recorded file length. Empty
 lines do not produce extra prompts. There is no continuation-line syntax;
 keep each expanded command within 127 characters.
 
-Reaching EOF ends BATCH. Invoking another BAT file **chains** to it: the
+Reaching EOF ends BATCH with status 0, irrespective of the last command's
+status. Invoking another BAT file **chains** to it: the
 replacement receives its own arguments and execution does not return to the
 calling script. CALL and a nested script-return stack are not implemented.
-There is no EXIT command or implicit `:EOF` label in this language.
+EXIT ends the BATCH process explicitly; there is no implicit `:EOF` label.
 
 ## Arguments and substitution
 
@@ -112,6 +113,25 @@ lines without parameter substitution and does not execute skipped commands.
 A missing label prints `Label not found; BATCH stopped.` and ends BATCH.
 `GOTO :EOF` has no special meaning: it requires an actual `:EOF` label.
 
+## EXIT and return status
+
+| Syntax | Effect |
+| --- | --- |
+| `EXIT` | Stop BATCH immediately with status 0 |
+| `EXIT n` | Stop BATCH immediately with decimal status 0–255 |
+| Normal EOF / Ctrl-Z | Stop BATCH with status 0, even after a nonzero child result |
+
+EXIT publishes the status through native BDOS function 108 before terminating
+with function 0. The native parent can read it through function 108; this does
+not change DOS AH=4Dh or PCTMP's private shell status. EXIT is BATCH-only and
+does not terminate the resident PCTMP. It ends the whole BATCH process; there
+is no CALL stack to return through.
+
+Signs, hexadecimal notation, values above 255 and extra operands are rejected.
+Invalid EXIT syntax reports an error and continues reading the script; it
+does not terminate or change the return status. Use `EXIT 0` for an explicit
+successful stop. There is no implicit “return the last command's status”.
+
 ## Comments
 
 | Form | Effect |
@@ -143,7 +163,7 @@ can be echoed when echo is ON; label lines remain silent.
 | `STOP name window` | Stop the named process on the specified console/window |
 | `SYS [text]` | Accepted and ignored; does not install a system disk |
 
-ECHO, SHIFT, GOTO, labels and comments are described above. The existing
+ECHO, SHIFT, GOTO, EXIT, labels and comments are described above. The existing
 setting commands retain their native syntax; for example `SUSPEND=ON`.
 Detailed shell options are in [ccp.md](ccp.md) and HELP.
 
@@ -203,7 +223,8 @@ its byte-length semantics.
 | `%NAME%` environment expansion | Not implemented in BATCH or PCTMP |
 | Quoted argument grouping and general escaping | Not implemented by BATCH; individual programs can parse their own arguments |
 | General `@command` suppression | Intentionally restricted to @ECHO |
-| PROMPT / EXIT | Not implemented as shell commands |
+| PROMPT | Not implemented |
+| Interactive EXIT | Not implemented; EXIT is deliberately BATCH-only |
 | DOS redirection operators and pipelines | Not implemented; use GET/PUT/RDR for external programs |
 
 An ordinary command error is not a structured language exception. There is
@@ -211,5 +232,7 @@ no IF-based recovery or automatic success/failure branching. Missing GOTO
 labels and fatal script-read failures stop BATCH.
 
 Build/source notes are in [commands/batch/README.md](commands/batch/README.md).
+`make check-batch-exit` tests explicit/default status, invalid operands and
+chaining against a real parent's BDOS 108.
 `make check-batch-language` tests ECHO controls, SHIFT, forward/backward GOTO,
 record boundaries, FAT/CP/M scripts and standalone ECHO redirection.

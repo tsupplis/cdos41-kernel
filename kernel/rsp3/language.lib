@@ -1,6 +1,6 @@
 ;*******************************************************************************
 ; Shell text output and the deliberately small BATCH language.
-; PCTMP: ECHO text only. BATCH: ECHO[=ON|OFF], @ECHO, SHIFT, :label/GOTO.
+; PCTMP: ECHO text only. BATCH: ECHO[=ON|OFF], @ECHO, SHIFT, :label/GOTO, EXIT.
 ; No general @ prefix, variable expansion, IF, FOR or CALL is introduced.
 ; This include is identical in the resident and standalone source trees.
 ;*******************************************************************************
@@ -73,8 +73,13 @@ IF BATCH
 lang_try_goto:
         mov di,offset lang_goto_word
         call lang_word
-        jnc lang_unhandled
+        jnc lang_try_exit
         jmp lang_goto
+lang_try_exit:
+        mov di,offset lang_exit_word
+        call lang_word
+        jnc lang_unhandled
+        jmp lang_exit
 lang_unhandled:
 ENDIF
         clc
@@ -168,6 +173,60 @@ batch_remove_at:
         dec read_blen
 batch_prepare_done:
         ret
+
+; EXIT is a BATCH command, never a resident-shell termination request.
+; Accept only a complete unsigned decimal byte; reject signs, overflow,
+; hex notation and extra operands without terminating or setting status.
+lang_exit:
+        call lang_spaces
+        xor ax,ax
+        cmp byte ptr [si],0
+        je batch_exit_status
+exit_digit:
+        mov dl,[si]
+        or dl,dl
+        jz exit_number_end
+        cmp dl,' '
+        je exit_number_end
+        cmp dl,TAB
+        je exit_number_end
+        cmp dl,'0'
+        jb exit_bad_status
+        cmp dl,'9'
+        ja exit_bad_status
+        sub dl,'0'
+        xor dh,dh
+        mov bx,ax
+        shl ax,1
+        shl bx,1
+        shl bx,1
+        shl bx,1
+        add ax,bx
+        add ax,dx
+        cmp ax,255
+        ja exit_bad_status
+        inc si
+        jmps exit_digit
+exit_number_end:
+        call lang_spaces
+        cmp byte ptr [si],0
+        je batch_exit_status
+exit_bad_status:
+        mov dx,offset lang_exit_usage
+        call print_string
+        jmp lang_echo_newline
+; Every ordinary EOF explicitly clears a previous child status. Function
+; 108 publishes AX to the native return-code mechanism before Function 0
+; terminates this CMD; it is independent of DOS AH=4Dh and PCTMP selector 5.
+batch_exit_zero:
+        xor ax,ax
+batch_exit_status:
+        mov dx,ax
+        mov cx,108
+        call ccpm
+        xor cx,cx
+        xor dx,dx
+        call ccpm
 
 lang_shift:
         call lang_spaces
@@ -263,9 +322,7 @@ goto_missing:
         mov dx,offset lang_no_label
         call print_string
         mov goto_scan,FALSE
-        xor cx,cx
-        xor dx,dx
-        call ccpm
+        jmp batch_exit_zero
 lang_syntax:
         mov dx,offset lang_syntax_message
         call print_string
@@ -278,6 +335,8 @@ lang_on_word db 'ON',0
 lang_off_word db 'OFF',0
 lang_shift_word db 'SHIFT',0
 lang_goto_word db 'GOTO',0
+lang_exit_word db 'EXIT',0
+lang_exit_usage db 'EXIT expects a decimal status from 0 to 255.$'
 lang_echo_is_on db 'ECHO=ON$'
 lang_echo_is_off db 'ECHO=OFF$'
 lang_syntax_message db 'Invalid BATCH command syntax.$'

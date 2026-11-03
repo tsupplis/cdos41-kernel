@@ -11,6 +11,7 @@ to BATCH.CMD; its separate TMP source copies implement the same rewrites.
 | `A:` ... `P:` | TMP | Select the default drive. |
 | `USER [0..15]` | TMP | Display or change the CP/M user number. |
 | `DIR [filespec]` | TMP | Built-in directory listing; `/L` long, `/W` wide, `/P` pause, `/S` system files only. Also accepts `[L]`, `[W]`, `[P]`, `[S]` and combined brackets; final `]` is optional. |
+| `EXIT [0..255]` | BATCH only | End BATCH, publishing the explicit status or 0 through BDOS 108. Normal EOF also returns 0. |
 | `ECHO [text]` | TMP | Print text; echo-state controls belong to BATCH only. |
 | `CLS` | TMP, local addition | Clear the screen and home the cursor. |
 | `ORDER [CMD,COM,EXE,BAT]` | TMP | Display or set executable-extension search order. |

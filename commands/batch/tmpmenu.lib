@@ -2128,9 +2128,7 @@ subagn:
 		mov goto_eof,TRUE
 		ret
 sub_exit:
-		xor cx,cx			;program. else continue
-		mov dx,cx
-		call ccpm
+		jmp batch_exit_zero		; normal EOF returns zero
 
 contsub:
 	    cmp dl,CR ! jnz ntcr		;is character a carriage ret?
@@ -2278,9 +2276,7 @@ getbuf:
 	    call switchhd		;restore sub directory for BDOS
 	    mov dx,offset subnotfound		;if so then output message
 	    call print_ds_string			;
-	    xor cx,cx				;and terminate
-	    xor dx,dx
-	    call ccpm
+	    jmp batch_exit_zero		; implicit BATCH termination
 
 fndsub:
 	push dx				;save default user number

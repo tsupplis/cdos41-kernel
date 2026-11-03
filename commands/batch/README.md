@@ -28,7 +28,7 @@ Ctrl-Z/end-of-file transition do not print extra drive prompts.
 ## Language reference
 
 [batch.md](../../batch.md) documents invocation, arguments, ECHO controls,
-SHIFT, labels/GOTO, comments, built-ins, aliases, command dispatch, case
+SHIFT, labels/GOTO, EXIT/status, comments, built-ins, aliases, command dispatch, case
 handling, redirection and unsupported syntax. HELP LANGUAGES BATCH provides
 the installed reference.
 
@@ -45,3 +45,9 @@ without changing the saved script identity. Echo state belongs to the BATCH
 process and remains set when chaining to another BAT file.
 
 Run root make check-batch-language for live regression coverage.
+
+EXIT and normal EOF share the native return-code terminator. EXIT accepts an
+optional decimal byte, writes it through BDOS 108 and terminates through BDOS
+0. Normal EOF explicitly returns 0 instead of leaking a preceding child's
+status. This does not add a resident-shell EXIT or change the kernel APIs.
+Run root make check-batch-exit for real parent/child status verification.

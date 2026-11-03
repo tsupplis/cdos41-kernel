@@ -228,3 +228,8 @@ check-batch-language: all
 check-cmdtail: all
 	python3 tools/cmdtail_check.py
 	python3 tools/cmdtail_live_check.py
+
+# Native BATCH return status; parent observes actual BDOS 108 results.
+.PHONY: check-batch-exit
+check-batch-exit: all
+	python3 commands/batch/tests/exit_check.py

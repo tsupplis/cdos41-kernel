@@ -185,7 +185,7 @@ replaced with supplied arguments. BAT files can chain to another BAT file.
 BATCH shares DIR and other TMP built-ins, including CLS, USER, PRINTER,
 PAUSE and REM, and the CD/MD/RD, DEL/DELQ and RENAME aliases. DEL invokes
 native ERA.CMD. Ordinary program lines use the executable search order.
-BATCH supports ECHO, ECHO=ON/OFF, @ECHO, SHIFT and labels/GOTO.
+BATCH supports ECHO, ECHO=ON/OFF, @ECHO, SHIFT, labels/GOTO and EXIT.
 See HELP LANGUAGES BATCH for syntax. IF, FOR and CALL remain unsupported.
 
 Native command/substitution files for SUBMIT use the separate .SUB format.
@@ -2274,7 +2274,7 @@ Runs native and DOS commands. %0 names the BAT file and %1 through %9
 substitute arguments. %% produces a literal percent sign.
 Bare BAT invocation chains to the replacement script; it does not return.
 
-BATCH supports ECHO, SHIFT, :label and GOTO. IF, FOR, CALL, environment
+BATCH supports ECHO, SHIFT, :label, GOTO and EXIT. IF, FOR, CALL, environment
 expansion and quoted argument grouping remain outside this implementation.
 Only @ECHO is recognized: @DIR and arbitrary @command are unsupported.
 
@@ -2306,6 +2306,18 @@ Labels occupy their own lines, are case-insensitive and are not echoed.
 GOTO searches from the start of the current script and resumes after the
 matching label. It supports forward and backward jumps. A missing label
 reports an error and stops this BAT file. Label text is one word.
+
+///3EXIT
+EXIT
+EXIT n
+
+Ends BATCH immediately. The optional status is decimal 0-255; omitted means
+0. Normal EOF or Ctrl-Z also returns 0, regardless of the last command's
+status. The native parent reads the result through BDOS function 108.
+EXIT does not terminate the resident PCTMP and is not an interactive command.
+
+Signs, hex, values above 255 and extra operands report an error without
+terminating. There is no automatic return-last-status or CALL return stack.
 
 ///1CHKCPMFS
 CHKCPMFS

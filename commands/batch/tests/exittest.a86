@@ -1,0 +1,83 @@
+        title 'BATCH EXIT - native parent return-code probe'
+; Runs each generated BATCH case and verifies the parent's BDOS 108 value.
+; Reacquire the console as required by native P_CLI. A nested child may
+; release it before BATCH ends: detach/retry until the parent status arrives.
+; No kernel is mocked.
+        cseg
+start:
+        cli
+        mov ax,ds
+        mov ss,ax
+        mov sp,offset stack_top
+        sti
+        mov dx,250
+        mov cl,145
+        int 0e0h
+next_case:
+        mov si,current_case
+        cmp word ptr [si],0
+        je all_passed
+        mov dx,7777h
+        mov cl,108
+        int 0e0h
+        mov si,current_case
+        mov dx,[si]
+        mov cl,150
+        int 0e0h
+        or cx,cx
+        jnz failed
+        mov waits,200
+wait_for_batch:
+        mov cl,146
+        int 0e0h
+        mov dx,0ffffh
+        mov cl,108
+        int 0e0h
+        cmp ax,7777h
+        jne verify_status
+        dec waits
+        jz failed
+        mov cl,147
+        int 0e0h
+        mov dx,1
+        mov cl,141
+        int 0e0h
+        jmps wait_for_batch
+verify_status:
+        mov observed,ax
+        mov si,current_case
+        cmp ax,2[si]
+        jne failed
+        mov dx,0ffffh
+        mov cl,108
+        int 0e0h
+        cmp ax,observed
+        jne failed
+        add current_case,4
+        inc case_number
+        jmp next_case
+all_passed:
+        mov dx,offset passed_message
+        jmps report
+failed:
+        mov cl,146
+        int 0e0h
+        mov dx,offset failed_message
+report:
+        mov cl,9
+        int 0e0h
+        xor cx,cx
+        xor dx,dx
+        int 0e0h
+        dseg
+        org 100h
+current_case dw offset cases
+waits dw 0
+observed dw 0
+case_number dw 0
+passed_message db 'BATCH EXIT PASS',13,10,'$'
+failed_message db 'BATCH EXIT FAIL',13,10,'$'
+include excases.lib
+stack_area rs 512
+stack_top rs 0
+        end start

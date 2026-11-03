@@ -148,8 +148,9 @@ Stock DOS Plus 1.2 versus this CDOS rebuild.
 | Command processor | COMMAND.COM | PCTMP and BATCH |
 | Startup scripts | AUTOEXEC.BAT | Per-console startup scripts |
 | Batch arguments | `%0`–`%9`, SHIFT | `%0`–`%9`, SHIFT |
-| Batch control and messages | IF, GOTO, FOR, ECHO | ECHO, labels/GOTO and SHIFT implemented; IF/FOR/CALL deferred |
+| Batch control and messages | IF, GOTO, FOR, ECHO | ECHO, labels/GOTO, SHIFT and EXIT implemented; IF/FOR/CALL deferred |
 | Echo control | ECHO ON/OFF | BATCH-only ECHO=ON/OFF and @ECHO; interactive ECHO prints text |
+| EXIT | COMMAND.COM command | BATCH-only; optional 0–255 status, otherwise 0 |
 | Environment variables | SET and `%NAME%` expansion | SETENV; no shell `%NAME%` expansion |
 | Search-path commands | PATH built-in | PATH.EXE for the DOS environment; SYSDISK and ORDER for native shell searching |
 | Input/output redirection and append | DOS pattern: `<`, `>`, `>>` | CP/M-Plus pattern: GET/PUT/RDR, extended to both native and DOS programs |
@@ -162,7 +163,7 @@ The internal-interface count uses the nine services identified in [api.md](api.m
 | DOS Plus commands without a matching CDOS command | CDOS alternative or gap |
 | --- | --- |
 | IF, FOR | Missing from BATCH |
-| PROMPT, EXIT, BREAK, VERIFY, SLICE | No corresponding shell commands |
+| PROMPT, BREAK, VERIFY, SLICE | No corresponding shell commands |
 | ALARM, GRAFTABL, DEVICE | No direct command equivalents |
 | CHKDSK | CHKCPMFS checks CP/M allocation; no equivalent FAT checker |
 | MODE | SETUP/SETPORT cover some configuration functions; no complete MODE equivalent |
@@ -175,7 +176,7 @@ See the [CDOS shell commands](ccp.md), [national setup](commands/n/README.md),
 Historical background: [DOS Plus](https://www.seasip.info/Cpm/dosplus.html)
 and its [EXE loader defect](https://www.seasip.info/Cpm/dosplus_exe.html).
 
-BATCH adds labels/GOTO, SHIFT and script-local `ECHO=ON/OFF`; `@ECHO`
+BATCH adds labels/GOTO, SHIFT, `EXIT [status]` and script-local `ECHO=ON/OFF`; `@ECHO`
 suppresses only its own line. Interactive ECHO and ECHO.CMD simply print text.
 This restriction is intentional; see the [BATCH language reference](batch.md).
 
@@ -353,6 +354,7 @@ system and the live regression checks.
 | `make` | Commands, kernel/RSPs, boot sources and eight images |
 | `make check` | Command headers, DATE parser, system layout, cursor, boot track and every packaged file/size |
 | `make check-tree` | TREE statistics and private FAT directory traversal |
+| `make check-batch-exit` | Explicit/default BATCH status through native BDOS 108 |
 | `make check-batch-language` | ECHO forms, script control, SHIFT/GOTO and DOS redirection |
 | `make check-graphics` | Assembled graphics guards and adapter gates; PCE VGA/EGA/CGA pixels, palettes, graphics text/TTY and restoration |
 | `make check-dos-switch` | DOS 37h get/set, native delimiter separation, EXEC sharing and launch persistence |

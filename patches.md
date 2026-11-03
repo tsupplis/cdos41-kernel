@@ -1084,3 +1084,18 @@ label recognition remains case-insensitive; substitution and SHIFT retain the
 argument bytes. Live BATCH tests use mixed-case arguments from both FAT and
 CP/M scripts. The README marks the shipped KEEP binaries, and batch.md is the
 complete implemented-language reference included in the release archive.
+
+### BATCH EXIT and default return status
+
+EXIT is a BATCH-only command. EXIT without an operand returns 0; an explicit
+unsigned decimal 0-255 is written through existing native BDOS 108 before
+BDOS 0 terminates the process. Invalid values/signs/hex/extra operands report
+an error without terminating. Normal script EOF/Ctrl-Z, missing-label and
+script-disappeared paths explicitly return 0 instead of leaking the previous
+child status. Kernel-fatal and Ctrl-C termination paths are unchanged.
+
+The PCTMP assembly condition excludes EXIT entirely: its rebuilt binary is
+unchanged. There is no new kernel API or DOS return-code conversion. A native
+parent fixture verifies explicit/bare EXIT, EOF after a child returns 77,
+invalid syntax and chain replacement through real BDOS 108, including repeat
+reads. Documentation is in batch.md and HELP LANGUAGES BATCH EXIT.
