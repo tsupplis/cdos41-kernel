@@ -52,6 +52,7 @@ The current version includes:
 - Extra built-in CLS and PATH commands.
 - DEL mapped to native ERA.CMD in both the shell and BATCH to keep CP/M as the main flavour.
 - Case-insensitive FAT short names, without interpreting modern case flags as CP/M compatibility attributes.
+- FAT volume labels remain metadata during raw CP/M directory scans, regardless of their root-directory position.
 - Support for DOS Environment Variable Setting (SETENV)
 - Full Batch Language Support with Extensions (In Progress)
 
@@ -147,7 +148,7 @@ Stock DOS Plus 1.2 versus this CDOS rebuild.
 | Command processor | COMMAND.COM | PCTMP and BATCH |
 | Startup scripts | AUTOEXEC.BAT | Per-console startup scripts |
 | Batch arguments | `%0`–`%9`, SHIFT | `%0`–`%9`, SHIFT |
-| Batch control and messages | IF, GOTO, FOR, ECHO | ECHO, labels/GOTO, SHIFT and EXIT implemented; IF/FOR/CALL deferred |
+| Batch control and messages | IF, GOTO, FOR, ECHO | ECHO, labels/GOTO, SHIFT, EXIT and IF EXIST/DIREXIST; string/status tests, FOR and CALL deferred |
 | Echo control | ECHO ON/OFF | BATCH-only ECHO=ON/OFF and @ECHO; interactive ECHO prints text |
 | EXIT | COMMAND.COM command | BATCH-only; optional 0–255 status, otherwise 0 |
 | Environment variables | SET and `%NAME%` expansion | SETENV and BATCH `%NAME%` expansion; no interactive expansion |
@@ -165,30 +166,12 @@ The internal-interface count uses the nine services identified in [api.md](api.m
 
 | DOS Plus commands without a matching CDOS command | CDOS alternative or gap |
 | --- | --- |
-| IF, FOR | Missing from BATCH |
+| IF string/status tests, FOR | Missing from BATCH |
 | PROMPT, BREAK, VERIFY, SLICE | No corresponding shell commands |
 | ALARM, GRAFTABL, DEVICE | No direct command equivalents |
 | CHKDSK | CHKCPMFS checks CP/M allocation; no equivalent FAT checker |
 | MODE | SETUP/SETPORT cover some configuration functions; no complete MODE equivalent |
 | BACKG, FSET | Related functions are available through SYSTAT/STOP and SET respectively; command syntax differs |
-
-DOS Plus shell features were checked on a disposable copy of the original
-1.2 disk; command names were also checked against its shell and system disk.
-The reference 1.2 disk uses FSET rather than a separate ATTRIB command. The
-local disk labelled 1.1 additionally supplies LABEL.EXE, GENRSX.CMD,
-GETRSX.RSX, PUTRSX.RSX and a native CCP.CMD. These package differences do
-not establish their presence on every 1.2/2.1 distribution. GENRSX builds
-extensions for DOS Plus's RSX loader; it does not provide that loader to CDOS.
-The native CCP is a separate CP/M-style shell candidate to assess, not a
-drop-in replacement for CDOS PCTMP or evidence of RSX support in CDOS.
-See the [CDOS shell commands](ccp.md), [national setup](commands/n/README.md),
-[hard-disk boot tests](commands/hdmaint/README.md) and [API inventory](api.md).
-Historical background: [DOS Plus](https://www.seasip.info/Cpm/dosplus.html)
-and its [EXE loader defect](https://www.seasip.info/Cpm/dosplus_exe.html).
-
-BATCH adds labels/GOTO, SHIFT, `EXIT [status]`, `%NAME%` expansion and script-local `ECHO=ON/OFF`; `@ECHO`
-suppresses only its own line. Interactive ECHO and ECHO.CMD simply print text.
-This restriction is intentional; see the [BATCH language reference](batch.md).
 
 ## Distributions
 
@@ -364,6 +347,7 @@ system and the live regression checks.
 | `make` | Commands, kernel/RSPs, boot sources and eight images |
 | `make check` | Command headers, DATE parser, system layout, cursor, boot track and every packaged file/size |
 | `make check-tree` | TREE statistics and private FAT directory traversal |
+| `make check-batch-if` | File/directory predicates, full FAT paths and directory-state preservation |
 | `make check-batch-expand` | Environment/argument expansion, bounds and per-console isolation |
 | `make check-batch-exit` | Explicit/default BATCH status through native BDOS 108 |
 | `make check-batch-language` | ECHO forms, script control, SHIFT/GOTO and DOS redirection |
@@ -377,6 +361,7 @@ system and the live regression checks.
 | `make check-show` | OEM/rebuilt SHOW comparison, media guards, capacity/free space, users and labels |
 | `make check-rtc` | Built-XIOS BIOS RTC, calendar bounds, fallback and write-back checks |
 | `make check-fat-case` | FAT case-insensitive names, PIP copy/import, ERA and CP/M F4 preservation |
+| `make check-fat-labels` | Raw-label isolation, DIR/SDIR counts, SET label protection and DOS label search/open |
 | `make check-fat-batch` | FAT-hosted BAT/CMD loading, case flags, EOF forms and buffer refills |
 | `make check-sdir` | OEM/rebuilt SDIR comparison on CP/M/FAT12, directory markers/counts, options and paging |
 | `make check-redirection` | Native/DOS capture, append, input/echo, binary EOF, failure recovery and return to shell |

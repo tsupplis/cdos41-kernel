@@ -297,11 +297,54 @@ pcs5:
 pcs5a:
 ;end			*3.2*
 
+; Raw enumeration starts with one CP/M-style directory-label record.
+; Locate a live FAT volume entry anywhere in this directory, not just slot
+; zero. Keep the blank pseudo-label when absent: existing native tools use
+; its 20h/80h markers to identify FAT and its synthesized stamping layout.
+; Subsequent raw records must not expose volume/LFN metadata as files.
+        cmp searchl,0
+        jne pcsearch_extents
+        popf286 b286
+        pushf
+        jz pcsearch_label_scan
+        mov bx,ax
+        cmp byte ptr dname[bx],0
+        je pcsearch_extents
+        cmp byte ptr dname[bx],0e5h
+        je pcsearch_extents
+        test byte ptr datts[bx],08h
+        jz pcsearch_extents
+        jmp pcs4
+
+pcsearch_label_scan:
+        mov bx,dirp
+        cmp byte ptr dname[bx],0
+        je pcsearch_label_blank
+        cmp byte ptr dname[bx],0e5h
+        je pcsearch_label_next
+        mov al,datts[bx]
+        and al,03fh
+        cmp al,00fh                 ; VFAT long-name entry, not a label
+        je pcsearch_label_next
+        test al,010h                ; directories cannot be volume labels
+        jnz pcsearch_label_next
+        test al,08h
+        jnz pcsearch_label_ready
+pcsearch_label_next:
+        xor cx,cx
+        call getdir
+        or ax,ax
+        jnz pcsearch_label_scan
+pcsearch_label_blank:
+        xor bx,bx                   ; no real name for the synthetic label
+pcsearch_label_ready:
+        jmp pcs6
+pcsearch_extents:
 	cmp searchl,3			;while(srchl == 3 && 
 	jne pcs6			;      extsize() == 0xffff);
 	call extsize
 	cmp ax,0ffffh
-	jz pcs4	
+        jnz $+5 ! jmp pcs4
 pcs6:
 	popf286 b286		; Make Iret do the pop flags
 	push es
@@ -313,6 +356,8 @@ pcs6:
 	jne pcs6a			;{
 	mov al,20h			;  p = dmaptr;
 	stosb				;  *p++ = 0x20;
+        or bx,bx                    ; blank label if the scan found none
+        jz pcs60
 	test byte ptr datts[bx],08h	;  if (dirp->datts & 0x08)
 	jz pcs60			;  {
 	lea si,dname[bx]		;    for (i = 0; i < 11; i++)
@@ -340,8 +385,8 @@ pcs61:					;  }
 	xor al,al			;  zero(p,31);
 	mov cx,31
 	rep stosb
-	test byte ptr datts[bx],08h	;  if (!(dirp->datts & 0x08))
-	jnz pcs9			;    dcnt = 0xffff;
+        ; Restart after probing: return every ordinary raw entry once.
+        ; Real volume/LFN entries are filtered by the raw-next path above.
 	call setenddir
 	jmps pcs9			;}
 pcs6a:					;else

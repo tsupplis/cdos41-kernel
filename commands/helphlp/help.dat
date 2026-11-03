@@ -185,8 +185,9 @@ replaced with supplied arguments. BAT files can chain to another BAT file.
 BATCH shares DIR and other TMP built-ins, including CLS, USER, PRINTER,
 PAUSE and REM, and the CD/MD/RD, DEL/DELQ and RENAME aliases. DEL invokes
 native ERA.CMD. Ordinary program lines use the executable search order.
-BATCH supports ECHO, ECHO=ON/OFF, @ECHO, SHIFT, labels/GOTO and EXIT.
-See HELP LANGUAGES BATCH for syntax. IF, FOR and CALL remain unsupported.
+BATCH supports ECHO, ECHO=ON/OFF, @ECHO, SHIFT, labels/GOTO, EXIT and
+IF [NOT] EXIST/DIREXIST. See HELP LANGUAGES BATCH for syntax.
+FOR, CALL, string comparisons and ERRORLEVEL remain unsupported.
 
 Native command/substitution files for SUBMIT use the separate .SUB format.
 
@@ -2294,7 +2295,8 @@ substitute arguments. %% produces a literal percent sign.
 Bare BAT invocation chains to the replacement script; it does not return.
 
 BATCH supports ECHO, SHIFT, :label, GOTO, EXIT and %NAME% expansion.
-IF, FOR, CALL and quoted argument grouping remain unimplemented.
+IF supports file/directory predicates. String/status comparisons, FOR, CALL
+and quoted argument grouping remain unimplemented.
 Only @ECHO is recognized: @DIR and arbitrary @command are unsupported.
 
 ///3ECHO
@@ -2336,6 +2338,26 @@ Undefined names become empty. SETENV changes are visible on the next line.
 Quotes do not prevent expansion or group BATCH arguments. GOTO searches
 raw labels. Commands above 127 characters are reported and skipped.
 This is native BATCH expansion via PCTMP, not interactive substitution.
+
+///3IF
+IF [NOT] EXIST filespec command
+IF [NOT] DIREXIST directory command
+
+EXIST tests files on CP/M or FAT, including empty/hidden/system files.
+Directories do not satisfy EXIST. DIREXIST tests FAT directories; CP/M user
+areas are not directories. NOT reverses a successful test result.
+
+Drive prefixes and relative/absolute FAT paths are supported, with short
+8.3 components. Use backslash or slash separators; dot/dot-dot work and the
+parent of root is root. A bare d: means its current directory. Wildcards
+* and ? are allowed only in the last component. No quoted/spaced operands.
+
+Substitution occurs once before IF. A true test executes the remaining
+command normally; a false test skips it. Nested IF on one line is supported.
+Drive/directory/DMA/error-mode state is restored before command execution.
+Malformed syntax and drive/I/O failures skip the command, even with NOT.
+No ELSE, blocks, string comparison or ERRORLEVEL test is implemented.
+This is BATCH-only; the interactive PCTMP has no IF command.
 
 ///3EXIT
 EXIT

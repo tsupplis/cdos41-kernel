@@ -56,6 +56,7 @@ cases = [
     ("languages batch shift", "old %1 becomes %0"),
     ("languages batch goto", "GOTO :label"),
     ("languages batch exit", "decimal 0-255"),
+    ("languages batch if", "IF [NOT] DIREXIST directory command"),
     ("languages batch variables", "Undefined names become empty"),
     ("set", "[PASSWORD=] alone"),
     ("setenv", "Native SETENV.CMD"),

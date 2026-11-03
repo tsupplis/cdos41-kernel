@@ -20,7 +20,7 @@ run("cpmchattr","-f","ccpm86-320","a.logical","s","0:BATCH.CMD")
 run("mformat","-C","-i","fat.img","-t","40","-h","2","-n","8","-c","2","::")
 for directory in ["SUB","EMPTY","SUB/DEEP","SUB/ONLYDIR"]:
     run("mmd","-i","fat.img","::"+directory)
-for name,body in [("ROOT.TXT",b"root"),("ZERO.DAT",b""),("HIDE.SYS",b"hidden"),("SUB/INNER.DAT",b"inner"),("SUB/DEEP/LEAF.TXT",b"leaf")]:
+for name,body in [("ROOT.TXT",b"root"),("REMOVE.TMP",b"erase"),("ZERO.DAT",b""),("HIDE.SYS",b"hidden"),("SUB/INNER.DAT",b"inner"),("SUB/DEEP/LEAF.TXT",b"leaf")]:
     (FOLDER/"fixture").write_bytes(body)
     run("mcopy","-i","fat.img","fixture","::"+name)
 run("mattrib","-i","fat.img","+h","+s","+r","::HIDE.SYS")
@@ -69,11 +69,22 @@ launches.append(("a:ifbad","bad"))
 # Conditional text is not expanded a second time. Existing built-ins, native
 # CMDs, drive changes, GOTO and EXIT use the original dispatch paths.
 run("mcopy","-i","fat.img",str(ROOT/"commands/echo/echo.cmd"),"::")
+run("mcopy","-i","fat.img",str(ROOT/"commands/sysdisk/sysdisk.cmd"),"::")
+run("mcopy","-i","fat.img",str(ROOT/"commands/batch/batch.cmd"),"::")
 run("mcopy","-i","fat.img",str(ROOT/"commands/setenv/setenv.cmd"),"::")
-script("IFEXEC.BAT","@ECHO=OFF\r\nB:SETENV Target=B:\\SUB\\INNER.DAT\r\nB:SETENV Message=Literal%%UNEXPANDED%%\r\nIF EXIST %Target% ECHO %Message%\r\niF nOt ExIsT B:missing IF DIREXIST B:SUB ECHO NestedCase\r\nIF EXIST A:KNOWN.TXT B:ECHO.CMD ChildCase\r\nIF EXIST A:KNOWN.TXT B:\r\nIF EXIST ROOT.TXT ECHO DRIVE-PASS\r\nIF EXIST A:KNOWN.TXT GOTO END\r\nECHO WRONG-GOTO\r\n:END\r\nIF EXIST A:KNOWN.TXT EXIT 7\r\nECHO WRONG-EXIT\r\n")
+# Disposable DOS fixture, never included in the distribution.
+(FOLDER/"dosif.asm").write_text("bits 16\ncpu 8086\norg 100h\nmov dx,message\nmov ah,9\nint 21h\nmov ax,4c00h\nint 21h\nmessage db 'DOS-IF-PASS',13,10,'$'\n")
+run("nasm","-f","bin","dosif.asm","-o","DOSIF.COM")
+run("mcopy","-i","fat.img","DOSIF.COM","::")
+shutil.copyfile(ROOT/"commands/batch/tests/exittest.a86",FOLDER/"ifstat.a86")
+run("pcdev_rasm86","ifstat.a86")
+run("pcdev_linkcmd","ifstat=ifstat[data[origin[0],max[0]]]")
+run("mcopy","-i","fat.img","ifstat.cmd","::")
+
+script("IFEXEC.BAT","@ECHO=OFF\r\nB:SETENV Target=B:\\SUB\\INNER.DAT\r\nB:SETENV Message=Literal%%UNEXPANDED%%\r\nIF EXIST %Target% ECHO %Message%\r\niF nOt ExIsT B:missing IF DIREXIST B:SUB ECHO NestedCase\r\nIF EXIST A:KNOWN.TXT B:ECHO.CMD ChildCase\r\nIF EXIST A:KNOWN.TXT B:DOSIF.COM\r\nIF EXIST B:REMOVE.TMP DEL B:REMOVE.TMP\r\nIF NOT EXIST B:REMOVE.TMP ECHO ALIAS-PASS\r\nIF EXIST A:KNOWN.TXT B:\r\nIF EXIST ROOT.TXT ECHO DRIVE-PASS\r\nIF EXIST A:KNOWN.TXT GOTO END\r\nECHO WRONG-GOTO\r\n:END\r\nIF EXIST A:KNOWN.TXT EXIT 7\r\nECHO WRONG-EXIT\r\n")
 launches.append(("a:ifexec","execute"))
 # Keep B: and all floating aliases mapped while absolute/relative tests run.
-script("IFMAP.BAT","@ECHO=OFF\r\nIF EXIST B:INNER.DAT ECHO RELATIVE-PASS\r\nIF EXIST B:\\ROOT.TXT ECHO ABSOLUTE-PASS\r\nIF EXIST B:INNER.DAT ECHO RESTORED-PASS\r\nIF NOT EXIST B:\\ABSENT\\ANY.TXT ECHO MISSING-PATH-PASS\r\nIF EXIST B:INNER.DAT ECHO ERROR-RESTORE-PASS\r\nIF EXIST N:LEAF.TXT ECHO N-RELATIVE-PASS\r\nIF EXIST N:\\ROOT.TXT ECHO N-ABSOLUTE-PASS\r\nIF EXIST N:LEAF.TXT ECHO N-RESTORED-PASS\r\nIF EXIST O:INNER.DAT ECHO O-PASS\r\nIF EXIST P:KNOWN.TXT ECHO P-PASS\r\nECHO MAPPING-DONE\r\n")
+script("IFMAP.BAT","@ECHO=OFF\r\nIF EXIST B:INNER.DAT ECHO RELATIVE-PASS\r\nIF EXIST B:\\ROOT.TXT ECHO ABSOLUTE-PASS\r\nIF EXIST B:INNER.DAT ECHO RESTORED-PASS\r\nIF NOT EXIST B:\\ABSENT\\ANY.TXT ECHO MISSING-PATH-PASS\r\nIF EXIST B:INNER.DAT ECHO ERROR-RESTORE-PASS\r\nIF EXIST N:LEAF.TXT ECHO N-RELATIVE-PASS\r\nIF EXIST N:\\ROOT.TXT ECHO N-ABSOLUTE-PASS\r\nIF EXIST N:LEAF.TXT ECHO N-RESTORED-PASS\r\nIF EXIST O:INNER.DAT ECHO O-PASS\r\nIF EXIST P:ROOT.TXT ECHO P-PASS\r\nECHO MAPPING-DONE\r\n")
 # Repeated path probes must reuse their private mapping, not leak descriptors.
 script("IFLOOP.BAT","@ECHO=OFF\r\n"+"IF EXIST B:\\SUB\\DEEP\\LEAF.TXT REM matched\r\n"*160+"IF EXIST B:INNER.DAT ECHO LOOP-RESTORED\r\nECHO LOOP-DONE\r\n")
 run("python3",str(ROOT/"tools/cpm86twist.py"),"twist","a.logical","cdos86.img")
@@ -82,22 +93,23 @@ cfg=re.sub(r'(?m)^path\s*=\s*"([^"\n]+)"',lambda m:'path = "'+str((ROOT/"media"/
 (FOLDER/"test.cfg").write_text(cfg)
 commands=["c f000000"]
 keys={":":"+Shift Semicolon -Shift"," ":"Space","\n":"Return","\\":"Backslash","=":"Equal"}
-def command(text,label,cycles="10000000"):
+def command(text,label,cycles="4000000"):
     for ch in text+"\n":
         commands.extend(["key "+keys.get(ch,ch),"c 200000"])
     commands.extend(["c "+cycles,f'save "{label}.bin" bin b800:0000 fa0'])
 for text,label in launches:
     command("cls","clear-"+label)
-    command(text,label)
+    command(text,label,"10000000" if label=="execute" else "4000000")
+command("b:ifstat 7","exit-status")
 command("a:","return-a")
-for text,label in [("chdir b:\\sub","map-b"),("chdir n:=b:\\sub\\deep","map-n"),("chdir o:=b:\\sub","map-o")]:
+for text,label in [('b:sysdisk b:\\', 'map-p'), ('chdir b:\\sub', 'map-b'), ('chdir n:=b:\\sub\\deep', 'map-n'), ('chdir o:=b:\\sub', 'map-o')]:
     command(text,label)
 command("cls","clear-map");command("a:ifmap","mappings")
 command("cls","clear-loop");command("a:ifloop","loop","30000000")
 command("dir b:inner.dat","parent-b")
 command("dir n:leaf.txt","parent-n")
 command("dir o:inner.dat","parent-o")
-command("dir p:known.txt","parent-p")
+command("dir p:root.txt","parent-p")
 commands.append("q")
 with (FOLDER/"pce.log").open("wb") as log:
     subprocess.run(["pce-ibmpc","-c","test.cfg","-t","null","-g","vga"],cwd=FOLDER,input=("\n".join(commands)+"\n").encode(),stdout=log,stderr=log,timeout=300,check=True)
@@ -115,12 +127,13 @@ for name,markers in expected.items():
     assert "IF cannot" not in result and "Invalid IF" not in result,(name,result)
 bad=screen("bad");assert "WRONG" not in bad and "BAD-SYNTAX-DONE" in bad,bad
 result=screen("execute")
-for marker in ["Literal%UNEXPANDED%","NestedCase","ChildCase","DRIVE-PASS"]: assert marker in result,(marker,result)
+for marker in ["Literal%UNEXPANDED%","NestedCase","ChildCase","DOS-IF-PASS","ALIAS-PASS","DRIVE-PASS"]: assert marker in result,(marker,result)
 assert "WRONG" not in result,result
+assert "BATCH EXIT PASS" in screen("exit-status"),screen("exit-status")
 result=screen("mappings")
 for marker in ["RELATIVE-PASS","ABSOLUTE-PASS","RESTORED-PASS","MISSING-PATH-PASS","ERROR-RESTORE-PASS","N-RELATIVE-PASS","N-ABSOLUTE-PASS","N-RESTORED-PASS","O-PASS","P-PASS","MAPPING-DONE"]: assert marker in result,(marker,result)
 result=screen("loop");assert "LOOP-RESTORED" in result and "LOOP-DONE" in result and "IF cannot" not in result,result
-for name,filename in [("parent-b","INNER"),("parent-n","LEAF"),("parent-o","INNER"),("parent-p","KNOWN")]:
+for name,filename in [("parent-b","INNER"),("parent-n","LEAF"),("parent-o","INNER"),("parent-p","ROOT")]:
     result=screen(name);assert filename in result and "File not found" not in result,(name,result)
 print(f"PASS: {len(cases)} paired EXIST/DIREXIST/NOT cases on CP/M/FAT; full/relative paths, wildcards, empty/hidden/system files, malformed syntax, missing drive, one-pass expansion, nested dispatch, GOTO/EXIT, 160 repeated probes and B:/N:/O:/P: mapping preservation")
 shutil.rmtree(FOLDER)

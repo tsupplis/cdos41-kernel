@@ -1,8 +1,9 @@
 ;*******************************************************************************
-; BATCH IF - native CP/M/FAT existence predicates.
+; BATCH IF - native existence predicates and bytewise string comparison.
 ;
 ; IF [NOT] EXIST filespec command
 ; IF [NOT] DIREXIST directory command
+; IF [NOT] left==right command (double quotes protect spaces/empty operands)
 ;
 ; Runs after expand.lib and before ordinary command dispatch. A true test
 ; removes its prefix and redispatches the remaining command without another
@@ -14,6 +15,12 @@
 ; HDS in place. Save/restore its eight mapping bytes, never its owner count.
 ; The original drive, DMA and error mode are restored before dispatch.
 ;*******************************************************************************
+; Local 4.1 CAT/HDS and UDA fields, shared with the existing BATCH directory
+; switching code. Eight mapping bytes exclude the reference count at +8.
+CONDITION_CAT_OWNERS equ 20h
+CONDITION_HDS_OWNERS equ 8
+CONDITION_HDS_CLUSTER equ 6
+CONDITION_U_ERROR_MODE equ 10h
         cseg
 
 ; Carry clear: ordinary command remains in clicb_cmd. Carry set: skip line.
@@ -34,21 +41,43 @@ condition_start:
         jnc condition_not
         jmp condition_syntax
 condition_not:
+        mov condition_left,si
         mov di,offset condition_not_word
         call lang_word
         jnc condition_predicate
+        cmp byte ptr [si],' '
+        je condition_negated
+        cmp byte ptr [si],TAB
+        je condition_negated
+; NOT==NOT compares a literal word; NOT followed by whitespace negates.
+        mov si,condition_left
+        jmps condition_predicate
+condition_negated:
         mov condition_negate,1
         call condition_require_space
         jnc condition_predicate
         jmp condition_syntax
 condition_predicate:
+        mov condition_left,si
         mov di,offset condition_exist_word
         call lang_word
-        jc condition_operand
+        jnc condition_try_directory
+        cmp byte ptr [si],' '
+        je condition_operand
+        cmp byte ptr [si],TAB
+        je condition_operand
+        jmp condition_compare_start
+condition_try_directory:
         mov di,offset condition_directory_word
         call lang_word
-        jc condition_is_directory
-        jmp condition_syntax
+        jc condition_directory_matched
+        jmp condition_compare_start
+condition_directory_matched:
+        cmp byte ptr [si],' '
+        je condition_is_directory
+        cmp byte ptr [si],TAB
+        je condition_is_directory
+        jmp condition_compare_start
 condition_is_directory:
         mov condition_directory,1
 condition_operand:
@@ -120,6 +149,101 @@ condition_report:
         stc
         ret
 
+; String operands are spans of the expanded command buffer, not new strings.
+; Delimiters are recognized only outside quotes. Quotes remain in the spans
+; for DOS compatibility; comparison is bytewise, case-sensitive and has no
+; numeric interpretation. No filesystem or other OS service is called here.
+condition_compare_start:
+        mov si,condition_left
+        xor cx,cx
+        xor dl,dl
+condition_compare_left:
+        mov al,[si]
+        or al,al
+        jnz condition_left_character
+        jmp condition_syntax
+condition_left_character:
+        cmp al,'"'
+        jne condition_left_not_quote
+        xor dl,1
+        jmps condition_left_advance
+condition_left_not_quote:
+        or dl,dl
+        jnz condition_left_advance
+        cmp al,' '
+        je condition_left_end
+        cmp al,TAB
+        je condition_left_end
+        cmp al,'='
+        jne condition_left_advance
+        cmp byte ptr 1[si],'='
+        je condition_left_end
+condition_left_advance:
+        inc si
+        inc cx
+        jmps condition_compare_left
+condition_left_end:
+        or cx,cx
+        jnz condition_left_present
+        jmp condition_syntax
+condition_left_present:
+        mov condition_left_length,cx
+        call lang_spaces
+        cmp word ptr [si],'=='
+        je condition_operator
+        jmp condition_syntax
+condition_operator:
+        add si,2
+        call lang_spaces
+        mov condition_right,si
+        xor cx,cx
+        xor dl,dl
+condition_compare_right:
+        mov al,[si]
+        or al,al
+        jnz condition_right_character
+        jmp condition_syntax
+condition_right_character:
+        cmp al,'"'
+        jne condition_right_not_quote
+        xor dl,1
+        jmps condition_right_advance
+condition_right_not_quote:
+        or dl,dl
+        jnz condition_right_advance
+        cmp al,' '
+        je condition_right_end
+        cmp al,TAB
+        je condition_right_end
+condition_right_advance:
+        inc si
+        inc cx
+        jmps condition_compare_right
+condition_right_end:
+        or cx,cx
+        jnz condition_right_present
+        jmp condition_syntax
+condition_right_present:
+        mov condition_right_length,cx
+        call lang_spaces
+        cmp byte ptr [si],0
+        jne condition_compare_command
+        jmp condition_syntax
+condition_compare_command:
+        mov condition_command,si
+        mov condition_result,0
+        cmp cx,condition_left_length
+        jne condition_compare_unequal
+        mov si,condition_left
+        mov di,condition_right
+        push ds ! pop es
+        cld
+        repe cmpsb
+        jne condition_compare_unequal
+        mov condition_result,1
+condition_compare_unequal:
+        jmp condition_decide
+
 ; Require a real separator, rejecting IF=, NOT= and EXIST= spellings.
 condition_require_space:
         cmp byte ptr [si],' '
@@ -152,7 +276,7 @@ condition_probe:
         mov cl,156
         call ccpm
         mov es,es:P_UDA[bx]
-        mov al,es:10h
+        mov al,es:CONDITION_U_ERROR_MODE
         mov condition_error_mode,al
         mov dx,0ffh
         mov cl,45
@@ -196,7 +320,7 @@ condition_resolve_drive:
         cmp es:word ptr [bx],0
         jne condition_select_drive
 condition_unbound_drive:
-        mov al,es:9dh
+        mov al,es:.S_DSYSDISK
         inc al
         mov condition_drive,al
 condition_select_drive:
@@ -472,7 +596,7 @@ condition_open_directory:
         jz condition_open_native
         push es
         mov es,sysdatseg
-        cmp es:word ptr 6[bx],0
+        cmp es:word ptr CONDITION_HDS_CLUSTER[bx],0
         pop es
         jne condition_open_native
         xor ax,ax
@@ -504,7 +628,7 @@ condition_private_mapping:
         mov bx,es:CAT[bx]
         or bx,bx
         jz condition_private_bad
-        cmp es:word ptr 20h[bx],1
+        cmp es:word ptr CONDITION_CAT_OWNERS[bx],1
         jne condition_private_bad
         xor ah,ah
         mov al,condition_drive
@@ -514,7 +638,7 @@ condition_private_mapping:
         mov bx,es:[bx]
         or bx,bx
         jz condition_private_bad
-        cmp es:word ptr 8[bx],1
+        cmp es:word ptr CONDITION_HDS_OWNERS[bx],1
         jne condition_private_bad
         mov condition_mapping,bx
         mov si,bx
@@ -540,7 +664,7 @@ condition_restore_mapping:
         or di,di
         jz condition_mapping_done
         mov es,sysdatseg
-        cmp es:word ptr 8[di],1
+        cmp es:word ptr CONDITION_HDS_OWNERS[di],1
         jne condition_mapping_bad
         mov si,offset condition_mapping_bytes
         mov cx,4
@@ -558,6 +682,6 @@ condition_if_word db 'IF',0
 condition_not_word db 'NOT',0
 condition_exist_word db 'EXIST',0
 condition_directory_word db 'DIREXIST',0
-condition_syntax_message db 'IF [NOT] EXIST filespec command or IF [NOT] DIREXIST directory command.$'
+condition_syntax_message db 'IF [NOT] EXIST filespec command, DIREXIST directory command, or left==right command.$'
 condition_spec_message db 'Invalid IF filespec; command skipped.$'
 condition_io_message db 'IF cannot inspect drive or directory; command skipped.$'

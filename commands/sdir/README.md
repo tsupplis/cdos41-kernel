@@ -43,6 +43,10 @@ equal with bits C0h set (80h = DOS entry, 40h = subdirectory). SDIR keeps a
 `size(file$info)`), prints `<DIR>` in FULL/SIZE and `d:\name` in SHORT, and
 counts directories separately. DOS pathnames are not accepted; use CHDIR.
 
+FAT volume labels are excluded from file rows and totals by the shared
+kernel raw-directory adapter, including labels after ordinary files. SDIR
+does not display the DOS volume name as a heading.
+
 ## Verification
 
 PCE regressions against the OEM binaries (`base/`) run from the CDOS

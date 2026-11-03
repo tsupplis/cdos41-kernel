@@ -1132,7 +1132,8 @@ BATCH expands %NAME% from a fresh bounded snapshot before command dispatch
 and command echo. Names match ASCII case-insensitively; missing names become
 empty text. Values and %0..%9 arguments retain case and are not recursively
 expanded. %% emits one percent; unmatched percent signs remain literal.
-Quotes remain ordinary text. GOTO scans raw labels. IF is not added.
+Quotes remain ordinary text. GOTO scans raw labels. IF was added separately
+as documented below.
 
 Raw/expanded commands exceeding 127 characters are reported and skipped,
 never executed truncated. An unsupported or malformed environment similarly
@@ -1181,3 +1182,79 @@ cases, and native HELP PATH. PATH remains built into TMP/BATCH and available
 as PATH.CMD. Live checks also verify that bare SYSDISK requires its external
 file and that explicit SYSDISK.CMD works from the shell and BATCH. No new
 kernel API was introduced.
+
+### BATCH IF file/directory predicates
+
+BATCH implements IF [NOT] EXIST filespec command and IF [NOT] DIREXIST
+directory command. EXIST tests regular files on CP/M/FAT, including empty,
+hidden and system entries; DIREXIST tests FAT directories. Native search
+results are checked for XFCB/label records and the FAT directory marker,
+rather than interpreting CP/M allocation bytes as FAT attributes.
+
+Operands support drive prefixes, full/relative short-name FAT paths,
+slash/backslash separators, dot/dot-dot and final-component wildcards.
+Root's parent is root; bare d: and trailing separators denote directories.
+Intermediate wildcards and quoted/spaced operands are rejected. Missing
+paths are false. Syntax and I/O failures skip the command even with NOT.
+
+The IF prefix is evaluated after one-pass expansion and before the existing
+comment/drive/built-in/alias/loader dispatcher. A true condition removes its
+prefix and uses that dispatcher without another expansion or echo pass.
+Nested IF is iterative. String/status comparisons, ELSE, blocks, FOR and
+CALL are not added. Resident PCTMP is unchanged by IF; no API is extended.
+
+Filesystem evaluation uses native BDOS. For FAT, OPEN "." first obtains a
+private CAT/HDS through BLACK's existing copy-on-write path. Directory opens
+then reuse that sole-owner HDS. Save/restore its eight mapping bytes; never
+copy or modify the process count. Restore occurs before trailing command
+dispatch. An unbound floating drive is resolved through the system drive
+without fixing its implicit mapping. No scratch floating drive is borrowed.
+Native BATCH already uses the CAT/HDS layout for script-directory switching;
+IF confines its additional use to this module and verifies sole ownership.
+Default drive, DMA offset/segment and the original UDA error mode are saved
+and restored on every evaluation path. Errors use return-only BDOS mode so
+an unreadable disk is not confused with an absent file and negated into true.
+
+make check-batch-if uses disposable CP/M/FAT disks for paired predicates,
+full paths, wildcards, empty/hidden/system files, invalid input/drives,
+substitution, nested dispatch, GOTO/EXIT, repeated probes and directory-state
+preservation. The completed live suite passed 34 paired predicate cases and
+160 repeated path probes, plus conditional native/DOS programs, aliases and
+EXIT 7 observed by the parent. The existing language regressions and make
+check also passed. The language guide and HELP LANGUAGES BATCH IF document
+usage.
+
+## FAT volume labels: isolate metadata from native raw file enumeration
+
+BLACK's raw BDOS 17/18 search (FCB drive byte '?') previously recognized a
+volume label only in the first physical directory slot. A later FAT label
+was translated as a user-0 ordinary file: SDIR displayed it with zero size
+and counted it as a file. The same mistake affected other raw CP/M readers.
+
+`kernel/con/black.a86` now scans for a live label before emitting the initial
+20h directory-label record. It then restarts the scan and excludes all real
+volume-label and VFAT long-name entries from ordinary raw records. Deleted
+entries cannot supply the label name, and an ordinary file with the same
+name as the volume label remains an ordinary file. No new resident data or
+API selector is needed. CP/M media does not take this FAT-only path.
+
+The blank pseudo-label when no label exists is retained, along with byte 12
+21h, byte 15/16/17 80h and the synthetic SFCB. Existing media detection and
+FAT timestamp readers therefore retain their established interface. Normal
+file open/search/delete/rename/attribute operations still exclude labels.
+SET's explicit label-name and wildcard attribute requests are checked against
+the complete unchanged 32-byte FAT label entry, not just its attribute byte.
+
+`make check` executes 24 linked-instruction search cases, including labels
+at different positions, absent/deleted/duplicate labels, LFN metadata,
+full/empty directories, matching file/label names, DMA bounds and balanced
+stacks. `make check-fat-labels` also checks DIR, DIR.CMD, SDIR, SHOW and SET,
+plus real DOS label first/next and denied ordinary FCB open on disposable
+FAT images. SHOW LABEL and SET [NAME=...] still reject FAT: no label editing
+feature is added by this correction.
+
+DOS label creation remains unsupported. A separate disposable probe found
+that INT 21h AH=16h with extended-FCB attribute 08h reports success but creates
+an ordinary archive file (20h), not a volume label (08h). Existing file
+rename/delete paths also do not provide volume-label editing. This is a
+known API gap, not implemented as part of the enumeration correction.

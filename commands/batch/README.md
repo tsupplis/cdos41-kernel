@@ -9,7 +9,8 @@ It implements DIR, CLS, USER and the other supported TMP built-ins.
 USER omits the redundant CP/M-media note and PAUSE uses
 `Press any key to continue...`. DIR accepts native slash options and CP/M
 brackets, including a final omitted ]. BATCH is not a full COMMAND.COM:
-IF/FOR/CALL remain unimplemented. BATCH expands `%NAME%` from the current
+IF supports EXIST/DIREXIST with optional NOT; comparisons, FOR and CALL remain
+unimplemented. BATCH expands `%NAME%` from the current
 console environment before command dispatch.
 
 `make check-batch-live` checks messages, CLS/DEL and an unrelated sentinel
@@ -60,3 +61,11 @@ state and expansion buffers are allocated in tmpdir.lib before dataend, after
 the native basepage and existing TMP data; includes must not allocate state
 before tmpdir.lib resets the data origin. Run make check-batch-expand for live
 CP/M/FAT scripts and per-console environment isolation.
+
+IF is implemented in ifcmd.lib and runs after expansion but before the normal
+command dispatcher. FAT path traversal uses native BDOS directory opens. An
+initial OPEN of "." creates a private CAT/HDS through native copy-on-write;
+subsequent opens reuse its sole-owner HDS. Only the eight mapping bytes are
+saved/restored, leaving reference counts to BDOS. CP/M predicates use native
+FCB searches. All exits restore the caller's drive, DMA and error mode.
+No new kernel API or DOS service is introduced. Run make check-batch-if.

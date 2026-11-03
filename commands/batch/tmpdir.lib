@@ -2078,6 +2078,10 @@ condition_drive db 0
 condition_saved_drive db 0
 condition_error_mode db 0
 condition_command dw 0
+condition_left dw 0
+condition_left_length dw 0
+condition_right dw 0
+condition_right_length dw 0
 condition_cursor dw 0
 condition_next dw 0
 condition_component_start dw 0

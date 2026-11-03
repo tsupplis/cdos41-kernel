@@ -2,8 +2,9 @@
 
 This describes the BATCH.CMD shipped by this CDOS rebuild. It runs native
 CMD programs, DOS COM/EXE programs and shell commands from a `.BAT` file.
-It includes the local ECHO, SHIFT, labels/GOTO, EXIT and environment-substitution extensions. It is distinct
-from SUBMIT's `.SUB` language and is not a complete COMMAND.COM replacement.
+It includes ECHO, SHIFT, labels/GOTO, EXIT, environment substitution and
+file/directory IF extensions. It is distinct from SUBMIT's `.SUB` language
+and is not a complete COMMAND.COM replacement.
 
 ## Starting and ending a script
 
@@ -81,7 +82,51 @@ unavailable environment and skips that command.
 Double quotes are ordinary text during expansion; they do not group BATCH
 arguments or suppress substitution. A raw or expanded line longer than 127
 characters is reported and skipped entirely, rather than executed truncated.
-GOTO searches raw labels without substitution. IF remains unimplemented.
+GOTO searches raw labels without substitution. IF tests the expanded operand.
+
+## IF file and directory tests
+
+| Syntax | Condition |
+| --- | --- |
+| `IF EXIST filespec command` | At least one matching file exists |
+| `IF NOT EXIST filespec command` | No matching file exists |
+| `IF DIREXIST directory command` | At least one matching FAT directory exists |
+| `IF NOT DIREXIST directory command` | No matching FAT directory exists |
+
+Keywords and filesystem matching ignore case. `EXIST` checks files on CP/M
+or FAT, including empty, hidden and system files; directories do not satisfy
+it. `DIREXIST` checks FAT directories; CP/M user areas are not directories.
+Use native drive/filespec forms such as `A:*.TXT`, or full FAT paths such as
+`B:\TOOLS\FILE.CMD`. Relative paths start at that drive's current directory;
+a leading `\` starts at its root. `/` is also accepted as a path separator.
+`.` and `..` work; the parent of FAT root remains root. A bare `B:` denotes
+its current directory. A trailing separator denotes a directory, not a file.
+
+Paths use short 8.3 components. `*` and `?` are supported in the final
+component, including directory tests; intermediate components must name a
+single directory. Operands containing spaces or quotes are unsupported.
+
+```bat
+@ECHO=OFF
+IF EXIST A:CONFIG.DAT ECHO Configuration found
+IF NOT EXIST B:\SAVE\REPORT.TXT ECHO No saved report
+IF DIREXIST B:\TOOLS ECHO Tools directory found
+IF EXIST %INPUT% GOTO PROCESS
+IF NOT DIREXIST %DEST% EXIT 1
+```
+
+Variable/positional substitution happens once, before testing. A true test
+executes the rest of that line through the ordinary command paths: shell
+built-ins, aliases, drive changes and external programs remain available.
+Conditional commands are not expanded again. Nested IF tests are supported
+on one line; a false outer test skips the rest. There is no ELSE, block
+syntax, string comparison or ERRORLEVEL test yet.
+
+Evaluation restores the original drive, DMA, error mode and directory mapping
+before executing or skipping the command. It does not borrow N:/O:/P: as a
+scratch drive. Missing files/directories yield false; malformed syntax or a
+drive/I/O failure reports an error and skips the command even with NOT.
+The whole expanded line still has the 127-character limit.
 
 ## ECHO and command echo
 
@@ -245,7 +290,7 @@ its byte-length semantics.
 
 | Feature | Status |
 | --- | --- |
-| IF / IF NOT, EXIST, DIREXIST, string comparisons | Not implemented |
+| IF string comparisons / ELSE / blocks | Not implemented; file/directory predicates are supported |
 | IF ERRORLEVEL | Not implemented; no conditional status test or stop-on-error language switch |
 | FOR | Not implemented |
 | CALL and return to a calling BAT | Not implemented; bare BAT invocation chains |
@@ -257,11 +302,14 @@ its byte-length semantics.
 | DOS redirection operators and pipelines | Not implemented; use GET/PUT/RDR for external programs |
 
 An ordinary command error is not a structured language exception. There is
-no IF-based recovery or automatic success/failure branching. Missing GOTO
-labels and fatal script-read failures stop BATCH.
+no conditional program-status test or automatic success/failure branching.
+Missing GOTO labels and fatal script-read failures stop BATCH.
 
 Build/source notes are in [commands/batch/README.md](commands/batch/README.md).
 `make check-batch-exit` tests explicit/default status, invalid operands and
 chaining against a real parent's BDOS 108.
 `make check-batch-language` tests ECHO controls, SHIFT, forward/backward GOTO,
 record boundaries, FAT/CP/M scripts and standalone ECHO redirection.
+
+`make check-batch-if` checks file/directory conditions, full FAT paths, command
+dispatch and preservation of directory mappings on disposable images.

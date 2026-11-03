@@ -46,6 +46,7 @@ check: all
 	python3 tools/cmdtail_check.py
 	python3 tools/batch_expand_unit_check.py
 	python3 tools/fat_recovery_check.py
+	python3 tools/fat_label_unit_check.py
 	python3 tools/pctmp_context_check.py
 	python3 tools/pctmp_critical_check.py
 	$(MAKE) -C boot check
@@ -162,6 +163,7 @@ check-historical: kernel
 	python3 tools/dos_handles_check.py
 	python3 tools/dos_redirection_config_check.py
 	python3 tools/fat_recovery_check.py
+	python3 tools/fat_label_unit_check.py
 	python3 tools/pctmp_context_check.py
 	python3 tools/pctmp_critical_check.py
 
@@ -244,3 +246,12 @@ check-batch-expand: all
 .PHONY: check-native-shell
 check-native-shell: all
 	python3 tools/native_shell_check.py
+
+.PHONY: check-batch-if
+check-batch-if: all
+	python3 tools/batch_if_check.py
+
+.PHONY: check-fat-labels
+check-fat-labels: all
+	python3 tools/fat_label_unit_check.py
+	python3 tools/fat_label_check.py

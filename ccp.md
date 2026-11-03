@@ -56,6 +56,8 @@ See [api.md](api.md#pctmp-private-far-call-interface) for the DOS-loader packet.
 | `SHIFT` | BATCH | BATCH | Advance positional arguments: old `%1` becomes `%0` |
 | `:label` | BATCH | BATCH | Define a silent jump target |
 | `GOTO label`, `GOTO :label` | BATCH | BATCH | Find the first matching label, ignoring case |
+| `IF [NOT] EXIST filespec command` | BATCH | BATCH | Test CP/M/FAT files, then conditionally execute the remaining command; supports full FAT paths |
+| `IF [NOT] DIREXIST directory command` | BATCH | BATCH | Test FAT directories, then conditionally execute the remaining command; CP/M user areas are not directories |
 | `EXIT`, `EXIT n` | BATCH | BATCH | End BATCH with native BDOS 108 status 0 or decimal n (0–255); normal EOF also returns 0 |
 | `%0` … `%9`, `%%` | BATCH | BATCH | Substitute positional arguments or a literal percent before dispatch |
 | `%NAME%` | BATCH | BATCH | Substitute a current-console environment value before dispatch; no interactive expansion |

@@ -39,7 +39,7 @@
 | 13 | FCB delete | DOS 1.x | Implemented | FCB adapter → shared CP/M/FAT filesystem | — |
 | 14 | FCB sequential read | DOS 1.x | Implemented | FCB adapter → shared CP/M/FAT filesystem | — |
 | 15 | FCB sequential write | DOS 1.x | Implemented | FCB adapter → shared CP/M/FAT filesystem | — |
-| 16 | FCB create | DOS 1.x | Implemented | FCB adapter → shared CP/M/FAT filesystem | — |
+| 16 | FCB create | DOS 1.x | Partial | Ordinary files; extended-FCB attribute 08h does not create a FAT volume label | — |
 | 17 | FCB rename | DOS 1.x | Implemented | FCB adapter → shared CP/M/FAT filesystem | — |
 | 18 | Reserved/legacy in-use | Unused / stub | Unused | AL=00h; no service performed | — |
 | 19 | Get default drive | DOS 1.x | Implemented | — | — |
@@ -268,8 +268,8 @@ Sources: [xcon1.lib](kernel/con/xcon1.lib), [xcon2.lib](kernel/con/xcon2.lib),
 | 0E | 14 | diskselect | BDOS | Implemented | — |
 | 0F | 15 | file open | BDOS | Implemented | — |
 | 10 | 16 | file close | BDOS | Implemented | — |
-| 11 | 17 | search first | BDOS | Implemented | — |
-| 12 | 18 | search next | BDOS | Implemented | — |
+| 11 | 17 | search first | BDOS | Implemented; FAT raw search returns labels as 20h metadata regardless of directory position | NEW (FAT label isolation) |
+| 12 | 18 | search next | BDOS | Implemented; FAT raw file records exclude volume/LFN metadata | NEW (FAT label isolation) |
 | 13 | 19 | file delete | BDOS | Implemented | — |
 | 14 | 20 | file read seq | BDOS | Implemented | — |
 | 15 | 21 | file write seq | BDOS | Implemented | — |
