@@ -440,7 +440,7 @@ io_retry_count:
 	dec	byte ptr retries
 	jnz	io_attempt
 
-; Report the final BIOS status, then restore the parameter vector and exit.
+; Report the final XIOS status, then restore the parameter vector and exit.
 	mov	al,last_status
 	mov	ah,al
 	mov	cl,4
@@ -535,11 +535,11 @@ msg_usage	db	'USAGE: DFORM drive: { [options] ... }',13,10,13,10
 	db	'  A: or B:  Target floppy drive (required)',13,10
 	db	'  1         Single-sided, 160K',13,10
 	db	'  2         Double-sided, 320K (default)',13,10
-	db      '  DOS       FAT12 360K data disk; incompatible with [1]',13,10
+	db      '  DOS       FAT12 360K with system bootstrap; incompatible with [1]',13,10
 	db	'  V         Verify after formatting',13,10
 	db	'  Combine options: [1V] or [1] [V; closing ] is optional.',13,10
 	db	'  Examples: DFORM A:[1V]   DFORM B: [V',13,10,'$'
-msg_dos360      db      '360K, FAT12 data disk (not a system disk); $'
+msg_dos360      db      '360K, FAT12; copy compatible CCPM.SYS first to boot; $'
 msg_single	db	'160K, single-sided; $'
 msg_double	db	'320K, double-sided; $'
 msg_with_verify	db	'verification enabled.',13,10,'$'
@@ -556,7 +556,7 @@ msg_cancelled	db	13,10,'Cancelled.',13,10,'$'
 msg_bad_syntax	db	'Invalid parameter.',13,10,'$'
 msg_bad_drive	db	'Invalid drive specification.',13,10,'$'
 msg_wrong_os	db	'DFORM requires Concurrent DOS 4.1.',13,10,'$'
-msg_io_error	db	'Disk operation failed; BIOS/XIOS status '
+msg_io_error	db	'Disk operation failed; XIOS status '
 status_hi	db	'0'
 status_lo	db	'0'
 	db	'.',13,10,'$'

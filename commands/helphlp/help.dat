@@ -568,7 +568,9 @@ Alias for native ERAQ.CMD, which asks before deleting each matching file.
 
 ///1DFORM
   DFORM drive: [options]
-  [DOS] formats a 360K FAT12 data disk. [V] verifies every track.
+  [DOS] formats a 360K FAT12 disk with the DSKMAINT system bootstrap.
+  [V] verifies every track. Copy compatible CCPM.SYS as the first file.
+  DOS boot requires OSSTART=60 and contiguous allocation from cluster 2.
   The default is CP/M 320K; [1] selects CP/M 160K.
   Example: DFORM B:[DOS] [V]. Confirm the target before answering Y.
 

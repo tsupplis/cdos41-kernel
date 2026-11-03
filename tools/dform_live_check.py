@@ -2,7 +2,7 @@
 """Format a disposable FAT12 360K floppy with the actual CDOS DFORM/XIOS.
 
 Checks physical geometry, complete FAT/root metadata, data fill, an independent
-mtools write/read, and the non-system boot sector's cold-boot message.
+mtools write/read, empty-media recovery and a rebuilt kernel cold boot.
 Only newly created images are modified. Failed tests retain their diagnostics.
 """
 from pathlib import Path
@@ -73,9 +73,13 @@ probe = b'DFORM FAT12 interoperability check\r\n'
 (folder/'probe.txt').write_bytes(probe)
 run('mcopy', '-i', 'target.img', 'probe.txt', '::PROBE.TXT')
 assert run('mtype', '-i', 'target.img', '::PROBE.TXT').stdout == probe
-# Cold boot the formatter's original output, not the copy modified by mtools.
-(folder/'test.cfg').write_text(cfg.replace('source.img', 'target.psi'))
-pce(['c f000000', 'save "boot.bin" bin b800:0000 fa0', 'q'], 'boot')
-assert 'Not a system disk.' in screen('boot')
-print('PASS: actual CDOS DOS format/verify; 360K geometry, FAT12 metadata, mtools file I/O and non-system boot message')
+# Preserve the original empty format: the mtools probe must not occupy the
+# first root entry/cluster required by the historical system bootstrap.
+(folder/'empty.img').write_bytes(b)
+from dskmaint_live_check import build_low_kernel, cold_boot
+cold_boot(folder, folder/'empty.img', 'empty', '', None,
+          ['Not a boot disk', 'Insert boot disk'])
+cold_boot(folder, folder/'empty.img', 'rebuilt', 'CCPM.SYS',
+          build_low_kernel(folder), ['Concurrent', 'A>'])
+print('PASS: CDOS DOS format/verify; exact DSKMAINT bootstrap, FAT12 metadata, mtools I/O, empty recovery and rebuilt kernel cold boot')
 shutil.rmtree(folder)

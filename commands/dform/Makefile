@@ -2,11 +2,8 @@
 # all builds the declared tools; check validates them; clean removes generated files.
 
 CMDINFO=cmdinfo
-ASM86=cpm86_asm86
-GENCMD=cpm86_gencmd
 RASM86=pcdev_rasm86
 LINK86=pcdev_linkcmd
-H862BIN=h862bin
 BIN2ASM=bin2asm
 
 TOOLS=dform.cmd
@@ -20,14 +17,10 @@ bootsect.inc loader.inc: %.inc: ../../boot/%.bin
 ../../boot/%.bin: ../../boot/%.a86
 	$(MAKE) -C ../../boot $*.bin
 
-%.h86: %.a86 Makefile
-	unix2dos $<
-	rm -f $@
-	$(ASM86) $*
-	@test -f $@
-
-%.bin: %.h86
-	$(H862BIN) $< $@
+# Share DSKMAINT's maintained 4.11 bootstrap; do not keep a second source.
+fatboot.bin: ../dskmaint/dosboot.a86 ../dskmaint/Makefile Makefile
+	$(MAKE) -C ../dskmaint dosboot.bin
+	cp ../dskmaint/dosboot.bin $@
 
 # bin2asm is already provided on PATH; labels belong to the including file.
 %.inc: %.bin
@@ -47,5 +40,6 @@ dform.cmd: dform.obj Makefile
 check: all
 	$(CMDINFO) dform.cmd
 	@test "$$(wc -c < fatboot.bin)" -eq 512
+	cmp fatboot.bin ../dskmaint/dosboot.bin
 clean:
 	$(RM) *.cmd *.obj *.log *.bin *.inc *.sym *.lst *.h86

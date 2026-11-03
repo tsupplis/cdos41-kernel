@@ -1637,3 +1637,18 @@ Checks validate explicit resident selections, identical CODE between images,
 response-file parity and the expected size difference. Profile budgets are
 154/166 KiB for the standard/FIDD images, or 170/182 KiB with serial terminals.
 Parallel builds, incremental no-op rebuilds and stray-RSP exclusion pass.
+
+### DFORM command-line formatting
+
+DFORM supports native CP/M 160/320K and DOS FAT12 360K formatting through
+XIOS 29/35/36 under MXdisk, with optional track verification. It temporarily
+installs the selected INT 1Eh geometry and restores it before releasing the
+disk. No kernel extension is required. The CMD reserves DMA scratch through
+MIN without storing its zero-filled reservation in the executable.
+
+DOS formatting embeds the same maintained 4.11 bootstrap as DSKMAINT,
+replacing the initial non-system sector. The user copies compatible CCPM.SYS
+as the first file, contiguous from cluster 2; this bootstrap requires
+OSSTART=60. DFORM does not install the kernel. `check-dform-live` checks the
+written geometry/metadata, mtools interoperability, empty-media recovery and
+cold boot with a locally generated matching kernel on disposable images.
