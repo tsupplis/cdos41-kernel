@@ -186,8 +186,8 @@ BATCH shares DIR and other TMP built-ins, including CLS, USER, PRINTER,
 PAUSE and REM, and the CD/MD/RD, DEL/DELQ and RENAME aliases. DEL invokes
 native ERA.CMD. Ordinary program lines use the executable search order.
 BATCH supports ECHO, ECHO=ON/OFF, @ECHO, SHIFT, labels/GOTO, EXIT and
-IF [NOT] EXIST/DIREXIST and string equality (==).
-See HELP LANGUAGES BATCH for syntax. FOR, CALL and ERRORLEVEL are unsupported.
+IF [NOT] EXIST/DIREXIST, string equality (==), and ERRORLEVEL.
+See HELP LANGUAGES BATCH for syntax. FOR and CALL are unsupported.
 
 Native command/substitution files for SUBMIT use the separate .SUB format.
 
@@ -2303,7 +2303,7 @@ Bare BAT invocation chains to the replacement script; it does not return.
 
 BATCH supports ECHO, SHIFT, :label, GOTO, EXIT and %NAME% expansion.
 IF supports file/directory predicates and string equality (==).
-ERRORLEVEL, FOR, CALL and ordinary quoted argument grouping are unsupported.
+FOR, CALL and ordinary quoted argument grouping are unsupported.
 Only @ECHO is recognized: @DIR and arbitrary @command are unsupported.
 
 ///3ECHO
@@ -2350,13 +2350,15 @@ This is native BATCH expansion via PCTMP, not interactive substitution.
 IF [NOT] EXIST filespec command
 IF [NOT] DIREXIST directory command
 IF [NOT] left==right command
+IF [NOT] ERRORLEVEL n command
 
 Tests the expanded operands once, then conditionally executes the command.
-Nested file/directory/string tests on one line are supported. No ELSE/blocks.
+Nested file/directory/string/status tests on one line are supported. No ELSE/blocks.
 This is BATCH-only; interactive PCTMP has no IF command.
 
 See IF FILES for native CP/M/FAT files and full FAT directory paths.
 See IF STRINGS for case-sensitive equality, quotes and empty operands.
+See IF STATUS for last-program return-code thresholds.
 Syntax errors skip the line; they are not made true by NOT.
 
 ///4FILES
@@ -2390,7 +2392,21 @@ NOT reverses equality; nested comparisons and file tests are supported.
 Unbalanced quotes, a missing operator/operand/command skip the line.
 An unquoted empty/missing substitution on either side is an error.
 Use quoted operands to test empty values; a literal suffix remains valid.
-No /I, ERRORLEVEL, ELSE, blocks or general quoted argument grouping is added.
+No /I, ELSE, blocks or general quoted argument grouping is added.
+
+///4STATUS
+IF [NOT] ERRORLEVEL n command
+
+True if the last program status is at least decimal n (0-255).
+NOT tests below n. Test highest thresholds first for a choice of results.
+Status starts at zero; native CMD uses BDOS 108, DOS uses its byte exit code.
+Built-ins, comments, IF, GOTO and replacement BAT files preserve the status.
+Rejected launches set 1; errors before launch leave the status unchanged.
+Tests do not consume it. DOS INT 20h exits start with zero for a new program.
+Signs, quotes, missing/oversized numbers or missing commands are errors.
+Variable substitution and nested IF are supported; no ELSE or blocks.
+EXIT n returns n; bare EXIT and normal EOF return 0, not the cached status.
+Requires matching rebuilt PCTMP; DOS AH=4Dh remains available unchanged.
 
 ///3EXIT
 EXIT

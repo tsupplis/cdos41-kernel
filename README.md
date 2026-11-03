@@ -148,7 +148,7 @@ Stock DOS Plus 1.2 versus this CDOS rebuild.
 | Command processor | COMMAND.COM | PCTMP and BATCH |
 | Startup scripts | AUTOEXEC.BAT | Per-console startup scripts |
 | Batch arguments | `%0`–`%9`, SHIFT | `%0`–`%9`, SHIFT |
-| Batch control and messages | IF, GOTO, FOR, ECHO | ECHO, labels/GOTO, SHIFT, EXIT and IF EXIST/DIREXIST/==; ERRORLEVEL, FOR and CALL deferred |
+| Batch control and messages | IF, GOTO, FOR, ECHO | ECHO, labels/GOTO, SHIFT, EXIT and IF EXIST/DIREXIST/==/ERRORLEVEL; FOR and CALL deferred |
 | Echo control | ECHO ON/OFF | BATCH-only ECHO=ON/OFF and @ECHO; interactive ECHO prints text |
 | EXIT | COMMAND.COM command | BATCH-only; optional 0–255 status, otherwise 0 |
 | Environment variables | SET and `%NAME%` expansion | SETENV and BATCH `%NAME%` expansion; no interactive expansion |
@@ -166,7 +166,7 @@ The internal-interface count uses the nine services identified in [api.md](api.m
 
 | DOS Plus commands without a matching CDOS command | CDOS alternative or gap |
 | --- | --- |
-| IF ERRORLEVEL, FOR | Missing from BATCH |
+| FOR | Missing from BATCH |
 | PROMPT, BREAK, VERIFY, SLICE | No corresponding shell commands |
 | ALARM, GRAFTABL, DEVICE | No direct command equivalents |
 | CHKDSK | CHKCPMFS checks CP/M allocation; no equivalent FAT checker |

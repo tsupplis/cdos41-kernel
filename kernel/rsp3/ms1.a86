@@ -87,6 +87,7 @@ TRUE		EQU	NOT FALSE
 	extrn standard_stream_mask:near,standard_input_byte:near
 	extrn standard_input_status:near,standard_output_byte:near
 	extrn standard_line_begin:near,standard_line_end:near
+	extrn ms2_status_query:near
 	extrn ms2_redir_config:near,ms2_redir_launch:near,ms2_redir_apply:near
 	public cli_ds
 	public in_int24_flag,critical_ss,critical_sp,dos1_call
@@ -455,6 +456,7 @@ ms_func_tbl	dw	ms_cleanup	;function 0
 		dw	ms_addmem_func	;function 8
 		dw ms2_redir_config	;function 9, stream configuration
 		dw ms_environment_func	;function 10, read-only environment query
+		dw ms2_status_query	;function 11, read-only DOS child status
 
 MS_FUNC_TBL_END	equ	(offset $ - offset ms_func_tbl)/2
 

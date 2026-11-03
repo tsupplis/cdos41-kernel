@@ -10,7 +10,7 @@ USER omits the redundant CP/M-media note and PAUSE uses
 `Press any key to continue...`. DIR accepts native slash options and CP/M
 brackets, including a final omitted ]. BATCH is not a full COMMAND.COM:
 IF supports EXIST/DIREXIST and case-sensitive string equality with optional
-NOT. ERRORLEVEL, FOR and CALL remain unimplemented. BATCH expands `%NAME%` from the current
+NOT and ERRORLEVEL status thresholds. FOR and CALL remain unimplemented. BATCH expands `%NAME%` from the current
 console environment before command dispatch.
 
 `make check-batch-live` checks messages, CLS/DEL and an unrelated sentinel
@@ -83,3 +83,18 @@ source token. String IF rejects an unquoted missing operand on either side;
 it cannot silently consume the first command word as the RHS. No sentinel
 bytes enter ordinary command text. True nested IF shifts the side map with
 the removed prefix. Quoted empty values and literal suffixes remain valid.
+
+ERRORLEVEL caches completed external-program results after console reacquisition
+and before translator cleanup. A pending-launch byte distinguishes native CMD
+(BDOS 108) from DOS COM/EXE (read-only PCTMP selector 0Bh); it is not set for
+RSPs or built-ins. DOS termination type is excluded, while native word results
+remain unsigned. Successful launches replace the cache; rejected launches set
+1. Earlier parse/search errors preserve it. The parser accepts decimal 0–255
+and shares NOT, syntax recovery and iterative dispatch with the other IF forms.
+The DOS query does not consume AH=4Dh, and root DOS handle initialization clears
+stale status before a new root program runs. No INT 21h call is added to BATCH.
+
+`python3 tools/batch_status_check.py` (from the project root) validates actual
+native and DOS termination on disposable CP/M/FAT script media. The linked-byte
+`tools/batch_string_unit_check.py` also covers threshold boundaries and malformed
+syntax. See the root `batch.md` for the complete language contract.

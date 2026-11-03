@@ -1250,14 +1250,9 @@ at different positions, absent/deleted/duplicate labels, LFN metadata,
 full/empty directories, matching file/label names, DMA bounds and balanced
 stacks. `make check-fat-labels` also checks DIR, DIR.CMD, SDIR, SHOW and SET,
 plus real DOS label first/next and denied ordinary FCB open on disposable
-FAT images. SHOW LABEL and SET [NAME=...] still reject FAT: no label editing
-feature is added by this correction.
-
-DOS label creation remains unsupported. A separate disposable probe found
-that INT 21h AH=16h with extended-FCB attribute 08h reports success but creates
-an ordinary archive file (20h), not a volume label (08h). Existing file
-rename/delete paths also do not provide volume-label editing. This is a
-known API gap, not implemented as part of the enumeration correction.
+FAT images. This enumeration correction originally left label editing
+unsupported; the FAT label editing patch below now supplies SET/SHOW and
+DOS extended-FCB adapters, replacing the old ordinary-file fallback.
 
 ### BATCH IF string equality (local extension)
 
@@ -1333,3 +1328,27 @@ metadata requests and mapping restoration), raw enumeration cases, native
 and DOS live operations from subdirectories, same-name open-file protection,
 full 32-byte label protection under ordinary SET operations, OEM CP/M output
 comparisons, both CCP/M command builds and source identity checks.
+
+### BATCH IF ERRORLEVEL and native DOS-status query
+
+BATCH now accepts `IF [NOT] ERRORLEVEL n command`, with an unsigned >= test
+against decimal thresholds 0–255. The cache starts at zero, captures the full
+native BDOS 108 word or DOS low-byte status only after a completed external
+launch, and survives built-ins, predicates, GOTO and BAT replacement. Rejected
+launches set 1; errors before launch preserve the cache. EXIT/EOF semantics
+remain unchanged. Parsing and iterative dispatch reside in `ifcmd.lib`; no
+resident IF parser or DOS interrupt dependency is added to BATCH.
+
+PCTMP private selector 0Bh is a local extension beyond 4.1/4.11: a read-only
+query of MS2's DOS status/type word, returned in AX/BX. AH=4Dh still consumes
+its own result exactly as before; selector 5 and BDOS 108 are unchanged.
+Root DOS handle initialization resets the word so INT 20h cannot expose a
+previous program's status; nested EXEC handle paths are unchanged. The new
+BATCH needs its matching PCTMP to report DOS results. Earlier PCTMP rejects
+the query with FFFFh; BATCH treats that unavailable result as status 1.
+
+Validation: linked production-byte IF tests cover >=/NOT, 0/255 boundaries,
+full native words, strict decimal parsing, expansion and nested dispatch.
+`tools/batch_status_check.py` exercises real CMD/COM/EXE termination, CP/M/FAT
+scripts, repeated tests, status persistence, INT 20h reset and conditional
+EXIT 23 on disposable emulator media.

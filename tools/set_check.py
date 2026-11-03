@@ -189,6 +189,11 @@ def session(v, src):
         .replace('driver      = "sdl:lowpass=5000"', 'driver      = "null"')
         .replace('file     = "cdostools.img"', 'file     = "fat.img"')
     )
+    cfg = re.sub(
+        r'(?m)^path\s*=\s*"([^"\n]+)"',
+        lambda m: 'path = "' + str((R / "media" / m[1]).resolve()) + '"',
+        cfg,
+    )
     (D / "cdos86.cfg").write_text(cfg)
     cmds = ["c f000000"]
     for i, tail in enumerate(cases):
@@ -223,15 +228,9 @@ def session(v, src):
     print(v, "done", flush=True)
 
 
-from concurrent.futures import ThreadPoolExecutor
-
-with ThreadPoolExecutor(2) as pool:
-    list(
-        pool.map(
-            lambda args: session(*args),
-            [("o", "base/set.cmd"), ("n", "commands/set/set.cmd")],
-        )
-    )
+# Compare independent fixtures sequentially: only one emulator at a time.
+for variant, source in [("o", "base/set.cmd"), ("n", "commands/set/set.cmd")]:
+    session(variant, source)
 
 
 def screen(v, i):
@@ -246,7 +245,11 @@ for i, c in enumerate(cases):
     b = screen("n", i)
     norm = lambda s: re.sub(r"(?:CONCURRENT )?SET (?:2\.1|3\.1N?|4\.1N)", "SET #", s)
     if c == "b: [name=test]":
-        assert "requires CP/M media." in a and "Volume label for drive B: TEST" in b, (c,a,b)
+        assert "requires CP/M media." in a and "Volume label for drive B: TEST" in b, (
+            c,
+            a,
+            b,
+        )
     else:
         assert norm(a) == norm(b), (i, c, a, b)
     if c.startswith("b: [") and any(x in c for x in ["protect=", "update="]):

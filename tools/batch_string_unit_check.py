@@ -102,6 +102,28 @@ for text,expected,environment in [
 ]:
     cases.append((text,expected,environment))
 
+# ERRORLEVEL shares the normal IF/NOT/nested-command dispatcher.
+for status in [0,1,7,255,256,65535]:
+    for threshold in [0,1,7,8,255]:
+        cases.append((f'IF ERRORLEVEL {threshold} ECHO status',
+                      'ECHO status' if status>=threshold else None,None,status))
+        cases.append((f'IF NOT ERRORLEVEL {threshold} ECHO below',
+                      'ECHO below' if status<threshold else None,None,status))
+for text in ['IF ERRORLEVEL','IF ERRORLEVEL ECHO wrong','IF ERRORLEVEL -1 ECHO wrong',
+             'IF ERRORLEVEL +1 ECHO wrong','IF ERRORLEVEL 256 ECHO wrong',
+             'IF ERRORLEVEL 999999999 ECHO wrong','IF ERRORLEVEL 1x ECHO wrong',
+             'IF ERRORLEVEL 0','IF ERRORLEVEL 0   ','IF ERRORLEVEL "0" ECHO wrong']:
+    cases.append((text,'ERROR'))
+cases.extend([
+ ('IF ERRORLEVEL==ERRORLEVEL ECHO literal','ECHO literal'),
+ ('if errorlevel 0007 ECHO zeros','ECHO zeros',None,7),
+ ('IF ERRORLEVEL 7 IF x==x ECHO nested','ECHO nested',None,7),
+ ('IF x==x IF ERRORLEVEL 7 ECHO nested','ECHO nested',None,7),
+ ('IF ERRORLEVEL 8 IF nonsense ECHO wrong',None,None,7),
+ ('IF ERRORLEVEL %MISSING% 7 ECHO wrong','ERROR',b'\0\0',7),
+ ('IF ERRORLEVEL %N% ECHO expanded','ECHO expanded',b'N=7\0\0',7),
+])
+
 def db(value):
     return ",".join(str(c) for c in value.encode("latin1")+b"\0")
 with tempfile.TemporaryDirectory(prefix="cdos-if-string-unit-") as folder_name:
@@ -111,6 +133,7 @@ with tempfile.TemporaryDirectory(prefix="cdos-if-string-unit-") as folder_name:
         text,expected=case[:2]
         environment=case[2] if len(case)>2 else None
         environment_bytes=environment if environment is not None else b"\0\0"
+        status=case[3] if len(case)>3 else 0
         assert len(text)<=127,(number,len(text))
         skip=expected is None or expected=="ERROR"
         source=f'''bits 16
@@ -126,6 +149,7 @@ org 100h
  mov ds,ax
  mov es,ax
  mov word [0f000h],0
+ mov word [{S("batch_errorlevel")}],{status}
  mov di,{S("expand_empty_positions")}
  mov cx,128
  xor al,al

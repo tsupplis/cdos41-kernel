@@ -120,7 +120,7 @@ executes the rest of that line through the ordinary command paths: shell
 built-ins, aliases, drive changes and external programs remain available.
 Conditional commands are not expanded again. Nested IF tests are supported
 on one line; a false outer test skips the rest. There is no ELSE, block
-syntax or ERRORLEVEL test yet. String comparisons are described below.
+syntax. String comparisons and return-status tests are described below.
 
 Evaluation restores the original drive, DMA, error mode and directory mapping
 before executing or skipping the command. It does not borrow N:/O:/P: as a
@@ -177,7 +177,39 @@ rules also apply after removing an outer true IF and to missing `%0`–`%9`.
 
 This quote handling applies to comparison operands only. It does not change
 positional argument splitting or add quoted filenames to EXIST/DIREXIST.
-ELSE, blocks, ERRORLEVEL, FOR and CALL remain unimplemented.
+ELSE, blocks, FOR and CALL remain unimplemented.
+
+## IF ERRORLEVEL
+
+```bat
+IF [NOT] ERRORLEVEL n command
+```
+
+True when the last external program's status is **at least** decimal `n`
+(0–255); NOT tests whether it is below `n`. Test several thresholds from
+highest to lowest when selecting one result. Signs, quoted numbers, values
+above 255, a missing threshold or a missing command are syntax errors.
+
+```bat
+MYTOOL.CMD
+IF ERRORLEVEL 7 ECHO Status is at least seven
+IF NOT ERRORLEVEL 1 ECHO Success
+```
+
+The status starts at zero for each BATCH invocation. Native CMD programs
+supply their full unsigned BDOS 108 word; DOS COM/EXE programs supply the
+low-byte exit code from INT 21h/4Ch (or 31h). A root DOS launch starts at
+zero, so an INT 20h exit does not reuse an earlier program's result.
+Built-ins, RSP dispatch, comments, labels, IF tests and GOTO preserve the
+cached status. Replacing the current script with another BAT file preserves
+it too. A rejected native/DOS launch sets it to 1. Errors reported before
+launch, such as an unknown command, leave it unchanged.
+
+Variable substitution and nested IF work as for the other conditions.
+Testing never consumes the status. EXIT and normal end-of-file retain their
+separate rules: `EXIT n` returns n; bare EXIT and EOF return zero, regardless
+of the last program's status. This feature requires the matching rebuilt
+PCTMP, whose read-only native query leaves DOS AH=4Dh untouched.
 
 ## ECHO and command echo
 
@@ -342,7 +374,7 @@ its byte-length semantics.
 | Feature | Status |
 | --- | --- |
 | IF ELSE / blocks | Not implemented; file/directory and string conditions are supported |
-| IF ERRORLEVEL | Not implemented; no conditional status test or stop-on-error language switch |
+| IF ERRORLEVEL | BATCH-only unsigned `status >= n` test; optional NOT; no automatic stop-on-error |
 | FOR | Not implemented |
 | CALL and return to a calling BAT | Not implemented; bare BAT invocation chains |
 | Interactive `%NAME%` expansion | Not implemented in PCTMP; supported in BATCH only |

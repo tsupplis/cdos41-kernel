@@ -649,6 +649,9 @@ nextcommand:	; LOOP FOREVER
 ;===========
 
 	    call attach			; 4.11 attaches before freeing drives
+IF BATCH
+	    call batch_capture_status	; child has relinquished the console
+ENDIF
 	    mov dx,0ffffh ! call drive_free
 	    mov dl,200			; restore batch priority for the next command
 	    mov cl,P_PRIORITY
@@ -1782,6 +1785,9 @@ openckgd:
 	    mov al,byte ptr 11[bx]
 	    and al,7FH			; mask off attribute bits
 	    cmp al,'D' ! jnz notcpm		; is this a .CMD file?
+IF BATCH
+		mov batch_status_pending,1
+ENDIF
 		mov drive,TRUE
 		jmp cpmcli			; else jmp to P_CLI
 
@@ -1844,7 +1850,15 @@ ENDIF
 	    mov cl,1			; ms_p_cli function
 	    callf ms_func_jmp_addr		; call function translator
 
-	    cmp bx,0 ! je get_nextcommand
+	    cmp bx,0 ! jne batch_dos_launch_failed
+IF BATCH
+	    mov batch_status_pending,2
+ENDIF
+	    jmp get_nextcommand
+batch_dos_launch_failed:
+IF BATCH
+	    mov batch_errorlevel,1
+ENDIF
 		call clierror
 		jmps get_nextcommand
 
@@ -2824,6 +2838,10 @@ startearly:	mov cmdsent,TRUE	;command was sent
 		mov cl,P_CLI		;
 	    	call ccpm		;invoke P_CLI
 		cmp bx,0 ! je noerr	;
+IF BATCH
+		mov batch_status_pending,0
+		mov batch_errorlevel,1
+ENDIF
 		cmp batchflag,TRUE
 ;		jnz clierror
 		jz blah

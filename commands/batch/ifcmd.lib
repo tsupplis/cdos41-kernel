@@ -1,6 +1,7 @@
 ;*******************************************************************************
 ; BATCH IF - native existence predicates and bytewise string comparison.
 ;
+; IF [NOT] ERRORLEVEL n command (unsigned decimal 0..255, status >= n)
 ; IF [NOT] EXIST filespec command
 ; IF [NOT] DIREXIST directory command
 ; IF [NOT] left==right command (double quotes protect spaces/empty operands)
@@ -71,7 +72,7 @@ condition_try_directory:
         mov di,offset condition_directory_word
         call lang_word
         jc condition_directory_matched
-        jmp condition_compare_start
+        jmp condition_try_status
 condition_directory_matched:
         cmp byte ptr [si],' '
         je condition_is_directory
@@ -151,6 +152,101 @@ condition_report:
         call crlf
         stc
         ret
+
+; Capture only completed external launches. RSPs/built-ins leave the cached
+; value untouched. Native status is the full BDOS 108 word; DOS status is
+; its low byte, with termination type deliberately excluded. Query 0Bh is
+; non-destructive: DOS AH=4Dh remains available to DOS callers.
+batch_capture_status:
+        mov al,batch_status_pending
+        mov batch_status_pending,0
+        cmp al,1
+        je batch_capture_native
+        cmp al,2
+        je batch_capture_dos
+        ret
+batch_capture_native:
+        mov cl,108
+        mov dx,0ffffh
+        call ccpm
+        mov batch_errorlevel,ax
+        ret
+batch_capture_dos:
+        mov cl,0bh
+        callf ms_func_jmp_addr
+        cmp ax,0ffffh
+        jne batch_capture_dos_valid
+        mov ax,1                ; older PCTMP cannot supply DOS status
+        mov batch_errorlevel,ax
+        ret
+batch_capture_dos_valid:
+        xor ah,ah
+        mov batch_errorlevel,ax
+        ret
+
+; ERRORLEVEL is a keyword only before whitespace; ERRORLEVEL==ERRORLEVEL
+; remains a literal string comparison. Reject signs, overflow, missing
+; thresholds and missing commands before evaluating NOT.
+condition_try_status:
+        mov si,condition_left
+        mov di,offset condition_status_word
+        call lang_word
+        jnc condition_status_literal
+        cmp byte ptr [si],' '
+        je condition_status_operand
+        cmp byte ptr [si],TAB
+        je condition_status_operand
+condition_status_literal:
+        jmp condition_compare_start
+condition_status_operand:
+        call condition_rhs_spaces
+        jnc condition_status_begin
+        jmp condition_syntax
+condition_status_begin:
+        xor dx,dx
+        xor cx,cx
+condition_status_digit:
+        mov al,[si]
+        cmp al,'0'
+        jb condition_status_end
+        cmp al,'9'
+        ja condition_status_end
+        sub al,'0'
+        xor ah,ah
+        mov bx,dx
+        shl dx,1
+        shl bx,1 ! shl bx,1 ! shl bx,1
+        add dx,bx
+        add dx,ax
+        cmp dx,255
+        jbe condition_status_next
+        jmp condition_syntax
+condition_status_next:
+        inc si
+        inc cx
+        jmps condition_status_digit
+condition_status_end:
+        or cx,cx
+        jnz condition_status_separator
+        jmp condition_syntax
+condition_status_separator:
+        push dx
+        call condition_require_space
+        pop dx
+        jnc condition_status_command
+        jmp condition_syntax
+condition_status_command:
+        cmp byte ptr [si],0
+        jne condition_status_test
+        jmp condition_syntax
+condition_status_test:
+        mov condition_command,si
+        mov condition_result,0
+        cmp batch_errorlevel,dx
+        jb condition_status_decide
+        mov condition_result,1
+condition_status_decide:
+        jmp condition_decide
 
 ; String operands are spans of the expanded command buffer, not new strings.
 ; Delimiters are recognized only outside quotes. Quotes remain in the spans
@@ -709,10 +805,11 @@ condition_mapping_bad:
 condition_mapping_done:
         ret
 
+condition_status_word db 'ERRORLEVEL',0
 condition_if_word db 'IF',0
 condition_not_word db 'NOT',0
 condition_exist_word db 'EXIST',0
 condition_directory_word db 'DIREXIST',0
-condition_syntax_message db 'IF [NOT] EXIST filespec command, DIREXIST directory command, or left==right command.$'
+condition_syntax_message db 'IF [NOT] requires EXIST/DIREXIST filespec, left==right, or ERRORLEVEL 0..255, then a command.$'
 condition_spec_message db 'Invalid IF filespec; command skipped.$'
 condition_io_message db 'IF cannot inspect drive or directory; command skipped.$'

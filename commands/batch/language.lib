@@ -2,7 +2,7 @@
 ; Shell text output and the deliberately small BATCH language.
 ; PCTMP: ECHO text only. BATCH: ECHO[=ON|OFF], @ECHO, SHIFT, :label/GOTO, EXIT.
 ; BATCH expansion/conditions are in expand.lib/ifcmd.lib. No general @ prefix.
-; String comparisons are in ifcmd.lib; ERRORLEVEL, FOR and CALL are absent.
+; String comparisons are in ifcmd.lib; ERRORLEVEL is in ifcmd.lib; FOR and CALL are absent.
 ; This include is identical in the resident and standalone source trees.
 ;*******************************************************************************
         cseg

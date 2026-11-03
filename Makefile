@@ -265,3 +265,8 @@ check-fat-labels: all
 check-batch-strings: all
 	python3 tools/batch_string_unit_check.py
 	python3 tools/batch_string_check.py
+
+.PHONY: check-batch-status
+check-batch-status: all
+	python3 tools/batch_string_unit_check.py
+	python3 tools/batch_status_check.py

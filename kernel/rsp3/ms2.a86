@@ -30,6 +30,7 @@ pagesize 72					; Apr 29, 1985
 	public raw_console_handle
 	public standard_stream_mask,standard_input_byte,standard_input_status
 	public standard_output_byte,standard_line_begin,standard_line_end
+	public ms2_status_query
 	public ms2_redir_config,ms2_redir_launch,ms2_redir_apply,redir_active_flags
 	extrn check_dos_media_fcb:near
 	extrn	convert_date:near	; dos to cpm date
@@ -4093,6 +4094,12 @@ ms2_term_common:			; shared with term and keep
 ;	*** Get Sub-Func Ret-Code ***
 ;	*****************************
 
+; Native BATCH reads the same DOS status without consuming AH=4Dh.
+; Called through ms_func with the owning PCTMP data segment selected.
+ms2_status_query:
+	mov ax,return_code
+	ret
+
 ms2_get_retcode:
 	sub	ax,ax
 	xchg	ax,return_code		; fetch and set to zero
@@ -4140,6 +4147,7 @@ terminated_handles_done:
 ms2_handles_init:
 	push ax ! push bx ! push cx ! push dx ! push si ! push di ! push es
 	mov active_psp,ax
+	mov return_code,0		; a fresh root launch, including INT 20h exits
 	mov abort_pending,0
 	mov line_input_hcb,0
 	mov es,ax

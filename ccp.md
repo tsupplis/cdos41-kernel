@@ -59,6 +59,7 @@ See [api.md](api.md#pctmp-private-far-call-interface) for the DOS-loader packet.
 | `IF [NOT] EXIST filespec command` | BATCH | BATCH | Test CP/M/FAT files, then conditionally execute the remaining command; supports full FAT paths |
 | `IF [NOT] DIREXIST directory command` | BATCH | BATCH | Test FAT directories, then conditionally execute the remaining command; CP/M user areas are not directories |
 | `IF [NOT] left==right command` | BATCH | BATCH | Case-sensitive bytewise equality after substitution; quotes protect spaces/empty operands and remain part of the comparison |
+| `IF [NOT] ERRORLEVEL n command` | BATCH | BATCH | Last native/DOS program status is at least decimal n (0–255); NOT tests below n; built-ins preserve status |
 | `EXIT`, `EXIT n` | BATCH | BATCH | End BATCH with native BDOS 108 status 0 or decimal n (0–255); normal EOF also returns 0 |
 | `%0` … `%9`, `%%` | BATCH | BATCH | Substitute positional arguments or a literal percent before dispatch |
 | `%NAME%` | BATCH | BATCH | Substitute a current-console environment value before dispatch; no interactive expansion |

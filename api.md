@@ -418,7 +418,7 @@ This is the OEM shell/loader interface in `ms1.a86`, not an INT E0h function
 and not a DOS INT 21h service. The PCTMP entry jump at code offset 3 routes
 to `ms_func`; callers must locate their owning PCTMP and use its matching ABI.
 CL selects the operation; DS:DX is the packet for packet operations. Results
-are returned in AX/BX. Selectors 0–8 are historical; 9, 0Ah and FFh are local
+are returned in AX/BX. Selectors 0–8 are historical; 9, 0Ah, 0Bh and FFh are local
 extensions beyond CDOS 4.1/4.11. Confirm FFh before calling 9. Selector 0Ah
 returns FFFFh when unavailable. The range guard now checks the number of entries; unknown selectors return FFFFh.
 
@@ -435,6 +435,7 @@ returns FFFFh when unavailable. The range guard now checks the number of entries
 | 8 | Additional memory | DX=FFFFh queries; other values set additional memory |
 | 9 | DOS stream configuration (NEW) | Version-1 six-word packet: version, flags, input FCB far pointer, output FCB far pointer. Flags 1=input, 2=output, 4=append, 8=echo input, 10h=echo output. AX=0 accepted; DX=0 cancels the caller’s pending request |
 | 0A | Environment query (NEW) | No packet. AX/BX=paragraph-aligned shared environment segment (offset 0), DX=capacity in bytes, currently 1024. Query does not mutate memory; native editors may commit validated changes through the returned pointer. Caller must bound access by capacity and validate double-NUL termination; no locking. Unknown selector returns FFFFh on earlier builds |
+| 0B | DOS child status query (NEW) | No packet. AX/BX=stored DOS status/type word, as for AH=4Dh, but without clearing it. BATCH uses AL for ERRORLEVEL. Root DOS launches reset this word to zero; older builds return FFFFh |
 | FF | DOS stream capability (NEW) | AX=5244h, DX=1; historical kernels safely reject this selector |
 
 CDOS uses this ORDER facility. The CCP/M project's E0h/F0h SETDEF packet is

@@ -2054,6 +2054,9 @@ ENDIF
 
 ; BATCH language state belongs after the native basepage and TMP data.
 IF BATCH
+; Cached external-program status; built-ins and IF never reset it.
+batch_errorlevel dw 0
+batch_status_pending db 0	; 0=none, 1=native CMD, 2=DOS COM/EXE
 batch_echo db TRUE
 batch_hide db FALSE
 goto_scan db FALSE

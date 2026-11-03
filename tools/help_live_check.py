@@ -69,6 +69,9 @@ cases = [
 import sys
 if "--path" in sys.argv: cases = [x for x in cases if x[0] == "path"]
 if "--batch" in sys.argv: cases = [x for x in cases if x[0] == "batch" or x[0].startswith("languages batch")]
+if "--labels" in sys.argv:
+    cases = [("set", "SET d: [NAME=] removes the FAT label"),
+             ("show", "LABEL displays the physical-root volume name on FAT")]
 for topic, _ in cases:
     command("cls", "clear-" + topic)
     command("help " + topic + " [nopage]", topic)

@@ -65,6 +65,7 @@ def check(no_label=False, create=False, access=False):
         for src, name in [
             (R / "base/show.cmd", "OSHOW.CMD"),
             (R / "commands/show/show.cmd", "NSHOW.CMD"),
+            (R / "commands/putget/put.cmd", "PUT.CMD"),
         ]:
             run("mcopy", "-i", "fat.img", str(src), "::" + name)
         run("mmd", "-i", "fat.img", "::ADIR")
@@ -102,6 +103,11 @@ def check(no_label=False, create=False, access=False):
             .replace('driver = "sdl"', 'driver = "null"')
             .replace('driver      = "sdl:lowpass=5000"', 'driver      = "null"')
             .replace('file     = "cdostools.img"', 'file     = "fat.img"')
+        )
+        cfg = re.sub(
+            r'(?m)^path\s*=\s*"([^"\n]+)"',
+            lambda m: 'path = "' + str((R / "media" / m[1]).resolve()) + '"',
+            cfg,
         )
         (F / "cdos86.cfg").write_text(cfg)
         cases = [
@@ -142,7 +148,7 @@ def check(no_label=False, create=False, access=False):
         keys = {" ": "Space", "[": "LeftBracket", "]": "RightBracket", ".": "Period"}
         for i, tail in enumerate(cases):
             for v in ["O", "N"]:
-                text = f"put [b:{v}{i}.txt] b:{v.lower()}show.cmd {tail}"
+                text = f"b:put.cmd [b:{v}{i}.txt] b:{v.lower()}show.cmd {tail}"
                 for c in text:
                     cmds += [
                         "key "
@@ -184,7 +190,9 @@ def check(no_label=False, create=False, access=False):
             old, new = outputs
 
             def normalize(text):
-                text = re.sub(r"(?:CONCURRENT )?SHOW (?:2\.1|3\.3|4\.1N)", "SHOW #", text)
+                text = re.sub(
+                    r"(?:CONCURRENT )?SHOW (?:2\.1|3\.3|4\.1N)", "SHOW #", text
+                )
                 return re.sub(r"(Space:)\s+\d+k", r"\1 #k", text)
 
             if tail == "b:label":
