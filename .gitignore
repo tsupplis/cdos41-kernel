@@ -67,3 +67,5 @@
 
 # DFORM generated assembler data
 /commands/dform/*.inc
+
+/commands/dskmaint/dosbootx.inc

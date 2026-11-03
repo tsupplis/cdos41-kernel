@@ -442,7 +442,7 @@ include date.dat
 ;add a cluster size of 2373 in front of 317, when support for the AT@
 ; is enabled	;
 
-cluster_list	dw	2373,317,315,0,0,356,353   ;# of clusters by disk type
+cluster_list	dw	2849,715,2373,317,315,0,0,356,353   ;# of clusters by disk type
 n_clusters	equ	(offset $ -offset cluster_list)/2 ;
 num_clusters	dw	n_clusters
 ;

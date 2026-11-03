@@ -839,6 +839,9 @@ set_drive_type:
         mov cur_top,79
         cmp ddio_entry,0ffh
         je set_drive_35_rate
+        mov al,floppy_cylinders[bx]
+        dec al
+        mov cur_top,al            ; CP/M remains 40-cylinder even in a 3.5-inch drive
         mov al,floppy_spt[bx]
         or al,al
         jz set_drive_35_rate

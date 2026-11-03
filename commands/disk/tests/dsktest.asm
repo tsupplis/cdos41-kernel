@@ -852,7 +852,13 @@ xios:
     je .format_request
     cmp al,29
     jne bad
+%if SECTORS == 15
+    cmp word [ss:bp+16],0f654h
+%elif SECTORS == 18
+    cmp word [ss:bp+16],0f66ch
+%else
     cmp word [ss:bp+16],0f650h
+%endif
     jne bad
 .format_request:
     mov ah,5
