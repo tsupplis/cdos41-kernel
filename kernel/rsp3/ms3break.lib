@@ -1,0 +1,34 @@
+; MS3 - DOS Ctrl-Break query and set, using the MS2 saved register frame.
+
+;	*****************************
+;	***    DOS Function 33    ***
+;	***  Check Control-Break  ***
+;	*****************************
+
+ms2_ctbr_check:
+	mov	ax,ms2_ax		; retrieve function code
+	cmp	al,0			; if al = 0, then
+	jz	ms2_ctbr_get		;   get current state
+	cmp	al,1			; if al = 1, then
+	jz	ms2_ctbr_set		;   set current state
+
+ms2_ctbr_error:
+	mov	al,no_function		; if illegal al value
+	jmp	ms2_error_ret		;   return an error
+
+ms2_ctbr_get:
+	mov	al,ctbr_state		; get the current state
+	mov	ms2_ret_al,al		; send it back
+	mov	ms2_dl,al		;   in both al and dl
+	ret
+
+ms2_ctbr_set:
+	mov	ax,ms2_dx		; get the new state
+	cmp	al,01h			; check for legal value
+	ja	ms2_ctbr_error		; return error if bad
+
+	mov	ctbr_state,al		; set it if good
+	mov	ms2_ret_al,al		;   and return in al
+	ret
+
+

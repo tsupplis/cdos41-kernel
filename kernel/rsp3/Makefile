@@ -26,6 +26,8 @@ clean:
 	rm -f *.obj *.h86 *.hex *.lst *.sym *.log *.con *.rsp *.cmd *.loc *.lnk *.mp? *.map
 
 PCTMP=tmppc.obj dispmenu.obj runmenu.obj rmenuio.obj dmsubs.obj wwcall.obj ms1.obj ms2.obj
+ms1.obj: ms3.a86
+
 CONFID=rspdat.obj initrsp.obj nterface.obj
 pctmp.rsp: $(PCTMP) pctmp.inp Makefile
 	@$(DRCLINK86) 'pctmp[input]' > pctmp-link.log 2>&1; result=$$?; cat pctmp-link.log; test $$result -eq 0

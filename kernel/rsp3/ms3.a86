@@ -1,0 +1,107 @@
+; MS3 - CDOS PC-MODE extensions.
+; Included in the MS1 code segment. MS1 owns the loader state and relocations.
+; prepare_exe_reader validates the declared image; load_exe_image_exact
+; copies it and resumes MS1 relocation processing at exe_image_loaded.
+
+; Exact MZ image bounds. Header size is in paragraphs, not 512-byte pages.
+; Keep the legacy final-page value 4 convention; reject empty/overflow images.
+; Returns AX=rounded image paragraphs and the exact DWORD byte count in DATA.
+prepare_exe_reader:
+	cmp exe_signature,5a4dh ! je $+5 ! jmp exe_reader_invalid
+	mov ax,exe_size
+	or ax,ax ! jnz $+5 ! jmp exe_reader_invalid
+	mov bx,exe_final
+	cmp bx,512 ! jbe $+5 ! jmp exe_reader_invalid
+	cmp bx,4 ! jne exe_reader_last_page
+	xor bx,bx			; retain the original loader convention
+exe_reader_last_page:
+	or bx,bx ! jz exe_reader_full_pages
+	dec ax
+exe_reader_full_pages:
+	mov cx,512
+	mul cx
+	add ax,bx ! adc dx,0
+	mov si,ax ! mov di,dx		; declared file bytes
+	mov ax,exe_header_pars
+	cmp ax,2 ! jae $+5 ! jmp exe_reader_invalid
+	mov cx,16
+	mul cx
+	sub si,ax ! sbb di,dx
+	jnc $+5 ! jmp exe_reader_invalid
+	mov ax,si ! or ax,di
+	jnz $+5 ! jmp exe_reader_invalid
+	mov exe_image_bytes,si
+	mov exe_image_bytes+2,di
+	mov ax,si ! mov dx,di
+	add ax,15 ! adc dx,0
+	mov cx,4
+exe_reader_round_paragraphs:
+	shr dx,1 ! rcr ax,1
+	loop exe_reader_round_paragraphs
+	or dx,dx ! jz exe_reader_size_ok
+exe_reader_invalid:
+	stc
+	ret
+exe_reader_size_ok:
+	clc
+	ret
+
+; Read via console-private scratch, preserving record zero for relocations.
+; Non-final copies are multiples of 16 bytes; only the final copy may be short.
+; This handles headers inside a record and prevents record padding overruns.
+load_exe_image_exact:
+	mov ax,exe_header_pars
+	mov dx,ax ! and dx,7
+	mov cl,4 ! shl dx,cl
+	mov exe_reader_skip,dx
+	mov cl,3 ! shr ax,cl
+	mov exe_reader_record,ax
+	mov exe_reader_record+2,0
+	mov ax,exe_image_bytes
+	mov exe_reader_left,ax
+	mov ax,exe_image_bytes+2
+	mov exe_reader_left+2,ax
+	mov ax,exe_seg
+	mov next_exe_seg,ax
+	mov dx,1
+	call set_multi_sector
+exe_reader_record_loop:
+	push ds ! pop es
+	mov dx,offset exe_image_scratch
+	call set_dma_ptr
+	mov si,offset fcb
+	mov ax,exe_reader_record
+	mov CPM_R01[si],ax
+	mov ax,exe_reader_record+2
+	mov CPM_R2[si],al
+	mov dx,si
+	mov cl,FRREAD
+	call bdos
+	or al,al ! jz exe_reader_record_ready
+	jmp bad_header			; EOF before the declared image is an error
+exe_reader_record_ready:
+	mov cx,128
+	sub cx,exe_reader_skip
+	cmp exe_reader_left+2,0 ! jne exe_reader_count_ready
+	cmp cx,exe_reader_left ! jbe exe_reader_count_ready
+	mov cx,exe_reader_left
+exe_reader_count_ready:
+	mov exe_reader_count,cx
+	mov si,offset exe_image_scratch
+	add si,exe_reader_skip
+	mov es,next_exe_seg
+	xor di,di
+	cld
+	rep movsb
+	mov ax,exe_reader_count
+	sub exe_reader_left,ax ! sbb exe_reader_left+2,0
+	mov dx,exe_reader_left ! or dx,exe_reader_left+2
+	jz exe_reader_image_done
+	mov cl,4 ! shr ax,cl
+	add next_exe_seg,ax
+	add exe_reader_record,1 ! adc exe_reader_record+2,0
+	mov exe_reader_skip,0
+	jmp exe_reader_record_loop
+exe_reader_image_done:
+	jmp exe_image_loaded
+

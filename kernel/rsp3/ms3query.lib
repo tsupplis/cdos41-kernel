@@ -1,0 +1,60 @@
+; MS3 - DOS switch-character and country-information queries.
+; Uses the MS2 saved register frame and common error return.
+
+;	*****************************
+;	***    DOS Function 37    ***
+;	*** Undocumented Function ***
+;	*****************************
+
+ms2_undoc37:
+; AL=0 queries the option prefix; AL=1 sets it from DL. Other selectors
+; (including DOS device availability 2/3) return AL=FFh, with CF clear.
+; This is DOS console state, separate from BDOS 110's output delimiter.
+	cmp	ms2_al,0
+	je	switch_get
+	cmp	ms2_al,1
+	jne	switch_unsupported
+	mov	al,ms2_dl
+	mov	switch_character,al
+	mov	ms2_ret_al,0
+	ret
+switch_get:
+	mov	al,switch_character
+	mov	ms2_dl,al
+	mov	ms2_ret_al,0
+	ret
+switch_unsupported:
+	mov	ms2_ret_al,0FFh
+	ret
+
+
+;	*****************************
+;	***    DOS Function 38    ***
+;	***  International Info   ***
+;	*****************************
+
+ms2_get_intnl:
+	cmp	ms2_al,0		; DOS 2.x queries the current country
+	jne	intnl_invalid
+	cmp	ms2_dx,0ffffh		; never treat a set request as a pointer
+	je	intnl_invalid
+	les	di,ms2_ds_dx
+	push ds ! push cs ! pop ds
+	mov	si,offset intnl_info
+	mov	cx,32
+	cld
+	rep	movsb
+	pop	ds
+	ret
+
+intnl_invalid:
+	mov	al,no_file		; DOS country error 02h
+	jmp	ms2_error_ret
+
+intnl_info	dw	0		; US month/day/year
+	db	'$',0,',',0,'.',0
+	db	0,0,0,0,0,0,0,0	; DOS 2.x reserved fields
+	db	0,0,0,0,0,0,0,0
+	db	0,0,0,0,0,0,0,0
+
+

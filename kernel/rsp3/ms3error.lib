@@ -1,0 +1,45 @@
+; MS3 - DOS extended-error reporting, assembled in the MS2 register context.
+
+; DOS 59h/BX=0 returns the last DOS 2.x error without consuming it.
+ms2_extended_error:
+	cmp ms2_bx,0 ! jne extended_invalid
+	mov ax,dos_error_code
+	mov ms2_ret_ax,ax
+	mov bx,0704h		; application error, abort
+	mov ch,1		; unknown locus
+	or ax,ax ! jnz extended_classify
+	xor bx,bx ! xor ch,ch
+	jmps extended_return
+extended_classify:
+	cmp ax,19 ! jb extended_not_physical
+	mov bx,0b01h		; media error, retry
+	mov ch,2
+	cmp ax,21 ! jne extended_return
+	mov bx,0502h		; device not ready, delayed retry
+	jmps extended_return
+extended_not_physical:
+	cmp ax,8 ! jne extended_disk
+	mov bx,0104h		; exhausted resource
+	mov ch,5		; memory
+	jmps extended_return
+extended_disk:
+	cmp ax,2 ! je extended_missing
+	cmp ax,3 ! je extended_missing
+	cmp ax,15 ! je extended_missing
+	cmp ax,18 ! je extended_missing
+	cmp ax,5 ! jne extended_return
+	mov bx,0303h		; authorization, user intervention
+	mov ch,2
+	jmps extended_return
+extended_missing:
+	mov bx,0803h		; not found, user intervention
+	mov ch,2
+extended_return:
+	mov ms2_bx,bx
+	mov byte ptr ms2_cx+1,ch
+	ret
+extended_invalid:
+	mov dos_critical_code,0
+	mov al,no_function
+	jmp ms2_error_ret
+

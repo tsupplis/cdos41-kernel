@@ -1,0 +1,111 @@
+; MS3 - DOS IOCTL services, assembled in the MS2 handle and register context.
+
+;	*****************************
+;	***    DOS Function 44    ***
+;	***  I/O Device Control   ***
+;	*****************************
+
+ms2_io_ctrl:
+	mov al,hf_read + hf_write
+	call get_active_handle
+	jc ioctl_error
+	mov si,hcb_fcb_base[bx]
+	mov al,ms2_al
+	cmp al,0 ! je ioctl_info
+	cmp al,1 ! je ioctl_set_info
+	cmp al,6 ! jne $+5 ! jmp ioctl_input
+	cmp al,7 ! jne $+5 ! jmp ioctl_output
+	mov al,no_function
+ioctl_error:
+	jmp ms2_error_ret
+ioctl_info:
+	mov ax,0040h
+	test hcb_flags[bx],hf_device ! jz ioctl_disk_info
+	mov ax,80c0h		; character device, IOCTL unsupported
+	cmp byte ptr 1[si],'N' ! jne ioctl_not_null
+	or al,4			; NUL
+	jmps ioctl_info_done
+ioctl_not_null:
+	call is_console_fcb
+	jnz ioctl_info_done
+	or al,13h		; CON input/output, special device
+	jmps ioctl_info_done
+ioctl_disk_info:
+	mov al,[si]
+	or al,al ! jnz ioctl_explicit_drive
+	mov al,cur_dsk
+	inc al
+ioctl_explicit_drive:
+	dec al
+	and al,1fh
+	or al,40h
+ioctl_info_done:
+	test hcb_flags[bx],hf_raw_con ! jz ioctl_info_store
+	or al,20h
+ioctl_info_store:
+	mov ms2_dx,ax
+	ret
+; Only CON raw/cooked mode is writable here. Device identity/readiness
+; flags remain derived; no relabeling of files, AUX, COM1, NUL or printer.
+ioctl_set_info:
+	cmp byte ptr ms2_dx+1,0 ! jne ioctl_bad_set
+	test hcb_flags[bx],hf_device ! jz ioctl_bad_set
+	call is_console_fcb
+	jnz ioctl_bad_set
+	and hcb_flags[bx],not hf_raw_con
+	test byte ptr ms2_dx,20h ! jz ioctl_set_done
+	or hcb_flags[bx],hf_raw_con
+ioctl_set_done:
+	ret
+ioctl_bad_set:
+	mov al,no_function
+	jmp ms2_error_ret
+
+ioctl_input:
+	test hcb_flags[bx],hf_device ! jnz ioctl_char_input
+	mov ax,fcb_rand_rec2[si]
+	cmp ax,fcb_byte_size2[si] ! jb ioctl_ready
+	ja ioctl_not_ready
+	mov ax,fcb_rand_rec[si]
+	cmp ax,fcb_byte_size[si] ! jb ioctl_ready
+	jmps ioctl_not_ready
+ioctl_char_input:
+	cmp byte ptr 1[si],'N' ! je ioctl_ready
+	call is_console_fcb
+	jnz ioctl_aux_input
+	call getstat
+	jz ioctl_not_ready
+	jmps ioctl_ready
+ioctl_aux_input:
+	cmp byte ptr 1[si],'A' ! je ioctl_aux_read_status
+	cmp word ptr 1[si],4f43h ! jne ioctl_not_ready
+	cmp word ptr 3[si],314dh ! jne ioctl_not_ready
+ioctl_aux_read_status:
+	mov cl,7
+	call ccpm
+	or al,al ! jz ioctl_not_ready
+	jmps ioctl_ready
+ioctl_output:
+	test hcb_flags[bx],hf_device ! jz ioctl_ready
+	cmp byte ptr 1[si],'L' ! je ioctl_printer
+	cmp byte ptr 1[si],'P' ! je ioctl_printer
+	cmp byte ptr 1[si],'A' ! je ioctl_aux_output
+	cmp word ptr 1[si],4f43h ! jne ioctl_ready
+	cmp word ptr 3[si],314dh ! je ioctl_aux_output
+	jmps ioctl_ready
+ioctl_printer:
+	call printer_ready
+	or al,al ! jz ioctl_not_ready
+	jmps ioctl_ready
+ioctl_aux_output:
+	mov cl,8
+	call ccpm
+	or al,al ! jz ioctl_not_ready
+ioctl_ready:
+	mov ms2_ret_ax,00ffh
+	ret
+ioctl_not_ready:
+	mov ms2_ret_ax,0
+	ret
+
+
