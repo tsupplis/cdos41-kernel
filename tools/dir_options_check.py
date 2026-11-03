@@ -21,16 +21,21 @@ run(
     str(R / "media/cdos86.img"),
     "logical.img",
 )
+run("cpmrm", "-f", "ccpm86-320", "logical.img", "0:ED.CMD")
 (F / "fixture").write_bytes(b"fixture\r\n\x1a")
 for name in ["norm.tst", "sys.tst"]:
     run("cpmcp", "-f", "ccpm86-320", "logical.img", "fixture", "0:" + name)
 run("cpmchattr", "-f", "ccpm86-320", "logical.img", "s", "0:sys.tst")
+for name in ["user3.tst", "sys3.tst"]:
+    run("cpmcp", "-f", "ccpm86-320", "logical.img", "fixture", "3:" + name)
+run("cpmchattr", "-f", "ccpm86-320", "logical.img", "s", "3:sys3.tst")
 run("python3", str(R / "tools/cpm86twist.py"), "twist", "logical.img", "cdos86.img")
 run("mformat", "-C", "-i", "fat.img", "-t", "40", "-h", "2", "-n", "8", "-c", "2", "::")
 for name in ["norm.tst", "sys.tst", "hide.tst"]:
     run("mcopy", "-i", "fat.img", "fixture", "::" + name)
 run("mattrib", "-i", "fat.img", "+s", "::sys.tst")
 run("mattrib", "-i", "fat.img", "+h", "::hide.tst")
+run("mcopy", "-i", "fat.img", str(R / "commands/dir/dir.cmd"), "::XDIR.CMD")
 for i in range(32):
     run("mcopy", "-i", "fat.img", "fixture", f"::page{i:02}.dat")
 (F / "dopts.bat").write_bytes(b"DIR B:*.TST [S]\r\n")
@@ -43,6 +48,7 @@ cfg = (
     .replace('driver      = "sdl:lowpass=5000"', 'driver      = "null"')
     .replace('file     = "cdostools.img"', 'file     = "fat.img"')
 )
+cfg = re.sub(r'(?m)^path\s*=\s*"([^"\n]+)"', lambda m: 'path = "' + str((R / "media" / m[1]).resolve()) + '"', cfg)
 (F / "cdos86.cfg").write_text(cfg)
 c = ["c f000000"]
 keys = {
@@ -79,6 +85,19 @@ for drive in ["a", "b"]:
         cases.append((drive, opt, label))
         command(f"dir {drive}:*.tst {opt}", label)
     command(f"dir {drive}:*.tst", "plain-" + drive)
+for spelling, label in [("[g3]", "g-bracket"), ("[g3", "g-open"), ("/g3", "g-slash"), ("[g3,s]", "g-sys")]:
+    command("dir a:*.tst " + spelling, label)
+command("user", "g-restored")
+command("dir a:*.tst /g16", "g-invalid")
+command("user", "invalid-restored")
+for drive in ["a", "b"]:
+    command(f"b:xdir {drive}: [s]", "external-s-" + drive)
+    command(f"b:xdir {drive}:", "external-default-" + drive)
+command("2a:", "userdrive-a")
+command("user", "userdrive-query")
+command("0a:", "userdrive-reset")
+command("16a:", "userdrive-invalid")
+command("user", "userdrive-invalid-query")
 command("dir [s] b:*.tst", "prefix")
 command("a:dopts.bat", "batch")
 command("dir b:page*.dat /l [p]", "pause")
@@ -94,7 +113,7 @@ with (F / "pce.log").open("wb") as log:
         input=("\n".join(c) + "\n").encode(),
         stdout=log,
         stderr=log,
-        timeout=300,
+        timeout=420,
         check=True,
     )
 assert "unknown key:" not in (F / "pce.log").read_text(errors="replace")
@@ -126,6 +145,21 @@ for drive in ["a", "b"]:
 for name in ["prefix", "batch"]:
     s = screen(name)
     assert re.search(r"SYS\s+TST", s) and not re.search(r"NORM\s+TST", s), s
+for label in ["g-bracket", "g-open", "g-slash"]:
+    text = screen(label)
+    assert re.search(r"USER3\s+TST", text) and not re.search(r"NORM\s+TST", text), text
+text = screen("g-sys")
+assert re.search(r"SYS3\s+TST", text) and not re.search(r"USER3\s+TST", text), text
+for label in ["g-restored", "invalid-restored", "userdrive-invalid-query"]:
+    assert "User Number = 0" in screen(label), screen(label)
+assert "Invalid User Number" in screen("g-invalid"), screen("g-invalid")
+assert "User Number = 2" in screen("userdrive-query"), screen("userdrive-query")
+for drive in ["a", "b"]:
+    text = screen("external-s-" + drive)
+    assert re.search(r"SYS\s+TST", text) and not re.search(r"NORM\s+TST", text), text
+    if drive == "b": assert re.search(r"HIDE\s+TST", text), text
+    text = screen("external-default-" + drive)
+    assert re.search(r"NORM\s+TST", text) and not re.search(r"SYS\s+TST", text), text
 for a, b in [("pause", "resumed"), ("open-pause", "open-resumed")]:
     assert "Press any key to continue..." in screen(a), screen(a)
     s = screen(b)

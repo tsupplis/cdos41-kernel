@@ -887,6 +887,10 @@ EJECT
 
 ;=======
 clicall:	; SEND CLI COMMAND
+	    call shell_user_drive
+	    jnc user_drive_not_handled
+	    jmp nextcommand
+user_drive_not_handled:
 	    call shell_language
 	    jnc language_not_handled
 	    jmp nextcommand

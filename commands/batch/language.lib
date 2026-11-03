@@ -57,6 +57,75 @@ lang_space_next:
 lang_spaces_done:
         ret
 
+; Standalone nD: selects a CP/M user (0..15) and drive (A..P).
+; Validate the complete form before any change; a failed drive selection
+; leaves the user unchanged. Other digit-leading commands pass untouched.
+shell_user_drive:
+        push ax ! push bx ! push cx ! push dx
+        push si ! push di ! push es
+        mov si,offset clicb_cmd
+        call lang_spaces
+        xor dx,dx
+        xor di,di
+        mov al,[si]
+        cmp al,'0' ! jb user_drive_unhandled
+        cmp al,'9' ! ja user_drive_unhandled
+user_drive_digit:
+        mov al,[si]
+        cmp al,'0' ! jb user_drive_letter
+        cmp al,'9' ! ja user_drive_letter
+        sub al,'0'
+        xor ah,ah
+        mov cx,ax
+        mov ax,dx
+        shl dx,1
+        shl ax,1 ! shl ax,1 ! shl ax,1
+        add dx,ax
+        add dx,cx
+        cmp dx,15 ! jbe user_drive_next
+        mov di,1
+        xor dx,dx
+user_drive_next:
+        inc si
+        jmps user_drive_digit
+user_drive_letter:
+        call lang_upper
+        cmp al,'A' ! jb user_drive_unhandled
+        cmp al,'Z' ! ja user_drive_unhandled
+        mov bl,al
+        inc si
+        cmp byte ptr [si],':' ! jne user_drive_unhandled
+        inc si
+        call lang_spaces
+        cmp byte ptr [si],0 ! jne user_drive_unhandled
+        or di,di ! jnz user_drive_bad_user
+        sub bl,'A'
+        cmp bl,15 ! ja user_drive_bad_disk
+        push dx
+        mov dl,bl
+        call setdisk
+        pop dx
+        or al,al ! jnz user_drive_bad_disk
+        call setuser
+        stc
+        jmps user_drive_return
+user_drive_bad_user:
+        mov dx,offset usererrmsg
+        jmps user_drive_error
+user_drive_bad_disk:
+        mov dx,offset fdrverr
+user_drive_error:
+        call print_string
+        call crlf
+        stc
+        jmps user_drive_return
+user_drive_unhandled:
+        clc
+user_drive_return:
+        pop es ! pop di ! pop si
+        pop dx ! pop cx ! pop bx ! pop ax
+        ret
+
 ; Called before filename parsing, so text retains case and dollar signs.
 ; Return carry set if this include consumed the command.
 shell_language:

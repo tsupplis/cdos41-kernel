@@ -22,6 +22,8 @@ EJECT
 dir:
 	mov stack_save,sp
 	mov es_save,es
+	call getuser
+	mov dir_saved_user,al
 
 
 ;start		*GLP*2*
@@ -1019,6 +1021,7 @@ dir_bracket_options:
     cmp al,'W' ! je dir_bracket_flag
     cmp al,'P' ! je dir_bracket_flag
     cmp al,'S' ! je dir_bracket_flag
+    cmp al,'G' ! je dir_bracket_flag
     mov ax,E_BADFNAME
     call clierror
     jmp ccpret
@@ -1051,19 +1054,60 @@ optnck:
 					;P (pause).
 	    mov lflag,0ffh		;bx is left pointing to the next
      	    mov lused,true
-	    jmps nots
+	    jmp nots
 notl:
 	cmp al,'W' ! jnz notw
 	    mov lflag,0
 	    mov lused,true
-	    jmps nots
+	    jmp nots
 notw:
 	cmp al,'P' ! jnz notp		;character after the option.
 	    mov pflag,0ffh
-	    jmps nots
+	    jmp nots
 notp:
-	cmp al,'S' ! jnz nots
+	cmp al,'S' ! jnz dir_check_g
 	    mov sflag,0ffh
+	    jmp nots
+ dir_check_g:
+    cmp al,'G' ! jne nots
+    inc bx
+    push cx ! push dx
+    xor dx,dx
+    mov al,[bx]
+    cmp al,'0' ! jb dir_bad_user
+    cmp al,'9' ! ja dir_bad_user
+ dir_user_digit:
+    mov al,[bx]
+    cmp al,'0' ! jb dir_user_end
+    cmp al,'9' ! ja dir_user_end
+    sub al,'0'
+    xor ah,ah
+    mov cx,ax
+    mov ax,dx
+    shl dx,1
+    shl ax,1 ! shl ax,1 ! shl ax,1
+    add dx,ax
+    add dx,cx
+    cmp dx,15 ! ja dir_bad_user
+    inc bx
+    jmps dir_user_digit
+ dir_user_end:
+    or al,al ! jz dir_user_set
+    cmp al,' ' ! je dir_user_set
+    cmp al,TAB ! je dir_user_set
+    cmp al,',' ! je dir_user_set
+    cmp al,']' ! je dir_user_set
+    cmp al,'/' ! je dir_user_set
+    cmp al,'[' ! jne dir_bad_user
+ dir_user_set:
+    mov cl,DIR_USERNUM
+    call bdos
+    pop dx ! pop cx
+    ret
+ dir_bad_user:
+    mov dx,offset usererrmsg
+    call print_string
+    jmp ccpret
 nots:
 	inc bx
 	ret
@@ -1413,6 +1457,8 @@ EJECT
 
 ccpret:
 	call restore			;restore default drive
+	mov dl,dir_saved_user
+	call setuser
 	call crlf
 	mov es,es_save ! mov sp,stack_save
 	ret
@@ -1871,6 +1917,7 @@ p_dec_flg	db	FALSE
 
 dfcb		rb	36
 
+dir_saved_user db 0
 fcount		dw	0
 
 drivemsg	db	'A'
