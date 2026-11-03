@@ -33,6 +33,7 @@ check: all
 	$(MAKE) -C commands check
 	$(MAKE) -C kernel/sysgen check
 	python3 tools/console_footprint_check.py
+	python3 tools/console_footprint_check.py kernel/sysgen/ccpmfidd.sys --confid 1
 	$(MAKE) -C kernel/rsp3 check
 	$(MAKE) -C kernel/con check-cursor check-rtc
 	python3 tools/historical_check.py

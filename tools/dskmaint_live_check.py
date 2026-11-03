@@ -54,10 +54,18 @@ def build_low_kernel(folder):
     gen = folder/'sysgen'
     gen.mkdir()
     source=ROOT/'kernel/sysgen'
+    # Stage only declared RSPs. The selected response file owns inclusion,
+    # just as in the normal SYSGEN build; stale RSPs are never enumerated.
+    from sysgen_check import resident_names
+    names=resident_names((source/'ccpm.sys').read_bytes())
+    selected={'pin.rsp','clock.rsp','pctmp.rsp','confid.rsp'}
     for pattern in ('*.con','*.rsp'):
         for component in source.glob(pattern):
+            if component.suffix=='.rsp' and component.name not in selected:
+                continue
             shutil.copyfile(component,gen/component.name)
-    recipe=(source/'genccpm.in').read_text()
+    response='genfidd.in' if 'CONFIDD' in names else 'genccpm.in'
+    recipe=(source/response).read_text()
     assert recipe.count('osstart=6000') == 1
     run(gen,'emu2',str(ROOT/'commands/genccpm/genccpm.cmd'),
         input=recipe.replace('osstart=6000','osstart=60').encode(),timeout=30)

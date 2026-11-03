@@ -1,8 +1,25 @@
 # Concurrent DOS 4.1 system generation
 
-`make` stages the seven CON components and PIN, CLOCK, PCTMP and CONFID in
-a fresh temporary directory, then runs the locally rebuilt GENCCPM 4.1.
-Only a completed output becomes CCPM.SYS; unrelated RSPs cannot leak in.
+`make` produces two systems from the same seven CON components and resident
+process sources. Each GENCCPM run has a fresh temporary directory containing
+only the declared components; unrelated RSPs cannot leak in. Outputs are
+published only after validation succeeds.
+
+| Output | Response file | Resident selection |
+| --- | --- | --- |
+| `ccpm.sys` | `genccpm.in` | PIN, CLOCK and PCTMP; excludes CONFIDD |
+| `ccpmfidd.sys` | `genfidd.in` | PIN, CLOCK, PCTMP and CONFIDD |
+
+The configurations differ only by `exclude=confid.rsp` in `genccpm.in`.
+Media always packages the standard `ccpm.sys`. Both outputs build side by side;
+no profile switch or cleanup is needed. To install the optional image manually,
+copy `ccpmfidd.sys` to the destination as `CCPM.SYS` using the usual system-file
+copy procedure. Preserve the standard image as the recovery boot disk.
+
+CONFIDD processes `CONFIG.SYS` FIDD device-driver entries. It remains built
+and available in the optional image, while the default distribution supplies
+no FIDD configuration or drivers. Normal serial AUX/printer support belongs
+to XIOS and remains in both images.
 The response file sets system/temp drives to A:, disables command logging,
 uses the initial memory partition list and places the kernel at 6000h.
 This leaves room for this larger 4.1 kernel below the 640 KB boundary.
@@ -38,11 +55,11 @@ The supported settings are 0 and 2; the default is 0.
 
 CIO reserves one 256-byte recall slot per configured console, rather than
 sixteen slots for the entire console-number range. With current sources the
-standard four-console SYS with shared buffers is 168,064 bytes, down from
-197,120 bytes: 29,056 bytes recovered. Console/recall allocation accounts for
-18,304 bytes; replacing nine private disk-buffer pools with the shared pool
-recovers another 10,752 stored bytes, plus runtime data-buffer memory.
-CONFIDD is still included; its optional-driver footprint is a separate review.
+standard four-console `ccpm.sys` is 155,520 bytes; `ccpmfidd.sys` is 168,064
+bytes. The original current build was 197,120 bytes. Console/recall allocation
+recovers 18,304 bytes; shared disk buffers recover another 10,752 stored bytes.
+Omitting CONFIDD from the default recovers a further 12,544 stored bytes
+(12,560 resident bytes, with file-size rounding).
 
 `tools/console_footprint_check.py`, included in root `make check`, checks the
 assembled XIOS counts, UART AUX allocation, generated resident-process copies,
@@ -50,9 +67,15 @@ recall storage and all 256 byte console IDs against the production selector.
 Eight assembled UART-startup cases also cover present/missing ports and
 requested terminal modes, checking that ordinary AUX ports remain available.
 It also rejects separate per-drive buffer pools or incorrect pool counts
-and process limits. The reviewed standard SYS file budget is 166 KiB
-(182 KiB with two serial
-terminals). A future budget increase requires reviewing and documenting its
+and process limits. The reviewed standard SYS budgets are:
+
+| Console profile | `ccpm.sys` | `ccpmfidd.sys` |
+| --- | --- | --- |
+| Four PC consoles | 154 KiB | 166 KiB |
+| Four PC + two serial terminals | 170 KiB | 182 KiB |
+
+`tools/sysgen_profiles_check.py` verifies identical kernel CODE and matched
+settings, with CONFIDD as the only resident-process difference. A future budget increase requires reviewing and documenting its
 resident cost. File bytes and the runtime memory boundary are distinct:
 GENCCPM also reserves XIOS disk buffers beyond the stored SYS image.
 
@@ -60,7 +83,7 @@ GENCCPM also reserves XIOS disk buffers beyond the stored SYS image.
 
 The default 16 directory/eight data buffers doubles the original 4.11 shared
 pool (eight/four), providing headroom for four active PC consoles. Edit the
-four numeric lines following `diskbuffers` and `a:` in `genccpm.in`:
+four numeric lines following `diskbuffers` and `a:` in both `genccpm.in` and `genfidd.in`:
 
 | Setting | Response value | Decimal value |
 | --- | --- | --- |
@@ -76,7 +99,7 @@ A:'s pool instead of allocating another pool per drive. Drive letters are
 pool references here, not a limit on the number of usable drives.
 
 Rebuild with root `make`, then run `make check`. The footprint check reads the
-selected pool counts and limits from this response file and verifies the
+selected pool counts and limits from the corresponding response file and verifies the
 actual DPH/BCB chains. Directory buffers increase both stored SYS size and
 resident memory; data-buffer contents are reserved at runtime, outside the
 stored image. If a deliberate increase exceeds the reviewed SYS size budget,

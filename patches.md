@@ -1615,3 +1615,25 @@ Buffer tuning: `kernel/sysgen/README.md` documents the four hexadecimal pool
 settings and preserves the sharing responses. The allocation check derives
 expected counts/limits from `genccpm.in`, while still rejecting duplicated
 per-drive pools and enforcing the reviewed SYS size budget.
+
+### Standard and optional FIDD system images
+
+SYSGEN now builds `ccpm.sys` without CONFIDD and `ccpmfidd.sys` with it, using
+identical kernel components and otherwise identical GENCCPM settings.
+`genccpm.in` excludes CONFID.RSP; `genfidd.in` retains it. Each target stages
+only declared CON/RSP files in its own temporary directory, allowing parallel
+builds without stale RSP leakage or output collisions. Both outputs remain
+incremental. Media continues to select only `ccpm.sys`.
+
+The default distribution has no FIDD CONFIG.SYS/drivers. Its standard SYS is
+155,520 bytes, versus 168,064 with CONFIDD: 12,544 stored bytes recovered
+(12,560 resident bytes before final file rounding). Both retain four PC
+consoles, two UART AUX ports and the shared 16-directory/eight-data pool.
+README documents installing the optional image as CCPM.SYS and reversing the
+choice. The low-linked DOS-floppy fixture follows the standard system's
+resident selection instead of blindly including stale staged RSPs.
+
+Checks validate explicit resident selections, identical CODE between images,
+response-file parity and the expected size difference. Profile budgets are
+154/166 KiB for the standard/FIDD images, or 170/182 KiB with serial terminals.
+Parallel builds, incremental no-op rebuilds and stray-RSP exclusion pass.

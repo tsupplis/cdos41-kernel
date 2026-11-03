@@ -213,8 +213,11 @@ The filesystem and boot track are generated locally.
 | PIN | Physical console input | Recompiled from CDOS 4.1 and adapted |
 | CLOCK | Timekeeping resident process | Recompiled from CDOS 4.1 |
 | PCTMP | Shell and command execution on four resident PC consoles | Recompiled from CDOS 4.1 and adapted |
-| CONFID | Resident configuration support | Recompiled from CDOS 4.1 |
+| CONFID | Optional FIDD device-driver loading (`ccpmfidd.sys`) | Recompiled from CDOS 4.1 |
 | Boot sector / loader | Start the generated kernel | Recompiled from CCP/M-86 boot sources |
+
+The build produces `ccpm.sys` (standard, used by media) and `ccpmfidd.sys`
+(with the optional CONFIDD driver loader). See [system generation](kernel/sysgen/README.md).
 
 ## Commands
 

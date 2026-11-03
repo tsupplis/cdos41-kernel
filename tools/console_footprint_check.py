@@ -9,7 +9,7 @@ and documenting the resident footprint rather than accepting silent growth.
 from pathlib import Path
 import re
 import subprocess
-import sys
+import argparse
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -35,7 +35,11 @@ assert x[s['NPCNS']] == physical
 assert x[s['NACB']] == s['NUMAUXPORTS'] == 2, 'UART AUX support changed'
 assert c['RECALLSLOTS'] == consoles
 assert c['RAWINIT']-c['RECALLLINES'] == 256*consoles
-image = Path(sys.argv[1]) if len(sys.argv)>1 else ROOT/'kernel/sysgen/ccpm.sys'
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('image',nargs='?',type=Path,default=ROOT/'kernel/sysgen/ccpm.sys')
+parser.add_argument('--confid',type=int,choices=(0,1),default=0)
+args=parser.parse_args()
+image=args.image
 b = image.read_bytes()
 w = lambda b,o: int.from_bytes(b[o:o+2],'little')
 base, code = w(b,3), w(b,1)
@@ -54,6 +58,7 @@ assert len([n for n in names if n.startswith('PCTMP')]) == consoles
 assert len([n for n in names if n.startswith('PIN')]) == physical
 assert {n for n in names if n.startswith('PCTMP')} == {f'PCTMP{i}' for i in range(consoles)}, names
 assert {n for n in names if n.startswith('PIN')} == {f'PIN{i}' for i in range(physical)}, names
+assert ('CONFIDD' in names)==bool(args.confid), 'Unexpected CONFIDD inclusion'
 # Every configured DPH must share the same reviewed pool. GENCCPM's '*:'
 # duplicates numeric settings; sharing requires a named A: pool followed by
 # '*:' with A: as the directory/data source.
@@ -63,7 +68,7 @@ for drive in range(16):
     if dph:
         headers.add((w(d,dph+14),w(d,dph+16)))
 assert len(headers)==1, f'Per-drive buffer duplication: {headers}'
-recipe=[line.strip().lower() for line in (ROOT/'kernel/sysgen/genccpm.in').read_text().splitlines()]
+recipe=[line.strip().lower() for line in (ROOT/'kernel/sysgen'/('genfidd.in' if args.confid else 'genccpm.in')).read_text().splitlines()]
 setting=recipe.index('diskbuffers')
 assert recipe[setting+1]=='a:', 'Expected named A: buffer pool'
 dir_count,dir_limit,data_count,data_limit=(int(v,16) for v in recipe[setting+2:setting+6])
@@ -79,7 +84,7 @@ for header,total,per_process in [(dir_header,dir_count,dir_limit),(data_header,d
         item=w(d,item+12)
     assert len(seen)==total, (len(seen),total)
     assert d[header+2]==per_process
-budget = (166 if serial==0 else 182)*1024
+budget = ((154 if serial==0 else 170)+12*args.confid)*1024
 assert len(b) <= budget, f'System footprint {len(b)} exceeds reviewed {budget}-byte budget'
 
 # Call the production recall-slot selector for every possible byte console ID.

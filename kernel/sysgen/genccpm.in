@@ -19,5 +19,6 @@ oslabel
 Enhanced Capability
 
 rsps
+exclude=confid.rsp
 
 gensys

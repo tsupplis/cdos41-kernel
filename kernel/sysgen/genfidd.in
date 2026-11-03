@@ -1,0 +1,23 @@
+destdrive=a:
+sysparams
+sysdrive=a: tmpdrive=a: cmdlogging=n osstart=6000
+
+memory
+
+diskbuffers
+a:
+10
+4
+8
+2
+*:
+a:
+a:
+no
+
+oslabel
+Enhanced Capability
+
+rsps
+
+gensys
