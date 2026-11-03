@@ -960,3 +960,23 @@ replace. The graphics live fixture checks teletype drawing and cursor advance.
 
 Validation: 177 assembled-XIOS cases; live PCE VGA/EGA/CGA graphics,
 including teletype; kernel regressions and every packaged image payload.
+
+## DOS 37h: get/set switch character
+
+`ms2.a86` implements AL=0 (query in DL) and AL=1 (set from DL),
+returning AL=0 on success. All other selectors, including device-availability
+selectors 2/3, return AL=FFh with carry clear and leave state/DX unchanged.
+The default is `/`; all byte values are accepted, matching DOS 2.0’s setter.
+The existing alignment byte beside the break setting holds the value, so the
+PCTMP DATA size and following field offsets do not change. State is per
+console, shared across EXEC and subsequent root launches on that console.
+The native shell and command-specific option grammars are unchanged.
+
+BDOS 110 is implemented in CIO, but it controls the string terminator used
+by native BDOS 9. It is not a DOS switch-character service. DOS 37h does not
+call or modify it. No BDOS, XIOS, pathname parser or EXEC changes are needed.
+
+`make check-dos-switch` tests the assembled handler with distinct CODE/DATA:
+all 256 byte values, all unsupported selectors, caller fields/status and
+console isolation. Disposable PCE tests check registers, the native output
+delimiter, EXEC child changes seen by its parent, and the next root launch.

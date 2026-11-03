@@ -39,6 +39,7 @@ check: all
 	python3 tools/dos_stamp_check.py
 	python3 tools/dos_api_check.py
 	python3 tools/dos_console_check.py
+	python3 tools/dos_switch_check.py
 	python3 tools/dos_handles_check.py
 	python3 tools/dos_redirection_config_check.py
 	python3 tools/fat_recovery_check.py
@@ -154,6 +155,7 @@ check-historical: kernel
 	python3 tools/dos_stamp_check.py
 	python3 tools/dos_api_check.py
 	python3 tools/dos_console_check.py
+	python3 tools/dos_switch_check.py
 	python3 tools/dos_handles_check.py
 	python3 tools/dos_redirection_config_check.py
 	python3 tools/fat_recovery_check.py
@@ -201,3 +203,9 @@ check-graphics: all
 	python3 tools/graphics_check.py
 	python3 tools/graphics_check.py ega
 	python3 tools/graphics_check.py cga
+
+# DOS option-prefix state, EXEC and launch persistence on disposable media.
+.PHONY: check-dos-switch
+check-dos-switch: all
+	python3 tools/dos_switch_check.py
+	python3 tools/dos_switch_live_check.py

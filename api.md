@@ -2,7 +2,7 @@
 
 | Scope | Contract |
 | --- | --- |
-| Build | Current CDOS 4.1 PC-MODE build with IBM SQUID XIOS; 2 November 2026 |
+| Build | Current CDOS 4.1 PC-MODE build with IBM SQUID XIOS; 3 November 2026 |
 | Numbers | Hexadecimal unless explicitly labelled decimal |
 | Implemented | Handler present in current code; not exhaustive DOS conformance certification |
 | Partial / stub / missing | Limited contract / no operation / no implementation |
@@ -72,17 +72,23 @@
 
 AH=2Fh through 68h dispatch through `ms2_func_table`. Successful entry clears
 CF; error handlers set CF and return a DOS error in AX. This differs from the
-DOS 1.x FCB AL-status convention. Reserved slots are explicitly listed below.
+DOS 1.x FCB AL-status convention. Unimplemented slots are explicitly listed below.
+
+DOS 2.0 already included the internal interfaces 1Fh, 32h, 34h, 37h,
+50h–53h and 55h; they are not reserved slots or later-DOS additions.
+Some expose version-dependent DOS data structures. The statuses below
+describe this kernel’s implementation. See Microsoft’s
+[DOS 2.0 system-call assignments](https://github.com/microsoft/MS-DOS/blob/main/v2.0/source/SYSCALL.txt).
 
 | AH | Service | Status | Limit / behaviour | Extension |
 | --- | --- | --- | --- | --- |
 | 31 | Terminate and keep resident | Partial | Records termination type 3 and disowns the process memory; ignores DX retained-paragraph count; not full DOS TSR compatibility | — |
-| 32 | Get DPB / reserved slot | Stub | No service; CF clear, AL=0, AH retained | — |
+| 32 | Get selected-drive DOS DPB | Stub | No service; CF clear, AL=0, AH retained | — |
 | 33 | Ctrl-Break control | Implemented | AL=0 queries DL; AL=1 sets DL=0/1. Enabled checking polls additional DOS calls and invokes INT 23h with caller registers. Raw 06h/07h and 33h/59h are excluded | NEW |
-| 34 | InDOS pointer / reserved slot | Stub | No pointer; CF clear, AL=0, AH retained | — |
+| 34 | Get InDOS flag pointer | Stub | No pointer; CF clear, AL=0, AH retained | — |
 | 35 | Get interrupt vector | Implemented | AL=vector, ES:BX=result from interrupt vector table | — |
 | 36 | Free disk space | Implemented | Uses media geometry and native free-space service; invalid drive returns AX=FFFFh | — |
-| 37 | Switch character | Partial | Returns DL=2Fh (`/`); no set-switch-character operation | — |
+| 37 | Switch character / device availability | Partial | AL=0 queries DL, AL=1 sets from DL; AL=0 on success, AL=FFh for unsupported selectors, CF clear. Default `/`; shared within one console across EXEC and root launches. Device-availability selectors 2/3 remain unsupported | NEW (get/set switch character) |
 | 38 | Country information | Implemented | AL=0 returns the full 32-byte US record. Other selectors and DX=FFFFh return CF set, AX=2 | NEW |
 | 39 / 3A / 3B | Make / remove / change directory | Implemented | FAT hierarchical directories; CP/M user areas are not DOS directories | — |
 | 3C / 3D / 3E | Create / open / close handle | Implemented | 20 handle slots, initially 0-4 are standard devices. Close releases device and standard references; final disk references flush before reuse | NEW (handle lifecycle) |
@@ -100,9 +106,10 @@ DOS 1.x FCB AL-status convention. Reserved slots are explicitly listed below.
 | 4E / 4F | Find first / next by pathname | Implemented | DTA search state, attributes and translated CP/M/FAT entries | — |
 | 50 | Set current PSP | Implemented | Saves BX in the active PSP used by EXEC/termination; does not switch concurrent processes | European 1985 recovery |
 | 51 | Get current PSP | Implemented | Returns the active PSP segment in BX | European 1985 recovery |
-| 52–53 | Reserved / later DOS internals | Stub | No service; CF clear, AL=0, AH retained; no list-of-lists contract | — |
+| 52 | Get DOS internal-variable pointer (list of lists) | Stub | No pointer; CF clear, AL=0, AH retained | — |
+| 53 | Construct DOS DPB from BPB | Stub | No DPB constructed; CF clear, AL=0, AH retained | — |
 | 54 | Get verify flag | Implemented | AL=0/1 returns the additional system-wide verification setting from XIOS | NEW |
-| 55 | Reserved / later DOS internals | Stub | No service; CF clear, AL=0, AH retained | — |
+| 55 | Duplicate PSP | Stub | No PSP duplicated; CF clear, AL=0, AH retained | — |
 | 56 | Rename pathname | Implemented | Path preparation and native rename | — |
 | 57 | Get / set handle date/time | Implemented | AL=0/1, disk files, 1980-2099. FAT retains two-second precision. CP/M requires update stamps and stores minutes. Set failures return CF set | NEW |
 | 58 | Later service | Missing | CF set, AX=1 | — |
@@ -450,7 +457,7 @@ callers must manage launch selection, console reacquisition and cleanup.
 | --- | --- |
 | Native return status | INT E0h, CL=108. New processes start at zero. P_CHAIN transfers the word to the replacement CMD. Termination publishes the result to the surviving parent. Reads are repeatable. Fatal BDOS disk termination sets FFFDh and keyboard Ctrl-C termination sets FFFEh. |
 | Serial | Native AUX and DOS 03h/04h are present; INT 14h remains firmware-owned. Hardware protocol/ownership tests are separate from this source inventory |
-| DOS control calls | IOCTL supports 00h/06h/07h. Country information uses DOS 2.x US defaults. Extended errors classify locally translated errors; unsupported services continue to report AX=1 |
+| DOS control calls | IOCTL supports 00h/01h/06h/07h, with 01h limited to CON. Country information uses DOS 2.x US defaults. Extended errors classify locally translated errors; unsupported services continue to report AX=1 |
 | Residency | INT 27h is an IRET stub; AH=31h has a limited keep-memory path, not full TSR semantics |
 | Graphics | Listed EGA/VGA modes include ROM-backed drawing and single palette/DAC entries; arbitrary pages, fonts and VESA remain unsupported |
 | Raw disk | Code is enabled, unlike the CCP/M build. This inventory is not an exhaustive raw-I/O correctness test; CHS encoding and verify count remain limited |
@@ -475,4 +482,5 @@ traced, not that every subfunction and device has passed conformance testing.
 | Video, console and keyboard | [xcon1.lib](kernel/con/xcon1.lib), [xcon2.lib](kernel/con/xcon2.lib), [xbegin.lib](kernel/con/xbegin.lib), [xchar.lib](kernel/con/xchar.lib) |
 | RTC initialization and write-back | [xrtc.lib](kernel/con/xrtc.lib), [xinit.lib](kernel/con/xinit.lib) |
 | Media-dependent utility contracts | [SET](commands/set/README.md), [SHOW](commands/show/README.md), [SDIR](commands/sdir/README.md) |
+| DOS 2.0 internal-function assignments | [Microsoft SYSCALL.txt](https://github.com/microsoft/MS-DOS/blob/main/v2.0/source/SYSCALL.txt), [GETSET.ASM](https://github.com/microsoft/MS-DOS/blob/main/v2.0/source/GETSET.ASM) |
 | Local patches | [patches.md](patches.md) |
