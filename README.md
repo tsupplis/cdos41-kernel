@@ -16,7 +16,7 @@ The assembly is based on partial 4.1 OEM sources corrected to align with Europea
 | Usability improvements | Command-line editing and recall, console shortcuts, paging and CLS |
 | Additional tools | ASM80, HEXCOM, Legacy CCP/M tools and floppy copy/compare commands |
 | Graphics | CGA plus EGA 0Dh/0Eh/10h and VGA 11h/12h/13h, with graphics drawing and palette services |
-| DOS compatibility | Extended DOS APIs, CON raw/cooked handle I/O, inherited standard handles and PUT/GET/RDR redirection for native CMD and DOS programs |
+| DOS compatibility | Extended DOS APIs, CON raw/cooked handle I/O, inherited standard handles and PUT/GET/RDR redirection for native CMD and DOS programs, Full DOS Batch Language |
 | Date fixes | Patched native date/reporting utilities and corrected short-year input in DATE.EXE |
 
 
@@ -38,7 +38,7 @@ The build follows the CCP/M project's source organization and toolchain.
 All build inputs are local to this repository. [Source pedigree and component
 status](source-map.md) and `sources.json` record the origins and source hashes.
 
-## CP/M-Plus usability improvements
+## CP/M-Plus and DOS usability improvements
 
 The current version includes:
 
@@ -48,11 +48,12 @@ The current version includes:
 - Ctrl+Alt+1–4 to select consoles; Ctrl+Alt+Tab to cycle through them.
 - Ctrl+Alt+0 (top row) or Ctrl+Alt+Esc opens an installed WMENU; Ctrl+keypad-Plus remains available.
 - Optional paging for TYPE, SDIR and DIR, alongside the built-in DIR's `/P` / `[P]`.
-- CP/M-Plus-style console redirection through PUT, GET and RDR for native and DOS programs.
+- CP/M-Plus-style console redirection through PUT, GET and RDR for native and DOS programs. (CP/M alternative to >, >>, <, |)
 - Extra built-in CLS and SYSDISK command.
 - DEL mapped to native ERA.CMD in both the shell and BATCH to keep CP/M as the main flavour.
 - Case-insensitive FAT short names, without interpreting modern case flags as CP/M compatibility attributes.
 - Support for DOS Environment Variable Setting (SETENV)
+- Full Batch Language Support with Extensions (In Progress)
 
 ## Command line conveniences
 
