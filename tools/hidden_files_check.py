@@ -2,7 +2,7 @@
 """HIDDEN/SYSTEM integration checks on one disposable PCE at a time."""
 
 from pathlib import Path
-import json, re, subprocess, sys, tempfile
+import json, os, re, subprocess, sys, tempfile
 
 R = Path(__file__).resolve().parent.parent
 
@@ -30,7 +30,7 @@ def entries(image):
 def fixture(prefix):
     d = Path(tempfile.mkdtemp(prefix=prefix))
     print("Diagnostics:", d, flush=True)
-    (d / "cdos86.img").write_bytes((R / "media/cdos86.img").read_bytes())
+    (d / "cdos86.img").write_bytes(Path(os.environ.get("HIDDEN_TEST_BOOT", str(R / "media/cdos86.img"))).read_bytes())
     run(
         d,
         "mformat",
@@ -164,6 +164,107 @@ def deletion():
     )
 
 
+def listings():
+    d = fixture("cdos-hidden-list-")
+    cases = [("sdir b:*.txt", "normal", ""),
+             ("sdir b:*.txt [sys]", "system", ""),
+             ("sdir b:*.txt [dir sys]", "all", ""),
+             ("sdir b:*.txt [sys short]", "short", ""),
+             ("sdir b:*.txt [sys size]", "size", ""),
+             ("dir.cmd b:*.txt [s]", "external-dir", ""),
+             ("dir b:*.txt [s]", "internal-dir", "")]
+    screens = session(d,cases)
+    for label in ["normal","system","all","short","size","external-dir","internal-dir"]:
+        body = screens[label].split("\n",1)[-1]
+        names = set(re.findall(r"(?m)(?:^|[ :])([A-Z]+)\s+[.]?TXT\b",body))
+        wanted = {"N","RO"} if label=="normal" else {"H","S","SH","HR","Q"}
+        if label=="all": wanted |= {"N","RO"}
+        assert names==wanted,(label,names,wanted,body)
+    for text in ["Hid","Sys","S+H"]: assert text in screens["system"],screens["system"]
+    print("PASS: shared SDIR normal/SYS/all/SHORT/SIZE and internal/external DIR filtering and HIDDEN indicators",flush=True)
+
+
+def cpm_listing():
+    d=fixture("cdos-hidden-cpm-")
+    cases=[("sdir a:batch.cmd", "normal", ""),
+           ("sdir a:batch.cmd [sys]", "sys", ""),
+           ("sdir a:batch.cmd [dir sys]", "all", ""),
+           ("dir.cmd a:batch.cmd [s]", "dir-sys", "")]
+    screens=session(d,cases)
+    assert not re.search(r"(?m)^BATCH[ .]",screens["normal"]),screens["normal"]
+    for label in ["sys","all"]:
+        assert re.search(r"(?m)^BATCH[ .].*Sys",screens[label]),screens[label]
+        assert "Hid" not in screens[label] and "S+H" not in screens[label],screens[label]
+    assert re.search(r"BATCH\s+CMD",screens["dir-sys"]),screens["dir-sys"]
+    print("PASS: CP/M normal-only default, explicit SYS/all selection and shared DIR [S]; no false HIDDEN flags",flush=True)
+
+
+def ls_rm():
+    """Exercise real utilities, including deletion policy, on disposable FAT."""
+    d=fixture("cdos-hidden-ls-rm-")
+    for tool in ["ls", "rm"]:
+        run(d,"mcopy","-i","fat.img",str(R.parent/"cpm86-hacking"/(tool+".cmd")),"::"+tool+".cmd")
+    before=entries(d/"fat.img")
+    cases=[("b:ls -b b:*.txt","normal",""),
+           ("b:ls -ab b:*.txt","all",""),
+           ("b:ls -al b:*.txt","long",""),
+           ("b:rm b:*.txt","rm-normal",""),
+           ("b:ls -ab b:*.txt","after-normal",""),
+           ("b:rm -a b:*.txt","rm-all",""),
+           ("b:ls -ab b:*.txt","after-all",""),
+           ("b:rm -af b:*.txt","rm-force",""),
+           ("b:ls -al b:*.*","final","")]
+    screens=session(d,cases)
+    def names(label):
+        return set(re.findall(r"(?mi)^([a-z]+)\.txt$",screens[label]))
+    assert names("normal")=={"N","RO"},screens["normal"]
+    assert names("all")=={"N","H","S","SH","RO","HR","Q"},screens["all"]
+    assert names("after-normal")=={"H","S","SH","RO","HR","Q"},screens["after-normal"]
+    assert names("after-all")=={"RO","HR"},screens["after-all"]
+    for flags,name in [("--H-","H"),("-S--","S"),("-SH-","SH"),("--HR","HR")]:
+        assert re.search(re.escape(flags)+r" +"+name+r" +[.]TXT",screens["long"]),screens["long"]
+    after=entries(d/"fat.img")
+    assert not any(n[8:]==b"TXT" for n in after),after
+    for name in [b"SUB        ",b"KEEPVOL    "]:
+        assert after[name]==before[name],(name,after[name],before[name])
+    assert "D---" in screens["final"],screens["final"]
+    print("PASS: LS normal/all/HIDDEN flags; RM default/-a/-af, RO protection, directory and label preservation",flush=True)
+
+
+def classic(boot):
+    """Check LS/RM on an explicitly supplied original boot disk copy."""
+    h=sys.modules[__name__]
+    boot=Path(boot);d=Path(tempfile.mkdtemp(prefix='hidden-classic-'));print(d,flush=True)
+    (d/'cdos86.img').write_bytes(boot.read_bytes())
+    (d/'diskdefs').write_bytes((h.R/'media/diskdefs').read_bytes())
+    h.run(d,'python3',str(h.R/'tools/cpm86twist.py'),'untwist',str(h.R/'media/base.img'),'data.img')
+    (d/'data.img').write_bytes((d/'data.img').read_bytes().ljust(327680,b'\xe5'))
+    for tool in ['ls','rm']:h.run(d,'cpmcp','-f','cpm86-320','data.img',str(h.R.parent/'cpm86-hacking'/(tool+'.cmd')),'0:')
+    (d/'text').write_bytes(b'unchanged\r\n\x1a')
+    for n in ['NORMAL.TXT','SYSTEM.TXT','READONLY.TXT']:h.run(d,'cpmcp','-f','cpm86-320','data.img','text','0:'+n)
+    b=bytearray((d/'data.img').read_bytes())
+    for o in range(4096,4096+64*32,32):
+     if b[o+1:o+12]==b'SYSTEM  TXT':b[o+10]|=128
+     if b[o+1:o+12]==b'READONLYTXT':b[o+9]|=128
+    (d/'data.img').write_bytes(b)
+    h.run(d,'python3',str(h.R/'tools/cpm86twist.py'),'twist','data.img','fat.img')
+    screens=h.session(d,[('b:ls -al b:*.txt','all',''),('b:rm b:*.txt','normal',''),('b:ls -ab b:*.txt','remaining',''),('b:rm -af b:*.txt','force','')])
+    assert '-S-- SYSTEM' in screens['all'],screens
+    assert '---R READONLY' in screens['all'],screens
+    assert '--H' not in screens['all'],screens
+    remaining=screens['remaining'].rsplit('b:ls -ab b:*.txt',1)[-1]
+    assert 'NORMAL.TXT' not in remaining and 'SYSTEM.TXT' in remaining and 'READONLY.TXT' in remaining,screens
+    h.run(d,'python3',str(h.R/'tools/cpm86twist.py'),'untwist','fat.img','after.img')
+    listing=h.run(d,'cpmls','-f','cpm86-320','after.img').decode()
+    assert '.txt' not in listing.lower(),listing
+    print('PASS: classic LS/RM SYSTEM/RO/default/-af compatibility: '+str(boot),flush=True)
+
 if __name__ == "__main__":
     if len(sys.argv) == 1 or sys.argv[1] == "delete":
         deletion()
+    elif sys.argv[1] == "cpm":
+        cpm_listing()
+    elif sys.argv[1] == "list": listings()
+    elif sys.argv[1] == "ls-rm": ls_rm()
+
+    elif sys.argv[1] == "classic": classic(sys.argv[2])

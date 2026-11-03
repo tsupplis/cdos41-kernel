@@ -52,6 +52,7 @@ check: all
 	python3 tools/fat_label_unit_check.py
 	python3 tools/fat_label_write_unit_check.py
 	python3 tools/fat_attributes_unit_check.py
+	python3 tools/fat_delete_unit_check.py
 	python3 tools/pctmp_context_check.py
 	python3 tools/pctmp_critical_check.py
 	$(MAKE) -C boot check
@@ -288,3 +289,9 @@ check-batch-call: all
 check-fat-attributes: all
 	python3 tools/fat_attributes_unit_check.py
 	python3 tools/fat_attributes_check.py
+
+.PHONY: check-hidden-files
+check-hidden-files: all
+	python3 tools/fat_delete_unit_check.py
+	python3 tools/hidden_files_check.py delete
+	python3 tools/hidden_files_check.py list

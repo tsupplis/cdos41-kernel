@@ -1458,3 +1458,64 @@ CP/M's separate deletion path is unchanged. ERA/ERAQ need no program edit;
 BDOS 19 and its DOS adapters reach the corrected backend. This change does
 not call BDOS 230, clear HIDDEN first or alter listing policy. Rename keeps
 its existing behavior. Browser/RM filtering is handled in later steps.
+
+Step 2 verification: 16 assembled exact/wildcard attribute combinations,
+plus live ERA/ERAQ deletion, READ-ONLY rejection, label/directory retention
+and rename all pass. The command programs are unchanged.
+
+## HIDDEN parity, steps 1 and 3: shared DIR/SDIR
+
+DIR.CMD's CDOS `dirm.plm` now also builds in CCP/M: the reviewed differences
+were actual-FAT probing, SYS-or-HIDDEN exclusive [S] filtering and corrected
+[Gn] parsing. All maintained DIR sources are now shared; no runtime sibling
+build dependency is introduced. Internal TMP/BATCH DIR is unchanged.
+
+SDIR sources are shared too. Raw first-record metadata gates FAT flag
+interpretation; HIDDEN is retained in its own file-info byte. Default SDIR
+and [DIR] show normal files only on both systems (explicitly selected UI
+change); [SYS] selects SYSTEM or FAT HIDDEN, [DIR SYS] selects all. FULL
+retains distinct Sys/Hid/S+H indicators. Size-based indexing preserves sort
+and multi-drive/user collection after the record extension. No BDOS 230
+call or on-disk attribute translation is added. CP/M directory allocation
+bytes remain allocation data, and hidden flags never become filename bits.
+
+Step 1/3 verification: live FAT checks pass for normal/SYS/all selection,
+FULL/SHORT/SIZE, distinct Hid/Sys/S+H indicators and internal/external DIR.
+The CP/M regression also passes: default excludes SYS, explicit SYS/all
+includes it, and allocation bytes do not produce false HIDDEN indicators.
+The test accepts HIDDEN_TEST_BOOT to select an explicit disposable boot
+reference when another build has removed media outputs; it never installs
+that reference into production media.
+
+## HIDDEN parity, step 4: LS/RM
+
+The cpm86-hacking directory adapter retains HIDDEN separately after detecting
+actual FAT raw-directory metadata. It never borrows CP/M filename attribute
+bits and does not call BDOS 230. LS and RM select SYSTEM or HIDDEN with -a;
+LS long output distinguishes D/S/H/R. RM -f only overrides READ-ONLY, retaining
+SYSTEM/HIDDEN and other attributes until deletion; directories remain excluded.
+Live FAT tests pass for default/-a listing, HIDDEN indicators, default/-a/-af
+deletion, READ-ONLY protection, and directory/volume-label retention. Original CP/M-86 1.1 and CCP/M-86 3.1 boot-disk checks also pass:
+LS distinguishes SYSTEM/READ-ONLY without false HIDDEN flags; default RM
+retains SYSTEM/READ-ONLY, and -af deletes both. Final directory contents are
+checked on the disposable disk, independently of retained screen history.
+
+### DCOPY/DCOMP: 8/9-sector raw floppy support
+
+The shared command sources now select BIOS (CP/M-86 1.1), legacy XIOS
+(CCP/M-86 3.1), capability-checked updated CCP/M XIOS, or CDOS 4.1 physical
+XIOS I/O. FAT12 BPB validation and retried sector-nine probes select eight/nine
+sectors conservatively; [8]/[9] provide explicit selection. Unknown media is
+never treated as eight sectors merely because a ninth-sector read failed.
+DCOMP checks both geometries. DCOPY formats the target to the source geometry
+before writes, removing leftover sector-nine tracks when copying eight-sector
+media. Both remain filesystem-independent and copy existing boot code unchanged.
+
+All head buffers and verification/format DMA use physical 8 KiB alignment,
+avoiding 64 KiB DMA boundary crossings for 4608-byte tracks. Padding is zeroed
+before comparison. Uninitialized DMA buffers are at the end of the CMD group:
+MIN reserves them, while LEN omits checked zero bytes from disk. Native prompt
+reads use raw function 6/FDh to sleep for PIN instead of starving its lower
+priority in a busy loop. Cleanup restores the original INT 1Eh vector, locks,
+priority, console state and media login records. Each project owns its sources,
+Makefile and simulations, without sibling build dependencies.

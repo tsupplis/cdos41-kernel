@@ -1,18 +1,21 @@
 ;*****************************************************************************
 ;
-;	DCOPY - CP/M-86 / CCP/M-86 diskette copier for the IBM PC
+;	DCOPY - CP/M-86 / CCP/M-86 / CDOS diskette copier for the IBM PC
 ;
 ;	Adapted from the PC DOS 1.10 utility by David Litton, IBM (1981-82).
 ;	The original copyright text is retained below.
 ;
 ;	Build:	make dcopy.cmd
-;	Usage:	DCOPY drive1: {drive2:} {[1]}
+;	Usage:	DCOPY drive1: {drive2:} {[1]} {[8]|[9]}
 ;
 ;	drive1:	Source diskette drive, A: or B:.
 ;	drive2:	Target diskette drive, A: or B:.
 ;		drive1: is required; drive2: defaults to the current drive.
 ;		The drives must be installed floppy units.  If both name
 ;		the same drive, the command prompts for diskette swaps.
+;	[8]/[9] Select sectors per track; conflicting selections are rejected.
+;	Without an override, probe sector 9 and validate any FAT12 BPB.
+;	Failure alone never selects eight sectors; unknown media needs [8].
 ;	[1]	Use head zero only; otherwise probe for the second side.
 ;		The closing bracket is optional: [1 is also accepted.
 ;		CCP/M aborts if the probe fails: native XIOS cannot tell
@@ -30,8 +33,8 @@
 ;		DCOPY A:		use A: and the current drive
 ;		DCOPY		display command usage
 ;
-;	CP/M-86 1.1 uses BIOS; CCP/M-86 3.1 uses native IBM PC XIOS.
-;	Both transfer raw tracks: 40 cylinders, eight 512-byte
+;	CP/M-86 1.1 uses BIOS; CCP/M-86 3.1 and CDOS 4.1 use native XIOS.
+;	Transfers are raw tracks: 40 cylinders, eight or nine 512-byte
 ;	sectors per head, one or two heads.  No filesystem is interpreted.
 ;	BDOS INT E0h handles console, current drive, memory and termination.
 ;	All BDOS calls preserve ES and the live disk/comparison registers.
@@ -59,7 +62,7 @@ f_maxmem	equ	53
 f_alloc	equ	55
 stack_size	equ	512
 
-; Floppy geometry and BIOS requests (eight 512-byte sectors per head).
+; Floppy geometry and BIOS requests (eight/nine 512-byte sectors per head).
 cylinder_limit           equ     40
 bios_read_track          equ     0200h
 bios_write_track         equ     0300h
@@ -207,7 +210,7 @@ show_insert_and_wait:
 ;-----------------------------------------------------------------------------
 
 ; CH is the starting cylinder; the end cylinder is exclusive. Each head
-; occupies 4 KiB.
+; occupies 8 KiB.
 read_source_tracks:
 	cmp current_cylinder,0
 	jne copy_geometry_ready
@@ -230,7 +233,7 @@ copy_geometry_ready:
 	jna	read_track_attempt
 	mov	byte ptr batch_end_cylinder,cylinder_limit
 
-; BIOS reads eight 512-byte sectors at ES:0000, starting at sector one.
+; BIOS reads the selected number of sectors at ES:0000, starting at sector one.
 read_track_attempt:
 	call clear_track_slot
 	xor	bx,bx
@@ -259,7 +262,7 @@ read_track_succeeded:
 	mov	byte ptr copy_side_count_char,32h
 	call	show_sides
 
-; Advance ES by 100h paragraphs per head; advance CH only when the head
+; Advance ES by 200h paragraphs per head; advance CH only when the head
 ; wraps to zero.
 advance_read_buffer:
 	add	bp,200h
@@ -501,7 +504,7 @@ retry_verify_not_ready:
 ;-----------------------------------------------------------------------------
 
 ; The sector-ID table stores cylinder, head, sector number and size for
-; eight sectors.
+; eight or nine sectors.
 format_target_track:
 	or	byte ptr copy_flags,flag_writing
 	push	es
@@ -865,11 +868,13 @@ msg_invalid_drive	db	0Dh,0Ah
 	db	'$'
 
 	dseg
-msg_banner	db	0dh,0ah,'CP/M-86 / CCP/M-86 FLOPPY COPY VER 1.0N',0dh,0ah,'$'
-msg_usage	db	'USAGE: DCOPY drive1: {drive2:} {[1]}',0dh,0ah,0dh,0ah
+msg_banner	db	0dh,0ah,'CP/M-86 / CCP/M-86 / CDOS FLOPPY COPY VER 1.1N',0dh,0ah,'$'
+msg_usage	db	'USAGE: DCOPY drive1: {drive2:} {[1]} {[8]|[9]}',0dh,0ah,0dh,0ah
 	db	'  drive1:  Source floppy drive, A: or B: (required)',0dh,0ah
 	db	'  drive2:  Target floppy drive (default: current drive)',0dh,0ah
 	db	'  [1]      Head zero only; closing ] is optional',0dh,0ah
+	db '  [8]/[9]  Explicit sectors per track; otherwise detect',13,10
+	db '  DOS/FAT media is copied as physical sectors',13,10
 	db	'  Same drive twice: prompt for diskette swaps',0dh,0ah
 	db	'  Example: DCOPY A: B:[1]',0dh,0ah,'$'
 	cseg
@@ -1083,8 +1088,8 @@ args_return:
 ; CP/M function 53 queries a maximum block and 55 reserves it. CCP/M
 ; function 53 already reserves the block, so skip the second allocation.
 ; Check AL for success and let termination release the transfer storage.
-; Round up to a 4 KiB boundary so an eight-sector BIOS transfer cannot cross
-; a 64 KiB DMA boundary.  Allow at most 80 head tracks (one complete disk).
+; Round up to a 8 KiB boundary so an eight-sector BIOS transfer cannot cross
+; a 68 KiB DMA boundary.  Allow at most 80 head tracks (one complete disk).
 ;-----------------------------------------------------------------------------
 alloc_buffer:
 	mov	dx,offset mem_block
@@ -1141,4 +1146,7 @@ stack_top:
 
 	include	ccpmio.a86
 	include	geom.a86
+	dseg
+; Trailing uninitialized DMA storage: CMD MIN reserves it; LEN omits it.
+verify_space	rs	4000h
 	end

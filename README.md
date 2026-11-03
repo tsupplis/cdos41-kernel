@@ -260,7 +260,7 @@ case handling.
 | `copymenu` | Copy menu definitions | 4.11 | Recompiled from CDOS 4.1 | Behavior tested | — |
 | `date` | Display or set the date | - | Recompiled from CCP/M-86 3.1 and adapted, Y2K patched | Additional tool | — |
 | `date.exe` | Display or set the date through DOS | 4.11 | Recompiled from CDOS 4.1 and adapted, short-year fix; commands/datetime | Equivalent | — |
-| `dcomp / dcopy` | Compare or copy floppy diskettes | - | Ported from PC DOS 1.10; imported from CCP/M-86 | Additional tool | — |
+| `dcomp / dcopy` | Compare or copy CP/M/FAT floppies, including 360K | - | Ported from PC DOS 1.10; adapted for CDOS and 8/9-sector geometry | Additional tool | — |
 | `ddt86` | 8086 interactive debugger | - | Recompiled from CCP/M-86 3.1 | Additional tool | — |
 | `dir` | List directory contents | - | Recompiled from CCP/M-86 3.1 and adapted; separate CDOS 4.1 TMP built-in | Additional tool | — |
 | `dredix` | Full-screen text editor | 4.11 | Recompiled from CDOS 4.1 | Behavior tested | — |

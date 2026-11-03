@@ -474,5 +474,4 @@ native_sector db 0
 native_head db 0
 native_write db 0
 native_gap_fill dw 0f650h
-verify_space	rs	4000h
 	cseg

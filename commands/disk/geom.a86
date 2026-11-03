@@ -43,6 +43,17 @@ geometry_bpb_spt:
         jb geometry_try_nine
         cmp es:word ptr .22,2
         ja geometry_try_nine
+        cmp es:byte ptr .21,0fch
+        jb geometry_try_nine
+        cmp es:word ptr .17,16
+        jb geometry_try_nine
+        cmp es:word ptr .17,224
+        ja geometry_try_nine
+        cmp es:byte ptr .13,1
+        je geometry_cluster_valid
+        cmp es:byte ptr .13,2
+        jne geometry_try_nine
+geometry_cluster_valid:
         mov al,es:byte ptr .24
         mov geometry_hint,al
 geometry_try_nine:

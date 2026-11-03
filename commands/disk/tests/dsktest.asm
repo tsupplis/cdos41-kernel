@@ -528,6 +528,9 @@ disk_model:
     rep stosb
 %if BPB
     mov word [es:bx+11],512
+    mov byte [es:bx+13],2
+    mov word [es:bx+17],112
+    mov byte [es:bx+21],0fdh
     mov word [es:bx+14],1
     mov byte [es:bx+16],2
     mov word [es:bx+22],2
