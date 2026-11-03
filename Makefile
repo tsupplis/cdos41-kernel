@@ -32,6 +32,7 @@ check: all
 	@set -e; for f in kernel/con/*.con kernel/rsp?/*.rsp; do cmdinfo $$f; done
 	$(MAKE) -C commands check
 	$(MAKE) -C kernel/sysgen check
+	$(MAKE) -C kernel/rsp3 check
 	$(MAKE) -C kernel/con check-cursor check-rtc
 	python3 tools/historical_check.py
 	python3 tools/pctmp_recovery_check.py
@@ -239,3 +240,7 @@ check-batch-exit: all
 check-batch-expand: all
 	python3 tools/batch_expand_unit_check.py
 	python3 tools/batch_expand_check.py
+
+.PHONY: check-native-shell
+check-native-shell: all
+	python3 tools/native_shell_check.py

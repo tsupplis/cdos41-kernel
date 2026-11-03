@@ -2068,6 +2068,34 @@ expand_line rs 128
 expand_environment rs 1024
 ENDIF
 
+; IF parser, native search buffers and temporary directory context.
+condition_negate db 0
+condition_directory db 0
+condition_result db 0
+condition_error db 0
+condition_fat db 0
+condition_drive db 0
+condition_saved_drive db 0
+condition_error_mode db 0
+condition_command dw 0
+condition_cursor dw 0
+condition_next dw 0
+condition_component_start dw 0
+condition_mapping dw 0
+condition_dma_offset dw 0
+condition_dma_segment dw 0
+condition_parse_packet dw 0,offset condition_fcb
+condition_mapping_bytes rs 8
+condition_fcb rs 36
+condition_dma rs 128
+condition_spec rs 128
+
+; Shared PATH workspace: append after fixed resident/base-page data.
+pc_input dw 0
+pc_value dw 0
+pc_capacity dw 0
+pc_value_length_word dw 0
+
 dataend		rb	0
 
 		org	(((offset dataend - offset databeg)+0fh) and 0fff0h)

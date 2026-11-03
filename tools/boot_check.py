@@ -28,6 +28,13 @@ def check(video):
         folder = Path(td)
         for name in ['cdos86.img', 'cdostools.img']:
             shutil.copyfile(MEDIA / name, folder / name)
+        logical = folder / 'fixture.logical'
+        for args in [
+            ['python3', str(ROOT/'tools/cpm86twist.py'), 'untwist', str(folder/'cdostools.img'), str(logical)],
+            ['cpmcp', '-f', 'ccpm86-320', str(logical), str(ROOT/'commands/sysdisk/sysdisk.cmd'), '0:SYSDISK.CMD'],
+            ['python3', str(ROOT/'tools/cpm86twist.py'), 'twist', str(logical), str(folder/'cdostools.img')],
+        ]:
+            subprocess.run(args, cwd=MEDIA, check=True, capture_output=True)
         # Retain the launcher's CPU, ROMs and disk/controller configuration.
         # Only the host terminal/speaker drivers become null for this test.
         cfg = (MEDIA / 'cdos86.cfg').read_text()
@@ -103,11 +110,11 @@ def check(video):
         type_command('user 0\n')
         type_command('cls\n')
         save('cls')
-        type_command('sysdisk\n')
+        type_command('b:sysdisk.cmd\n')
         save('sysdisk')
-        type_command('sysdisk [off]\n')
+        type_command('b:sysdisk.cmd [off]\n')
         save('sysdisk-off')
-        type_command('sysdisk [on]\n')
+        type_command('b:sysdisk.cmd [on]\n')
         save('sysdisk-on')
         commands.append('q')
         with (folder / 'pce.log').open('wb') as log:
@@ -135,7 +142,7 @@ def check(video):
         assert prompt(text['cls']) and 'Concurrent' not in text['cls'], text['cls']
         assert "Can't Find Command" not in text['sysdisk'] and prompt(text['sysdisk']), text['sysdisk']
         assert 'The system drive is off' in text['sysdisk-off'], text['sysdisk-off']
-        assert prompt(text['sysdisk-on']) and 'system drive is off' not in text['sysdisk-on'].split('sysdisk [on]')[-1], text['sysdisk-on']
+        assert prompt(text['sysdisk-on']) and 'system drive is off' not in text['sysdisk-on'].split('b:sysdisk.cmd [on]')[-1], text['sysdisk-on']
         subprocess.run(['python3', str(ROOT / 'tools/cpm86twist.py'), 'untwist',
                         str(folder / 'cdostools.img'), str(folder / 'logical.img')], check=True)
         subprocess.run(['cpmcp', '-f', 'ccpm86-320', str(folder / 'logical.img'),

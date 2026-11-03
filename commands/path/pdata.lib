@@ -1,0 +1,6 @@
+        dseg
+pc_input dw 0
+pc_value dw 0
+pc_capacity dw 0
+pc_value_length_word dw 0
+        cseg

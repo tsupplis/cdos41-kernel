@@ -227,7 +227,7 @@ declare
 
 
 declare fat$listing byte;
-declare media$fcb (16) byte initial ('????????????',0,0,0,0);
+declare media$fcb (36) byte initial ('????????????',0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
 declare media$buf (128) byte;
 
 fat$media: procedure(drive) byte;

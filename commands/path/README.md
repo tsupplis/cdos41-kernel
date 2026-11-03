@@ -1,18 +1,24 @@
-# DOS PATH
+# PATH
 
-PATH.EXE is equivalent to the CDOS 4.11 executable on release disk 3.
-The rebuild has the same command body and data. The original enters the
-314-byte body through five NOPs. The rebuild places the padding after it.
-Calls and branches move with the body and data offsets stay fixed.
+`PATH.CMD` displays or sets the owning console's DOS search path through the
+native PCTMP environment interface. The same `npath.lib` implementation is
+compiled directly into TMP and BATCH; their built-ins need no external file.
 
-The startup jump skips the four differing linker identification bytes.
-In the backward group-copy routine the original starts a paragraph copy at
-offset 0Fh, while the local linker emits 0Eh. PATH cannot enter this routine.
-Its two populated groups require exactly their stored lengths (20 and 24
-paragraphs) and request no expansion. The loader exits if memory is too
-small. Otherwise the accumulated extra space is zero at every group, so
-the displacement test skips the copy call at CS:01C9h. This conclusion
-applies specifically to this executable's group descriptors.
+```
+PATH
+PATH=B:\TOOLS;C:\BIN
+PATH B:\TOOLS;C:\BIN
+PATH=
+PATH ;
+```
 
-The remaining difference is the MZ checksum. `make check` verifies the
-entire executable against the pinned release hash with these exact changes.
+The last two forms clear the value. Names are stored as uppercase `PATH`;
+values retain their supplied case. Other environment variables are preserved.
+Validation checks the environment terminator, capacity and 127-byte value
+limit before modifying the block. A failed update leaves it unchanged.
+Explicit `PATH.CMD` can be launched through P_CLI and has TAIL=KEEP.
+PATH controls the DOS environment; SYSDISK controls native system searching.
+
+`pathx.a86` and `check.py` are retained as the legacy DOS PATH reconstruction
+and comparison reference. They do not participate in the native default build.
+The historical `base/path.exe` remains available for interoperability tests.

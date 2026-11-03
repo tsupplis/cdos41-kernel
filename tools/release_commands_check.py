@@ -8,7 +8,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 TOOLS = {'eraq': 'era/eraq.cmd', 'pip': 'pip/pip4.cmd',
-         'path': 'path/path.exe', 'date': 'datetime/date.exe'}
+         'path': 'path/path.cmd', 'date': 'datetime/date.exe'}
 CLI = ['chset', 'eraq', 'pip', 'dsp', 'printmgr', 'path', 'date']
 KEYS = {' ': 'Space', ':': '+Shift Semicolon -Shift', ';': 'Semicolon',
         '.': 'Period', '[': 'LeftBracket', ']': 'RightBracket', '=': 'Equal',
@@ -61,7 +61,7 @@ def session(work, group, variant):
     (folder / 'cfg').write_text(config)
     run('mformat', '-C', '-i', 'fat.img', '-t', '40', '-h', '2', '-n', '8', '-c', '2', '::')
     for name in CLI if group == 'cli' else [group]:
-        filename = name + ('.exe' if name in ('path', 'date') else '.cmd')
+        filename = name + ('.exe' if name == 'date' or (name == 'path' and variant == 'original') else '.cmd')
         binary = ROOT / 'base' / filename if variant == 'original' else (
             ROOT / 'commands' / TOOLS.get(name, name + '/' + filename))
         put(binary, filename)

@@ -165,7 +165,7 @@ for a, b in [("pause", "resumed"), ("open-pause", "open-resumed")]:
     s = screen(b)
     assert [x for x in s.splitlines() if x][-1] == "A>", s
 print(
-    "PASS: DIR /S, [S], [S, combined flags, prefix/suffix, DOS hidden/system and CP/M system filtering, BATCH and bracket paging",
+    "PASS: DIR /G3 and [G3], user restoration, nD: validation, /S and [S], FAT hidden/system and CP/M SYS filtering, BATCH and bracket paging",
     flush=True,
 )
 shutil.rmtree(F)

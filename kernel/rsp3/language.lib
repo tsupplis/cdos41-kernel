@@ -134,6 +134,12 @@ shell_language:
         mov di,offset lang_echo_word
         call lang_word
         jc lang_echo
+        mov di,offset lang_path_word
+        call lang_word
+        jnc lang_not_path
+        call path_builtin
+        jmp lang_handled
+lang_not_path:
 IF BATCH
         mov di,offset lang_shift_word
         call lang_word
@@ -398,6 +404,7 @@ lang_syntax:
         jmp lang_echo_newline
 ENDIF
 
+lang_path_word db 'PATH',0
 lang_echo_word db 'ECHO',0
 IF BATCH
 lang_on_word db 'ON',0

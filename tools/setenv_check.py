@@ -13,7 +13,7 @@ for p in [R/'kernel/sysgen/ccpm.sys',R/'commands/setenv/setenv.cmd']:
 run('python3',twist,'twist','a.logical','cdos86.img')
 run('mformat','-C','-i','fat.img','-t','40','-h','2','-n','8','-c','2','::')
 run('mmd','-i','fat.img','::FIRST')
-run('mcopy','-i','fat.img',str(R/'commands/path/path.exe'),'::PATH.EXE')
+run('mcopy','-i','fat.img',str(R/'base/path.exe'),'::PATH.EXE')
 run('mmd','-i','fat.img','::SECOND')
 cfg=(R/'media/cdos86.cfg').read_text().replace('driver = "sdl"','driver = "null"').replace('driver      = "sdl:lowpass=5000"','driver      = "null"').replace('file     = "cdostools.img"','file     = "fat.img"')
 cfg=re.sub(r'(?m)^path\s*=\s*"([^"\n]+)"',lambda m:'path = "'+str((R/'media'/m[1]).resolve())+'"',cfg)

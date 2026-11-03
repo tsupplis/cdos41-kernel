@@ -30,7 +30,10 @@ See [api.md](api.md#pctmp-private-far-call-interface) for the DOS-loader packet.
 | `DIR [filespec] /L` or `[L]` | TMP, BATCH | CMDLINE, BATCH | Long listing |
 | `DIR [filespec] /W` or `[W]` | TMP, BATCH | CMDLINE, BATCH | Wide listing |
 | `DIR [filespec] /P` or `[P]` | TMP, BATCH | CMDLINE, BATCH | Pause after a screenful |
-| `DIR [filespec] /S` or `[S]` | TMP, BATCH | CMDLINE, BATCH | System files only |
+| `DIR [filespec] /S` or `[S]` | TMP, BATCH | CMDLINE, BATCH | SYS files on CP/M; SYSTEM or HIDDEN on FAT; excludes ordinary files |
+| `DIR [filespec] /Gn` or `[Gn]` | TMP, BATCH | CMDLINE, BATCH | List CP/M user 0–15, then restore the current user |
+| `nD:` | TMP, BATCH | CMDLINE, BATCH | Select user 0–15 and drive A–P together; validate before changing context |
+| `PATH`, `PATH=value`, `PATH value` | TMP, BATCH | CMDLINE, BATCH | Display/set the console environment PATH; `PATH=` or `PATH ;` clears it |
 | `ECHO text` | TMP, BATCH | CMDLINE, BATCH | Print literal text, preserving case and dollar signs |
 | `ECHO` without text, interactively | TMP | CMDLINE | Print a blank line |
 | `ECHO` without text, in a BAT file | BATCH | BATCH | Display the script's echo setting |
@@ -86,8 +89,8 @@ loader, but that does not implement the alias itself.
 
 | Command or variation | Implementation | Can be called from | Behavior |
 | --- | --- | --- | --- |
-| `PATH`, `PATH.EXE` | EXTERNAL (DOS EXE) | CMDLINE, BATCH, MS_P_CLI | Display or change the DOS environment's PATH; not a PCTMP/BATCH built-in |
-| `SYSDISK`, `SYSDISK.CMD` | EXTERNAL (native CMD) | CMDLINE, BATCH, P_CLI | Display this window's native system search drive/path |
+| `PATH.CMD [value]` | EXTERNAL (native CMD) | CMDLINE, BATCH, P_CLI | Same environment operation as the built-in; TAIL=KEEP |
+| `SYSDISK.CMD` | EXTERNAL (native CMD) | CMDLINE, BATCH, P_CLI | Display this window's native system search drive/path |
 | `SYSDISK d:` | EXTERNAL (native CMD) | CMDLINE, BATCH, P_CLI | Select the system search drive |
 | `SYSDISK {d:}subdir{\subdir...}` | EXTERNAL (native CMD) | CMDLINE, BATCH, P_CLI | Select a DOS/FAT system search subdirectory |
 | `SYSDISK [ON]`, `SYSDISK [OFF]` | EXTERNAL (native CMD) | CMDLINE, BATCH, P_CLI | Enable or disable native system searching |
@@ -98,32 +101,24 @@ loader, but that does not implement the alias itself.
 | `SETENV [HELP]` | EXTERNAL (native CMD) | CMDLINE, BATCH, P_CLI | Display native-style usage; `/?` is not a help switch |
 | `ECHO.CMD [text]` | EXTERNAL (native CMD) | CMDLINE, BATCH, P_CLI | Print text and CR/LF; an empty tail prints a blank line; no echo-state controls |
 | `DIR.CMD [filespec ...]` | EXTERNAL (native CMD) | CMDLINE, BATCH, P_CLI | Standalone native directory listing; distinct from the shell's DIR |
-| `DIR.CMD [filespec ...] [S]` | EXTERNAL (native CMD) | CMDLINE, BATCH, P_CLI | Include system files as well as ordinary directory files |
+| `DIR.CMD [filespec ...] [S]` | EXTERNAL (native CMD) | CMDLINE, BATCH, P_CLI | SYS files only on CP/M; SYSTEM or HIDDEN only on FAT |
 | `DIR.CMD [filespec ...] [P]` | EXTERNAL (native CMD) | CMDLINE, BATCH, P_CLI | Enable paging |
 | `DIR.CMD [filespec ...] [Gn]` | EXTERNAL (native CMD) | CMDLINE, BATCH, P_CLI | Select CP/M user n (0–15) for listing |
 
-Native CMD programs use P_CLI; PATH.EXE uses MS_P_CLI. P_CLI does not launch
+Native CMD programs, including PATH.CMD, use P_CLI. P_CLI does not launch
 DOS EXEs, and MS_P_CLI does not execute native CMDs or BAT files. The shell and
 BATCH select the appropriate loader; their availability does not imply that
 the two APIs are interchangeable. Neither API provides shell filename-search
 and alias behavior merely by accepting the same command text.
 
-## Current gaps and agreed direction
+## Search paths and user areas
 
-- **PATH:** the current build still produces PATH.EXE. The requested replacement
-  is native PATH.CMD, with `PATH` and `PATH=...` accepted by TMP/BATCH and routed
-  to that one implementation. The explicit external file will then use P_CLI,
-  not MS_P_CLI. That conversion and dispatch change are not implemented yet;
-  the table above records the current executable.
-- **User/drive shorthand:** the current shell recognizes only bare `A:` … `P:`.
-  `1C:`, `2C:` and other user-prefixed forms are not implemented. Use `USER 1`
-  followed by `C:` today. Proposed shorthand accepts users 0–15 and drives
-  A–P in both TMP and BATCH, validates both before changing context and leaves
-  the previous context intact on failure. A user number is a CP/M user area,
-  not a FAT subdirectory.
-- **SYSDISK:** already implemented as an external native CMD, not a TMP/BATCH
-  built-in. It controls native system searching; PATH controls the DOS
-  environment. They are separate facilities, both listed above.
+PATH edits the console environment used by DOS executable searching. SYSDISK
+controls native system searching through external SYSDISK.CMD, supplied on
+the maintenance disk. PATH is a true TMP/BATCH built-in; PATH.CMD is its
+standalone form. SYSDISK requires its command file to be available.
+A user prefix in `nD:`
+selects a CP/M user area, not a FAT subdirectory.
 
 ## RSP implementation in this build
 

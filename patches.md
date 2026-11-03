@@ -74,7 +74,7 @@ names still use external command lookup. USER retains its number report
 and omits the “User numbers only apply to CP/M media” note; the unused
 string is removed from tmpdir.lib.
 
-The native 4.1 SYSDISK is packaged on both media images. Its existing SD
+The native 4.1 SYSDISK is packaged on maintenance media. Its existing SD
 implementation in commands/sysdisk is retained unchanged: query the system
 search path, set a path, or enable/disable searching with [ON]/[OFF]. The
 CCP/M 3.1 command's single-system-drive implementation is not substituted.
@@ -1148,3 +1148,36 @@ with the original data declarations, outside the native basepage.
 Resident PCTMP has no BATCH state or interactive variable substitution.
 Tests cover CP/M/FAT scripts, case, undefined/nonrecursive values, refresh,
 CMD child tails, positional/SHIFT behavior, bounds and console isolation.
+
+## Native shell PATH and user/drive consistency
+
+PATH and PATH= now execute inside TMP/BATCH, sharing `npath.lib` with native
+PATH.CMD. The external command uses the existing PCTMP environment query
+(selector 0Ah) and TAIL=KEEP; there is no new kernel API or DOS interrupt.
+Names are uppercase, values retain case, and unrelated variables survive.
+The setter validates the complete block and final capacity before compacting
+entries in place. This avoids a 1 KiB scratch block in every resident console.
+`pathx.a86` remains the legacy DOS reconstruction, outside the default build.
+
+SYSDISK remains an external source-built command, supplied only on the
+maintenance disk. Its temporary TMP/BATCH implementation was withdrawn to
+avoid about 6 KiB of resident kernel overhead and 2.5 KiB in BATCH. The
+resident service, copied support modules and their link dependencies were
+removed; the original SYSDISK.CMD sources and behavior are unchanged.
+PATH and SYSDISK retain separate roles: DOS environment versus native searching.
+
+DIR /Gn and [Gn] list users 0–15 and restore the caller's user. The G parser
+preserves CX/DX: losing those registers previously corrupted subsequent file
+parsing. Standalone nD: accepts users 0–15 and drives A–P in both processors.
+DIR [S] selects only the system class: SYS on CP/M, SYSTEM or HIDDEN on FAT.
+
+The external DIR media probe now supplies a full 36-byte FCB, keeping BDOS
+FCB updates separate from its adjacent DMA probe buffer. Live checks cover
+internal /G3 and [G3], user restoration, nD: validation, external/internal
+CP/M SYS and FAT SYSTEM/HIDDEN filtering, and BATCH paging.
+
+Validation: `make check`, `make check-native-shell`, linked PATH boundary
+cases, and native HELP PATH. PATH remains built into TMP/BATCH and available
+as PATH.CMD. Live checks also verify that bare SYSDISK requires its external
+file and that explicit SYSDISK.CMD works from the shell and BATCH. No new
+kernel API was introduced.

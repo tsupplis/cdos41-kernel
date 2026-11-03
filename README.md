@@ -49,7 +49,7 @@ The current version includes:
 - Ctrl+Alt+0 (top row) or Ctrl+Alt+Esc opens an installed WMENU; Ctrl+keypad-Plus remains available.
 - Optional paging for TYPE, SDIR and DIR, alongside the built-in DIR's `/P` / `[P]`.
 - CP/M-Plus-style console redirection through PUT, GET and RDR for native and DOS programs. (CP/M alternative to >, >>, <, |)
-- Extra built-in CLS and SYSDISK command.
+- Extra built-in CLS and PATH commands.
 - DEL mapped to native ERA.CMD in both the shell and BATCH to keep CP/M as the main flavour.
 - Case-insensitive FAT short names, without interpreting modern case flags as CP/M compatibility attributes.
 - Support for DOS Environment Variable Setting (SETENV)
@@ -86,9 +86,7 @@ Ctrl-U retains the historical #/newline echo; Ctrl-E continues on a new row.
 | `DIR filespec /P` | Page the shell's built-in directory listing |
 | `ORDER` | Display the executable-extension search order |
 | `ORDER CMD,COM,EXE,BAT` | Set the extension search order |
-| `SYSDISK` | Display the system search path |
-| `SYSDISK [ON]` / `[OFF]` | Enable / disable system-path searching |
-| `SYSDISK path` | Set the system search path |
+| `PATH` / `PATH=value` | Display / set the DOS search path |
 
 Optional paging uses 23 screen rows. Press a key to continue or Ctrl-C to stop;
 paging is off by default. TYPE and SDIR count tabs and wrapped text. SDIR's
@@ -96,7 +94,7 @@ paging is off by default. TYPE and SDIR count tabs and wrapped text. SDIR's
 and built-in DIR retain their respective option syntax.
 
 `ORDER` provides command-order configuration in 4.1. SETDEF will not be ported;
-system-path configuration remains with SYSDISK.
+system-path configuration remains with the external SYSDISK.CMD on the maintenance disk.
 
 EXE loading fixes the same [DOS Plus defect](https://www.seasip.info/Cpm/dosplus_exe.html): headers need not be 512-byte aligned.
 
@@ -153,7 +151,7 @@ Stock DOS Plus 1.2 versus this CDOS rebuild.
 | Echo control | ECHO ON/OFF | BATCH-only ECHO=ON/OFF and @ECHO; interactive ECHO prints text |
 | EXIT | COMMAND.COM command | BATCH-only; optional 0–255 status, otherwise 0 |
 | Environment variables | SET and `%NAME%` expansion | SETENV and BATCH `%NAME%` expansion; no interactive expansion |
-| Search-path commands | PATH built-in | PATH.EXE for the DOS environment; SYSDISK and ORDER for native shell searching |
+| Search-path commands | PATH built-in | PATH built-in and PATH.CMD for the DOS environment; SYSDISK and ORDER for native shell searching |
 | DOS program memory | ADDMEM and COMSIZE | Same-named PCTMP/BATCH built-ins: extra allocation and minimum DOS-program memory |
 | File attributes (ATTRIB role) | FSET on the reference 1.2 disk | SET changes read-only/system/archive attributes; SDIR inspects them. Different syntax; no exposed HIDDEN toggle |
 | Volume labels (LABEL role) | DOS volume-label utility on some system disks | SET d: [NAME=label.typ] and SHOW d: [LABEL] for CP/M disks; FAT label editing remains missing |
@@ -201,7 +199,7 @@ This restriction is intentional; see the [BATCH language reference](batch.md).
 | `cdosdev.img` | No | ASM80/ASM86, DDT86, GENCMD, HEXCOM, GENCCPM, GENLDR, ED, SUBMIT and PIP |
 | `cdosmaint.img` | Yes | Kernel, INITDIR, DSKMAINT, HDMAINT.CMD, SYSDISK, ERA and PIP |
 | `cdosmenu.img` | No | SPL, PRINT, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP, menu/terminal data, BAT examples and PIP |
-| `cdosdos.img` | No | SETENV.CMD, COPY.EXE, DATE.EXE, ERASE.EXE, PATH.EXE, LOADCCPM.COM, TIME.EXE, REN.EXE and REDOS.COM, core commands and PIP |
+| `cdosdos.img` | No | SETENV.CMD, COPY.EXE, DATE.EXE, ERASE.EXE, PATH.CMD, LOADCCPM.COM, TIME.EXE, REN.EXE and REDOS.COM, core commands and PIP |
 | `cdosextras.img` | No | BACKREST, CARDFILE, DRTALK, their support files and PIP |
 | `cdosadmin.img` | No | FUNCTION, DCOPY/DCOMP, SETPORT, SETUP, STOP, CHKCPMFS, N with NATIONAL.MSG, FM with FM.CFG and TERM.DAT and PIP |
 
@@ -258,7 +256,7 @@ release-image provenance. Details are in `base/cdos411.json`.
 
 
 `Tail=KEEP` marks native CMD binaries built to preserve command-tail case:
-BATCH.CMD, ECHO.CMD, GET.CMD, PUT.CMD, RDR.CMD and SETENV.CMD. Other native CMDs use the
+BATCH.CMD, ECHO.CMD, GET.CMD, PUT.CMD, RDR.CMD, SETENV.CMD and PATH.CMD. Other native CMDs use the
 historical uppercase tail; DOS COM/EXE files do not use this CMD-header flag.
 Filename matching is unchanged. [CHSET](commands/chset/README.md) can query or
 change the setting. See [batch.md](batch.md) for substitution and child-command
@@ -301,7 +299,7 @@ case handling.
 | `initdir` | Enable or remove directory date/time stamps | 4.11 | Recompiled from CDOS 4.1 | Equivalent | — |
 | `loadccpm.com` | Load the system from DOS | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Byte-identical | — |
 | `n` | Configure national keyboard, screen and printer tables | 4.11 | Rewritten in C from CDOS 4.11, with byte-identical assembly reference | Behavior tested | — |
-| `path.exe` | Display or set the DOS search path | 4.11 | Recompiled from CDOS 4.1 | Equivalent | — |
+| `path` | Display or set the DOS search path | 4.11 | Rewritten in assembly from CDOS PATH; shared with TMP/BATCH, legacy source retained | Equivalent | KEEP |
 | `pip` | Copy and transfer files | 4.11 | Recompiled from CDOS 4.1 and adapted | Behavior tested | — |
 | `print` | Print files using Concurrent printer services | - | Recompiled from CCP/M-86 3.1 | Additional tool | — |
 | `printmgr` | Manage print spooling | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Behavior tested | — |
@@ -372,7 +370,7 @@ system and the live regression checks.
 | `make check-graphics` | Assembled graphics guards and adapter gates; PCE VGA/EGA/CGA pixels, palettes, graphics text/TTY and restoration |
 | `make check-dos-switch` | DOS 37h get/set, native delimiter separation, EXEC sharing and launch persistence |
 | `make check-dos-allocation` | 1Bh/1Ch/36h geometry, FAT media pointer, invalid-drive rejection and default-drive preservation |
-| `make check-pce` | Boot, console switching, line editing/recall, DIR, PIP, CLS, USER and SYSDISK |
+| `make check-pce` | Boot, console switching, line editing/recall, DIR, PIP, CLS, USER and external SYSDISK.CMD |
 | `make check-type` | OEM/rebuilt TYPE comparison, DOS/CP/M EOF, passwords and paging |
 | `make check-set` | OEM/rebuilt SET comparison, persisted attributes, passwords and timestamp settings |
 | `make check-setenv` | DOS environment editing, mixed-case persistence, capacity and PATH interoperability |

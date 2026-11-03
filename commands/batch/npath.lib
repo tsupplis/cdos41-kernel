@@ -1,0 +1,222 @@
+;*******************************************************************************
+; PATH - shared native implementation for TMP, BATCH and PATH.CMD.
+; DS:SI is a NUL-terminated argument tail, optionally beginning with '='.
+; PCTMP environment discovery is the native ms_func 0Ah interface.
+; No DOS interrupt, file lookup or child process is used by the built-in.
+; Validate the final size before compacting in place; unrelated variables and
+; value case are preserved. The environment query defines the capacity.
+;*******************************************************************************
+        cseg
+path_builtin:
+        push ax ! push bx ! push cx ! push dx
+        push si ! push di ! push bp ! push es
+        mov pc_input,si
+        mov cl,0ah
+        callf ms_func_jmp_addr
+        cmp ax,0ffffh ! jne pc_branch_1
+        jmp pc_unsupported
+pc_branch_1:
+        or ax,ax ! jnz pc_branch_2
+        jmp pc_unsupported
+pc_branch_2:
+        cmp dx,2 ! jae pc_branch_3
+        jmp pc_unsupported
+pc_branch_3:
+        cmp dx,1024 ! jbe pc_branch_4
+        jmp pc_unsupported
+pc_branch_4:
+        mov pc_capacity,dx
+        mov es,ax
+        xor di,di
+        mov bp,dx
+        dec bp
+pc_validate:
+        cmp di,bp ! jb pc_branch_5
+        jmp pc_bad_block
+pc_branch_5:
+        cmp es:word ptr [di],0 ! je pc_valid
+        inc di
+        jmps pc_validate
+pc_valid:
+        mov si,pc_input
+        call pc_spaces
+        cmp byte ptr [si],'=' ! jne pc_not_equal
+        inc si
+        call pc_spaces
+        jmp pc_set
+pc_not_equal:
+        cmp byte ptr [si],0 ! jne pc_set
+        mov si,offset pc_key
+        call pc_print_cs
+        xor di,di
+pc_query_entry:
+        cmp es:byte ptr [di],0 ! je pc_query_done
+        call pc_is_path
+        jc pc_query_found
+pc_query_skip:
+        mov al,es:[di]
+        inc di
+        or al,al ! jnz pc_query_skip
+        jmps pc_query_entry
+pc_query_found:
+        add di,5
+pc_query_text:
+        mov al,es:[di]
+        or al,al ! jz pc_query_done
+        call pc_char
+        inc di
+        jmps pc_query_text
+pc_query_done:
+        call pc_newline
+        jmp pc_done
+pc_set:
+        cmp byte ptr [si],';' ! jne pc_value_ready
+        cmp byte ptr 1[si],0 ! jne pc_value_ready
+        inc si
+pc_value_ready:
+        mov pc_value,si
+        xor cx,cx
+pc_value_length:
+        cmp byte ptr [si],0 ! je pc_length_ready
+        inc si
+        inc cx
+        cmp cx,127 ! jbe pc_branch_6
+        jmp pc_full
+pc_branch_6:
+        jmps pc_value_length
+pc_length_ready:
+        mov pc_value_length_word,cx
+        xor bx,bx
+        xor di,di
+pc_copy_entry:
+        cmp es:byte ptr [di],0 ! je pc_append
+        call pc_is_path
+        jc pc_skip_old
+pc_copy_byte:
+        mov al,es:[di]
+        inc bx
+        inc di
+        or al,al ! jnz pc_copy_byte
+        jmps pc_copy_entry
+pc_skip_old:
+        mov al,es:[di]
+        inc di
+        or al,al ! jnz pc_skip_old
+        jmps pc_copy_entry
+pc_append:
+        mov ax,pc_value_length_word
+        add ax,bx
+        add ax,7
+        cmp ax,pc_capacity ! jbe pc_branch_7
+        jmp pc_full
+pc_branch_7:
+        ; All possible failures have been checked. Compact toward offset zero.
+        xor bx,bx
+        xor di,di
+pc_commit_entry:
+        cmp es:byte ptr [di],0 ! je pc_commit_append
+        call pc_is_path
+        jc pc_commit_skip
+pc_commit_byte:
+        mov al,es:[di]
+        mov es:[bx],al
+        inc bx ! inc di
+        or al,al ! jnz pc_commit_byte
+        jmps pc_commit_entry
+pc_commit_skip:
+        mov al,es:[di]
+        inc di
+        or al,al ! jnz pc_commit_skip
+        jmps pc_commit_entry
+pc_commit_append:
+        xor di,di
+pc_append_key:
+        mov al,cs:pc_key[di]
+        mov es:[bx],al
+        inc bx
+        inc di
+        cmp di,5 ! jb pc_append_key
+        mov si,pc_value
+pc_append_value:
+        lodsb
+        mov es:[bx],al
+        inc bx
+        or al,al ! jnz pc_append_value
+        mov cx,pc_capacity
+        sub cx,bx
+        xor al,al
+pc_clear_rest:
+        mov es:[bx],al
+        inc bx
+        loop pc_clear_rest
+        jmp pc_done
+pc_unsupported:
+        mov si,offset pc_requires
+        jmps pc_error
+pc_bad_block:
+        mov si,offset pc_invalid
+        jmps pc_error
+pc_full:
+        mov si,offset pc_no_room
+pc_error:
+        call pc_print_cs
+        call pc_newline
+pc_done:
+        pop es ! pop bp ! pop di ! pop si
+        pop dx ! pop cx ! pop bx ! pop ax
+        ret
+
+; Complete NAME= match at a validated entry boundary; preserve its cursor.
+pc_is_path:
+        push di ! push bx
+        xor bx,bx
+pc_match:
+        mov al,es:[di]
+        cmp al,'a' ! jb pc_compare
+        cmp al,'z' ! ja pc_compare
+        sub al,20h
+pc_compare:
+        cmp al,cs:pc_key[bx] ! jne pc_no_match
+        inc di
+        inc bx
+        cmp bx,5 ! jb pc_match
+        stc
+        jmps pc_match_done
+pc_no_match:
+        clc
+pc_match_done:
+        pop bx ! pop di
+        ret
+pc_spaces:
+        cmp byte ptr [si],' ' ! je pc_space
+        cmp byte ptr [si],9 ! jne pc_spaces_done
+pc_space:
+        inc si
+        jmps pc_spaces
+pc_spaces_done:
+        ret
+pc_print_cs:
+        mov al,cs:[si]
+        or al,al ! jz pc_print_done
+        call pc_char
+        inc si
+        jmps pc_print_cs
+pc_print_done:
+        ret
+pc_newline:
+        mov al,13
+        call pc_char
+        mov al,10
+pc_char:
+        push ax ! push bx ! push cx ! push dx
+        push si ! push di ! push bp ! push es
+        mov dl,al
+        mov cx,2
+        int 0e0h
+        pop es ! pop bp ! pop di ! pop si
+        pop dx ! pop cx ! pop bx ! pop ax
+        ret
+pc_key db 'PATH=',0
+pc_requires db 'PATH requires the native PCTMP environment query.',0
+pc_invalid db 'Invalid environment block; PATH unchanged.',0
+pc_no_room db 'Insufficient environment space; PATH unchanged.',0

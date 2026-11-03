@@ -201,9 +201,15 @@ Alias targets and other external commands must be available on the selected
 search path. Unqualified resident commands can also dispatch through their
 native command queues. An explicit filename/extension requests the disk form.
 
-PATH is **not** a BATCH or PCTMP built-in. PATH.EXE edits the DOS environment's
-PATH variable; SYSDISK.CMD controls native system searching. SET changes
-file/disk attributes, while SETENV.CMD edits DOS environment variables.
+PATH is a true BATCH/PCTMP built-in. `PATH` displays the DOS
+environment PATH; `PATH=value` or `PATH value` sets it, preserving case.
+`PATH=` or `PATH ;` clears it; no external PATH file is needed.
+SYSDISK.CMD controls native system searching, accepting a drive/path or
+`[ON]`/`[OFF]`. It is external and must be available on the command search
+path or invoked with an explicit drive. It is supplied on maintenance media.
+`nD:` selects CP/M user 0–15 and drive A–P together; DIR `/Gn` or `[Gn]`
+uses that user only for its listing. SET changes file/disk attributes,
+while SETENV.CMD edits environment variables.
 
 ## Case handling and redirection
 
@@ -215,7 +221,7 @@ preserves them. BATCH.CMD is built with KEEP, so positional arguments retain
 their supplied case through substitution and SHIFT. This is independent of whether
 a script is stored on a FAT volume using lowercase name flags.
 
-The shipped **BATCH.CMD, ECHO.CMD, PUT.CMD, GET.CMD, RDR.CMD and SETENV.CMD** use TAIL=KEEP.
+The shipped **BATCH.CMD, ECHO.CMD, PUT.CMD, GET.CMD, RDR.CMD, SETENV.CMD and PATH.CMD** use TAIL=KEEP.
 KEEP preserves argument text; it does not make filenames or wrapper options
 case-sensitive. A native child still follows its own TAIL setting. DOS
 COM/EXE tails do not use this native CMD-header flag. See

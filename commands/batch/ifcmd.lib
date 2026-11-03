@@ -1,0 +1,563 @@
+;*******************************************************************************
+; BATCH IF - native CP/M/FAT existence predicates.
+;
+; IF [NOT] EXIST filespec command
+; IF [NOT] DIREXIST directory command
+;
+; Runs after expand.lib and before ordinary command dispatch. A true test
+; removes its prefix and redispatches the remaining command without another
+; expansion pass. False/error tests consume the line. Nested IF is iterative.
+;
+; Filesystem access is native BDOS throughout. FAT paths use directory OPEN
+; (drive bit 7), never INT 21h. OPEN "." first makes CAT/HDS private by the
+; kernel's copy-on-write rules. Later directory opens reuse that sole-owner
+; HDS in place. Save/restore its eight mapping bytes, never its owner count.
+; The original drive, DMA and error mode are restored before dispatch.
+;*******************************************************************************
+        cseg
+
+; Carry clear: ordinary command remains in clicb_cmd. Carry set: skip line.
+batch_condition:
+        push ds ! pop es
+condition_again:
+        mov si,offset clicb_cmd
+        call lang_spaces
+        mov di,offset condition_if_word
+        call lang_word
+        jc condition_start
+        clc
+        ret
+condition_start:
+        mov condition_negate,0
+        mov condition_directory,0
+        call condition_require_space
+        jnc condition_not
+        jmp condition_syntax
+condition_not:
+        mov di,offset condition_not_word
+        call lang_word
+        jnc condition_predicate
+        mov condition_negate,1
+        call condition_require_space
+        jnc condition_predicate
+        jmp condition_syntax
+condition_predicate:
+        mov di,offset condition_exist_word
+        call lang_word
+        jc condition_operand
+        mov di,offset condition_directory_word
+        call lang_word
+        jc condition_is_directory
+        jmp condition_syntax
+condition_is_directory:
+        mov condition_directory,1
+condition_operand:
+        call condition_require_space
+        jnc condition_copy_operand
+        jmp condition_syntax
+condition_copy_operand:
+        mov di,offset condition_spec
+condition_operand_next:
+        lodsb
+        or al,al
+        jnz condition_operand_character
+        jmp condition_syntax
+condition_operand_character:
+        cmp al,' '
+        je condition_operand_end
+        cmp al,TAB
+        je condition_operand_end
+        cmp al,'"'
+        jne condition_operand_store
+        jmp condition_syntax
+condition_operand_store:
+        stosb
+        jmps condition_operand_next
+condition_operand_end:
+        xor al,al
+        stosb
+        call lang_spaces
+        cmp byte ptr [si],0
+        jne condition_has_command
+        jmp condition_syntax
+condition_has_command:
+        mov condition_command,si
+        call condition_probe
+        cmp condition_error,0
+        je condition_decide
+        cmp condition_error,2
+        je condition_bad_filespec
+        mov dx,offset condition_io_message
+        jmps condition_report
+condition_bad_filespec:
+        mov dx,offset condition_spec_message
+        jmps condition_report
+condition_decide:
+        mov al,condition_result
+        xor al,condition_negate
+        or al,al
+        jnz condition_execute
+        stc
+        ret
+condition_execute:
+        mov si,condition_command
+        mov di,offset clicb_cmd
+condition_move_command:
+        lodsb
+        stosb
+        or al,al
+        jnz condition_move_command
+        sub di,offset clicb_cmd
+        mov ax,di
+        mov read_blen,al
+        call batch_prepare
+        jmp condition_again
+condition_syntax:
+        mov dx,offset condition_syntax_message
+condition_report:
+        call print_string
+        call crlf
+        stc
+        ret
+
+; Require a real separator, rejecting IF=, NOT= and EXIST= spellings.
+condition_require_space:
+        cmp byte ptr [si],' '
+        je condition_spaces
+        cmp byte ptr [si],TAB
+        je condition_spaces
+        stc
+        ret
+condition_spaces:
+        call lang_spaces
+        clc
+        ret
+
+; Evaluate a copied operand. Globals keep cleanup independent of BDOS register
+; clobbers; no descriptor from a user file is opened or retained.
+condition_probe:
+        mov condition_error,0
+        mov condition_result,0
+        mov condition_mapping,0
+        mov condition_fat,0
+        mov cl,52
+        call ccpm
+        mov condition_dma_offset,ax
+        mov condition_dma_segment,es
+        mov cl,25
+        call ccpm
+        mov condition_saved_drive,al
+        inc al
+        mov condition_drive,al
+        mov cl,156
+        call ccpm
+        mov es,es:P_UDA[bx]
+        mov al,es:10h
+        mov condition_error_mode,al
+        mov dx,0ffh
+        mov cl,45
+        call ccpm
+        mov dx,ds
+        mov cl,51
+        call ccpm
+        mov dx,offset condition_dma
+        call setbuf
+        push ds ! pop es
+        mov si,offset condition_spec
+        cmp byte ptr 1[si],':'
+        jne condition_drive_ready
+        lodsb
+        call lang_upper
+        sub al,'A'
+        cmp al,15
+        jbe condition_explicit_drive
+        jmp condition_invalid
+condition_explicit_drive:
+        inc al
+        mov condition_drive,al
+        inc si
+condition_drive_ready:
+        mov condition_cursor,si
+condition_resolve_drive:
+; Unbound N:/O:/P: mean the current system drive. Probe that physical drive
+; instead of turning an implicit floating-drive default into a fixed mapping.
+        cmp condition_drive,14
+        jb condition_select_drive
+        mov cl,156
+        call ccpm
+        mov bx,es:CAT[bx]
+        or bx,bx
+        jz condition_unbound_drive
+        xor ah,ah
+        mov al,condition_drive
+        dec ax
+        shl ax,1
+        add bx,ax
+        cmp es:word ptr [bx],0
+        jne condition_select_drive
+condition_unbound_drive:
+        mov al,es:9dh
+        inc al
+        mov condition_drive,al
+condition_select_drive:
+        xor dh,dh
+        mov dl,condition_drive
+        dec dl
+        mov cl,14
+        call ccpm
+        or al,al
+        jz condition_media
+        jmp condition_io_error
+condition_media:
+        call condition_clear_fcb
+        mov condition_fcb,'?'
+        mov di,offset condition_dma
+        mov cx,128
+        xor al,al
+        rep stosb
+        mov dx,offset condition_fcb
+        mov cl,17
+        call ccpm
+        cmp ah,0
+        je condition_media_result
+        jmp condition_io_error
+condition_media_result:
+        cmp condition_dma,20h
+        jne condition_cpm
+        cmp byte ptr condition_dma+15,80h
+        jne condition_cpm
+        mov condition_fat,1
+        call condition_private_mapping
+        jnc condition_path
+        jmp condition_io_error
+condition_cpm:
+condition_path:
+        mov si,condition_cursor
+        cmp byte ptr [si],'\'
+        je condition_absolute
+        cmp byte ptr [si],'/'
+        jne condition_component
+condition_absolute:
+        cmp condition_fat,1
+        je condition_root
+        jmp condition_missing
+condition_root:
+        inc si
+        mov condition_cursor,si
+        call condition_clear_fcb
+        or condition_fcb,80h
+        mov dx,offset condition_fcb
+        mov cl,16
+        call ccpm
+        or al,al
+        jz condition_component
+        jmp condition_io_error
+condition_component:
+        push ds ! pop es
+        mov si,condition_cursor
+        mov condition_component_start,si
+        mov condition_next,0
+condition_component_scan:
+        lodsb
+        or al,al
+        jz condition_component_final
+        cmp al,'\'
+        je condition_component_slash
+        cmp al,'/'
+        jne condition_component_scan
+condition_component_slash:
+        mov condition_next,si
+        mov byte ptr -1[si],0
+condition_component_final:
+        call condition_parse_component
+        jnc condition_component_ok
+        jmp condition_invalid
+condition_component_ok:
+        cmp condition_next,0
+        je condition_search
+        cmp condition_fat,1
+        je condition_enter_path
+        jmp condition_missing
+condition_enter_path:
+        call condition_no_wildcards
+        jnc condition_enter
+        jmp condition_invalid
+condition_enter:
+        cmp byte ptr condition_fcb+1,' '
+        je condition_next_component
+        call condition_open_directory
+        jnc condition_next_component
+        jmp condition_open_failed
+condition_next_component:
+        mov si,condition_next
+        mov condition_cursor,si
+        jmp condition_component
+condition_search:
+        cmp condition_directory,0
+        je condition_search_media_ready
+        cmp condition_fat,1
+        je condition_search_media_ready
+        jmp condition_missing
+condition_search_media_ready:
+        cmp byte ptr condition_fcb+1,' '
+        jne condition_search_name
+; An explicit root or trailing separator denotes a directory, never a file.
+        cmp condition_fat,1
+        je condition_empty_fat
+        jmp condition_missing
+condition_empty_fat:
+        cmp condition_directory,1
+        je condition_empty_directory
+        jmp condition_missing
+condition_empty_directory:
+        jmp condition_found
+condition_search_name:
+        cmp byte ptr condition_fcb+1,'.'
+        jne condition_search_first
+        cmp condition_fat,1
+        jne condition_missing
+        cmp condition_directory,1
+        jne condition_missing
+        call condition_open_directory
+        jnc condition_found
+        jmp condition_open_failed
+condition_search_first:
+        cmp condition_directory,0
+        je condition_files_only
+        or condition_fcb,80h
+condition_files_only:
+        mov dx,offset condition_fcb
+        mov cl,17
+        call ccpm
+condition_search_result:
+        cmp al,0ffh
+        jne condition_entry
+        or ah,ah
+        jz condition_missing
+        jmp condition_io_error
+condition_entry:
+        xor ah,ah
+        mov cl,5
+        shl ax,cl
+        mov bx,offset condition_dma
+        add bx,ax
+        cmp byte ptr [bx],16
+        jae condition_search_next
+        cmp condition_directory,0
+        je condition_found
+        mov al,16[bx]
+        cmp al,17[bx]
+        jne condition_search_next
+        and al,0c0h
+        cmp al,0c0h
+        je condition_found
+condition_search_next:
+        cmp condition_directory,0
+        je condition_next_search_ready
+        or condition_fcb,80h
+condition_next_search_ready:
+        mov dx,offset condition_fcb
+        mov cl,18
+        call ccpm
+        jmps condition_search_result
+condition_open_failed:
+        or ah,ah
+        jnz condition_io_error
+        jmps condition_missing
+condition_found:
+        mov condition_result,1
+condition_missing:
+        jmp condition_cleanup
+condition_invalid:
+        mov condition_error,2
+        jmp condition_cleanup
+condition_io_error:
+        mov condition_error,1
+condition_cleanup:
+        call condition_restore_mapping
+        xor dh,dh
+        mov dl,condition_saved_drive
+        mov cl,14
+        call ccpm
+        or al,al
+        jz condition_restore_dma
+        mov condition_error,1
+condition_restore_dma:
+        mov dx,condition_dma_segment
+        mov cl,51
+        call ccpm
+        mov dx,condition_dma_offset
+        call setbuf
+        xor dh,dh
+        mov dl,condition_error_mode
+        mov cl,45
+        call ccpm
+        push ds ! pop es
+        ret
+
+condition_clear_fcb:
+        push ds ! pop es
+        mov di,offset condition_fcb
+        mov cx,36
+        xor al,al
+        rep stosb
+        mov al,condition_drive
+        mov condition_fcb,al
+        mov di,offset condition_fcb+1
+        mov cx,11
+        mov al,' '
+        rep stosb
+        ret
+
+; Parse a single 8.3 component with native function 152, insisting that the
+; entire component was consumed. Dot/dot-dot are special directory names.
+condition_parse_component:
+        call condition_clear_fcb
+        mov si,condition_component_start
+        cmp byte ptr [si],0
+        je condition_parse_ok
+        cmp byte ptr [si],'.'
+        jne condition_parse_native
+        cmp byte ptr 1[si],0
+        je condition_dot
+        cmp byte ptr 1[si],'.'
+        jne condition_parse_native
+        cmp byte ptr 2[si],0
+        jne condition_parse_native
+        mov byte ptr condition_fcb+2,'.'
+condition_dot:
+        mov byte ptr condition_fcb+1,'.'
+        jmps condition_parse_ok
+condition_parse_native:
+        mov condition_parse_packet,si
+        mov dx,offset condition_parse_packet
+        mov cl,152
+        call ccpm
+        or cx,cx
+        jnz condition_parse_bad
+        or bx,bx
+        jnz condition_parse_bad
+        cmp condition_fcb,0
+        jne condition_parse_bad
+        cmp byte ptr condition_fcb+1,' '
+        je condition_parse_bad
+        mov al,condition_drive
+        mov condition_fcb,al
+condition_parse_ok:
+        clc
+        ret
+condition_parse_bad:
+        stc
+        ret
+condition_no_wildcards:
+        mov si,offset condition_fcb+1
+        mov cx,11
+condition_wildcard_scan:
+        lodsb
+        cmp al,'?'
+        je condition_parse_bad
+        loop condition_wildcard_scan
+        clc
+        ret
+condition_open_directory:
+; FAT root has no on-disk ".." entry. Its logical parent is itself.
+        cmp byte ptr condition_fcb+1,'.'
+        jne condition_open_native
+        cmp byte ptr condition_fcb+2,'.'
+        jne condition_open_native
+        cmp byte ptr condition_fcb+3,' '
+        jne condition_open_native
+        mov bx,condition_mapping
+        or bx,bx
+        jz condition_open_native
+        push es
+        mov es,sysdatseg
+        cmp es:word ptr 6[bx],0
+        pop es
+        jne condition_open_native
+        xor ax,ax
+        clc
+        ret
+condition_open_native:
+        or condition_fcb,80h
+        mov dx,offset condition_fcb
+        mov cl,15
+        call ccpm
+        or al,al
+        jz condition_open_ok
+        stc
+        ret
+condition_open_ok:
+        clc
+        ret
+
+; Force native copy-on-write before touching a directory mapping. A unique
+; CAT and HDS cannot be changed by a parent/child while this predicate runs.
+; Subsequent native directory OPENs reuse this HDS (BLACK opn1ae/opn1b).
+condition_private_mapping:
+        call condition_clear_fcb
+        mov byte ptr condition_fcb+1,'.'
+        call condition_open_directory
+        jc condition_private_done
+        mov cl,156
+        call ccpm
+        mov bx,es:CAT[bx]
+        or bx,bx
+        jz condition_private_bad
+        cmp es:word ptr 20h[bx],1
+        jne condition_private_bad
+        xor ah,ah
+        mov al,condition_drive
+        dec ax
+        shl ax,1
+        add bx,ax
+        mov bx,es:[bx]
+        or bx,bx
+        jz condition_private_bad
+        cmp es:word ptr 8[bx],1
+        jne condition_private_bad
+        mov condition_mapping,bx
+        mov si,bx
+        mov di,offset condition_mapping_bytes
+        mov cx,4
+condition_save_mapping_word:
+        mov ax,es:[si]
+        mov [di],ax
+        add si,2
+        add di,2
+        loop condition_save_mapping_word
+        clc
+condition_private_done:
+        ret
+condition_private_bad:
+        stc
+        ret
+
+; Restore only the eight mapping bytes. Counts and CAT links are owned by
+; BDOS. No new process can inherit this transient mapping: dispatch is later.
+condition_restore_mapping:
+        mov di,condition_mapping
+        or di,di
+        jz condition_mapping_done
+        mov es,sysdatseg
+        cmp es:word ptr 8[di],1
+        jne condition_mapping_bad
+        mov si,offset condition_mapping_bytes
+        mov cx,4
+        pushf
+        cli
+        rep movsw
+        popf
+        jmps condition_mapping_done
+condition_mapping_bad:
+        mov condition_error,1
+condition_mapping_done:
+        ret
+
+condition_if_word db 'IF',0
+condition_not_word db 'NOT',0
+condition_exist_word db 'EXIST',0
+condition_directory_word db 'DIREXIST',0
+condition_syntax_message db 'IF [NOT] EXIST filespec command or IF [NOT] DIREXIST directory command.$'
+condition_spec_message db 'Invalid IF filespec; command skipped.$'
+condition_io_message db 'IF cannot inspect drive or directory; command skipped.$'

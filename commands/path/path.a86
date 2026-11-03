@@ -1,0 +1,54 @@
+        title 'PATH - native command entry'
+; Native command wrapper around the same PATH code embedded in TMP/BATCH.
+; Discover the owning PCTMP using the process-parent chain, never a fixed
+; environment address. TAIL=KEEP preserves case in the stored PATH value.
+        cseg
+start:
+        cli
+        mov ax,ds
+        mov ss,ax
+        mov sp,offset stack_top
+        sti
+        cld
+        mov cl,156
+        int 0e0h
+        mov dx,64
+find_owner:
+        or bx,bx ! jz no_owner
+        push dx
+        mov di,bx
+        add di,8
+        mov si,offset owner_name
+        mov cx,5
+        repe cmpsb
+        pop dx
+        je owner_found
+        mov bx,es:1eh[bx]
+        dec dx
+        jnz find_owner
+no_owner:
+        mov si,offset pc_requires
+        call pc_print_cs
+        call pc_newline
+        jmps finish
+owner_found:
+        mov ax,es:10h[bx]
+        mov es,ax
+        mov ax,es:word ptr .50h
+        mov word ptr ms_func_jmp_addr+2,ax
+        mov si,81h
+        call path_builtin
+finish:
+        xor cx,cx
+        xor dx,dx
+        int 0e0h
+        dseg
+        org 100h
+ms_func_jmp_addr rd 0
+        dw 3,0
+owner_name db 'PCTmp'
+stack_area rs 512
+stack_top rs 0
+include npath.lib
+include pdata.lib
+        end start

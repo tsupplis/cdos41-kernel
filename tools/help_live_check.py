@@ -61,7 +61,10 @@ cases = [
     ("setenv", "Native SETENV.CMD"),
     ("wmenu", "Ctrl-Alt-Esc"),
     ("order", "ORDER="),
+    ("path", "PATH.CMD is the native external version"),
 ]
+import sys
+if "--path" in sys.argv: cases = [x for x in cases if x[0] == "path"]
 for topic, _ in cases:
     command("cls", "clear-" + topic)
     command("help " + topic + " [nopage]", topic)
@@ -86,7 +89,7 @@ for topic, expected in cases:
     (F / (topic + ".txt")).write_text(s)
     assert expected in s, (topic, s)
 print(
-    "PASS: native HELP reads TREE/ECHO, nested LANGUAGES BATCH ECHO/SHIFT/GOTO/EXIT/VARIABLES and existing topics, including text beyond 64 KiB",
+    "PASS: native HELP reads " + ", ".join(topic for topic, _ in cases),
     flush=True,
 )
 shutil.rmtree(F)

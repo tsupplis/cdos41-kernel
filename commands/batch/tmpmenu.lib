@@ -827,6 +827,11 @@ ENDIF
 EJECT
 
 delret:
+; IF redispatches through the same drive, comment, built-in and loader paths.
+        call batch_condition
+        jnc condition_dispatch_ready
+        jmp nextcommand
+condition_dispatch_ready:
 	    mov bx,offset clicb
 	    xor cx,cx
 	    mov cl,read_blen

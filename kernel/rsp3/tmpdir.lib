@@ -2060,6 +2060,12 @@ goto_eof db FALSE
 goto_target rs 128
 ENDIF
 
+; Shared PATH workspace: append after fixed resident/base-page data.
+pc_input dw 0
+pc_value dw 0
+pc_capacity dw 0
+pc_value_length_word dw 0
+
 dataend		rb	0
 
 		org	(((offset dataend - offset databeg)+0fh) and 0fff0h)

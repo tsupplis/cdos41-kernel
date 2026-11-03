@@ -324,7 +324,8 @@ Applications and raw console input can assign different meanings.
 Concurrent DOS 4.1 command reference for this distribution.
 
 Shell built-ins (PCTMP, also shared with BATCH):
-  drive letters A:..P:, USER, DIR, CLS, ORDER, COMSIZE, ADDMEM,
+  drive letters A:..P: and nD: (users 0..15), USER, DIR, CLS,
+  PATH, ORDER, COMSIZE, ADDMEM,
   8087, SUSPEND, PRINTER, PAUSE, REM and SYS.
   RUNMENU activates the interactive shell's linked menu interface.
   STOP name window stops a process; bare STOP uses STOP.CMD.
@@ -338,9 +339,9 @@ Native commands supplied across the eight disks:
   DIR DREDIX DSKMAINT DSP ED EDITMENU ERA ERAQ FM FUNCTION
   GENCCPM GENCMD GENLDR GET HDMAINT HELP HEXCOM INITDIR MKDIR N PIP
   PRINT PRINTMGR PUT RDR REN REST RMDIR SDIR SET SETENV SETPORT SETUP SHOW
-  SPL STOP SUBMIT SYSDISK SYSTAT WINDOW WMENU
+  PATH SPL STOP SUBMIT SYSDISK SYSTAT WINDOW WMENU
 
-DOS executables: COPY.EXE DATE.EXE ERASE.EXE PATH.EXE REN.EXE TIME.EXE.
+DOS executables: COPY.EXE DATE.EXE ERASE.EXE REN.EXE TIME.EXE.
 LOADCCPM.COM loads Concurrent from DOS; REDOS.COM installs PC DOS system files on a prepared hard disk.
 Use an explicit extension to distinguish DATE.CMD from DATE.EXE.
 
@@ -559,8 +560,8 @@ Alias for native ERAQ.CMD, which asks before deleting each matching file.
 
 ///1DIR
 Built-in shell/BATCH syntax:
-  DIR {filespec} {/L|/W} {/S} {/P}
-  DIR {filespec} [L|W,S,P]
+  DIR {filespec} {/L|/W} {/S} {/P} {/Gn}
+  DIR {filespec} [L|W,S,P,Gn]
 
 /L selects long output; /W selects wide output. /S displays system files
 only. On DOS media hidden files are treated as system files too. /P
@@ -582,7 +583,10 @@ Examples:
 
 Explicit DIR.CMD uses the separately imported native command, with
 its own CP/M [S], [Gn] and [P] options. Those are not a separate DIR RSP.
-Use USER to change the CP/M user number for the built-in DIR.
+/Gn or [Gn] selects CP/M user 0..15 for a listing and restores the
+previous user afterward. [S] is the same system-only filter in DIR.CMD.
+Use nD: (for example 3B:) to change user and drive together in TMP/BATCH;
+invalid users or unavailable drives leave the current context unchanged.
 
 ///1DREDIX
 DREDIX {filename}
@@ -1327,7 +1331,17 @@ follow its language/setup prompts.
   You can request a CMD file by specifying the entire name: SDIR.CMD.
 
 ///1PATH
-  See the SYSDISK command.
+PATH
+PATH=value
+PATH value
+PATH=
+PATH ;
+
+Displays or changes the current console's DOS environment PATH. Values keep
+case; other variables are preserved. PATH= or PATH ; clears the value.
+TMP and BATCH provide this command directly, with no external file needed.
+PATH.CMD is the native external version and preserves its argument case.
+SYSDISK controls native system searching; PATH controls DOS searching.
 
 ///1PAUSE
 PAUSE
@@ -1936,6 +1950,9 @@ This compatibility built-in is accepted and ignored. It does not copy
 system files or select the system search path. Use SYSDISK for that path.
 
 ///1SYSDISK
+  External SYSDISK.CMD is supplied on the maintenance disk.
+  TMP and BATCH require this command file; SYSDISK is not a built-in.
+
   Use the SYSDISK command to show the current system disk,  to set a different
   system disk, or to turn off the system disk search sequence.
 
