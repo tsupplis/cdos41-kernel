@@ -1086,6 +1086,9 @@ do_one_port:
 	jnz	erase_port		; hardware is absent
 
 	call	do_aux_int		; set up port hardware
+; Serial-terminal allocation is independent of ordinary UART AUX/printer I/O.
+        cmp dx,num_serial_cons
+        jae do_one_done
 	mov	bx,dx			; bx = port number
 	cmp	su_ser_con[bx],0FFh	; if not serial console
 	jnz	do_one_done		;   then we're finished

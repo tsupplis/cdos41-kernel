@@ -1,0 +1,8 @@
+; Console allocation policy shared by XIOS and CIO.
+; Four PC virtual consoles are always present. Serial UART AUX/printer I/O
+; remains available independently of allocating resident terminal shells.
+; Set num_serial_cons to 2 to restore the OEM's two serial-terminal consoles;
+; the default is 0. GENCCPM derives PCTMP/PIN instances from these counts.
+num_vir_cons    equ 4
+num_serial_cons equ 0
+num_sys_cons    equ num_vir_cons + num_serial_cons

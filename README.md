@@ -212,7 +212,7 @@ The filesystem and boot track are generated locally.
 | XIOS | IBM PC/XT/AT SQUID hardware support | Recompiled from CDOS 4.1 and adapted |
 | PIN | Physical console input | Recompiled from CDOS 4.1 and adapted |
 | CLOCK | Timekeeping resident process | Recompiled from CDOS 4.1 |
-| PCTMP | Shell and command execution | Recompiled from CDOS 4.1 and adapted |
+| PCTMP | Shell and command execution on four resident PC consoles | Recompiled from CDOS 4.1 and adapted |
 | CONFID | Resident configuration support | Recompiled from CDOS 4.1 |
 | Boot sector / loader | Start the generated kernel | Recompiled from CCP/M-86 boot sources |
 

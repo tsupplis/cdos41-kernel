@@ -407,7 +407,7 @@ reorg1	equ	offset $
 	dseg
 	org	reorg1
 
-num_vir_cons	equ	4		;number of virtual consoles
+; Console counts are supplied by consoles.def at the top level of SQUID.
 
 sysdat		dw	0
 supervisor_o	rw	1
@@ -418,9 +418,9 @@ tick		db	false
 ticks_sec	db	60
 door		db	false
 nacb		db	num_aux_ports
-npcns		db	1 + num_aux_ports
-nvcns		db	num_vir_cons + num_aux_ports
-nccb		db	num_vir_cons + num_aux_ports
+npcns		db	1 + num_serial_cons
+nvcns		db	num_sys_cons
+nccb		db	num_sys_cons
 nlcb		db	5		;5 list devices
 
 ccb		dw	offset ccb_tab	;pointer to the first ccb

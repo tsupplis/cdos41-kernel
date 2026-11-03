@@ -32,6 +32,7 @@ check: all
 	@set -e; for f in kernel/con/*.con kernel/rsp?/*.rsp; do cmdinfo $$f; done
 	$(MAKE) -C commands check
 	$(MAKE) -C kernel/sysgen check
+	python3 tools/console_footprint_check.py
 	$(MAKE) -C kernel/rsp3 check
 	$(MAKE) -C kernel/con check-cursor check-rtc
 	python3 tools/historical_check.py

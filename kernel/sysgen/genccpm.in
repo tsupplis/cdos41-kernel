@@ -5,11 +5,14 @@ sysdrive=a: tmpdrive=a: cmdlogging=n osstart=6000
 memory
 
 diskbuffers
+a:
+10
+4
+8
+2
 *:
-4
-4
-2
-2
+a:
+a:
 no
 
 oslabel

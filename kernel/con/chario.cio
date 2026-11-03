@@ -690,9 +690,9 @@ ed_nldone:
 ; One last accepted line per console, not a command history.  Keep this
 ; private storage in CIO's code group: DS is shared system data with a
 ; fixed layout.  No CCB/UDA fields or other module layouts are changed.
-; XIOS virtual-console events use a four-bit console number.  Guard the
-; index so other console devices cannot access outside this table.
-recall_slots equ 16
+; Allocate only configured consoles. Guard the index so other console
+; devices cannot access outside this table. consoles.def also drives XIOS.
+recall_slots equ num_sys_cons
 
 recall_slot:	; DH=console, return DI=slot, carry set if unsupported
 	cmp dh,recall_slots ! jae recall_bad
@@ -756,18 +756,10 @@ recall_lines rb 0
 	db 0 ! rb 255
 	db 0 ! rb 255
 	db 0 ! rb 255
+if num_serial_cons
 	db 0 ! rb 255
 	db 0 ! rb 255
-	db 0 ! rb 255
-	db 0 ! rb 255
-	db 0 ! rb 255
-	db 0 ! rb 255
-	db 0 ! rb 255
-	db 0 ! rb 255
-	db 0 ! rb 255
-	db 0 ! rb 255
-	db 0 ! rb 255
-	db 0 ! rb 255
+endif
 
 rawinit:
 ;-------

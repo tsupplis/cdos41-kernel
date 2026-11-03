@@ -1524,3 +1524,94 @@ BIOS-format correction: CP/M INT 13h/AH=05h reads the sector-ID count from
 the INT 1Eh table. DCOPY now selects eight/nine there for each format call,
 then restores nine for geometry probes without changing returned AX/CF.
 The regression harness checks this count; native XIOS formatting is unchanged.
+
+### Four-console resident allocation and bounded recall storage
+
+The OEM SQUID header counted four PC virtual consoles plus two UART terminals,
+even when the serial ports were used only as AUX/printers. GENCCPM consequently
+instantiated six PCTMP data areas and three PIN data areas. The default now
+selects four PC consoles and no resident serial terminals, retaining two UART
+AUX/printer ports. `consoles.def` shares the policy between XIOS and CIO;
+`num_serial_cons=2` restores the OEM terminal profile. XIOS startup only
+reserves a UART for a console if that terminal is included in the policy.
+
+Recall now allocates 256 bytes per configured console (1024 bytes by default),
+with the original range guard, rather than reserving 4096 bytes for sixteen
+possible IDs. The standard SYS drops from 197,120 to 178,816 bytes, saving
+18,304 bytes without removing command implementations or DOS APIs. CONFIDD
+is unchanged. The footprint check validates actual component/header counts,
+resident copies, UART AUX counts and all 256 recall-selector inputs, and
+rejects an unreviewed SYS increase beyond the documented profile budget.
+Both zero/two-terminal profiles are rebuilt and checked. Eight assembled UART
+startup cases verify that AUX ports are claimed only by enabled terminal slots.
+
+## HIDDEN parity, step 6: DISK7 and WASH15
+
+The cpm86-ports browsers now default to normal files on CP/M, CCP/M and
+CDOS. O toggles all files, including SYSTEM or FAT HIDDEN; S/H indicators
+remain distinct. An empty filtered list offers the toggle safely. Separate
+record metadata travels with names through sorting, navigation, tagging
+and deletion; no CP/M filename bit is repurposed. Actual raw FAT header
+recognition follows a version gate before FAT allocation metadata is read.
+
+DISK7's records grow from 13 to 14 bytes, WASH15's from 12 to 13. Filename
+and FCB copies retain their original lengths; stride, sort, deletion and
+rename offsets include the metadata. DISK7's tag scan skips the metadata
+and locates each next tag explicitly. No sibling build dependency or BDOS
+230 call is introduced. Rename/delete continue through BDOS 23/19, retaining
+OS write protection and lock checks.
+
+Verification: both ASM86 builds and live FAT normal/all/empty filtering,
+rename/delete, metadata retention and untouched labels/directories pass.
+DISK7 tagging/untagging also passes. Original CP/M-86 1.1 and CCP/M-86 3.1
+SYSTEM-selection checks pass without false HIDDEN flags.
+
+## HIDDEN parity, step 5: FILER
+
+FILER uses the same version/raw-header gates and a separate attribute byte
+in its 14-byte records. O implements the documented normal/all toggle;
+selected-file status distinguishes S/H without widening the four-column grid.
+All record strides include the new byte, while filename/FCB copies and tag
+offsets retain their original lengths. There is no BDOS 230 dependency.
+
+Confirmed deletion and replacement retain FILER's historical READ-ONLY
+override. The former blanket attribute clear is replaced by BDOS 17 into
+private DMA followed by BDOS 30 with READ-ONLY alone cleared. SYSTEM,
+archive and F1-F3 survive, and missing searches restore default DMA without
+changing attributes. The FAT backend retains HIDDEN independently; BDOS 19
+continues to enforce locks and disk write protection.
+
+Verification: keyboard and launch regressions pass. The assembled attribute
+check covers all four BDOS search slots and eight RO/SYSTEM/archive
+combinations, preserving F1-F3, plus missing-file cleanup. Live FAT HIDDEN
+navigation/rename/delete and original CP/M-86 1.1 / CCP/M-86 3.1
+SYSTEM+READ-ONLY deletion pass.
+The live harness paces FILER actions after drawing because its existing
+flow-control poll consumes keys typed during screen output.
+
+### Shared disk-buffer allocation instead of nine private pools
+
+The original response applied numeric wildcard settings independently to
+A-H and M: four directory/two data buffers each, giving 36 directory and
+18 data buffers even when the drives were absent. Original 4.11 instead
+shared one eight-directory/four-data pool across all configured DPHs.
+The maintained profile now shares one larger 16-directory/eight-data pool,
+with per-process limits four/two. A: owns it; the wildcard shares A: rather
+than duplicating numeric values. GENCCPM's hexadecimal input uses `10` for
+16. Hashing is fixed for explicit A:, but the wildcard still asks the
+question, so only the wildcard gets the trailing `no` response.
+
+With four consoles, the SYS is 168,064 bytes: 10,752 smaller than the earlier
+four-console/private-pool build and 29,056 smaller than the original current
+build. Relative to the 152,192-byte release 4.11 kernel, the remaining 15,872
+bytes include 12,560 bytes of CONFIDD, which remains enabled. The footprint
+check walks every configured DPH and its BCB chains, requiring one shared
+16/8 pool and 4/2 process limits. Both zero/two-terminal configurations pass;
+reviewed SYS budgets are 166/182 KiB respectively. Historical assembled BDOS
+buffer-chain/drive-selection checks also pass. Full live regression must be
+rerun against the regenerated kernel and media.
+
+Buffer tuning: `kernel/sysgen/README.md` documents the four hexadecimal pool
+settings and preserves the sharing responses. The allocation check derives
+expected counts/limits from `genccpm.in`, while still rejecting duplicated
+per-drive pools and enforcing the reviewed SYS size budget.
