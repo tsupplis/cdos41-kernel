@@ -97,9 +97,9 @@ keys = {
 }
 for text, label in [
     ("echo InteractiveCase", "interactive"),
-    ("b:lang one two", "batch"),
+    ("b:lang OneCase TwoCase", "batch"),
     ("cls", "clear-cpm"),
-    ("a:langc one two", "cpm-batch"),
+    ("a:langc OneCase TwoCase", "cpm-batch"),
     ("cls", "clear-back"),
     ("b:back", "backward"),
     ("cls", "clear-empty"),
@@ -159,15 +159,15 @@ for text in [
     "ON",
     "A>ECHO VisibleCase",
     "VisibleCase",
-    "ARG-ONE",
-    "ARG-TWO",
+    "ARG-OneCase",
+    "ARG-TwoCase",
     "LABEL-PASS",
     "COMPLETE",
 ]:
     assert text in b.splitlines(), (text, b)
 assert "WRONG" not in b and "@ECHO" not in b, b
 assert (
-    "ARG-TWO" in screens["cpm-batch"] and "COMPLETE" in screens["cpm-batch"]
+    "ARG-TwoCase" in screens["cpm-batch"] and "COMPLETE" in screens["cpm-batch"]
 ), screens["cpm-batch"]
 assert (
     "BACKWARD-PASS" in screens["backward"] and "BACK-END" in screens["backward"]
@@ -186,6 +186,7 @@ assert p.stdout == b"CMDCASE\r\n".ljust(128, b"\x1a"), p.stdout
 assert "CONTEXT-PASS" in screens["context"], screens["context"]
 assert "Directory of Drive B" in screens["context"], screens["context"]
 assert "User Number = 1" in screens["context"], screens["context"]
+assert (R / "commands/batch/batch.cmd").read_bytes()[127] & 2
 assert (R / "commands/batch/language.lib").read_bytes() == (
     R / "kernel/rsp3/language.lib"
 ).read_bytes()

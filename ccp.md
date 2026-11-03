@@ -1,5 +1,7 @@
 # Concurrent DOS 4.1 command dispatch
 
+The complete BAT language is documented in [batch.md](batch.md).
+
 Current PC-MODE build, based on `kernel/rsp3/tmpmenu.lib`, `tmpdir.lib`
 and `kernel/sysgen/Makefile`. Alias targets require the named external file. The named aliases also apply
 to BATCH.CMD; its separate TMP source copies implement the same rewrites.

@@ -25,22 +25,23 @@ see the root patch notes.
 BATCH reads each line before echoing its prompt. Empty lines and the
 Ctrl-Z/end-of-file transition do not print extra drive prompts.
 
-## Small command-file language
+## Language reference
 
-ECHO text writes a message; bare ECHO queries script echo state. ECHO=ON and
-ECHO=OFF enable/disable subsequent command/prompt echo. Only @ECHO suppresses
-its own line; there is no general @command prefix. ECHO ON/OFF print literal
-text. Echo control is deliberately BATCH-only: interactive ECHO and ECHO.CMD
-are simple message commands. State is private to a BATCH process, initially ON,
-and retained when chaining to another BAT file.
+[batch.md](../../batch.md) documents invocation, arguments, ECHO controls,
+SHIFT, labels/GOTO, comments, built-ins, aliases, command dispatch, case
+handling, redirection and unsupported syntax. HELP LANGUAGES BATCH provides
+the installed reference.
 
-SHIFT advances the argument list (%1 becomes %0); it does not change the script
-filename or location. Labels (:name) are silent, case-insensitive single words.
-GOTO name (or GOTO :name) searches raw records from the beginning and resumes
-after the matching label. Scanning disables substitution and does not execute
-skipped commands. Missing labels report an error and stop the script.
+## Implementation
+
+BATCH.CMD is built with TAIL=KEEP, preserving invocation argument case through
+positional substitution and SHIFT. The build check verifies the header flag.
 
 The identical language.lib include in commands/batch and kernel/rsp3 supplies
 ECHO and conditionally assembles the BATCH-only features. RASM86 includes it
 from the top-level A86 modules because nested includes are unsupported.
+GOTO scans raw records with substitution disabled. SHIFT changes arguments
+without changing the saved script identity. Echo state belongs to the BATCH
+process and remains set when chaining to another BAT file.
+
 Run root make check-batch-language for live regression coverage.

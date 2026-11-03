@@ -73,9 +73,9 @@ dist: all
 $(DIST_DISKS): %: media/%
 	cp $< $@
 
-$(DISKSZIP): $(DIST_DISKS) LICENSE.md LICENSE-bis.md README.md ccp.md patches.md Makefile
+$(DISKSZIP): $(DIST_DISKS) LICENSE.md LICENSE-bis.md README.md ccp.md batch.md patches.md Makefile
 	$(RM) $@
-	COPYFILE_DISABLE=1 zip -X -j $@ $(DIST_DISKS) LICENSE.md LICENSE-bis.md README.md ccp.md patches.md
+	COPYFILE_DISABLE=1 zip -X -j $@ $(DIST_DISKS) LICENSE.md LICENSE-bis.md README.md ccp.md batch.md patches.md
 
 check-dist: dist
 	unzip -t $(DISKSZIP)

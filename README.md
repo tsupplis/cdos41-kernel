@@ -147,9 +147,11 @@ Stock DOS Plus 1.2 versus this CDOS rebuild.
 | EXEs with short or unaligned headers | Loader defect affects some programs | Fixed |
 | Command processor | COMMAND.COM | PCTMP and BATCH |
 | Startup scripts | AUTOEXEC.BAT | Per-console startup scripts |
-| Batch arguments | `%0`–`%9`, SHIFT | `%0`–`%9`; no SHIFT |
-| Batch control and messages | IF, GOTO, FOR, ECHO | ECHO and labels/GOTO implemented; IF/FOR pending |
+| Batch arguments | `%0`–`%9`, SHIFT | `%0`–`%9`, SHIFT |
+| Batch control and messages | IF, GOTO, FOR, ECHO | ECHO, labels/GOTO and SHIFT implemented; IF/FOR/CALL deferred |
+| Echo control | ECHO ON/OFF | BATCH-only ECHO=ON/OFF and @ECHO; interactive ECHO prints text |
 | Environment variables | SET and `%NAME%` expansion | SETENV; no shell `%NAME%` expansion |
+| Search-path commands | PATH built-in | PATH.EXE for the DOS environment; SYSDISK and ORDER for native shell searching |
 | Input/output redirection and append | DOS pattern: `<`, `>`, `>>` | CP/M-Plus pattern: GET/PUT/RDR, extended to both native and DOS programs |
 | Command pipelines | `command1 \| command2` using temporary files | Not implemented |
 | Internal DOS interfaces | Not supported as a compatibility interface | 2 of 9 fully implemented (22%); 1 partial; 6 missing or stubbed |
@@ -175,7 +177,7 @@ and its [EXE loader defect](https://www.seasip.info/Cpm/dosplus_exe.html).
 
 BATCH adds labels/GOTO, SHIFT and script-local `ECHO=ON/OFF`; `@ECHO`
 suppresses only its own line. Interactive ECHO and ECHO.CMD simply print text.
-This restriction is intentional; see [BATCH](commands/batch/README.md).
+This restriction is intentional; see the [BATCH language reference](batch.md).
 
 ## Distributions
 
@@ -242,69 +244,75 @@ release-image provenance. Details are in `base/cdos411.json`.
 | Original used | Distribution uses the original itself; no replacement is being compared | 
 
 
-| Tool | Purpose | Original reference | Source (`commands/`) | Parity |
-| --- | --- | --- | --- | --- |
-| `asm80` | 8080 assembler | - | Translated using XLT86 from CP/M-80 2.2 and adapted | Additional tool |
-| `asm86` | 8086 assembler | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool |
-| `batch` | Run BAT command files | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Equivalent |
-| `chdir / mkdir` | Change or create directories | 4.11 | Recompiled from CDOS 4.1; shared D.A86 implementation | Byte-identical |
-| `chkcpmfs` | Read-only CP/M directory allocation consistency check | - | New shared PL/M-86 checker for CDOS, CCP/M-86 and CP/M-86 | Additional tool |
-| `rmdir` | Remove directories | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Equivalent |
-| `chset` | Inspect or change CMD header flags | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Behavior tested |
-| `cls` | Clear the terminal screen | - | New; TMP built-in; VT52 ESC-E | Additional tool |
-| `copy.exe` | Copy files | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Equivalent |
-| `copymenu` | Copy menu definitions | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
-| `date` | Display or set the date | - | Recompiled from CCP/M-86 3.1 and adapted, Y2K patched | Additional tool |
-| `date.exe` | Display or set the date through DOS | 4.11 | Recompiled from CDOS 4.1 and adapted, short-year fix; commands/datetime | Equivalent |
-| `dcomp / dcopy` | Compare or copy floppy diskettes | - | Ported from PC DOS 1.10; imported from CCP/M-86 | Additional tool |
-| `ddt86` | 8086 interactive debugger | - | Recompiled from CCP/M-86 3.1 | Additional tool |
-| `dir` | List directory contents | - | Recompiled from CCP/M-86 3.1 and adapted; separate CDOS 4.1 TMP built-in | Additional tool |
-| `dredix` | Full-screen text editor | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
-| `dskmaint` | Format, verify and copy diskettes | 4.11 | Recompiled from CDOS 4.1 with reconstructed 4.11 DOS boot sector | Behavior tested |
-| `dsp` | Inspect print-spool information | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
-| `echo` | Write text to the native console | None | New native RASM86 implementation | Additional tool |
-| `ed` | Line-oriented text editor | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool |
-| `editmenu` | Edit menu definitions | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
-| `era` | Erase files | - | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |
-| `eraq` | Erase files with per-file confirmation | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
-| `erase.exe` | Erase files through DOS | 4.11 | Recompiled from CDOS 4.1 | Equivalent |
-| `function` | Program function keys | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
-| `gencmd` | Convert H86 output into CMD executables | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool |
-| `get` | Feed console input from a text file | - | New; shared putget.lib engine, imported from the CCP/M project | Additional tool |
-| `genccpm` | Generate and configure the system image | - | Recompiled from CDOS 4.1 and adapted; flag-table fix | No reference |
-| `genldr` | Generate a system loader | - | Recompiled from CDOS 4.1; carried-over SCD2 startup | No reference |
-| `hdmaint` | Hard-disk maintenance | 4.11 | Recompiled from CDOS 4.1 with recovered flat LBDOS | Byte-identical |
-| `help` | Browse indexed command help | 4.11 | Recompiled from CDOS 4.1; maintained help.dat | Behavior tested |
-| `hexcom` | Convert Intel HEX to COM binaries | - | HEXCOM 3.00-compatible C from [tpzasm](https://github.com/johnsonjh/tpzasm) | Additional tool |
-| `initdir` | Enable or remove directory date/time stamps | 4.11 | Recompiled from CDOS 4.1 | Equivalent |
-| `loadccpm.com` | Load the system from DOS | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Byte-identical |
-| `n` | Configure national keyboard, screen and printer tables | 4.11 | Rewritten in C from CDOS 4.11, with byte-identical assembly reference | Behavior tested |
-| `path.exe` | Display or set the DOS search path | 4.11 | Recompiled from CDOS 4.1 | Equivalent |
-| `pip` | Copy and transfer files | 4.11 | Recompiled from CDOS 4.1 and adapted | Behavior tested |
-| `print` | Print files using Concurrent printer services | - | Recompiled from CCP/M-86 3.1 | Additional tool |
-| `printmgr` | Manage print spooling | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Behavior tested |
-| `put` | Capture console output into a file | - | New; shared putget.lib engine, imported from the CCP/M project | Additional tool |
-| `rdr` | Redirect console input and output together | - | New; shared putget.lib engine, imported from the CCP/M project | Additional tool |
-| `redos.com` | Install PC DOS system files on a prepared hard disk | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical |
-| `ren` | Rename files | - | Recompiled from CCP/M-86 3.1 and adapted for parity | Additional tool |
-| `ren.exe` | Rename files through DOS | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical |
-| `sdir` | Detailed, sorted directory listing | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |
-| `set` | Set file and drive attributes | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |
-| `setenv.exe` | Display and edit the 1 KB per-console DOS environment | None | New implementation for CDOS 4.11 | Additional tool |
-| `setport` | Configure serial ports and protocols | 4.11 | Reverse Engineered from CDOS 4.11 and patched | Equivalent |
-| `setup` | Customize system hardware settings | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical |
-| `show` | Display disk space and drive information | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |
-| `submit` | Run SUB command files | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool |
-| `spl` | Manage the print spool queues and dispatch jobs to DSP | 4.11 | Reconstructed C from CDOS 4.11; DRC 1.11 build, ASM86 reference retained | Behavior tested |
-| `stop` | List processes and stop a selected entry | 4.11 | Reconstructed PL/M from CDOS 4.11; byte-identical assembly reference retained | Behavior tested |
-| `sysdisk` | Display or change the system search path | 4.11 | Recompiled from CDOS 4.1; SD-mode D.A86 wrapper | Byte-identical |
-| `systat` | Inspect processes and system resources | 4.1 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |
-| `time.exe` | Display or set the time through DOS | 4.11 | Reconstructed assembly from CDOS 4.11; release MZ fields restored | Byte-identical |
-| `tree` | Directory tree with per-directory file counts and byte totals | None | New C implementation of the DOS Plus interface | Additional tool |
-| `type` | Display a text file | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |
-| `window` | Control console windows from commands | 4.11 | C rewrite, adapted for parity; shared modules in commands/window | Behavior tested |
-| `wmenu` | Interactive console-window manager | 4.11 | C rewrite, adapted for parity; shared modules in commands/window | Behavior tested |
+`Tail=KEEP` marks native CMD binaries built to preserve command-tail case:
+BATCH.CMD, ECHO.CMD, GET.CMD, PUT.CMD and RDR.CMD. Other native CMDs use the
+historical uppercase tail; DOS COM/EXE files do not use this CMD-header flag.
+Filename matching is unchanged. [CHSET](commands/chset/README.md) can query or
+change the setting. See [batch.md](batch.md) for substitution and child-command
+case handling.
 
+| Tool | Purpose | Original reference | Source (`commands/`) | Parity | Tail |
+| --- | --- | --- | --- | --- | --- |
+| `asm80` | 8080 assembler | - | Translated using XLT86 from CP/M-80 2.2 and adapted | Additional tool | — |
+| `asm86` | 8086 assembler | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool | — |
+| `batch` | Run BAT command files | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Equivalent | KEEP |
+| `chdir / mkdir` | Change or create directories | 4.11 | Recompiled from CDOS 4.1; shared D.A86 implementation | Byte-identical | — |
+| `chkcpmfs` | Read-only CP/M directory allocation consistency check | - | New shared PL/M-86 checker for CDOS, CCP/M-86 and CP/M-86 | Additional tool | — |
+| `rmdir` | Remove directories | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Equivalent | — |
+| `chset` | Inspect or change CMD header flags | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Behavior tested | — |
+| `cls` | Clear the terminal screen | - | New; TMP built-in; VT52 ESC-E | Additional tool | — |
+| `copy.exe` | Copy files | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Equivalent | — |
+| `copymenu` | Copy menu definitions | 4.11 | Recompiled from CDOS 4.1 | Behavior tested | — |
+| `date` | Display or set the date | - | Recompiled from CCP/M-86 3.1 and adapted, Y2K patched | Additional tool | — |
+| `date.exe` | Display or set the date through DOS | 4.11 | Recompiled from CDOS 4.1 and adapted, short-year fix; commands/datetime | Equivalent | — |
+| `dcomp / dcopy` | Compare or copy floppy diskettes | - | Ported from PC DOS 1.10; imported from CCP/M-86 | Additional tool | — |
+| `ddt86` | 8086 interactive debugger | - | Recompiled from CCP/M-86 3.1 | Additional tool | — |
+| `dir` | List directory contents | - | Recompiled from CCP/M-86 3.1 and adapted; separate CDOS 4.1 TMP built-in | Additional tool | — |
+| `dredix` | Full-screen text editor | 4.11 | Recompiled from CDOS 4.1 | Behavior tested | — |
+| `dskmaint` | Format, verify and copy diskettes | 4.11 | Recompiled from CDOS 4.1 with reconstructed 4.11 DOS boot sector | Behavior tested | — |
+| `dsp` | Inspect print-spool information | 4.11 | Recompiled from CDOS 4.1 | Behavior tested | — |
+| `echo` | Write text to the native console | None | New native RASM86 implementation | Additional tool | KEEP |
+| `ed` | Line-oriented text editor | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool | — |
+| `editmenu` | Edit menu definitions | 4.11 | Recompiled from CDOS 4.1 | Behavior tested | — |
+| `era` | Erase files | - | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested | — |
+| `eraq` | Erase files with per-file confirmation | 4.11 | Recompiled from CDOS 4.1 | Behavior tested | — |
+| `erase.exe` | Erase files through DOS | 4.11 | Recompiled from CDOS 4.1 | Equivalent | — |
+| `function` | Program function keys | 4.11 | Recompiled from CDOS 4.1 | Behavior tested | — |
+| `gencmd` | Convert H86 output into CMD executables | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool | — |
+| `get` | Feed console input from a text file | - | New; shared putget.lib engine, imported from the CCP/M project | Additional tool | KEEP |
+| `genccpm` | Generate and configure the system image | - | Recompiled from CDOS 4.1 and adapted; flag-table fix | No reference | — |
+| `genldr` | Generate a system loader | - | Recompiled from CDOS 4.1; carried-over SCD2 startup | No reference | — |
+| `hdmaint` | Hard-disk maintenance | 4.11 | Recompiled from CDOS 4.1 with recovered flat LBDOS | Byte-identical | — |
+| `help` | Browse indexed command help | 4.11 | Recompiled from CDOS 4.1; maintained help.dat | Behavior tested | — |
+| `hexcom` | Convert Intel HEX to COM binaries | - | HEXCOM 3.00-compatible C from [tpzasm](https://github.com/johnsonjh/tpzasm) | Additional tool | — |
+| `initdir` | Enable or remove directory date/time stamps | 4.11 | Recompiled from CDOS 4.1 | Equivalent | — |
+| `loadccpm.com` | Load the system from DOS | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Byte-identical | — |
+| `n` | Configure national keyboard, screen and printer tables | 4.11 | Rewritten in C from CDOS 4.11, with byte-identical assembly reference | Behavior tested | — |
+| `path.exe` | Display or set the DOS search path | 4.11 | Recompiled from CDOS 4.1 | Equivalent | — |
+| `pip` | Copy and transfer files | 4.11 | Recompiled from CDOS 4.1 and adapted | Behavior tested | — |
+| `print` | Print files using Concurrent printer services | - | Recompiled from CCP/M-86 3.1 | Additional tool | — |
+| `printmgr` | Manage print spooling | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Behavior tested | — |
+| `put` | Capture console output into a file | - | New; shared putget.lib engine, imported from the CCP/M project | Additional tool | KEEP |
+| `rdr` | Redirect console input and output together | - | New; shared putget.lib engine, imported from the CCP/M project | Additional tool | KEEP |
+| `redos.com` | Install PC DOS system files on a prepared hard disk | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical | — |
+| `ren` | Rename files | - | Recompiled from CCP/M-86 3.1 and adapted for parity | Additional tool | — |
+| `ren.exe` | Rename files through DOS | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical | — |
+| `sdir` | Detailed, sorted directory listing | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested | — |
+| `set` | Set file and drive attributes | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested | — |
+| `setenv.exe` | Display and edit the 1 KB per-console DOS environment | None | New implementation for CDOS 4.11 | Additional tool | — |
+| `setport` | Configure serial ports and protocols | 4.11 | Reverse Engineered from CDOS 4.11 and patched | Equivalent | — |
+| `setup` | Customize system hardware settings | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical | — |
+| `show` | Display disk space and drive information | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested | — |
+| `submit` | Run SUB command files | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool | — |
+| `spl` | Manage the print spool queues and dispatch jobs to DSP | 4.11 | Reconstructed C from CDOS 4.11; DRC 1.11 build, ASM86 reference retained | Behavior tested | — |
+| `stop` | List processes and stop a selected entry | 4.11 | Reconstructed PL/M from CDOS 4.11; byte-identical assembly reference retained | Behavior tested | — |
+| `sysdisk` | Display or change the system search path | 4.11 | Recompiled from CDOS 4.1; SD-mode D.A86 wrapper | Byte-identical | — |
+| `systat` | Inspect processes and system resources | 4.1 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested | — |
+| `time.exe` | Display or set the time through DOS | 4.11 | Reconstructed assembly from CDOS 4.11; release MZ fields restored | Byte-identical | — |
+| `tree` | Directory tree with per-directory file counts and byte totals | None | New C implementation of the DOS Plus interface | Additional tool | — |
+| `type` | Display a text file | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested | — |
+| `window` | Control console windows from commands | 4.11 | C rewrite, adapted for parity; shared modules in commands/window | Behavior tested | — |
+| `wmenu` | Interactive console-window manager | 4.11 | C rewrite, adapted for parity; shared modules in commands/window | Behavior tested | — |
 ## Y2K utilities
 
 The native DATE(.CMD/.EXE), SDIR and SHOW imports retain the CCP/M project's date fixes.

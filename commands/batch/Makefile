@@ -2,6 +2,7 @@
 # all builds local outputs; check validates them; clean removes generated files.
 
 CMDINFO=cmdinfo
+CMDMOD=cmdmod
 RASM86=pcdev_rasm86
 LINK86=pcdev_linkcmd
 
@@ -14,6 +15,7 @@ OBJECTS=batch.obj
 all: $(TOOLS)
 check: all
 	@set -e; for f in $(TOOLS); do $(CMDINFO) $$f; done
+	@python3 -c "from pathlib import Path; assert Path('batch.cmd').read_bytes()[127] & 2, 'Expected CMD TAIL=KEEP flag'"
 
 LOCAL_INCLUDES=$(wildcard *.a86 *.lib *.equ *.dat *.def *.h *.dcl)
 $(OBJECTS): $(LOCAL_INCLUDES) Makefile
@@ -32,4 +34,5 @@ batch.cmd: $(OBJECTS) Makefile
 	@$(LINK86) 'batch[dat[max[0]]]' > batch-link.log 2>&1; result=$$?; cat batch-link.log; test $$result -eq 0
 	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' batch-link.log
 	@test -s $@
+	$(CMDMOD) -f 1=1 $@
 	$(CMDINFO) $@

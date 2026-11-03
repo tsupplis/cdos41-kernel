@@ -1058,15 +1058,15 @@ CHSET adds TAIL=KEEP/UPPER, stored as a fifth settings field. Its bit-pattern
 table and all record/query bounds are extended, and the settings display
 buffer grows to 128 bytes. Existing settings leave the new bit unchanged.
 Host CMDMOD uses the version-agnostic `-f bit=0|1` operation; `-f 1=1`
-changes only this flag, retaining the remaining file bytes exactly. PUT/GET/RDR set KEEP
-in their local build; cpmtools directory-attribute commands are not involved.
+changes only this flag, retaining the remaining file bytes exactly. BATCH/ECHO/PUT/GET/RDR set KEEP
+in their local builds; cpmtools directory-attribute commands are not involved.
 Wrapper option parsers already accept upper/lowercase A/E/EI/EO. BDOS filename
 parsing is still case-insensitive; DOS child argument text is not normalized.
 Unmarked native children launched by the wrappers are still uppercased by
 P_CLI. Unpatched stock kernels retain their previous behaviour.
 
 CMDMOD has separate raw-bit and unchanged-payload tests in its own project.
-make check-cmdtail verifies the wrappers opt in and exercises
+make check-cmdtail verifies the marked CMDs opt in and exercises
 all 256 header-flag combinations against 127 non-NUL bytes through the actual
 assembled CLI conversion loop. Disposable PCE tests exercise CHSET toggles,
 native opt-in/default behaviour and all three wrappers with DOS COM/EXE,
@@ -1078,3 +1078,9 @@ than assuming a 2 KB index; the expanded LANGUAGES entries cross that old bound.
 Live help checks read the nested ECHO, SHIFT and GOTO topics. The existing
 CHKCPMFS command also gains its missing help topic so packaged-command coverage
 remains complete.
+
+BATCH.CMD opts into KEEP for its own incoming argument list. Its command and
+label recognition remains case-insensitive; substitution and SHIFT retain the
+argument bytes. Live BATCH tests use mixed-case arguments from both FAT and
+CP/M scripts. The README marks the shipped KEEP binaries, and batch.md is the
+complete implemented-language reference included in the release archive.
