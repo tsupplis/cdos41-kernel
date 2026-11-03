@@ -5393,7 +5393,14 @@ ms_get_alloc:
 
 	mov dl,0			;function 1Bh uses the current drive
 ms_alloc_select:
-	dec dl ! jns ms_alloc_drive
+; DOS DL=0 means current; 1..16 select native A:..P:. Treat the byte
+; as unsigned: the old DEC/JNS mistook 81h..FFh for the current drive.
+; Reject out-of-range codes before changing native process drive state.
+	or dl,dl ! jz ms_alloc_current
+	cmp dl,16 ! ja ms_alloc_error
+	dec dl
+	jmps ms_alloc_drive
+ms_alloc_current:
 	mov dl,cur_dsk
 ms_alloc_drive:
 	cmp dl,cur_dsk ! je ms_alloc_dpb
@@ -5436,7 +5443,7 @@ ms_get_alloc1:
 	pop ds
 	mov MS_BX,cx			;zero offset for FAT
 	mov ax,80H
-; Both native FAT DPB markers are valid: FFFEh (FAT12), FFFFh (FAT16).
+; Both native FAT DPB markers are valid: FFFEh (FAT16), FFFFh (FAT12).
 	cmp es:word ptr [si],0FFFEH ! jb not_dos_dpb
 	  mov cl,es:1bh[si]		;PSH out of dpb
 	  shl ax,cl

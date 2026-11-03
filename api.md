@@ -44,8 +44,8 @@
 | 18 | Reserved/legacy in-use | Unused / stub | Unused | AL=00h; no service performed | — |
 | 19 | Get default drive | DOS 1.x | Implemented | — | — |
 | 1A | Set DTA | DOS 1.x | Implemented | — | — |
-| 1B | Allocation information, current drive | DOS 1.x | Partial | Geometry plus hash/FAT buffer segment, offset zero; FAT12/16 counts exclude reserved clusters; CP/M media is not a DOS FAT | — |
-| 1C | Allocation information, selected drive | DOS 1.x | Partial | DL=0 current, 1=A, …; Initializes/query DPB through BDOS; AL=FFh on selection/DPB failure; restores current drive; same media-dependent pointer as 1B | — |
+| 1B | Allocation information, current drive | DOS 1.x | Implemented | FAT12/16 geometry and DS:BX pointing at the FAT buffer’s media byte; cluster counts exclude reserved clusters. CP/M media supplies allocation geometry; its hash buffer is not a DOS FAT | — |
+| 1C | Allocation information, selected drive | DOS 2.0 | Implemented | DL=0 current, 1–16=A:–P:; unsigned validation, AL=FFh for out-of-range/unavailable drives or DPB failure; preserves default drive. Same media-dependent geometry/pointer contract as 1B | NEW (invalid-drive fix) |
 | 1D | Reserved/legacy read-only | Unused / stub | Unused | AL=00h; no service performed | — |
 | 1E | Reserved/legacy attributes | Unused / stub | Unused | AL=00h; no service performed | — |
 | 1F | Get current-drive DPB | DOS 1.x | Missing | m_null returns AL=00h; no DOS DPB pointer | — |
@@ -87,7 +87,7 @@ describe this kernel’s implementation. See Microsoft’s
 | 33 | Ctrl-Break control | Implemented | AL=0 queries DL; AL=1 sets DL=0/1. Enabled checking polls additional DOS calls and invokes INT 23h with caller registers. Raw 06h/07h and 33h/59h are excluded | NEW |
 | 34 | Get InDOS flag pointer | Stub | No pointer; CF clear, AL=0, AH retained | — |
 | 35 | Get interrupt vector | Implemented | AL=vector, ES:BX=result from interrupt vector table | — |
-| 36 | Free disk space | Implemented | Uses media geometry and native free-space service; invalid drive returns AX=FFFFh | — |
+| 36 | Free disk space | Implemented | Geometry and free clusters from native services; shares 1Ch’s unsigned drive validation. Invalid/unavailable drive returns AX=FFFFh; default drive preserved | NEW (invalid-drive fix) |
 | 37 | Switch character / device availability | Partial | AL=0 queries DL, AL=1 sets from DL; AL=0 on success, AL=FFh for unsupported selectors, CF clear. Default `/`; shared within one console across EXEC and root launches. Device-availability selectors 2/3 remain unsupported | NEW (get/set switch character) |
 | 38 | Country information | Implemented | AL=0 returns the full 32-byte US record. Other selectors and DX=FFFFh return CF set, AX=2 | NEW |
 | 39 / 3A / 3B | Make / remove / change directory | Implemented | FAT hierarchical directories; CP/M user areas are not DOS directories | — |

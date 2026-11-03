@@ -130,7 +130,7 @@ def allocation():
  mov ax,ds
  {'add ax,1000h' if kind=='external-cpm' else ''}
  mov es,ax
- mov word [es:0f200h],{0xfffe if kind=='fat12' else 0xffff if kind=='fat16' else 32}
+ mov word [es:0f200h],{0xffff if kind=='fat12' else 0xfffe if kind=='fat16' else 32}
 '''
     if kind.startswith('fat'):
      body+='mov word [es:0f206h],640\nmov word [es:0f208h],4096\nmov byte [es:0f21bh],2\n';sectors,units=8,638
@@ -160,5 +160,98 @@ def allocation():
     near(code,C(entry),body);count+=1
  print(f'PASS: {count} DOS allocation-info cases: FAT12/FAT16/CP/M/external DPB, default/current/other drive, selection/DPB failures and drive restoration')
 
+
+def allocation_drives():
+ # All 256 encodings reach the real selector; only native dependencies are
+ # replaced. Codes 0..16 are syntactically valid; 17..255 must not call BDOS.
+ for failed_select in [False,True]:
+  code=bytearray(BASE)
+  stub(code,'BDOS',f'mov [0f010h],dl\ninc byte [0f011h]\nmov al,{int(failed_select)}\nret')
+  stub(code,'ABDOS','mov [0f012h],dl\ninc byte [0f013h]\nret')
+  stub(code,'MS_ALLOC_DPB','mov byte [0f014h],1\nmov byte ['+str(D('RET_AL'))+'],7\nret')
+  body=f'''xor bx,bx
+ drive_case:
+ mov byte [{D('CUR_DSK')}],1
+ mov byte [{D('RET_AL')}],0
+ mov word [0f010h],0
+ mov word [0f012h],0
+ mov byte [0f014h],0
+ mov dx,bx
+ push bx
+ call far [cs:target]
+ pop bx
+ cmp bx,16
+ ja rejected
+ cmp bx,0
+ je accepted_current
+ cmp bx,2
+ je accepted_current
+ cmp byte [0f011h],1
+ jne failed
+ mov ax,bx
+ dec ax
+ cmp byte [0f010h],al
+ jne failed
+'''
+  if failed_select:
+   body+=f'''cmp byte [{D('RET_AL')}],255
+ jne failed
+ cmp byte [0f014h],0
+ jne failed
+ jmp next_drive
+'''
+  else:body+='jmp accepted\n'
+  body+=f'''accepted_current:
+ cmp byte [0f011h],0
+ jne failed
+accepted:
+ cmp byte [{D('RET_AL')}],7
+ jne failed
+ cmp byte [0f014h],1
+ jne failed
+ jmp next_drive
+rejected:
+ cmp byte [{D('RET_AL')}],255
+ jne failed
+ cmp byte [0f011h],0
+ jne failed
+ cmp byte [0f014h],0
+ jne failed
+next_drive:
+ cmp byte [{D('CUR_DSK')}],1
+ jne failed
+ cmp byte [0f013h],0
+ jne failed
+ inc bx
+ cmp bx,256
+ jb drive_case
+'''
+  near(code,C('MS_SPEC_ALLOC'),body)
+ # Execute real 36h/dskfree_alloc and 1Ch selector code. Bridge the
+ # software interrupt to local 1Ch so emu2 does not invoke its host DOS.
+ # Live tests below this target verify actual INT 21h dispatch.
+ s2=syms('ms2');c2,d2=bases('ms2')
+ for drive in [17,0x7f,0x80,0x81,0xfe,0xff]:
+  code=bytearray(BASE)
+  at=c2+s2['MS1_FUNC'];dest=len(code)
+  code+=asm(f'org {dest}\ncall {C("MS_SPEC_ALLOC")}\nmov al,[{D("RET_AL")}]\nret')
+  code[at:at+3]=b'\xe9'+word((dest-at-3)&65535)
+  stub(code,'BDOS','inc byte [0f000h]\nret')
+  stub(code,'BDOS_RETURN_ES','inc byte [0f000h]\nret')
+  body=f'''mov word [{d2+s2['MS2_DX']}],{drive}
+ mov word [{d2+s2['MS2_RET_AX']}],0
+ mov byte [{D('CUR_DSK')}],1
+ mov byte [0f000h],0
+ call far [cs:target]
+ cmp word [{d2+s2['MS2_RET_AX']}],0ffffh
+ jne failed
+ cmp byte [0f000h],0
+ jne failed
+ cmp byte [{D('CUR_DSK')}],1
+ jne failed
+'''
+  near(code,c2+s2['MS2_GET_DSKFREE'],body)
+ print('PASS: 512 assembled 1Ch selector cases (0..FF, valid/current/failed selection) and six real 36h-to-1Ch invalid-drive paths without native calls')
+
 if __name__=='__main__':
- console();labels();allocation()
+ console();labels();allocation();allocation_drives()

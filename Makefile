@@ -209,3 +209,9 @@ check-graphics: all
 check-dos-switch: all
 	python3 tools/dos_switch_check.py
 	python3 tools/dos_switch_live_check.py
+
+# Allocation-info and free-space drive validation; disposable PCE disks only.
+.PHONY: check-dos-allocation
+check-dos-allocation: all
+	python3 tools/pctmp_io_check.py
+	python3 tools/dos_alloc_live_check.py

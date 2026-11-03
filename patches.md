@@ -980,3 +980,30 @@ call or modify it. No BDOS, XIOS, pathname parser or EXEC changes are needed.
 all 256 byte values, all unsupported selectors, caller fields/status and
 console isolation. Disposable PCE tests check registers, the native output
 delimiter, EXEC child changes seen by its parent, and the next root launch.
+
+## DOS allocation information: unsigned drive validation
+
+INT 21h/1Ch shared its selector with 1Bh and the allocation stage of 36h.
+DEC DL followed by JNS treated invalid input codes 81h–FFh as “current drive”.
+The selector now tests zero explicitly, accepts native drive codes 1–16
+(A:–P:), and rejects larger unsigned values before calling BDOS or changing
+native process drive state. 1Ch returns AL=FFh and 36h returns AX=FFFFh on
+these errors. Selection/DPB failures retain their existing handling.
+
+Normal results are preserved. FAT12/FAT16 geometry and the actual FAT-buffer
+pointer remain unchanged, including the media-descriptor byte at offset zero.
+The native FAT loader fills that buffer on login; replacing the pointer with
+a synthetic descriptor is unnecessary and would reduce legacy FAT access.
+CP/M media still provides allocation geometry without a DOS FAT contract.
+1Bh/1Ch are therefore recorded as Implemented with the media distinction in
+the API limits column; 36h remains Implemented with its invalid-drive bug fixed.
+The FAT12/FAT16 DPB marker comment and synthetic fixture labels are corrected;
+the existing marker comparison and geometry calculations are unchanged.
+
+The standard assembled regression covers all 256 selector values with
+successful/failed selection (512 cases), plus the 36h-to-1Ch path through
+a synthetic software-interrupt bridge. Existing FAT12/FAT16/CP/M/external-DPB
+cases retain their geometry, pointer and drive-restoration assertions.
+`make check-dos-allocation` also boots disposable PCE CP/M/FAT media and checks
+1Bh/1Ch/36h against the FAT BPB and actual descriptor byte, unchanged FAT
+pointer, invalid-drive returns and preservation of the current drive.
