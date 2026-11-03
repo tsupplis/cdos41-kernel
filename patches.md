@@ -1007,3 +1007,74 @@ cases retain their geometry, pointer and drive-restoration assertions.
 `make check-dos-allocation` also boots disposable PCE CP/M/FAT media and checks
 1Bh/1Ch/36h against the FAT BPB and actual descriptor byte, unchanged FAT
 pointer, invalid-drive returns and preservation of the current drive.
+
+### TREE and the small BATCH language (issues #26 and #25)
+
+TREE.CMD is a new native C command using the existing DR C/RASM86 toolchain.
+It follows the DOS Plus TREE interface and SDIR's FAT-entry guard. Separate
+regular-file and directory searches collect immediate logical byte counts and
+walk directories in disk order. Child searches rescan parents instead of
+retaining BDOS search state across descent. Mappings remain process-private;
+CP/M disks are rejected. TREE is on the tools disk with rebuilt HELP text.
+
+PCTMP and BATCH process ECHO before filename parsing, retaining case and literal
+$ characters. The shared language.lib has identical local copies, with BATCH
+features conditionally assembled; no cross-project dependency is introduced.
+Only BATCH accepts ECHO=ON/OFF and @ECHO. Restricting state changes to scripts is
+intentional. @DIR and arbitrary @command prefixes remain unsupported.
+
+BATCH reads/classifies each line before prompt/command echo. Labels are silent;
+SHIFT moves the argument buffer without replacing script identity. GOTO scans
+raw records from the start with substitution disabled, so skipped lines neither
+execute nor expand parameters. Missing labels terminate this BAT normally after
+an error. No CALL stack, IF, FOR or environment expansion is introduced.
+
+ECHO.CMD uses a native RASM86/LINKCMD build without a runtime. Its BDOS
+console calls work with GET/PUT/RDR; KEEP_TAIL preserves case. The standalone
+command is on the tools disk; no ECHO.EXE is distributed. PAUSE remains a
+PCTMP/BATCH built-in, with no redundant standalone command.
+HELP LANGUAGES BATCH documents the script-only features; check-tree and
+check-batch-language exercise disposable PCE media.
+
+### Opt-in native CMD command-tail case preservation
+
+The native CLI previously uppercased every disk-loaded CMD tail, so a DOS
+child launched through PUT/GET/RDR received altered arguments. The wrappers
+could not restore the original case after their own launch.
+
+A local CMD-header extension assigns byte 7Fh bit 1 (02h) to KEEP_TAIL. The
+loader already retains the header flag byte in lod_lbyte. command.sup copies
+that byte to CH before selecting the child's base-page DS, then counts the
+tail in CL while conditionally skipping only ASCII a-z conversion. Ordinary
+unmarked commands retain their historical uppercase tails. Filename parsing,
+default FCB generation, directory attributes and DOS APIs are unchanged.
+The local pre-change cmdh.def and known DRI flag descriptions assign no
+meaning to bit 1; none of the 60 retained CMD reference binaries examined in
+CDOS/CCP/M/CP/M base directories has it set. This is explicitly a project
+extension, not a promise about every third-party loader or format checker.
+Reference: https://www.seasip.info/Cpm/cmdfile.html
+
+CHSET adds TAIL=KEEP/UPPER, stored as a fifth settings field. Its bit-pattern
+table and all record/query bounds are extended, and the settings display
+buffer grows to 128 bytes. Existing settings leave the new bit unchanged.
+Host CMDMOD uses the version-agnostic `-f bit=0|1` operation; `-f 1=1`
+changes only this flag, retaining the remaining file bytes exactly. PUT/GET/RDR set KEEP
+in their local build; cpmtools directory-attribute commands are not involved.
+Wrapper option parsers already accept upper/lowercase A/E/EI/EO. BDOS filename
+parsing is still case-insensitive; DOS child argument text is not normalized.
+Unmarked native children launched by the wrappers are still uppercased by
+P_CLI. Unpatched stock kernels retain their previous behaviour.
+
+CMDMOD has separate raw-bit and unchanged-payload tests in its own project.
+make check-cmdtail verifies the wrappers opt in and exercises
+all 256 header-flag combinations against 127 non-NUL bytes through the actual
+assembled CLI conversion loop. Disposable PCE tests exercise CHSET toggles,
+native opt-in/default behaviour and all three wrappers with DOS COM/EXE,
+mixed-case filenames/extensions/options and append. No TREE/ECHO/BATCH logic
+is changed by this workstream.
+
+The HELP index checker follows the native dollar-sentinel terminator rather
+than assuming a 2 KB index; the expanded LANGUAGES entries cross that old bound.
+Live help checks read the nested ECHO, SHIFT and GOTO topics. The existing
+CHKCPMFS command also gains its missing help topic so packaged-command coverage
+remains complete.

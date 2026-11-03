@@ -1,0 +1,20 @@
+        title 'TREE - native BDOS bridge'
+; Native C bridge. Preserve the C frame and index registers; OSCall returns
+; the full status word, unlike the byte-valued C library BDOS wrapper.
+        public OSCALL
+        cseg
+OSCALL:
+        push bp
+        mov bp,sp
+        push si
+        push di
+        push es
+        mov cx,4[bp]
+        mov dx,6[bp]
+        int 0e0h
+        pop es
+        pop di
+        pop si
+        pop bp
+        ret
+        end

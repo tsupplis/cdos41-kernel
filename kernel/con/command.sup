@@ -425,13 +425,16 @@ cli_gload:
 		;	count cmd length and convert
 		;	to upper case
 
-	push ds ! mov ds,cli_bpage
+; Header KEEP_TAIL is opt-in. Capture the loader flags before changing DS;
+; CH is free while CL counts the tail. Ordinary CMDs retain uppercasing.
+	push ds ! mov ch,lod_lbyte ! mov ds,cli_bpage
 	mov cl,0 ! mov di,offset bpg_dma+1
 ncmdchar:
 	cmp byte ptr [di],0 ! je endtail
 
 		; convert CMD tail to UPPER CASE
 
+	    test ch,keep_tail ! jnz nlow
 	    cmp byte ptr [di],'a' ! jb nlow
 		cmp byte ptr [di],'z' ! ja nlow
 		    and byte ptr [di],05fh

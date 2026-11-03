@@ -4,6 +4,7 @@
 CMDINFO=cmdinfo
 ASM86=cpm86_asm86
 GENCMD=cpm86_gencmd
+CMDMOD=cmdmod
 
 TOOLS=put.cmd get.cmd rdr.cmd
 
@@ -14,6 +15,7 @@ all: $(TOOLS)
 
 %.cmd: %.h86 Makefile
 	$(GENCMD) $<
+	$(CMDMOD) -f 1=1 $@
 	$(CMDINFO) $@
 
 # Assemble absolute groups for GENCMD.
@@ -27,3 +29,5 @@ clean:
 # Validate the structure of each rebuilt command/component.
 check: all
 	@set -e; for f in $(TOOLS); do $(CMDINFO) $$f; done
+
+	@python3 -c "from pathlib import Path; assert all(Path(f).read_bytes()[127] & 2 for f in '$(TOOLS)'.split()), 'Expected CMD TAIL=KEEP flag'"

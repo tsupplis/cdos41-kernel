@@ -718,6 +718,11 @@ IF BATCH
 	    push ds ! pop es
 	    call sublin
 	    cmp read_blen,1 ! jbe noclearline
+	    call batch_prepare
+	    mov si,offset clicb_cmd
+	    call lang_spaces
+	    cmp byte ptr [si],':'
+	    je noclearline
 ENDIF
 
 					; set up and print user prompt
@@ -727,7 +732,9 @@ ENDIF
 					; has changed the default.
 					; (unless we just returned from the
 					; BATCH processor.)
+	    cmp batch_hide,TRUE ! je batch_prompt_cr_done
 	    mov dl,CR ! call prchar
+batch_prompt_cr_done:
 	    call getuser
 
 
@@ -748,6 +755,7 @@ IF BATCH
 ENDIF
 
 
+	    cmp batch_hide,TRUE ! je nozero
 	    test bl,bl ! jz nozero	;don't print user 0 prompt
 	    mov dl,bl ! call prnum
 nozero:
@@ -771,6 +779,8 @@ IF BATCH
 ENDIF
 
 
+; Update parent drive/user even when command echo is suppressed.
+	    cmp batch_hide,TRUE ! je noprompt
 	    mov dl,'A' ! add dl,bl
 	    call prchar	
 	    mov dx,offset prompt
@@ -783,8 +793,14 @@ EJECT
 noprompt:
 	    call rcln
 startup:
+IF BATCH
+	    cmp batch_hide,TRUE ! je batch_lf_done
+ENDIF
 		; echo newline
 	    mov dl,LF ! call prchar
+IF BATCH
+batch_lf_done:
+ENDIF
 ;
 ;		Code added for RUNMENU
 ;
@@ -895,6 +911,10 @@ EJECT
 
 ;=======
 clicall:	; SEND CLI COMMAND
+	    call shell_language
+	    jnc language_not_handled
+	    jmp nextcommand
+language_not_handled:
 ;=======
 			; put null at end of input
 		    mov bx,offset clicb_cmd
@@ -2062,6 +2082,7 @@ gotlin:
 
 IF BATCH
 
+	cmp batch_hide,TRUE ! je batch_echo_done
 	mov delimit,0				;set string delimiter to 0
 	mov dx,offset clicb_cmd			;dx -> command line
 	call print_ds_string			;print string
@@ -2077,6 +2098,7 @@ notll:
 
 	mov dl,CR
 	call prchar
+batch_echo_done:
 
 ENDIF
 
@@ -2102,6 +2124,10 @@ sublin:
 subagn:
 	    call movchar			;get character from file.
 	    cmp submit,FALSE ! jnz contsub	;is submit done?
+		cmp goto_scan,TRUE ! jne sub_exit
+		mov goto_eof,TRUE
+		ret
+sub_exit:
 		xor cx,cx			;program. else continue
 		mov dx,cx
 		call ccpm
@@ -2180,6 +2206,7 @@ bufok:
 		mov dl,CR				;put a carriage return in dl
 
 notend:
+	    cmp goto_scan,TRUE ! je notpct
 	    cmp dl,'%' ! jnz notpct			;is it a percent sign?
 		inc si					;yes - point si to parm number
 		cmp si,offset subbuf+128 ! jb bufok1
@@ -2318,6 +2345,7 @@ sub2:
 	cmp dl,0 ! jz fondit		;if dl = 0 then  si is pointing
 					;to proper parm, else inc si
 	    mov al,byte ptr [si]	;until another space is found,
+	    or al,al ! jz subdon	; exhausted arguments stay empty
 
 	    cmp al,' ' ! jz nxtprm	;dec di and try again
 	    cmp al,0 ! jnz goagn
@@ -3047,5 +3075,6 @@ ccpm:	; INTERFACE ROUTINE FOR SYSTEM ENTRY POINTS
 ;====
 
 	int OSINT ! ret
+
 
                                                                                                                                                                                                                                                                                                                                                                                                                                           

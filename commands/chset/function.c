@@ -119,11 +119,14 @@ are in the com_tab[].
 		0L,	127,	3,	"0",	/* su = of */
 
 		0L,	127,	2,	"1",	/***/
-		0L,	127,	2,	"0"	/***/
+		0L,	127,	2,	"0",
+
+		0L,	127,	1,	"1",	/* TAIL=KEEP */
+		0L,	127,	1,	"0"	/* TAIL=UPPER */
 	};
 
 
-#define	MAX_FIELD	4
+#define	MAX_FIELD	5
 
 
 	BYTE		first_opt[] =
@@ -132,7 +135,8 @@ are in the com_tab[].
 		3,		/* shared */
 		5,		/* suspend */
 		7,		/***/
-		9		/* tells routines that suspend is 5,6 only */
+		9,		/* TAIL */
+		11		/* final option boundary */
 	};
 
 	BYTE	*bdos_01_msg = "\n\rFile password protected in Write mode\n\r";

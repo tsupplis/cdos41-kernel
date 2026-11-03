@@ -2,7 +2,7 @@
 """Read representative maintained help topics through the native HELP program."""
 
 from pathlib import Path
-import tempfile, shutil, subprocess
+import tempfile, shutil, subprocess, re
 from alias_check import ROOT as R
 
 F = Path(tempfile.mkdtemp(prefix="cdos-help-live-"))
@@ -24,6 +24,11 @@ cfg = (
     .replace('driver      = "sdl:lowpass=5000"', 'driver      = "null"')
     .replace('file     = "cdostools.img"', 'file     = "fat.img"')
 )
+cfg = re.sub(
+    r'(?m)^path\s*=\s*"([^"\n]+)"',
+    lambda m: 'path = "' + str((R / "media" / m[1]).resolve()) + '"',
+    cfg,
+)
 (F / "cdos86.cfg").write_text(cfg)
 c = ["c f000000"]
 keys = {
@@ -44,7 +49,12 @@ command("b:", "drive")
 cases = [
     ("commands", "no separate DIR"),
     ("dir", "[S]"),
-    ("batch", "IF, GOTO, FOR"),
+    ("batch", "ECHO=ON/OFF"),
+    ("tree", "TREE {d:}"),
+    ("echo", "BATCH-only controls"),
+    ("languages batch echo", "equals sign changes state"),
+    ("languages batch shift", "old %1 becomes %0"),
+    ("languages batch goto", "GOTO :label"),
     ("set", "[PASSWORD=] alone"),
     ("wmenu", "Ctrl-Alt-Esc"),
     ("order", "ORDER="),
@@ -73,7 +83,7 @@ for topic, expected in cases:
     (F / (topic + ".txt")).write_text(s)
     assert expected in s, (topic, s)
 print(
-    "PASS: native HELP reads COMMANDS, DIR, BATCH, SET, WMENU and ORDER, including topics beyond 64 KiB",
+    "PASS: native HELP reads TREE/ECHO, nested LANGUAGES BATCH ECHO/SHIFT/GOTO and existing topics, including text beyond 64 KiB",
     flush=True,
 )
 shutil.rmtree(F)

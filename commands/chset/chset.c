@@ -7,7 +7,7 @@ EXTERN	WORD	_EXTERR;		/* Has AX after an O.S. call	*/
 #define		DMA_LEN		128
 #define		FCB_LEN		36
 
-#define		REC_LEN		24	/***/
+#define		REC_LEN		25	/***/
 #define		REC_DRIVE	0
 #define		REC_FILE	1
 #define		REC_TYPE	9
@@ -16,6 +16,7 @@ EXTERN	WORD	_EXTERR;		/* Has AX after an O.S. call	*/
 #define		REC_8087	20
 #define		REC_SHARED	21
 #define		REC_SUSPEND	22
+#define		REC_TAIL	24
 #define		REC_MPMLOCK	23	/***/
 #define		REC_F_8087	0
 #define		REC_F_SHARED	1
@@ -146,21 +147,24 @@ BYTE	*deli_02	=	"\t =<>,|[]"				;
 #define		EMPTY		0xff	/* Can not be same as option number */
 
 #define		FIE1_START	0
-#define 	FIE1_END	3   /***/
+#define 	FIE1_END	4   /***/
 
 	struct	fie1_str	fie1_tab[] =
 	{
 		"8*087",0,
 		"SH*ARED",1,
 		"SU*SPEND",2,
-		"M*PMLOCK",3	/***/
+		"M*PMLOCK",3,
+		"TA*IL",4
 	};
 
 	struct	fie1_str	opt1_tab[] =
 	{
 		"ON*",0,
 		"OF*F",1,		
-		"OP*TIONAL",2
+		"OP*TIONAL",2,
+		"K*EEP",0,
+		"U*PPER",1
 	};
 
 	struct	abcd_str	xref_tab[] =
@@ -168,7 +172,8 @@ BYTE	*deli_02	=	"\t =<>,|[]"				;
 		0,2,		/* on, off, optional			*/
 		0,1,		/* on, off				*/
 		0,1,		/* on, off				*/
-		0,1		/***/
+		0,1,		/* MP/M locking */
+		3,4		/* TAIL KEEP, UPPER */
 	};
 
 	
@@ -363,6 +368,7 @@ BYTE *record;	/* Record to set fields in */
     *(record+REC_8087) = EMPTY;		/* 8087 field		*/
     *(record+REC_SHARED) = EMPTY;		/* SHARED field of record	*/
     *(record+REC_SUSPEND) = EMPTY;	/* SUSPEND field of record	*/
+    *(record+REC_TAIL) = EMPTY;
     *(record+REC_MPMLOCK) = EMPTY;	/***/
 
     string++;
@@ -507,7 +513,8 @@ VOID	display_help()
 	    c_writestr("Fields and Settings:\n\r\n\r");
 	    c_writestr("    8087        ON or OPT or OFF\n\r");
 	    c_writestr("    SHARED      ON or OFF \n\r");
-	    c_writestr("    SUSPEND     ON or OFF \n\r\n\r");
+	    c_writestr("    SUSPEND     ON or OFF \n\r");
+	    c_writestr("    TAIL        KEEP or UPPER (local kernel extension)\n\r\n\r");
 	    c_writestr("Examples:\n\r\n\r");
 	    c_writestr("    CHSET qwe.cmd [shared=on]          ; Sets the shared field of qwe.cmd\n\r");
 	    c_writestr("    CHSET editor [sus=on]              ; Sets editor.cmd to suspend\n\r");
@@ -765,7 +772,7 @@ VOID	print(record,string)
 
 	{
 
-	 BYTE			print_buffer[80];
+	 BYTE			print_buffer[128];
 	 BYTE			*prt_buf;
 	 WORD			index;
 	 WORD			i;

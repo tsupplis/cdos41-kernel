@@ -1,0 +1,292 @@
+;*******************************************************************************
+; Shell text output and the deliberately small BATCH language.
+; PCTMP: ECHO text only. BATCH: ECHO[=ON|OFF], @ECHO, SHIFT, :label/GOTO.
+; No general @ prefix, variable expansion, IF, FOR or CALL is introduced.
+; This include is identical in the resident and standalone source trees.
+;*******************************************************************************
+        cseg
+
+; Match a whole case-insensitive command. DS:SI input, CS:DI keyword.
+; Carry set on match with SI after the word; otherwise SI is unchanged.
+lang_word:
+        push si
+lang_word_loop:
+        mov ah,cs:[di]
+        or ah,ah
+        jz lang_word_end
+        lodsb
+        call lang_upper
+        cmp al,ah
+        jne lang_word_no
+        inc di
+        jmps lang_word_loop
+lang_word_end:
+        mov al,[si]
+        or al,al
+        jz lang_word_yes
+        cmp al,' '
+        je lang_word_yes
+        cmp al,TAB
+        je lang_word_yes
+        cmp al,'='
+        je lang_word_yes
+lang_word_no:
+        pop si
+        clc
+        ret
+lang_word_yes:
+        pop ax
+        stc
+        ret
+lang_upper:
+        cmp al,'a'
+        jb lang_upper_done
+        cmp al,'z'
+        ja lang_upper_done
+        sub al,20h
+lang_upper_done:
+        ret
+lang_spaces:
+        cmp byte ptr [si],' '
+        je lang_space_next
+        cmp byte ptr [si],TAB
+        jne lang_spaces_done
+lang_space_next:
+        inc si
+        jmps lang_spaces
+lang_spaces_done:
+        ret
+
+; Called before filename parsing, so text retains case and dollar signs.
+; Return carry set if this include consumed the command.
+shell_language:
+        mov si,offset clicb_cmd
+        call lang_spaces
+        mov di,offset lang_echo_word
+        call lang_word
+        jc lang_echo
+IF BATCH
+        mov di,offset lang_shift_word
+        call lang_word
+        jnc lang_try_goto
+        jmp lang_shift
+lang_try_goto:
+        mov di,offset lang_goto_word
+        call lang_word
+        jnc lang_unhandled
+        jmp lang_goto
+lang_unhandled:
+ENDIF
+        clc
+        ret
+lang_echo:
+        call lang_spaces
+IF BATCH
+        cmp byte ptr [si],'='
+        jne lang_echo_query
+        inc si
+        call lang_spaces
+        mov di,offset lang_on_word
+        call lang_word
+        jc lang_echo_on
+        mov di,offset lang_off_word
+        call lang_word
+        jc lang_off_matched
+        jmp lang_syntax
+lang_off_matched:
+        mov al,FALSE
+        jmps lang_echo_setting
+lang_echo_on:
+        mov al,TRUE
+lang_echo_setting:
+        push ax
+        call lang_spaces
+        cmp byte ptr [si],0
+        pop ax
+        je lang_setting_valid
+        jmp lang_syntax
+lang_setting_valid:
+        mov batch_echo,al
+        jmps lang_handled
+lang_echo_query:
+        cmp byte ptr [si],0
+        jne lang_echo_text
+        mov dx,offset lang_echo_is_on
+        cmp batch_echo,FALSE
+        jne lang_echo_status
+        mov dx,offset lang_echo_is_off
+lang_echo_status:
+        call print_string
+        jmps lang_echo_newline
+ENDIF
+lang_echo_text:
+        lodsb
+        or al,al
+        jz lang_echo_newline
+        mov dl,al
+        push si
+        call prchar
+        pop si
+        jmps lang_echo_text
+lang_echo_newline:
+        call crlf
+lang_handled:
+        stc
+        ret
+
+IF BATCH
+; The reader calls this before printing a prompt. Labels are silent and
+; only @ECHO is recognized; @DIR and every other @command remain invalid.
+batch_prepare:
+        mov al,batch_echo
+        xor al,TRUE
+        mov batch_hide,al
+        mov si,offset clicb_cmd
+        call lang_spaces
+        cmp byte ptr [si],':'
+        jne batch_prepare_at
+        mov batch_hide,TRUE
+        ret
+batch_prepare_at:
+        cmp byte ptr [si],'@'
+        jne batch_prepare_done
+        push si
+        inc si
+        mov di,offset lang_echo_word
+        call lang_word
+        pop di
+        jnc batch_prepare_done
+        mov batch_hide,TRUE
+        mov si,di
+        inc si
+batch_remove_at:
+        lodsb
+        mov [di],al
+        inc di
+        or al,al
+        jnz batch_remove_at
+        dec read_blen
+batch_prepare_done:
+        ret
+
+lang_shift:
+        call lang_spaces
+        cmp byte ptr [si],0
+        je lang_shift_valid
+        jmp lang_syntax
+lang_shift_valid:
+        mov si,offset subparms
+shift_skip_first:
+        lodsb
+        or al,al
+        jz shift_empty
+        cmp al,' '
+        jne shift_skip_first
+        call lang_spaces
+        mov di,offset subparms
+shift_copy:
+        lodsb
+        mov [di],al
+        inc di
+        or al,al
+        jnz shift_copy
+        jmp lang_handled
+shift_empty:
+        mov word ptr subparms,20h
+        jmp lang_handled
+
+; GOTO re-reads records with substitution disabled. A scan never executes
+; commands, changes arguments or echoes text. Missing labels end this BAT.
+lang_goto:
+        call lang_spaces
+        cmp byte ptr [si],':'
+        jne goto_save
+        inc si
+goto_save:
+        mov di,offset goto_target
+        mov cx,127
+goto_save_loop:
+        lodsb
+        cmp al,' '
+        je goto_save_done
+        cmp al,TAB
+        je goto_save_done
+        or al,al
+        jz goto_save_done
+        call lang_upper
+        mov [di],al
+        inc di
+        loop goto_save_loop
+        jmps lang_syntax
+goto_save_done:
+        cmp di,offset goto_target
+        je lang_syntax
+        mov byte ptr [di],0
+        mov goto_scan,TRUE
+        mov goto_eof,FALSE
+        mov subsavelow,0
+        mov subsavehigh,0
+        mov eof,FALSE
+        mov submit,offset subbuf-1
+goto_next_line:
+        call sublin
+        cmp goto_eof,TRUE
+        je goto_missing
+        mov si,offset clicb_cmd
+        call lang_spaces
+        cmp byte ptr [si],':'
+        jne goto_next_line
+        inc si
+        mov di,offset goto_target
+goto_compare:
+        mov ah,[di]
+        or ah,ah
+        jz goto_boundary
+        lodsb
+        call lang_upper
+        cmp al,ah
+        jne goto_next_line
+        inc di
+        jmps goto_compare
+goto_boundary:
+        mov al,[si]
+        or al,al
+        jz goto_found
+        cmp al,' '
+        je goto_found
+        cmp al,TAB
+        jne goto_next_line
+goto_found:
+        mov goto_scan,FALSE
+        jmp lang_handled
+goto_missing:
+        mov dx,offset lang_no_label
+        call print_string
+        mov goto_scan,FALSE
+        xor cx,cx
+        xor dx,dx
+        call ccpm
+lang_syntax:
+        mov dx,offset lang_syntax_message
+        call print_string
+        jmp lang_echo_newline
+ENDIF
+
+lang_echo_word db 'ECHO',0
+IF BATCH
+lang_on_word db 'ON',0
+lang_off_word db 'OFF',0
+lang_shift_word db 'SHIFT',0
+lang_goto_word db 'GOTO',0
+lang_echo_is_on db 'ECHO=ON$'
+lang_echo_is_off db 'ECHO=OFF$'
+lang_syntax_message db 'Invalid BATCH command syntax.$'
+lang_no_label db 'Label not found; BATCH stopped.',CR,LF,'$'
+        dseg
+batch_echo db TRUE
+batch_hide db FALSE
+goto_scan db FALSE
+goto_eof db FALSE
+goto_target rs 128
+ENDIF
+        cseg

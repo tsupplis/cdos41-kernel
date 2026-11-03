@@ -1,0 +1,61 @@
+        title 'ECHO - native Concurrent DOS text command'
+;*******************************************************************************
+; ECHO.CMD [text]
+; Native BDOS text output, followed by CR/LF. Dollar signs are literal.
+; KEEP_TAIL preserves incoming case in this rebuild. ON/OFF are ordinary
+; text here: ECHO=ON/OFF and @ECHO are BATCH-only state controls.
+; PUT/RDR capture the same native console calls as other CMD tools.
+;*******************************************************************************
+        cseg
+start:
+        cli
+        mov ax,ds
+        mov ss,ax
+        mov sp,offset stack_top
+        sti
+        cld
+        mov bx,80h
+        xor cx,cx
+        mov cl,[bx]
+        cmp cx,127
+        jbe tail_length_ok
+        mov cx,127
+tail_length_ok:
+        mov si,81h
+trim_leading:
+        jcxz message_done
+        cmp byte ptr [si],' '
+        je trim_one
+        cmp byte ptr [si],9
+        jne write_message
+trim_one:
+        inc si
+        dec cx
+        jmps trim_leading
+write_message:
+        lodsb
+        mov dl,al
+        call put_char
+        loop write_message
+message_done:
+        mov dl,13
+        call put_char
+        mov dl,10
+        call put_char
+        xor cx,cx
+        xor dx,dx
+        int 0e0h
+; Preserve the tail cursor/count across the native console service.
+put_char:
+        push cx
+        push si
+        mov cl,2
+        int 0e0h
+        pop si
+        pop cx
+        ret
+        dseg
+        org 100h                    ; reserve the native base page/tail
+stack_area rs 512
+stack_top rs 0
+        end start

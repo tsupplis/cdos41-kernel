@@ -185,8 +185,8 @@ replaced with supplied arguments. BAT files can chain to another BAT file.
 BATCH shares DIR and other TMP built-ins, including CLS, USER, PRINTER,
 PAUSE and REM, and the CD/MD/RD, DEL/DELQ and RENAME aliases. DEL invokes
 native ERA.CMD. Ordinary program lines use the executable search order.
-This is not a full MS-DOS COMMAND.COM scripting language: IF, GOTO, FOR,
-ECHO and SHIFT are not implemented by this BATCH.
+BATCH supports ECHO, ECHO=ON/OFF, @ECHO, SHIFT and labels/GOTO.
+See HELP LANGUAGES BATCH for syntax. IF, FOR and CALL remain unsupported.
 
 Native command/substitution files for SUBMIT use the separate .SUB format.
 
@@ -222,8 +222,8 @@ CD is a shell/BATCH alias for CHDIR.CMD. See CHDIR for syntax.
 
   Explanation:
   CHSET is a command that allows you to make changes in the command header  of
-  a program file with a  .CMD file extension.  CHSET has three fields that you
-  can display or change.  The three fields and their possible settings are:
+  a program file with a  .CMD file extension.  CHSET has five fields that you
+  can display or change.  The fields and their possible settings are:
 
   8087  - The  8087  field has three  possible  settings:   ON,  OFF,  or  OPT
   (optional).    Specify  ON  for programs that require an 8087 processor   in
@@ -240,6 +240,15 @@ CD is a shell/BATCH alias for CHDIR.CMD. See CHDIR for syntax.
   CHSET  modifies a  program's command header so that Concurrent suspends that
   program's operation when it occupies a switched-out window.   OFF cancels  a
   previous ON selection.
+
+  MPMLOCK - ON or OFF selects MP/M-style record locking.
+
+  TAIL - KEEP preserves command-tail case; UPPER retains normal uppercasing.
+  This is a local kernel extension. PUT/GET/RDR are built with TAIL=KEEP so
+  DOS child arguments retain their case. Their filenames and options remain
+  case-insensitive. Other CMDs default to UPPER. Stock kernels ignore KEEP.
+  Example: CHSET PUT.CMD [TAIL=KEEP]
+  TAIL is in the executable header, not a cpmtools directory attribute.
 
   Changing Field Settings
   You  can  change any or all of CHSET's fields in a single command line.   To
@@ -259,7 +268,7 @@ CD is a shell/BATCH alias for CHDIR.CMD. See CHDIR for syntax.
 
   CHSET responds with the following display:
 
-  B:ERASE   .CMD settings are [8087=OFF,SHARED=OFF,SUSPEND=OFF]
+  B:ERASE   .CMD settings are [8087=OFF,SHARED=OFF,SUSPEND=OFF,MPMLOCK=OFF,TAIL=UPPER]
 
   Modifying a command header is not a trivial matter.  While CHSET cannot harm
   your .CMD files,  inappropriate use of it can cause your programs to  behave
@@ -1104,35 +1113,27 @@ the tools disk with LOADCCPM.COM. It generates loader material from the
 system image; follow its prompts and the accompanying OEM documentation.
 
 ///1GET
-    Syntax:
+GET [infile{,E|EI}] command-line
+Supply a program's console input from infile rather than the keyboard.
+The brackets are required; the first item is the filename, followed by flags.
 
-    GET [infile{,E|EI}] command-line
+E / EI  Also echo the supplied input on the screen.
 
-    Explanation:
+Run an external .CMD, .COM or .EXE program. Shell built-ins and explicit
+CON, BIOS or direct hardware input are outside this interface.
+Native text input stops at Ctrl-Z or file end, supplies an empty line, then
+returns to keyboard input. DOS NUL and Ctrl-Z bytes remain data; EOF remains
+EOF and DOS buffered line input returns an empty line. The program must
+handle EOF. DOS descendants inherit redirected standard input.
 
-    GET feeds the console input of a program from a text file instead
-    of the keyboard. For native CMD programs, infile is read until a
-    CTRL-Z or the end of the file.  The line read at that point is
-    empty, which ends programs such as PIP; any later input comes from
-    the keyboard.  The program and any programs it starts on this
-    virtual console receive the characters; other consoles are not
-    affected.
+Filenames, flags and executable lookup are case-insensitive. DOS argument
+case is preserved. A native CMD child follows its own TAIL setting, normally
+UPPER. Other virtual consoles are unaffected.
 
-    E or EI echoes the characters supplied from the file to the screen.
-
-    The command-line names a .CMD, .COM or .EXE program.  Commands built
-    into the shell, such as DIR, TYPE and CLS, are not redirected; use
-    the program forms such as SDIR.CMD or TYPE.CMD.
-    DOS programs use standard input; NUL and CTRL-Z are data, and EOF
-    remains EOF. DOS line input returns an empty line at EOF.
-
-    ///2EXAMPLES
-    Examples:
-
-    A>GET [SCRIPT.IN] ED MYFILE.TXT
-    A>GET [CMDS.DAT] PIP
-
-    See also: PUT, RDR
+///2EXAMPLES
+GET [script.in] ED.CMD myfile.txt
+GET [commands.dat,eI] PIP.CMD
+See also PUT and RDR.
 
 ///1HDMAINT
 HDMAINT
@@ -1331,7 +1332,7 @@ follow its language/setup prompts.
 ///1PAUSE
 PAUSE
 Displays Press any key to continue... and waits for a key. Implemented
-by the shell and BATCH; no PAUSE.CMD is needed for this built-in.
+by the shell and BATCH; no standalone PAUSE.CMD is needed.
 
 ///1PIP
   Syntax:
@@ -1544,71 +1545,58 @@ by the shell and BATCH; no PAUSE.CMD is needed for this built-in.
   See the Concurrent User's Guide for more information on these commands.
 
 ///1PUT
-    Syntax:
+PUT [outfile{,A}{,E|EO}] command-line
+Capture a program's console output in outfile. Existing output is replaced.
+The brackets are required; the first item is the filename, followed by flags.
 
-    PUT [outfile{,A}{,E|EO}] command-line
+A       Append instead of replacing the file.
+E / EO  Also display the captured output on the screen.
 
-    Explanation:
+Run an external .CMD, .COM or .EXE program. Shell built-ins such as DIR,
+CLS and ECHO are not captured; use DIR.CMD, TYPE.CMD or ECHO.CMD explicitly.
+DOS standard output and legacy console calls are captured; stderr, explicit
+CON access and BIOS/direct video are not. Native capture follows the virtual
+console; DOS capture follows the child and its DOS descendants.
 
-    PUT writes everything a program sends to the console (BDOS
-    functions 2, 6 and 9) to a disk file instead of showing it.  The
-    program and any programs it starts on this virtual console are
-    captured; other consoles are not affected.  An existing outfile is
-    replaced.
+Filenames, flags and executable lookup are case-insensitive. DOS argument
+case is preserved. A native CMD child follows its own TAIL setting, normally
+UPPER. Native text append replaces an EOF marker; DOS append uses byte length.
 
-    A       appends to outfile instead of replacing it.
-    E or EO also shows the output on the screen.
-
-    The command-line names a .CMD, .COM or .EXE program.  Commands built
-    into the shell, such as DIR, TYPE and CLS, are not redirected; use
-    the program forms such as SDIR.CMD or TYPE.CMD.
-    DOS programs use standard handles 0/1 and legacy INT 21h console
-    calls. Stderr remains on the screen. BIOS/direct video is excluded.
-
-    ///2EXAMPLES
-    Examples:
-
-    A>PUT [SDIR.TXT] SDIR.CMD
-    A>PUT [BUILD.LOG,A] LINK86 MYPROG
-    A>PUT [BUILD.LOG,A,EO] LIB86 MYLIB
-
-    See also: GET, RDR
+///2EXAMPLES
+PUT [message.txt] ECHO.CMD Hello World
+PUT [build.log,a,eO] MSASM.EXE hello
+The first writes Hello World; the second passes lowercase hello to DOS.
+See also GET, RDR, ECHO and CHSET.
 
 ///1RD
 RD is a shell/BATCH alias for RMDIR.CMD. See RMDIR for syntax.
 
 ///1RDR
-    Syntax:
+RDR [infile,outfile{,A}{,E|EI|EO}] command-line
+Redirect input and output together, combining GET and PUT.
+The brackets are required. Input and output filenames must differ.
 
-    RDR [infile,outfile{,A}{,E|EI|EO}] command-line
+A   Append to outfile instead of replacing it.
+EI  Echo supplied input on the screen.
+EO  Also display captured output on the screen.
+E   Echo both input and output.
 
-    Explanation:
+Run an external .CMD, .COM or .EXE program. Shell built-ins such as DIR,
+CLS and ECHO are not redirected. Use external programs where available:
+DIR.CMD, TYPE.CMD or ECHO.CMD.
+DOS standard input/output and legacy console calls are redirected; stderr,
+explicit CON access and BIOS/direct screen access are outside the streams.
+DOS NUL/Ctrl-Z bytes are data, reads return zero at EOF and append uses the
+true byte length. Native text input/append follows GET/PUT's EOF conventions.
 
-    RDR redirects the console input and the console output of a program
-    at the same time: input is read from infile (as with GET) and
-    output is written to outfile (as with PUT).
+Filenames, flags and executable lookup are case-insensitive. DOS argument
+case is preserved. A native CMD child follows its own TAIL setting, normally
+UPPER. Other virtual consoles are unaffected.
 
-    A       appends to outfile instead of replacing it.
-    EI      echoes the input read from infile to the screen.
-    EO      echoes the output written to outfile to the screen.
-    E       echoes both.
-
-    DOS NUL and CTRL-Z bytes are preserved; block reads return zero at
-    EOF. DOS append uses the true byte length. Input/output must differ.
-
-    The command-line names a .CMD, .COM or .EXE program.  Commands built
-    into the shell, such as DIR, TYPE and CLS, are not redirected.
-    DOS programs use standard handles 0/1 and legacy INT 21h console
-    calls. Stderr remains on the screen. BIOS/direct video is excluded.
-
-    ///2EXAMPLES
-    Examples:
-
-    A>RDR [SCRIPT.IN,BUILD.LOG] ED MYFILE.TXT
-    A>RDR [COMMANDS.DAT,PIP.LOG,EO] PIP
-    A>RDR [NEXTCMD.IN,MASTER.LOG,A,EO] PIP
-
-    See also: GET, PUT
+///2EXAMPLES
+RDR [script.in,editor.log] ED.CMD myfile.txt
+RDR [commands.dat,pip.log,a,eO] PIP.CMD
+See also GET and PUT.
 
 ///1REDOS
   REDOS is used to make DOS self-starting from your hard disk.
@@ -1763,20 +1751,6 @@ A line beginning with a semicolon or period is also a comment.
     Press a key for the next page, or Ctrl-C to stop. [LENGTH=n] controls
     repeated headers separately; it does not enable interactive pauses.
 
-///1SETENV
-  SETENV [NAME[=value]]
-
-  DOS SETENV.EXE manages the current console's DOS environment. With no
-  arguments it lists all variables; NAME displays one. NAME=value adds or
-  replaces a variable; NAME= removes it. Names are case-insensitive and new
-  names are stored uppercase. Values preserve case and spaces.
-
-  The environment has 1024 bytes including names, values and terminators.
-  An oversized change is rejected without changing the existing environment.
-  Changes persist for subsequent DOS programs on this console until reboot.
-  PATH edits the PATH variable in this same block. SET manages file/disk
-  attributes and is unrelated. SETENV requires Concurrent DOS 4.1.
-
 ///1SET
 SET filespec [RO|RW,DIR|SYS,ARCHIVE=ON|OFF,F1=ON|OFF,...,F4=ON|OFF]
 SET filespec[;password] [PASSWORD=newpassword,PROTECT=READ|WRITE|DELETE|NONE]
@@ -1811,6 +1785,20 @@ CREATE and ACCESS timestamps are mutually exclusive. Enabling either
 replaces the other; selecting both together is invalid. INITDIR must
 format the directory before timestamping can be enabled. UPDATE is
 independent. A bare filespec is not a query: use SDIR or SHOW to inspect.
+
+///1SETENV
+  SETENV [NAME[=value]]
+
+  DOS SETENV.EXE manages the current console's DOS environment. With no
+  arguments it lists all variables; NAME displays one. NAME=value adds or
+  replaces a variable; NAME= removes it. Names are case-insensitive and new
+  names are stored uppercase. Values preserve case and spaces.
+
+  The environment has 1024 bytes including names, values and terminators.
+  An oversized change is rejected without changing the existing environment.
+  Changes persist for subsequent DOS programs on this console until reboot.
+  PATH edits the PATH variable in this same block. SET manages file/disk
+  attributes and is unrelated. SETENV requires Concurrent DOS 4.1.
 
 ///1SETPORT
 SETPORT
@@ -2250,3 +2238,77 @@ live changes in effect. Esc from the main menu hides it without unloading.
 Write uses a default d:WINDOWn.TXT filename; Return writes, Esc cancels.
 Ctrl-Alt-1..4 and Ctrl-Alt-Tab remain the console-switch shortcuts.
 WINDOW provides the nonresident command-line interface.
+
+///1ECHO
+ECHO {text}
+ECHO.CMD {text}
+Display text followed by a newline. Message case and dollar signs are literal.
+PCTMP and BATCH implement ECHO directly. Use an explicit ECHO.CMD name for
+standalone native output that PUT or RDR can capture:
+
+PUT [message.txt] ECHO.CMD Hello World
+
+An empty ECHO.CMD tail writes a blank line. ON and OFF are ordinary message
+text: ECHO ON prints ON. Only BATCH has ECHO=ON/OFF state controls and @ECHO;
+these never change interactive-shell or standalone-command state.
+See HELP LANGUAGES BATCH ECHO for the script controls, and HELP PUT for capture.
+
+///1TREE
+TREE {d:}
+Shows the directory structure of a DOS/FAT disk, starting at its root.
+Each row lists the immediate file bytes, file count and complete directory
+path. Subdirectory totals are not added to parent totals. Hidden/system
+files are included; directory entries and dot entries are not files.
+
+TREE uses the current drive when omitted. CP/M disks have user areas,
+not FAT directories, and are rejected. The calling shell's directory is
+preserved. Output uses the CP/M console interface and can be captured by PUT.
+
+///1LANGUAGES
+Command-file languages. Use HELP LANGUAGES BATCH for the BAT language.
+Native SUBMIT command files use the separate SUB format; see SUBMIT.
+
+///2BATCH
+filename.BAT {argument1} ... {argument9}
+Runs native and DOS commands. %0 names the BAT file and %1 through %9
+substitute arguments. %% produces a literal percent sign.
+Bare BAT invocation chains to the replacement script; it does not return.
+
+BATCH supports ECHO, SHIFT, :label and GOTO. IF, FOR, CALL, environment
+expansion and quoted argument grouping remain outside this implementation.
+Only @ECHO is recognized: @DIR and arbitrary @command are unsupported.
+
+///3ECHO
+ECHO text
+ECHO
+ECHO=ON
+ECHO=OFF
+@ECHO=ON
+@ECHO=OFF
+
+ECHO text displays a message. Bare ECHO displays the current ECHO setting.
+ECHO=OFF suppresses subsequent script prompts/command lines, not messages.
+ECHO=ON restores them. @ECHO suppresses echo of that ECHO line itself.
+ECHO ON and ECHO OFF display literal text; the equals sign changes state.
+Echo state belongs to this BATCH process, never the interactive PCTMP.
+
+///3SHIFT
+SHIFT
+Shifts the argument list: old %1 becomes %0, old %2 becomes %1, and so on.
+Repeated SHIFT after arguments are exhausted leaves empty arguments.
+
+///3GOTO
+:label
+GOTO label
+GOTO :label
+
+Labels occupy their own lines, are case-insensitive and are not echoed.
+GOTO searches from the start of the current script and resumes after the
+matching label. It supports forward and backward jumps. A missing label
+reports an error and stops this BAT file. Label text is one word.
+
+///1CHKCPMFS
+CHKCPMFS
+Read-only CP/M directory/allocation consistency check on the current drive.
+Scans users 0-15; reports duplicate or invalid allocation and extent entries.
+Run on an idle drive. Does not repair disks; DOS/FAT media are rejected.

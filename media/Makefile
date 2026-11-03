@@ -21,7 +21,8 @@ DEV_COMMANDS = ../commands/asm80/asm80.cmd ../commands/asm86/asm86.cmd \
     ../commands/hexcom/hexcom.cmd ../commands/genccpm/genccpm.cmd \
     ../commands/genldr/genldr.cmd ../commands/ed/ed.cmd ../commands/submit/submit.cmd
 
-TOOLS_COMMANDS = ../commands/putget/put.cmd ../commands/putget/get.cmd ../commands/putget/rdr.cmd \
+TOOLS_COMMANDS = ../commands/tree/tree.cmd ../commands/echo/echo.cmd \
+    ../commands/putget/put.cmd ../commands/putget/get.cmd ../commands/putget/rdr.cmd \
     ../commands/sysdisk/sysdisk.cmd ../commands/era/era.cmd \
     ../commands/help/help.cmd ../commands/helphlp/help.hlp ../commands/systat/systat.cmd \
     ../commands/chset/chset.cmd ../commands/window/window.cmd ../commands/window/wmenu.cmd

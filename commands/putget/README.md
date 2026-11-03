@@ -108,3 +108,24 @@ recognized only FFh; PIP uses FDh after checking console status, so GET would
 otherwise wait on the keyboard during a copy. Output handling remains unchanged.
 
 The DOS adapter adds standard-handle routing without changing the native hook.
+
+## Command-tail case
+
+PUT.CMD, GET.CMD and RDR.CMD are built with TAIL=KEEP. This local CMD-header
+extension prevents the native launcher from uppercasing the wrapper's tail
+before its DOS child is selected. Filenames, executable lookup and flags remain
+case-insensitive; only the child's argument bytes retain their original case.
+For example `PUT [out.txt,eO] MSASM.EXE hello` passes lowercase `hello` to DOS.
+Native child CMDs still receive uppercase tails unless they independently opt in.
+KEEP cannot recover case already changed by an earlier caller or script processor.
+
+The setting is header byte 7Fh bit 1 (02h), not a CP/M/FAT directory attribute.
+Use `CHSET PUT.CMD [TAIL=KEEP]` or `[TAIL=UPPER]` to change it. Query with
+`CHSET PUT.CMD`. Host builds use `cmdmod -f 1=1 file.cmd`; clear it with `-f 1=0`.
+CMDMOD edits raw bits without interpreting their operating-system meaning. cpmchattr does not edit executable headers. Stock kernels
+retain their old uppercasing behaviour; KEEP requires this project's patched
+native launcher. The flag is a local extension, not a historical DRI setting.
+
+`make check-cmdtail` checks header-bit isolation, the assembled conversion loop,
+CHSET changes and DOS COM/EXE execution through all three wrappers, including
+mixed-case filenames/flags/extensions and lowercase append options.

@@ -124,13 +124,65 @@ use standard input/output, including legacy INT 21h console calls. Use
 DIR.CMD or SDIR.CMD for directory capture. Shell built-ins and direct screen
 access remain outside this interface. Details and limits are in the
 [PUT/GET/RDR notes](commands/putget/README.md).
+PUT/GET/RDR preserve DOS argument case using the opt-in CMD `TAIL=KEEP` flag;
+CHSET can select KEEP or the historical UPPER behaviour.
+
+## Comparison with DOS Plus 1.2
+
+Stock DOS Plus 1.2 versus this CDOS rebuild.
+
+| Functionality | DOS Plus 1.2 | This CDOS rebuild |
+| --- | --- | --- |
+| Native CP/M and DOS programs | Both supported | Both supported |
+| Documented DOS 2.0 application API | All functions claimed supported; reports DOS 2.11 | Partial: resident programs (31h), device control (44h), program loading (4Bh). Legacy resident termination (INT 27h) is missing |
+| Concurrent DOS programs | One foreground DOS program | Multiple DOS console sessions |
+| Background native programs | Up to three | Supported alongside DOS sessions |
+| Screen management | Foreground screen with background task control | Multiple consoles and WINDOW/WMENU |
+| CP/M floppies and FAT volumes | Accessible from native and DOS programs | Accessible from native and DOS programs |
+| FAT subdirectories | Supported | Supported |
+| CP/M hard-disk partitions | Not supported | Supported |
+| Hard-disk installation and boot | FAT partition only | FAT or CP/M partition |
+| National keyboard, screen and printer settings | N and NATIONAL.MSG | Same national setup support through N and NATIONAL.MSG |
+| Directory-tree statistics | TREE | TREE.CMD |
+| EXEs with short or unaligned headers | Loader defect affects some programs | Fixed |
+| Command processor | COMMAND.COM | PCTMP and BATCH |
+| Startup scripts | AUTOEXEC.BAT | Per-console startup scripts |
+| Batch arguments | `%0`–`%9`, SHIFT | `%0`–`%9`; no SHIFT |
+| Batch control and messages | IF, GOTO, FOR, ECHO | ECHO and labels/GOTO implemented; IF/FOR pending |
+| Environment variables | SET and `%NAME%` expansion | SETENV; no shell `%NAME%` expansion |
+| Input/output redirection and append | DOS pattern: `<`, `>`, `>>` | CP/M-Plus pattern: GET/PUT/RDR, extended to both native and DOS programs |
+| Command pipelines | `command1 \| command2` using temporary files | Not implemented |
+| Internal DOS interfaces | Not supported as a compatibility interface | 2 of 9 fully implemented (22%); 1 partial; 6 missing or stubbed |
+
+The internal-interface count uses the nine services identified in [api.md](api.md):
+33% have at least some implementation; this is not an overall compatibility score.
+
+| DOS Plus commands without a matching CDOS command | CDOS alternative or gap |
+| --- | --- |
+| IF, FOR | Missing from BATCH |
+| PROMPT, EXIT, BREAK, VERIFY, SLICE | No corresponding shell commands |
+| ALARM, GRAFTABL, DEVICE | No direct command equivalents |
+| CHKDSK | CHKCPMFS checks CP/M allocation; no equivalent FAT checker |
+| MODE | SETUP/SETPORT cover some configuration functions; no complete MODE equivalent |
+| BACKG, FSET | Related functions are available through SYSTAT/STOP and SET respectively; command syntax differs |
+
+DOS Plus shell features were checked on a disposable copy of the original
+1.2 disk; command names were also checked against its shell and system disk.
+See the [CDOS shell commands](ccp.md), [national setup](commands/n/README.md),
+[hard-disk boot tests](commands/hdmaint/README.md) and [API inventory](api.md).
+Historical background: [DOS Plus](https://www.seasip.info/Cpm/dosplus.html)
+and its [EXE loader defect](https://www.seasip.info/Cpm/dosplus_exe.html).
+
+BATCH adds labels/GOTO, SHIFT and script-local `ECHO=ON/OFF`; `@ECHO`
+suppresses only its own line. Interactive ECHO and ECHO.CMD simply print text.
+This restriction is intentional; see [BATCH](commands/batch/README.md).
 
 ## Distributions
 
 | Image | Bootable | Contents |
 | --- | --- | --- |
 | `cdos86.img` | Yes | Kernel, core file commands, ED, DATE, SDIR, SET, SHOW, SUBMIT, BATCH, SYSDISK, ERA/ERAQ, PIP and shell alias targets |
-| `cdostools.img` | No | HELP, SYSTAT, CHSET, WINDOW/WMENU, PUT/GET/RDR, SYSDISK, ERA and PIP |
+| `cdostools.img` | No | TREE, ECHO.CMD, HELP, SYSTAT, CHSET, WINDOW/WMENU, PUT/GET/RDR, SYSDISK, ERA and PIP |
 | `cdosdev.img` | No | ASM80/ASM86, DDT86, GENCMD, HEXCOM, GENCCPM, GENLDR, ED, SUBMIT and PIP |
 | `cdosmaint.img` | Yes | Kernel, INITDIR, DSKMAINT, HDMAINT.CMD, DCOPY, SYSDISK, ERA and PIP |
 | `cdosmenu.img` | No | SPL, PRINT, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP, menu/terminal data, BAT examples and PIP |
@@ -210,6 +262,7 @@ release-image provenance. Details are in `base/cdos411.json`.
 | `dredix` | Full-screen text editor | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
 | `dskmaint` | Format, verify and copy diskettes | 4.11 | Recompiled from CDOS 4.1 with reconstructed 4.11 DOS boot sector | Behavior tested |
 | `dsp` | Inspect print-spool information | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
+| `echo` | Write text to the native console | None | New native RASM86 implementation | Additional tool |
 | `ed` | Line-oriented text editor | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool |
 | `editmenu` | Edit menu definitions | 4.11 | Recompiled from CDOS 4.1 | Behavior tested |
 | `era` | Erase files | - | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |
@@ -247,6 +300,7 @@ release-image provenance. Details are in `base/cdos411.json`.
 | `sysdisk` | Display or change the system search path | 4.11 | Recompiled from CDOS 4.1; SD-mode D.A86 wrapper | Byte-identical |
 | `systat` | Inspect processes and system resources | 4.1 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |
 | `time.exe` | Display or set the time through DOS | 4.11 | Reconstructed assembly from CDOS 4.11; release MZ fields restored | Byte-identical |
+| `tree` | Directory tree with per-directory file counts and byte totals | None | New C implementation of the DOS Plus interface | Additional tool |
 | `type` | Display a text file | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested |
 | `window` | Control console windows from commands | 4.11 | C rewrite, adapted for parity; shared modules in commands/window | Behavior tested |
 | `wmenu` | Interactive console-window manager | 4.11 | C rewrite, adapted for parity; shared modules in commands/window | Behavior tested |
@@ -276,7 +330,7 @@ stages, and supplied with its manual on the second OEM disk. See
 [HDMAINT build notes](commands/hdmaint/README.md) for loader provenance and checks.
 Installation and cold boot from both CP/M and FAT12 hard-disk partitions
 have passed under PCE with the rebuilt kernel. HELP text and imported commands
-will be aligned with the original 4.1 distribution progressively.
+are all aligned.
 
 ## Build and checks
 
@@ -290,6 +344,8 @@ system and the live regression checks.
 | --- | --- |
 | `make` | Commands, kernel/RSPs, boot sources and eight images |
 | `make check` | Command headers, DATE parser, system layout, cursor, boot track and every packaged file/size |
+| `make check-tree` | TREE statistics and private FAT directory traversal |
+| `make check-batch-language` | ECHO forms, script control, SHIFT/GOTO and DOS redirection |
 | `make check-graphics` | Assembled graphics guards and adapter gates; PCE VGA/EGA/CGA pixels, palettes, graphics text/TTY and restoration |
 | `make check-dos-switch` | DOS 37h get/set, native delimiter separation, EXEC sharing and launch persistence |
 | `make check-dos-allocation` | 1Bh/1Ch/36h geometry, FAT media pointer, invalid-drive rejection and default-drive preservation |

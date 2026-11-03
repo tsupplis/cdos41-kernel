@@ -42,6 +42,7 @@ check: all
 	python3 tools/dos_switch_check.py
 	python3 tools/dos_handles_check.py
 	python3 tools/dos_redirection_config_check.py
+	python3 tools/cmdtail_check.py
 	python3 tools/fat_recovery_check.py
 	python3 tools/pctmp_context_check.py
 	python3 tools/pctmp_critical_check.py
@@ -215,3 +216,15 @@ check-dos-switch: all
 check-dos-allocation: all
 	python3 tools/pctmp_io_check.py
 	python3 tools/dos_alloc_live_check.py
+
+# TREE and the deliberately small shell/BATCH language; disposable disks only.
+.PHONY: check-tree check-batch-language
+check-tree: all
+	python3 tools/tree_check.py
+check-batch-language: all
+	python3 tools/batch_language_check.py
+
+.PHONY: check-cmdtail
+check-cmdtail: all
+	python3 tools/cmdtail_check.py
+	python3 tools/cmdtail_live_check.py

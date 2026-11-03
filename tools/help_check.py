@@ -67,13 +67,23 @@ assert "../base/help.hlp" not in media, "Distributions must use the rebuilt help
 b = (R / "commands/helphlp/help.hlp").read_bytes()
 roots = set()
 indexed = 0
-for a in range(0, 2048, 16):
+# HELP reads records until the '$' sentinel; the index is not fixed at 2 KB.
+# LANGUAGES pushes the maintained database beyond the former 128-entry bound.
+entries = []
+for a in range(0, len(b), 16):
     e = b[a : a + 16]
-    if len(e) < 16 or not 1 <= e[15] <= 9:
-        continue
+    assert len(e) == 16, "Truncated HELP index"
+    if e[0] == ord('$'):
+        index_end = ((a + 16 + 127) // 128) * 128
+        break
+    assert 1 <= e[15] <= 9, (a, e)
+    entries.append(e)
+else:
+    raise AssertionError("Missing HELP index terminator")
+for e in entries:
     name = e[:12].decode("ascii").strip()
     p = int.from_bytes(e[12:14], "little") * 128 + e[14]
-    assert 2048 <= p < len(b), (name, p, len(b))
+    assert index_end <= p < len(b), (name, p, len(b))
     indexed += 1
     if e[15] == 1:
         roots.add(name)
