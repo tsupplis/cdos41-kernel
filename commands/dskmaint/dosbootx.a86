@@ -1,0 +1,198 @@
+;*****************************************************************************
+; DOSBOOTX - FAT12 720K/1.2M/1.44M floppy bootstrap for Concurrent DOS.
+; The formatter supplies the BPB. CCPM.SYS/CPM3.SYS must occupy the first
+; root entry and contiguous clusters starting at 2, as with the 4.11 loader.
+; The CMD header must specify OSSTART=0060h; skip its 128 bytes when loading.
+; Relocate before loading low memory. Read one sector per BIOS request so
+; geometry and 64K DMA boundaries do not depend on the selected capacity.
+;*****************************************************************************
+        cseg 07c0h
+        org 0
+        jmps boot_entry
+        nop
+        db 'DRI 4.1N'
+        dw 512
+        db 2
+        dw 1
+        db 2
+        dw 112,1440
+        db 0f9h
+        dw 3,9,2,0,0
+boot_entry:
+        cli
+        xor ax,ax
+        mov ss,ax
+        mov sp,7c00h
+        sti
+        cld
+        mov ax,cs
+        mov ds,ax
+        int 12h
+        sub ax,16
+        mov cl,6
+        shl ax,cl
+        mov es,ax
+        xor si,si
+        xor di,di
+        mov cx,256
+        rep movsw
+        push es
+        mov ax,offset relocated
+        push ax
+        retf
+relocated:
+        mov ax,cs
+        mov ds,ax
+        mov es,ax
+        cli
+        mov ss,ax
+        mov sp,1000h
+; Give the BIOS the selected EOT before reading sectors beyond nine.
+        mov al,byte ptr .24
+        mov parameters+4,al
+        xor ax,ax
+        mov es,ax
+        mov es:word ptr .78h,offset parameters
+        mov es:word ptr .7ah,ds
+        mov ax,ds
+        mov es,ax
+        sti
+; Locate the root from reserved sectors and the FAT count/size.
+        mov ax,word ptr .22
+        xor cx,cx
+        mov cl,byte ptr .16
+        mul cx
+        add ax,word ptr .14
+        mov root_lba,ax
+        call read_sector
+        mov si,200h
+        mov di,offset name_ccpm
+        mov cx,11
+        repe cmpsb
+        je found_name
+        mov si,200h
+        mov di,offset name_cpm3
+        mov cx,11
+        repe cmpsb
+        je name_compare_ok
+        jmp not_bootable
+name_compare_ok:
+found_name:
+        cmp word ptr .21ah,2
+        je cluster_two
+        jmp not_bootable
+cluster_two:
+; File length in sectors, including the first sector's CMD header.
+        mov ax,word ptr .21ch
+        mov dx,word ptr .21eh
+        add ax,511
+        adc dx,0
+        mov cx,512
+        div cx
+        mov remaining,ax
+        or ax,ax
+        jz not_bootable
+        mov ax,word ptr .17
+        add ax,15
+        mov cl,4
+        shr ax,cl
+        add ax,root_lba
+        mov file_lba,ax
+        mov destination,60h
+        call read_sector
+        cmp byte ptr .200h,1
+        jne not_bootable
+        cmp word ptr .203h,60h
+        jne not_bootable
+        mov si,280h
+        mov cx,192
+        jmps copy_sector
+load_sector:
+        mov ax,file_lba
+        call read_sector
+        mov si,200h
+        mov cx,256
+copy_sector:
+        push es
+        mov es,destination
+        xor di,di
+        rep movsw
+        pop es
+        mov ax,di
+        mov cl,4
+        shr ax,cl
+        add destination,ax
+        inc file_lba
+        dec remaining
+        jnz load_sector
+        mov ax,60h
+        mov ds,ax
+        mov ds,word ptr .6
+        xor dx,dx
+        jmpf system_entry
+not_bootable:
+        mov si,offset insert_message
+        jmps fatal
+read_error:
+        mov si,offset error_message
+fatal:
+        lodsb
+        or al,al
+        jz wait_key
+        mov ah,0eh
+        mov bx,7
+        int 10h
+        jmps fatal
+wait_key:
+        xor ax,ax
+        int 16h
+        int 19h
+        jmps wait_key
+; AX=LBA. ES=CS, destination buffer 0200h. Preserve all live loader state.
+read_sector:
+        push ax
+        push cx
+        push dx
+        push bx
+        xor dx,dx
+        div word ptr .24
+        mov cl,dl
+        inc cl
+        xor dx,dx
+        div word ptr .26
+        mov ch,al
+        mov dh,dl
+        xor dl,dl
+        mov bx,200h
+        mov retries,5
+read_retry:
+        mov ax,0201h
+        int 13h
+        jnc read_done
+        xor ax,ax
+        int 13h
+        dec retries
+        jnz read_retry
+        jmp read_error
+read_done:
+        pop bx
+        pop dx
+        pop cx
+        pop ax
+        ret
+parameters db 0dfh,2,25h,2,9,1bh,0ffh,6ch,0f6h,0fh,8
+root_lba dw 0
+file_lba dw 0
+remaining dw 0
+destination dw 60h
+retries db 0
+name_ccpm db 'CCPM    SYS'
+name_cpm3 db 'CPM3    SYS'
+insert_message db 13,10,'Not a boot disk. Insert boot disk',0
+error_message db 13,10,'Read error',0
+        org 510
+        dw 0aa55h
+        cseg 0060h
+        org 0
+system_entry:
+        end

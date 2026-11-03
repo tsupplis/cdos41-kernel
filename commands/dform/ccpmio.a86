@@ -157,11 +157,15 @@ ccpm_dos_packet:
         cmp operation,5
         jne ccpm_dos_drive
         mov ah,format_fill
-        mov al,50h              ; Profile fill, gap 50h, caller-owned CHRN DMA.
+        mov al,format_gap       ; Profile gap/fill, caller-owned CHRN DMA.
         push ax
         mov native_format_extra,2
 ccpm_dos_drive:
+        mov ch,transfer_count
+        or ch,ch
+        jnz ccpm_count_ready
         mov ch,sector_count
+ccpm_count_ready:
         mov cl,drive
         push cx
         cmp operation,5
@@ -177,6 +181,7 @@ ccpm_dos_physical:
 ccpm_dos_track_ready:
         push cx
         xor cx,cx
+        mov cl,transfer_sector
         push cx
         mov cx,buffer_segment
         push cx

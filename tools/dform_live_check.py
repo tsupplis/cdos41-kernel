@@ -11,7 +11,14 @@ import shutil
 import struct
 import subprocess
 import tempfile
+import argparse
 
+parser=argparse.ArgumentParser()
+parser.add_argument('--format',type=int,choices=(360,720,1200,1440),default=360)
+capacity=parser.parse_args().format
+cylinders,spt,spc,media,spf,roots={360:(40,9,2,0xfd,2,112),720:(80,9,2,0xf9,3,112),1200:(80,15,1,0xf9,7,224),1440:(80,18,1,0xf0,9,224)}[capacity]
+total=cylinders*2*spt
+metadata=1+2*spf+roots//16
 ROOT = Path(__file__).resolve().parent.parent
 folder = Path(tempfile.mkdtemp(prefix='dform-live-'))
 print('Diagnostics:', folder, flush=True)
@@ -29,7 +36,7 @@ run('cpmcp', '-f', 'ccpm86-320', 'logical.img',
 run('python3', str(ROOT/'tools/cpm86twist.py'), 'twist', 'logical.img', 'source.img')
 # Start with eight physical sectors and nonzero old data. Formatting must
 # replace the geometry and clear every directory/FAT byte, not merely the IDs.
-run('psi', '-n', '320', '-F', '165', '-o', 'target.psi')
+run('psi', '-n', str(capacity), '-F', '165', '-o', 'target.psi')
 cfg = (ROOT/'media/cdos86.cfg').read_text().replace('driver = "sdl"', 'driver = "null"').replace('sdl:lowpass=5000', 'null')
 cfg = cfg.replace('cdos86.img', 'source.img').replace('cdostools.img', 'target.psi')
 cfg = re.sub(r'(?m)^path\s*=\s*"([^"\n]+)"',
@@ -37,9 +44,9 @@ cfg = re.sub(r'(?m)^path\s*=\s*"([^"\n]+)"',
 (folder/'test.cfg').write_text(cfg)
 commands = ['c f000000']
 keys = {':': '+Shift Semicolon -Shift', ' ': 'Space', '[': 'LeftBracket', ']': 'RightBracket'}
-for ch in 'dform b: [dos] [v]':
+for ch in f'dform b: [dos{capacity}] [v]':
     commands += ['key '+keys.get(ch, ch), 'c 200000']
-commands += ['key Return', 'c 6000000', 'key y', 'c 40000000',
+commands += ['key Return', 'c 6000000', 'key y', 'c 100000000',
              'save "format.bin" bin b800:0000 fa0', 'q']
 
 def pce(commands, name):
@@ -57,17 +64,17 @@ def screen(name):
 pce(commands, 'format')
 assert 'Format complete.' in screen('format')
 info = run('psi', 'target.psi', '-f').stdout.decode()
-assert 'BAD-ID' not in info and '720 + 0' in info, info
+assert 'BAD-ID' not in info and f'{total} + 0' in info, info
 run('psi', 'target.psi', '-O', 'raw', '-o', 'target.img')
 b = (folder/'target.img').read_bytes()
-assert len(b) == 368640
-assert b[:512] == (ROOT/'commands/dform/fatboot.bin').read_bytes()
-assert struct.unpack_from('<HBHBHHBHHHH', b, 11) == (512,2,1,2,112,720,0xfd,2,9,2,0)
-fat = b'\xfd\xff\xff'+bytes(1021)
-assert b[512:1536] == b[1536:2560] == fat
-assert not any(b[2560:6144]), 'Root directory is not empty'
-assert b[6144:9216] == bytes(3072)
-assert b[9216:] == bytes([0xf6])*(len(b)-9216), 'Unexpected formatted data fill'
+assert len(b) == total*512
+boot=bytearray((ROOT/('commands/dform/fatboot.bin' if capacity==360 else 'commands/dform/dosbootx.bin')).read_bytes())
+struct.pack_into('<HBHBHHBHHHH',boot,11,512,spc,1,2,roots,total,media,spf,spt,2,0)
+assert b[:512] == boot
+fat=bytes([media,255,255])+bytes(spf*512-3)
+assert b[512:(1+spf)*512] == b[(1+spf)*512:(1+2*spf)*512] == fat
+assert not any(b[(1+2*spf)*512:metadata*512]), 'Root directory is not empty'
+assert b[metadata*512:] == bytes([0xf6])*((total-metadata)*512), 'Unexpected formatted data fill'
 run('mdir', '-i', 'target.img', '::')
 probe = b'DFORM FAT12 interoperability check\r\n'
 (folder/'probe.txt').write_bytes(probe)
@@ -75,11 +82,13 @@ run('mcopy', '-i', 'target.img', 'probe.txt', '::PROBE.TXT')
 assert run('mtype', '-i', 'target.img', '::PROBE.TXT').stdout == probe
 # Preserve the original empty format: the mtools probe must not occupy the
 # first root entry/cluster required by the historical system bootstrap.
-(folder/'empty.img').write_bytes(b)
+(folder/'formatted.img').write_bytes(b)
+# The shared cold-boot helper uses the configuration's relative ROM path.
+(folder/'rom').symlink_to((ROOT/'media/rom').resolve(), target_is_directory=True)
 from dskmaint_live_check import build_low_kernel, cold_boot
-cold_boot(folder, folder/'empty.img', 'empty', '', None,
+cold_boot(folder, folder/'formatted.img', 'empty', '', None,
           ['Not a boot disk', 'Insert boot disk'])
-cold_boot(folder, folder/'empty.img', 'rebuilt', 'CCPM.SYS',
+cold_boot(folder, folder/'formatted.img', 'rebuilt', 'CCPM.SYS',
           build_low_kernel(folder), ['Concurrent', 'A>'])
-print('PASS: CDOS DOS format/verify; exact DSKMAINT bootstrap, FAT12 metadata, mtools I/O, empty recovery and rebuilt kernel cold boot')
+print(f'PASS: CDOS {capacity}K format/verify, FAT12, mtools I/O, empty recovery and rebuilt kernel cold boot')
 shutil.rmtree(folder)

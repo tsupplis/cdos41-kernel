@@ -27,6 +27,11 @@ $(OBJECTS): $(LOCAL_INCLUDES) Makefile
 	@$(RASM86) $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
 	@grep -qiE 'Number of errors: +0\.' $*.log
 
+squiddm3.obj: dosbootx.inc
+dosbootx.inc: dosbootx.bin
+	bin2asm -m -f $@ $<
+	unix2dos $@
+
 # Compile PL/M sources; declarations and Makefile changes trigger recompilation.
 %.obj: %.plm Makefile $(wildcard *.lit *.def *.equ *.lib *.h *.dcl *.inc *.ext)
 	@$(INTEL_PLM86) $< debug 'optimize(3)' xref > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
@@ -40,18 +45,18 @@ $(OBJECTS): $(LOCAL_INCLUDES) Makefile
 # Remove generated outputs only; preserve sources and reference files.
 clean:
 	rm -f *.sys *.loc *.cmd *.obj *.h86 *.hex *.sym *.lin *.lst *.prn *.log
-	rm -f *.mp? *.lnk *.map *.exe *.com dosboot.raw dosboot.bin dskmaint.raw dskraw.inp
+	rm -f *.mp? *.lnk *.map *.exe *.com dosboot.raw dosboot.bin dosbootx.raw dosbootx.bin dosbootx.inc dskmaint.raw dskraw.inp
 
 help1.obj: help1.a86 Makefile
 	$(INTEL_ASM86) $<
 
 # GENCMD supplies the CODE group header. Keep its temporary image distinct
 # from runnable commands and extract the same 512 bytes the OEM SID step used.
-dosboot.raw: dosboot.h86 Makefile
+dosboot.raw dosbootx.raw: %.raw: %.h86 Makefile
 	$(GENCMD) $<
-	mv dosboot.cmd $@
+	mv $*.cmd $@
 
-dosboot.bin: dosboot.raw Makefile
+dosboot.bin dosbootx.bin: %.bin: %.raw Makefile
 	python3 -c "from pathlib import Path; b=Path('$<').read_bytes(); assert b[0]==1 and int.from_bytes(b[1:3],'little')==32; Path('$@').write_bytes(b[128:640])"
 
 # LINK86's input file avoids the 128-byte DOS command-tail limit.

@@ -233,11 +233,18 @@ set_286_drive:
 	rol	al,cl			;   is in the top half
 	push	ax			; but save the other half too
 	and	al,0Fh			; mask off the unwanted
-	cmp	al,2			; if other than 2 (hyper)
-	jnz	set_286_drive_done	;   then leave it alone
-
-	mov	drive_type[si],hyper_drive
-	mov	data_rate[si],rate_hyper_48
+	cmp al,2
+        jb set_286_drive_done
+        cmp al,4
+        ja set_286_drive_done
+        mov drive_type[si],al     ; CMOS: 2=1.2M, 3=720K, 4=1.44M
+        mov data_rate[si],rate_hyper_48
+        cmp al,2
+        je set_286_drive_done
+        mov data_rate[si],rate_slow_48
+        cmp al,4
+        jne set_286_drive_done
+        mov data_rate[si],rate_hyper_96
 set_286_drive_done:
 	pop	ax
 	ret
@@ -827,7 +834,7 @@ floppy_hash:
 	lea	bx,dph_tbl	; floppies are first here
 flop_hash_loop:
 	mov	si,[bx]		; point to the dph
-	mov	ax,0E0h		; big enough for pc 1.2 meg FAT's
+	mov	ax,0120h		; nine FAT sectors: up to 1.44M FAT12
 	call	hash_alloc	; save one chunk
 	inc bx ! inc bx		; point to next dph
 	loop	flop_hash_loop	; and do another

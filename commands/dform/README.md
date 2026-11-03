@@ -20,6 +20,6 @@ temporary INT 1Eh table and restores the vector before releasing the disk.
 CMD MIN reserves the aligned DMA scratch space.
 
 `make check-dform-live` at the project root exercises the CDOS format and
-verify path, reads and writes the FAT filesystem with mtools, and cold-boots
-the empty disk recovery prompt and a copied, low-linked rebuilt kernel on
-disposable PCE images.
+verify path and reads and writes the FAT filesystem with mtools. It also
+checks empty-disk recovery and cold-boots a copied, low-linked rebuilt kernel
+on disposable PCE images.

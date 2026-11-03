@@ -1,0 +1,100 @@
+;*****************************************************************************
+; FAT12 - write profile-selected boot sector, both FATs and empty root.
+; Metadata is written one sector at a time, so it may cross any head/track
+; boundary (1.44M needs 33 sectors). Data sectors retain format fill F6.
+; No system file is copied or allocated; the user supplies matching CCPM.SYS.
+;*****************************************************************************
+        cseg
+write_fat360:
+        mov dx,offset msg_writing_fat
+        call puts
+        mov ax,fat_root_entries
+        add ax,15
+        mov cl,4
+        shr ax,cl
+        xor bx,bx
+        mov bl,fat_sectors
+        add ax,bx
+        add ax,bx
+        inc ax
+        mov fat_metadata_end,ax
+        mov fat_lba,0
+        mov transfer_count,1
+fat_write_sector:
+        mov es,buffer_segment
+        xor di,di
+        xor ax,ax
+        mov cx,256
+        cld
+        rep stosw
+        cmp fat_lba,0
+        jne fat_reserved_entries
+        mov si,offset fat_boot_sector
+        cmp cylinders,40
+        je fat_boot_selected
+        mov si,offset extended_boot_sector
+fat_boot_selected:
+        xor di,di
+        mov cx,256
+        rep movsw
+; Overlay the complete BPB, retaining each loader's instructions untouched.
+        mov es:word ptr .11,512
+        mov al,fat_cluster_sectors
+        mov es:byte ptr .13,al
+        mov es:word ptr .14,1
+        mov es:byte ptr .16,2
+        mov ax,fat_root_entries
+        mov es:word ptr .17,ax
+        mov ax,fat_total_sectors
+        mov es:word ptr .19,ax
+        mov al,fat_media
+        mov es:byte ptr .21,al
+        xor ah,ah
+        mov al,fat_sectors
+        mov es:word ptr .22,ax
+        mov al,sector_count
+        mov es:word ptr .24,ax
+        mov es:word ptr .26,2
+        jmp fat_sector_ready
+fat_reserved_entries:
+        mov ax,fat_lba
+        cmp ax,1
+        je fat_first_entries
+        xor bx,bx
+        mov bl,fat_sectors
+        inc bx
+        cmp ax,bx
+        jne fat_sector_ready
+fat_first_entries:
+        mov al,fat_media
+        mov es:byte ptr .0,al
+        mov es:word ptr .1,0ffffh
+fat_sector_ready:
+; LBA -> physical CHS -> DSKMAINT reversed logical head-one numbering.
+        mov ax,fat_lba
+        xor dx,dx
+        xor bx,bx
+        mov bl,sector_count
+        div bx
+        mov transfer_sector,dl
+        shr ax,1
+        jnc fat_head_zero
+        neg al
+        add al,track_count
+        dec al
+fat_head_zero:
+        mov track,al
+        mov operation,3
+        call disk_io
+        inc fat_lba
+        mov ax,fat_lba
+        cmp ax,fat_metadata_end
+        jae near_fat12_2805_1
+        jmp fat_write_sector
+near_fat12_2805_1:
+        mov transfer_count,0
+        mov transfer_sector,0
+        ret
+        dseg
+msg_writing_fat db 'Writing FAT12 boot sector, FATs and root directory...',13,10,'$'
+        cseg

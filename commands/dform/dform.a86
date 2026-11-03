@@ -1,5 +1,5 @@
 ; DFORM - Concurrent DOS 4.1 command-line floppy formatter.
-; DFORM B:[DOS] [V] creates and optionally verifies 360K FAT12 data media.
+; DFORM B:[DOS] [V] creates and optionally verifies 360K/720K/1.2M/1.44M FAT12 media.
 ; Native CP/M formats: 320K by default, 160K with [1].
 ; All transfers use CDOS XIOS under MXdisk.
 cgroup	group	code,data
@@ -50,16 +50,16 @@ wrong_version:
 system_ok:
         call ccpm_init
 
-; Align within a 16 KiB reservation. A nine-sector head fits inside one
-; physical 8 KiB slot and cannot straddle a 64 KiB DMA page.
+; Align within a 32 KiB reservation. A eighteen-sector head fits inside one
+; physical 16 KiB slot and cannot straddle a 64 KiB DMA page.
 	mov	ax,offset buffer_space
 	add	ax,15
 	mov	cl,4
 	shr	ax,cl
 	mov	bx,ds
 	add	ax,bx
-	add	ax,1ffh
-	and	ax,0fe00h
+	add	ax,3ffh
+	and	ax,0fc00h
 	mov	buffer_segment,ax
 	mov	dx,offset msg_double
 	cmp	byte ptr sides,1
@@ -178,40 +178,66 @@ letter_ok:
 	mov	drive,al
 	add	al,'A'
 	mov	prompt_drive,al
-	jcxz	bad_syntax
+        jcxz near_dform_14385_1_zero
+        jmps near_dform_14385_1
+near_dform_14385_1_zero:
+        jmp bad_syntax
+near_dform_14385_1:
 	lodsb
 	dec	cx
 	cmp	al,':'
-	jnz	bad_syntax
+        jz near_dform_14385_2
+        jmp bad_syntax
+near_dform_14385_2:
 next_group:
 	call	skip_spaces
-	jz	args_done
+        jnz near_dform_14385_3
+        jmp args_done
+near_dform_14385_3:
 	lodsb
 	dec	cx
 	cmp	al,'['
-	jnz	bad_syntax
+        jz near_dform_14385_4
+        jmp bad_syntax
+near_dform_14385_4:
 	xor	bl,bl		; a group must contain at least one option
 next_option:
-	jcxz	group_end
+        jcxz near_dform_14385_5_zero
+        jmps near_dform_14385_5
+near_dform_14385_5_zero:
+        jmp group_end
+near_dform_14385_5:
 	mov	al,[si]
 	cmp	al,']'
-	jz	close_group
+        jnz near_dform_14385_6
+        jmp close_group
+near_dform_14385_6:
 	cmp	al,' '
-	jz	group_end
+        jnz near_dform_14385_7
+        jmp group_end
+near_dform_14385_7:
 	cmp	al,9
-	jz	group_end
+        jnz near_dform_14385_8
+        jmp group_end
+near_dform_14385_8:
 	lodsb
 	dec	cx
 	inc	bl
 	cmp	al,'1'
-	jz	option_one
+        jnz near_dform_14385_9
+        jmp option_one
+near_dform_14385_9:
 	cmp	al,'2'
-	jz	option_two
+        jnz near_dform_14385_10
+        jmp option_two
+near_dform_14385_10:
 	and	al,0dfh
         cmp al,'D'
         jz option_dos
 	cmp	al,'V'
-	jnz	bad_syntax
+        jz near_dform_14385_11
+        jmp bad_syntax
+near_dform_14385_11:
 	or	byte ptr options,opt_verify
 	jmp	next_option
 option_dos:
@@ -228,6 +254,48 @@ option_dos:
         cmp al,'S'
         jne bad_syntax
         or options,opt_dos
+; Optional decimal capacity immediately after DOS; bare DOS means 360K.
+        xor bp,bp
+        xor di,di
+capacity_digit:
+        jcxz capacity_done
+        mov al,[si]
+        cmp al,'0'
+        jb capacity_done
+        cmp al,'9'
+        ja capacity_done
+        sub al,'0'
+        xor ah,ah
+        push ax
+        mov ax,bp
+        mov dx,10
+        mul dx
+        or dx,dx
+        jnz capacity_overflow
+        mov bp,ax
+        pop ax
+        add bp,ax
+        jc capacity_invalid
+        inc si
+        dec cx
+        inc di
+        jmp capacity_digit
+capacity_overflow:
+        pop ax
+capacity_invalid:
+        jmp bad_syntax
+capacity_done:
+        or di,di
+        jnz capacity_explicit
+        mov bp,360
+capacity_explicit:
+        cmp capacity_seen,0
+        je capacity_first
+        cmp bp,format_capacity
+        jne capacity_invalid
+capacity_first:
+        mov format_capacity,bp
+        mov capacity_seen,1
         jmp next_option
 option_one:
 	or	byte ptr options,opt_single
@@ -259,8 +327,22 @@ select_dos_profile:
         test options,opt_dos
         jz apply_profile
         test options,opt_single
-        jnz bad_syntax
+        jz near_dform_14385_12
+        jmp bad_syntax
+near_dform_14385_12:
         mov bx,offset profile_dos360
+        cmp format_capacity,360
+        je apply_profile
+        mov bx,offset profile_dos720
+        cmp format_capacity,720
+        je apply_profile
+        mov bx,offset profile_dos1200
+        cmp format_capacity,1200
+        je apply_profile
+        mov bx,offset profile_dos1440
+        cmp format_capacity,1440
+        je apply_profile
+        jmp bad_syntax
 apply_profile:
 ; Profile: cylinders, last head number, total heads, sectors/head, fill byte.
         mov al,[bx]
@@ -273,6 +355,20 @@ apply_profile:
         mov sector_count,al
         mov al,4[bx]
         mov format_fill,al
+        test options,opt_dos
+        jz args_return
+        mov al,5[bx]
+        mov format_gap,al
+        mov al,6[bx]
+        mov fat_cluster_sectors,al
+        mov al,7[bx]
+        mov fat_media,al
+        mov al,8[bx]
+        mov fat_sectors,al
+        mov ax,9[bx]
+        mov fat_root_entries,ax
+        mov ax,11[bx]
+        mov fat_total_sectors,ax
 args_return:
 	ret
 
@@ -515,7 +611,27 @@ sector_count    db      8
 format_fill     db      0e5h
 profile_cpm160  db      40,0,40,8,0e5h
 profile_cpm320  db      40,1,80,8,0e5h
-profile_dos360  db      40,1,80,9,0f6h
+; DOS profiles append gap, cluster sectors, media, FAT sectors, root/total.
+profile_dos360  db 40,1,80,9,0f6h,50h,2,0fdh,2
+                dw 112,720
+profile_dos720  db 80,1,160,9,0f6h,50h,2,0f9h,3
+                dw 112,1440
+profile_dos1200 db 80,1,160,15,0f6h,54h,1,0f9h,7
+                dw 224,2400
+profile_dos1440 db 80,1,160,18,0f6h,6ch,1,0f0h,9
+                dw 224,2880
+format_capacity dw 360
+capacity_seen db 0
+format_gap db 50h
+transfer_count db 0
+transfer_sector db 0
+fat_cluster_sectors db 2
+fat_media db 0fdh
+fat_sectors db 2
+fat_root_entries dw 112
+fat_total_sectors dw 720
+fat_metadata_end dw 0
+fat_lba dw 0
 sides		db	1
 track_count	db	80
 track		db	0
@@ -535,11 +651,11 @@ msg_usage	db	'USAGE: DFORM drive: { [options] ... }',13,10,13,10
 	db	'  A: or B:  Target floppy drive (required)',13,10
 	db	'  1         Single-sided, 160K',13,10
 	db	'  2         Double-sided, 320K (default)',13,10
-	db      '  DOS       FAT12 360K with system bootstrap; incompatible with [1]',13,10
+	db      '  DOS       FAT12 360K; DOS720/DOS1200/DOS1440 select larger media',13,10
 	db	'  V         Verify after formatting',13,10
 	db	'  Combine options: [1V] or [1] [V; closing ] is optional.',13,10
 	db	'  Examples: DFORM A:[1V]   DFORM B: [V',13,10,'$'
-msg_dos360      db      '360K, FAT12; copy compatible CCPM.SYS first to boot; $'
+msg_dos360      db      'DOS FAT12; copy compatible CCPM.SYS first to boot; $'
 msg_single	db	'160K, single-sided; $'
 msg_double	db	'320K, double-sided; $'
 msg_with_verify	db	'verification enabled.',13,10,'$'
@@ -570,12 +686,14 @@ loader:
 loader_end:
 fat_boot_sector:
         include fatboot.inc
+extended_boot_sector:
+        include dosbootx.inc
 
 stack_space	rs	stack_size
 stack_top:
-; Alignment can consume up to 8191 bytes before a 4608-byte head buffer.
+; Alignment can consume up to 16383 bytes before a 9216-byte head buffer.
 	include	ccpmio.a86
-        include fat360.a86
+        include fat12.a86
         dseg
-buffer_space rs 4000h
+buffer_space rs 8000h
 	end

@@ -309,7 +309,11 @@ zero_out_tracks:
 make_boot_sector:
 	cld
 	xor	di,di			;start again
-	mov	si,offset pc_loader	;start of loader image
+	mov si,offset pc_loader
+        cmp tracks_per_disk[bx],160
+        jne choose_boot_image_done
+        mov si,offset pc_loader_extended
+choose_boot_image_done:
 	mov	cx,bytes_sector[bx]	;one sector's worth
 	rep	movsb			;boot sector in image
 	push	di			;remember where we left off
@@ -423,38 +427,9 @@ eject
 ;	does not get executed
 ;
 check_for_AT:
-	push	es
-	mov	ax,0ffffh		;high end of RAM
-	mov	es,ax
-	cmp	es:byte ptr.0eh,0fch	;looking for AT machine id
-	pop	es
-	jnz	no_AT			;not there, do nothing
-;
-	mov	al,0eh
-	call	get
-	test	al,0c0h			;check battery, checksum
-	jnz	no_AT
-;
-	mov	al,10h
-	call	get			;get drive types
-	test	al,00100010b		;looking for high dense drive
-	jz	no_AT
-;
-;at this point we have an AT with high density drive
-;
-	mov	ax,offset at_list
-	mov	current_menu_types,ax	;point to AT list of offsets
-	mov	ax,offset dos_high_dense
-	mov	f_f7_prompt,ax		;put in correct prompt
-no_AT:
-	ret
-;
-get:
-	out	70h,al
-	jmps	$+2			;waste some time
-	in	al,71h
-	ret
-
+; All media choices are explicit. The driver validates physical operations;
+; 3.5-inch drives must not masquerade as the historical AT F7 replacement.
+        ret
 
 eject
 	DSEG
@@ -471,12 +446,13 @@ cluster_list	dw	2373,317,315,0,0,356,353   ;# of clusters by disk type
 n_clusters	equ	(offset $ -offset cluster_list)/2 ;
 num_clusters	dw	n_clusters
 ;
-current_menu_types	dw	offset XT_list
+current_menu_types	dw	offset format_types
 ;
 ;
 ;these lists are based on the menu presented, if running on the AT@
 ;  then cpm_1_8 will be replaced by dos_15
 ;
+format_types dw 0,2,4,6,14,16,12
 xt_list		dw	0,2,4,6		;offset of first four types
 at_list		dw	0,2,12,6	;includes high dense drive
 ;
@@ -486,6 +462,7 @@ disk_type	dw	offset dos_1_9		;DOS SS 9 sector
 		dw	offset cpm_2_8		;CPM DS 8   "
 		dw	offset dos_1_8		;DOS SS 8   "
 		dw	offset dos_2_8		;DOS DS 8   "
+        dw offset dos_720,offset dos_1440
 ;AT@
 		dw	offset dos_15		;DOS hi-dense 15 SPT 160 traks
 ;
@@ -558,6 +535,17 @@ dos_15		dw	15,160,2,512,512*15,512*15*160
 		dw	offset dos_sys_tracks,1
 		dw	offset dos_15_tbl
 		db	79
+; New DOS-only 80-cylinder FAT12 formats.
+dos_720 dw 9,160,2,512,512*9,0
+        db dos_media_720
+        dw 0f650h,offset dos_720_name,0,160,io_new_format
+        dw offset dos_sys_tracks,1,offset dos_720_tbl
+        db 79
+dos_1440 dw 18,160,2,512,512*18,0
+        db dos_media_1440
+        dw 0f66ch,offset dos_1440_name,0,160,io_new_format
+        dw offset dos_sys_tracks,1,offset dos_1440_tbl
+        db 79
 ;
 ;	
 cpm_media		equ	0		;offsets in dos_directory
@@ -565,6 +553,8 @@ dos_media_1_9		equ	1		; where each element is
 dos_media_2_9		equ	2		;  three bytes
 dos_media_1_8		equ	3
 dos_media_2_8		equ	4
+dos_media_720 equ 6
+dos_media_1440 equ 7
 dos_media_15		equ	5
 ;
 dos_directory	db	0,0,0			;dummy entry for CP/M
@@ -574,7 +564,9 @@ dt_element	equ	(offset $ - offset dos_directory)
 		db	0feh,1,4		;    # of sectors in directory
 		db	0ffh,1,7
 ;AT@
-		db	0f9h,7,14		;high density drive
+		db	0f9h,7,14		;1.2M high density drive
+        db 0f9h,3,7             ;720K
+        db 0f0h,9,14            ;1.44M
 ;
 format_block	db	0,0,1,2		;C H R N values for format operation
 fb_element	equ	offset $ - offset format_block
@@ -592,6 +584,9 @@ fb_element	equ	offset $ - offset format_block
 		db	0,0,0dh,2
 		db	0,0,0eh,2
 		db	0,0,0fh,2
+        db 0,0,16,2
+        db 0,0,17,2
+        db 0,0,18,2
 ;
 ;	one of these tables gets put into the boot sector at offset 0Bh
 ;
@@ -626,12 +621,29 @@ dos_15_tbl	dw	512		;bytes per sector
 		db	2		;number of fat's
 		dw	0E0h		;number of root dir entries
 		dw	960h		;number of sectors in logical disk
-		db	0fch		;media descriptor
+		db	0f9h		;media descriptor
 		dw	7		;number of sectors in fat
 		dw	15		;sectors per track
 		dw	2		;number of heads
 		dw	0		;number of hidden sectors
 		
+dos_720_tbl dw 512
+        db 2
+        dw 1
+        db 2
+        dw 112,1440
+        db 0f9h
+        dw 3,9,2,0
+dos_1440_tbl dw 512
+        db 1
+        dw 1
+        db 2
+        dw 224,2880
+        db 0f0h
+        dw 9,18,2,0
+pc_loader_extended:
+        include dosbootx.inc
+
 ;
 ;	definition of working IOPB
 ;
@@ -674,31 +686,32 @@ f_sel_func	db	7
 fss		dw	length fss_@
 fss_@		db	'   S E L E C T   T Y P E   O F   D I S K E T T E   T O   F O R M A T   '
 ;
-f_keys		dw	4			;4 keys to display
+f_keys		dw	7			;4 keys to display
 		dw	offset f_f3		;F3 key, etc. etc.
 		dw	offset f_f5
 		dw	offset f_f7
 		dw	offset f_f9
+        dw offset f_f2,offset f_f4,offset f_f6
 ;
-f_f3		db	9,26,'F3 '		;row, col, keyname
+f_f3		db	9,6,'F3 '		;row, col, keyname
 		dw	1			;lines in legend
-		db	10,36			;row, col of legend
+		db	9,14			;row, col of legend
 		dw	offset dos_single	;ASCII string
 ;					
 dos_single	dw	length ds_@		;length of string
 ds_@		db	' PC-DOS single sided, 9 sectors'	;ASCII string
 ;
-f_f5		db	12,26,'F5 '		;Wouldn't it be nice if there
+f_f5		db	11,6,'F5 '		;Wouldn't it be nice if there
 		dw	1			; were a real macro assembler
-		db	13,36			;  that would allow the
+		db	11,14			;  that would allow the
 		dw	offset dos_double	;    definition of structures
 ;
 dos_double	dw	length dd_@
 dd_@		db	' PC-DOS double sided, 9 sectors'
 ;
-f_f7		db	15,26,'F7 '
+f_f7		db	13,6,'F7 '
 		dw	1
-		db	16,36
+		db	13,14
 f_f7_prompt	dw	offset cpm_single
 ;
 cpm_single	dw	length cs_@
@@ -706,23 +719,40 @@ cs_@		db	' CP/M single sided, 8 sectors'
 ;
 ;AT@
 dos_high_dense	dw	length dhd_@
-dhd_@		db	' PC-DOS high density'
+dhd_@		db	' DOS FAT12 1.2M (5.25 inch)'
 ;
-f_f9		db	18,26,'F9 '
+f_f9		db	15,6,'F9 '
 		dw	1
-		db	19,36
+		db	15,14
 		dw	offset cpm_double
 ;
 cpm_double	dw	length cd_@
 cd_@		db	' CP/M double sided, 8 sectors'
 ;
+f_f2 db 17,6,'F2 '
+        dw 1
+        db 17,14
+        dw offset dos_720_name
+f_f4 db 19,6,'F4 '
+        dw 1
+        db 19,14
+        dw offset dos_1440_name
+f_f6 db 21,6,'F6 '
+        dw 1
+        db 21,14
+        dw offset dos_high_dense
+dos_720_name dw length dos_720_text
+dos_720_text db ' DOS FAT12 720K (3.5 inch)'
+dos_1440_name dw length dos_1440_text
+dos_1440_text db ' DOS FAT12 1.44M (3.5 inch)'
 f_answers	dw	1			;number of lists
 		dw	offset fa		;list of acceptable answers
 ;
 fa		db	offset fa_2 - offset fa_1	;number of keys
 fa_1		db	'=' or 80h, '?' or 80h		;key id with high
 		db	'A' or 80h, 'C' or 80h		; bit on
-		db	1bh				;ESC key
+		db '<' or 80h, '>' or 80h, '@' or 80h
+        db	1bh				;ESC key
 fa_2		equ	$				;F3 F5 F7 F9 ESC
 ;
 sel_form_dsk	dw	length sfd_@

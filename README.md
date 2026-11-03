@@ -379,6 +379,7 @@ system and the live regression checks.
 | `make dist` | Root-level disk images and disks.zip |
 | `make check-release-commands` | Compare 4.11 and rebuilt command behavior in PCE and run the DATE parser cases |
 | `make check-dskmaint-live` | Format a disposable FAT floppy and verify empty-disk recovery and both system filenames at cold boot |
+| `make check-dform-live` | Format and verify DOS 360K media, check empty-disk recovery and cold boot after copying a matching kernel |
 | `make check-dist` | Build and verify the disk archive |
 | `make clean` | Remove generated build outputs, media and releases |
 

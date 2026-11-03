@@ -350,10 +350,20 @@ io_new_format:
 	mov	bp,sp		 ; for stack parameters
 	mov	ax,gp_fl	 ; get gap and fill values from stack
 	mov	gap_fill,ax	 ;   and store into local variable
-	mov	bl,drive	 ; now, we must pretend that this is
-	mov	bh,0		 ;   a cpm disk (or ss pc-dos) so that
-	mov	disk_modes[bx],0 ;   the track numbering is consistent
-	jmp	format_floppy	 ; everything else is ready to go
+        push es
+        mov es,dma_seg
+        mov bx,dma_off
+        mov al,es:[bx]           ; caller's CHRN describes the physical track
+        mov ah,0
+        mov TRACK,ax
+        mov al,es:1[bx]
+        mov ddio_head,al
+        mov ddio_entry,0ffh
+        pop es
+        call format_floppy
+        mov ddio_entry,0
+        mov ddio_head,0
+        ret
 
 
 ;	PC MODE Direct Read/Write functions
@@ -385,30 +395,8 @@ ddio_rw:
 	push bx			;   these instructions!
 	mov ax,TRACK		; get head, track
 	mov ddio_head,ah	; save passed int 13 head
-	mov bl,drive ! mov bh,0	; if the current disk
-	cmp disk_modes[bx],0	;   is a cpm disk then
-	jz ddio_cpm_disk	;   fake cpm track numbering
-
-	cmp disk_modes[bx],0FEh	; if it's single sided DOS
-	jz ddio_go		;   then just go for it
-	cmp disk_modes[bx],0FCh	; same for 9 sectors
-	jz ddio_go
-
-;	we've got a double sided dos disk
-
-	rcr ah,1		; head bit to carry, ah = 80h
-	rcl ax,1		; shift the track left and add head
-	mov TRACK,ax		; save the updated TRACK
-	jmps ddio_go		; works for 96 tpi disk too
-
-ddio_cpm_disk:
-	cmp ah,0		; if head = 0
-	jz ddio_go		;   then just go
-
-	mov ah,0		; if not, then wrap around
-	neg al
-	add al,79		; 0 -> 79 ... 39 -> 40
-	mov TRACK,ax		; save the updated track
+        xor ah,ah
+        mov TRACK,ax             ; physical cylinder; seek uses ddio_head
 
 ddio_go:
 	mov ax, word ptr cur_N	   ;* save N and eot in command string
@@ -495,6 +483,12 @@ sel_flop1:
 ;	exit:	bx = dph pointer or 00h if error reading size
 
 floppy_size:
+        push bx
+        xor bh,bh
+        mov bl,cl
+        mov floppy_spt[bx],0      ; media may have changed density
+        mov floppy_cylinders[bx],40
+        pop bx
 	push	bx		; save dph pointer
 	mov	al,cl		; drive code
 	mov	ah,2		; read fat as well if PC_MODE
@@ -512,7 +506,9 @@ floppy_size:
 	cmp	al,0FFh		; media change flag
 	jz	flop_size_cont	;   is ignored here
 	test	al,al		; but if there is a hard
-	jnz	flop_size_bad	;   error, return bx=0
+	jz floppy_boot_read_ok
+        jmp flop_size_bad
+floppy_boot_read_ok:
 
 ;	now check for a PC DOS disk
 
@@ -520,6 +516,103 @@ flop_size_cont:
 	mov	bl,cur_disk		;find mode array entry
 	sub	bh,bh
 	mov	disk_modes[bx],0	;assume cp/m for now
+        mov floppy_spt[bx],0
+        mov floppy_cylinders[bx],40
+        cmp word ptr local_buffer+11,512
+        je floppy_bpb_field_1
+        jmp floppy_legacy_id
+floppy_bpb_field_1:
+        cmp word ptr local_buffer+26,2
+        je floppy_bpb_field_2
+        jmp floppy_legacy_id
+floppy_bpb_field_2:
+        mov ax,word ptr local_buffer+24
+        cmp ax,9
+        jne floppy_check_15
+        cmp word ptr local_buffer+19,1440
+        je floppy_bpb_field_3
+        jmp floppy_legacy_id
+floppy_bpb_field_3:
+        cmp byte ptr local_buffer+21,0f9h
+        je floppy_bpb_field_4
+        jmp floppy_legacy_id
+floppy_bpb_field_4:
+        cmp byte ptr local_buffer+13,2
+        je floppy_bpb_field_5
+        jmp floppy_legacy_id
+floppy_bpb_field_5:
+        cmp word ptr local_buffer+22,3
+        je floppy_bpb_field_6
+        jmp floppy_legacy_id
+floppy_bpb_field_6:
+        cmp word ptr local_buffer+17,112
+        je floppy_bpb_field_7
+        jmp floppy_legacy_id
+floppy_bpb_field_7:
+        mov ax,offset pcdpb720
+        jmps floppy_new_bpb
+floppy_check_15:
+        cmp ax,15
+        jne floppy_check_18
+        cmp word ptr local_buffer+19,2400
+        je floppy_bpb_field_8
+        jmp floppy_legacy_id
+floppy_bpb_field_8:
+        cmp byte ptr local_buffer+21,0f9h
+        je floppy_bpb_field_9
+        jmp floppy_legacy_id
+floppy_bpb_field_9:
+        cmp word ptr local_buffer+22,7
+        je floppy_bpb_field_10
+        jmp floppy_legacy_id
+floppy_bpb_field_10:
+        mov ax,offset pcdpb15
+        jmps floppy_new_bpb
+floppy_check_18:
+        cmp ax,18
+        je floppy_bpb_field_11
+        jmp floppy_legacy_id
+floppy_bpb_field_11:
+        cmp word ptr local_buffer+19,2880
+        je floppy_bpb_field_12
+        jmp floppy_legacy_id
+floppy_bpb_field_12:
+        cmp byte ptr local_buffer+21,0f0h
+        je floppy_bpb_field_13
+        jmp floppy_legacy_id
+floppy_bpb_field_13:
+        cmp word ptr local_buffer+22,9
+        je floppy_bpb_field_14
+        jmp floppy_legacy_id
+floppy_bpb_field_14:
+        mov ax,offset pcdpb1440
+floppy_new_bpb:
+        cmp word ptr local_buffer+14,1
+        je floppy_bpb_field_15
+        jmp floppy_legacy_id
+floppy_bpb_field_15:
+        cmp byte ptr local_buffer+16,2
+        je floppy_bpb_field_16
+        jmp floppy_legacy_id
+floppy_bpb_field_16:
+        cmp word ptr local_buffer+24,9
+        je floppy_new_valid
+        cmp byte ptr local_buffer+13,1
+        je floppy_bpb_field_17
+        jmp floppy_legacy_id
+floppy_bpb_field_17:
+        cmp word ptr local_buffer+17,224
+        je floppy_bpb_field_18
+        jmp floppy_legacy_id
+floppy_bpb_field_18:
+floppy_new_valid:
+        mov dl,byte ptr local_buffer+24
+        mov floppy_spt[bx],dl
+        mov floppy_cylinders[bx],80
+        mov dl,byte ptr local_buffer+21
+        mov disk_modes[bx],dl
+        jmp flop_size_good
+floppy_legacy_id:
 	mov	ax,fat_id
 
 	mov	cx,num_fat_ids		; how many dos modes we support
@@ -596,6 +689,14 @@ format_floppy:
 	mov	cur_disk,bl	; save for seek
 
 	mov	bh,0
+        cmp drive_type[bx],3
+        jb format_legacy_drive
+        mov data_rate[bx],rate_slow_48
+        cmp mcnt,9
+        jbe format_flop_go
+        mov data_rate[bx],rate_hyper_96
+        jmp format_flop_go
+format_legacy_drive:
 	cmp	drive_type[bx],slow_drive
 	jz	format_flop_go	; skip for older drives
 
@@ -733,6 +834,24 @@ set_drive_type:
 	mov	cur_protect,0		; assume no media protection
 	mov	cur_top,top_cylin_48	; assume 48 tpi drive
 	mov	bl,cur_disk ! mov bh,0
+        cmp drive_type[bx],3
+        jb set_drive_legacy
+        mov cur_top,79
+        cmp ddio_entry,0ffh
+        je set_drive_35_rate
+        mov al,floppy_spt[bx]
+        or al,al
+        jz set_drive_35_rate
+        mov cur_eot,al
+        mov cur_gap,2ah
+        mov data_rate[bx],rate_slow_48
+        cmp al,9
+        jbe set_drive_35_rate
+        mov data_rate[bx],rate_hyper_96
+        mov cur_gap,1bh
+set_drive_35_rate:
+        jmp set_drive_rate
+set_drive_legacy:
 	cmp	drive_type[bx],slow_drive
 	jz	set_drive_slow		; skip for old fashioned
 
@@ -761,6 +880,10 @@ set_drive_med:
 	jmps	set_drive_rate		; set rate and go
 
 set_drive_slow:
+        cmp floppy_cylinders[bx],80
+        jne set_drive_slow_ready
+        mov cur_top,79
+set_drive_slow_ready:
 	mov	al,PC_STATE_SLOW_48	;* more black hole poking
 	call	do_at_ros_vars		;*
 	cmp	ddio_entry,0ffh		;* if int 13h entry
@@ -802,6 +925,9 @@ d_a_r_v_ret:				;*
 ;	set end of track value for 48 tpi diskette
 
 set_eot_48:
+        mov al,floppy_spt[bx]
+        or al,al
+        jnz set_eot_ok
 	mov	al,eot_48_cpm		; assume only 8 per track
 	cmp	disk_modes[bx],0FDh	; DOS 9 sector double sided?
 	jz	set_eot_9		; skip if so
@@ -1004,7 +1130,7 @@ disk_recal:
 	 call	save_pc_data		;* stick it
 d_r_not_at:				;*
 	cmp drive_type[bx],hyper_drive
-	jnz disk_routine		; skip if a 48 tpi drive
+	jb disk_routine		; skip if a 48 tpi drive
 
 	call recal			;the FDC only sends out 77 steps,
 	call wait_sense_get		;  so hyper drives need 2 recals.
@@ -1117,6 +1243,11 @@ seek:
 	mov bl,0			;get a head 0
 	mov ax,cur_trk
 
+        cmp ddio_entry,0ffh
+        jne seek_logical_track
+        mov bl,ddio_head
+        jmp side_ok
+seek_logical_track:
 	push bx				;PC MODE cylinder fixup?
 	mov bl,cur_disk ! sub bh,bh
 	cmp disk_modes[bx],0		; if it's a cpm disk
@@ -1376,12 +1507,18 @@ flop_error_found:
 flop_error_go:
 	mov	bl,cur_disk ! mov bh,0	; for table index
 	cmp	drive_type[bx],hyper_drive
-	jnz	flop_error_jmp		; skip if a 48 tpi drive
+	jb	flop_error_jmp		; skip if a 48 tpi drive
 
 	dec	media_retry
 	jz	flop_error_ret		; if retries exausted
 
-	xor	data_rate[bx],(rate_hyper_48 xor rate_hyper_96)
+	cmp drive_type[bx],3
+        jb floppy_retry_525
+        xor data_rate[bx],(rate_slow_48 xor rate_hyper_96)
+        jmps floppy_retry_rate_done
+floppy_retry_525:
+        xor data_rate[bx],(rate_hyper_48 xor rate_hyper_96)
+floppy_retry_rate_done:
 	mov	al,'X'			; call for another try
 	ret
 
@@ -1589,6 +1726,8 @@ drive_type	db	slow_drive, slow_drive		;floppy drive type
 		db	slow_drive, slow_drive		;default old drives
 data_rate	db	rate_slow_48, rate_slow_48	;floppy data rate
 		db	rate_slow_48, rate_slow_48	;default old drives
+floppy_spt db 0,0,0,0
+floppy_cylinders db 40,40,40,40
 pc_at		db	00h				;assume false
 
 dma_mode_storage	db	dma_mode_read_fdc	;current dma mode
@@ -1819,6 +1958,26 @@ good_fat_ids	dw	0FFFFh,0FFFEh,0FFFDh	; supported fat id's
 
 pc_dpb_list	dw	pcdpb8D,pcdpb8S,pcdpb9D	; the dpb's for above id's
 		dw	pcdpb9S,pcdpb15		; 1.2 meg best guess
+
+
+; FAT12 720K: BPB-validated, 80 cylinders and two heads.
+pcdpb720 dw -1,2,3,715,1024,1
+        dw 9
+        db 3,7,0
+        dw 719,111
+        db 0,0
+        dw 28+PERM,0
+        db 2,3
+
+
+; FAT12 1440K: BPB-validated, 80 cylinders and two heads.
+pcdpb1440 dw -1,2,9,2849,512,1
+        dw 18
+        db 3,7,0
+        dw 1439,223
+        db 0,0
+        dw 56+PERM,0
+        db 2,3
 
 ;	FAT ID = FC, Single Sided, 9 Sector format (IBM PCDOS 2.0 ONLY)
 pcdpb9S	dw	-1		;extended DPB flag
