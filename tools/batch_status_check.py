@@ -19,9 +19,6 @@ run("cpmchattr","-f","ccpm86-320","a.logical","s","0:BATCH.CMD")
 run("mformat","-C","-i","fat.img","-t","40","-h","2","-n","8","-c","2","::")
 for source in ["setenv/setenv.cmd","echo/echo.cmd"]:
     run("mcopy","-i","fat.img",str(ROOT/"commands"/source),"::")
-run("mmd","-i","fat.img","::SUB")
-(FOLDER/"known.txt").write_bytes(b"CPM\r\n\x1a")
-run("cpmcp","-f","ccpm86-320","a.logical","known.txt","0:KNOWN.TXT")
 shutil.copyfile(ROOT/"commands/batch/tests/exittest.a86",FOLDER/"ifstat.a86")
 run("pcdev_rasm86","ifstat.a86")
 run("pcdev_linkcmd","ifstat=ifstat[data[origin[0],max[0]]]")
@@ -49,6 +46,8 @@ run('mcopy','-i','fat.img','DX7.EXE','::')
 run('cpmrm','-f','ccpm86-320','a.logical','0:CCPM.SYS')
 run('cpmcp','-f','ccpm86-320','a.logical',str(ROOT/'kernel/sysgen/ccpm.sys'),'0:CCPM.SYS')
 run('cpmchattr','-f','ccpm86-320','a.logical','s','0:CCPM.SYS')
+(FOLDER/'BAD.EXE').write_bytes(b'MZ')
+run('mcopy','-i','fat.img','BAD.EXE','::')
 scripts={}
 for kind in ['N','D']:
     lines=['@ECHO=OFF','IF NOT ERRORLEVEL 1 ECHO InitialZero']
@@ -59,6 +58,7 @@ for kind in ['N','D']:
                   'ECHO PreserveStatus',f'IF ERRORLEVEL {value} IF x==x ECHO {kind}{value}Retained']
     lines += ['IF ERRORLEVEL 1 ECHO WRONG-stale','ECHO StatusSuiteDone']
     scripts[f'ST{kind}.BAT']='\n'.join(lines)+'\n'
+scripts['STFAIL.BAT']='@ECHO=OFF\nB:N7.CMD\nB:BAD.EXE\nIF ERRORLEVEL 1 ECHO RejectedOne\nIF ERRORLEVEL 2 ECHO WRONG-rejected\nB:N7.CMD\nB:ABSENT.CMD\nIF ERRORLEVEL 7 ECHO SearchPreserves\nIF ERRORLEVEL 8 ECHO WRONG-search\n'
 scripts['STMIX.BAT']='@ECHO=OFF\nB:D7.COM\nIF NOT ERRORLEVEL 8 ECHO DosSeven\nB:OLD.COM\nIF ERRORLEVEL 1 ECHO WRONG-int20\nIF NOT ERRORLEVEL 1 ECHO OldExitZero\nB:DX7.EXE\nIF ERRORLEVEL 7 ECHO ExeSeven\nIF ERRORLEVEL 8 ECHO WRONG-exe\nB:N256.CMD\nIF ERRORLEVEL 255 ECHO NativeWord\nIF ERRORLEVEL 256 ECHO WRONG-overflow\nIF ERRORLEVEL 255 ECHO SyntaxPreserves\nGOTO NEXT\nECHO WRONG-goto\n:NEXT\nIF ERRORLEVEL 255 ECHO GotoPreserves\nB:CHAIN.BAT\n'
 scripts['CHAIN.BAT']='@ECHO=OFF\nIF ERRORLEVEL 255 ECHO ChainPreserves\nIF ERRORLEVEL 255 EXIT 23\nECHO WRONG-exit\n'
 for name,body in scripts.items():
@@ -76,7 +76,7 @@ def command(text,label):
     for ch in text+"\n":
         commands.extend(["key "+keys.get(ch,ch),"c 200000"])
     commands.extend(["c 10000000",f'save "{label}.bin" bin b800:0000 fa0'])
-for text,label in [('a:stn','native'),('a:std','dos'),('b:stn','fat-native'),('b:std','fat-dos'),('a:stmix','mixed')]:
+for text,label in [('a:stn','native'),('a:std','dos'),('b:stn','fat-native'),('b:std','fat-dos'),('a:stfail','failures'),('a:stmix','mixed')]:
     command('cls','clear-'+label);command(text,label)
 command("b:ifstat 23","status")
 commands.append("q")
@@ -94,6 +94,8 @@ for name,kind in [('native','N'),('dos','D'),('fat-native','N'),('fat-dos','D')]
             assert f'{kind}{value}{suffix}' in result,(name,value,suffix,result)
     assert 'InitialZero' in result and 'StatusSuiteDone' in result,(name,result)
     assert 'WRONG' not in result,(name,result)
+result=screen('failures')
+assert 'RejectedOne' in result and 'SearchPreserves' in result and 'WRONG' not in result,result
 result=screen('mixed')
 for marker in ['DosSeven','OldExitZero','ExeSeven','NativeWord','SyntaxPreserves','GotoPreserves','ChainPreserves']:
     assert marker in result,(marker,result)
