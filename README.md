@@ -151,8 +151,12 @@ Stock DOS Plus 1.2 versus this CDOS rebuild.
 | Batch control and messages | IF, GOTO, FOR, ECHO | ECHO, labels/GOTO, SHIFT and EXIT implemented; IF/FOR/CALL deferred |
 | Echo control | ECHO ON/OFF | BATCH-only ECHO=ON/OFF and @ECHO; interactive ECHO prints text |
 | EXIT | COMMAND.COM command | BATCH-only; optional 0–255 status, otherwise 0 |
-| Environment variables | SET and `%NAME%` expansion | SETENV; no shell `%NAME%` expansion |
+| Environment variables | SET and `%NAME%` expansion | SETENV and BATCH `%NAME%` expansion; no interactive expansion |
 | Search-path commands | PATH built-in | PATH.EXE for the DOS environment; SYSDISK and ORDER for native shell searching |
+| DOS program memory | ADDMEM and COMSIZE | Same-named PCTMP/BATCH built-ins: extra allocation and minimum DOS-program memory |
+| File attributes (ATTRIB role) | FSET on the reference 1.2 disk | SET changes read-only/system/archive attributes; SDIR inspects them. Different syntax; no exposed HIDDEN toggle |
+| Volume labels (LABEL role) | DOS volume-label utility on some system disks | SET d: [NAME=label.typ] and SHOW d: [LABEL] for CP/M disks; FAT label editing remains missing |
+| Native resident extensions | RSX loading; GENRSX supplied on some system disks | Resident System Processes (RSPs); no compatible RSX loader or GENRSX equivalent |
 | Input/output redirection and append | DOS pattern: `<`, `>`, `>>` | CP/M-Plus pattern: GET/PUT/RDR, extended to both native and DOS programs |
 | Command pipelines | `command1 \| command2` using temporary files | Not implemented |
 | Internal DOS interfaces | Not supported as a compatibility interface | 2 of 9 fully implemented (22%); 1 partial; 6 missing or stubbed |
@@ -171,12 +175,19 @@ The internal-interface count uses the nine services identified in [api.md](api.m
 
 DOS Plus shell features were checked on a disposable copy of the original
 1.2 disk; command names were also checked against its shell and system disk.
+The reference 1.2 disk uses FSET rather than a separate ATTRIB command. The
+local disk labelled 1.1 additionally supplies LABEL.EXE, GENRSX.CMD,
+GETRSX.RSX, PUTRSX.RSX and a native CCP.CMD. These package differences do
+not establish their presence on every 1.2/2.1 distribution. GENRSX builds
+extensions for DOS Plus's RSX loader; it does not provide that loader to CDOS.
+The native CCP is a separate CP/M-style shell candidate to assess, not a
+drop-in replacement for CDOS PCTMP or evidence of RSX support in CDOS.
 See the [CDOS shell commands](ccp.md), [national setup](commands/n/README.md),
 [hard-disk boot tests](commands/hdmaint/README.md) and [API inventory](api.md).
 Historical background: [DOS Plus](https://www.seasip.info/Cpm/dosplus.html)
 and its [EXE loader defect](https://www.seasip.info/Cpm/dosplus_exe.html).
 
-BATCH adds labels/GOTO, SHIFT, `EXIT [status]` and script-local `ECHO=ON/OFF`; `@ECHO`
+BATCH adds labels/GOTO, SHIFT, `EXIT [status]`, `%NAME%` expansion and script-local `ECHO=ON/OFF`; `@ECHO`
 suppresses only its own line. Interactive ECHO and ECHO.CMD simply print text.
 This restriction is intentional; see the [BATCH language reference](batch.md).
 
@@ -189,7 +200,7 @@ This restriction is intentional; see the [BATCH language reference](batch.md).
 | `cdosdev.img` | No | ASM80/ASM86, DDT86, GENCMD, HEXCOM, GENCCPM, GENLDR, ED, SUBMIT and PIP |
 | `cdosmaint.img` | Yes | Kernel, INITDIR, DSKMAINT, HDMAINT.CMD, DCOPY, SYSDISK, ERA and PIP |
 | `cdosmenu.img` | No | SPL, PRINT, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP, menu/terminal data, BAT examples and PIP |
-| `cdosdos.img` | No | COPY.EXE, DATE.EXE, ERASE.EXE, PATH.EXE, SETENV.EXE, LOADCCPM.COM, TIME.EXE, REN.EXE and REDOS.COM, core commands and PIP |
+| `cdosdos.img` | No | SETENV.CMD, COPY.EXE, DATE.EXE, ERASE.EXE, PATH.EXE, LOADCCPM.COM, TIME.EXE, REN.EXE and REDOS.COM, core commands and PIP |
 | `cdosextras.img` | No | BACKREST, CARDFILE, DRTALK, their support files and PIP |
 | `cdosadmin.img` | No | FUNCTION, DCOMP, SETPORT, SETUP, STOP, CHKCPMFS, N with NATIONAL.MSG, FM with FM.CFG and TERM.DAT and PIP |
 
@@ -246,7 +257,7 @@ release-image provenance. Details are in `base/cdos411.json`.
 
 
 `Tail=KEEP` marks native CMD binaries built to preserve command-tail case:
-BATCH.CMD, ECHO.CMD, GET.CMD, PUT.CMD and RDR.CMD. Other native CMDs use the
+BATCH.CMD, ECHO.CMD, GET.CMD, PUT.CMD, RDR.CMD and SETENV.CMD. Other native CMDs use the
 historical uppercase tail; DOS COM/EXE files do not use this CMD-header flag.
 Filename matching is unchanged. [CHSET](commands/chset/README.md) can query or
 change the setting. See [batch.md](batch.md) for substitution and child-command
@@ -300,7 +311,7 @@ case handling.
 | `ren.exe` | Rename files through DOS | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical | — |
 | `sdir` | Detailed, sorted directory listing | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested | — |
 | `set` | Set file and drive attributes | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested | — |
-| `setenv.exe` | Display and edit the 1 KB per-console DOS environment | None | New implementation for CDOS 4.11 | Additional tool | — |
+| `setenv` | Display and edit the 1 KB per-console DOS environment | None | New native C implementation for CDOS 4.11 | Additional tool | KEEP |
 | `setport` | Configure serial ports and protocols | 4.11 | Reverse Engineered from CDOS 4.11 and patched | Equivalent | — |
 | `setup` | Customize system hardware settings | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical | — |
 | `show` | Display disk space and drive information | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested | — |
@@ -354,6 +365,7 @@ system and the live regression checks.
 | `make` | Commands, kernel/RSPs, boot sources and eight images |
 | `make check` | Command headers, DATE parser, system layout, cursor, boot track and every packaged file/size |
 | `make check-tree` | TREE statistics and private FAT directory traversal |
+| `make check-batch-expand` | Environment/argument expansion, bounds and per-console isolation |
 | `make check-batch-exit` | Explicit/default BATCH status through native BDOS 108 |
 | `make check-batch-language` | ECHO forms, script control, SHIFT/GOTO and DOS redirection |
 | `make check-graphics` | Assembled graphics guards and adapter gates; PCE VGA/EGA/CGA pixels, palettes, graphics text/TTY and restoration |
