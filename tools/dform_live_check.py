@@ -46,7 +46,7 @@ commands = ['c f000000']
 keys = {':': '+Shift Semicolon -Shift', ' ': 'Space', '[': 'LeftBracket', ']': 'RightBracket'}
 for ch in f'dform b: [dos{capacity}] [v]':
     commands += ['key '+keys.get(ch, ch), 'c 200000']
-commands += ['key Return', 'c 6000000', 'key y', 'c 100000000',
+commands += ['key Return', 'c 6000000', 'key y', 'c 40000000', 'c 40000000',
              'save "format.bin" bin b800:0000 fa0', 'q']
 
 def pce(commands, name):

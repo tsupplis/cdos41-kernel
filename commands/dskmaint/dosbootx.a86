@@ -19,6 +19,8 @@
         db 0f9h
         dw 3,9,2,0,0
 boot_entry:
+        jmpf boot_normalized
+boot_normalized:
         cli
         xor ax,ax
         mov ss,ax

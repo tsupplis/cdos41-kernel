@@ -48,10 +48,10 @@ geometry_bpb_spt:
         jb geometry_try_nine
         cmp bx,2
         ja geometry_try_nine
+        push dx              ; preserve the selected source/target drive
         mul bx
         mov bx,ax
         mov ax,es:word ptr .19
-        push dx
         xor dx,dx
         div bx
         or dx,dx

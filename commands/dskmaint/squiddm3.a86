@@ -449,12 +449,9 @@ num_clusters	dw	n_clusters
 current_menu_types	dw	offset format_types
 ;
 ;
-;these lists are based on the menu presented, if running on the AT@
-;  then cpm_1_8 will be replaced by dos_15
-;
-format_types dw 0,2,4,6,14,16,12
-xt_list		dw	0,2,4,6		;offset of first four types
-at_list		dw	0,2,12,6	;includes high dense drive
+ ; Menu answers F2..F8 follow the screen's column order. Each entry is
+; a byte offset into disk_type, whose historical entries keep their order.
+format_types dw 4,6,0,2,14,12,16
 ;
 disk_type	dw	offset dos_1_9		;DOS SS 9 sector
 		dw	offset dos_2_9		;DOS DS 9   "
@@ -462,9 +459,9 @@ disk_type	dw	offset dos_1_9		;DOS SS 9 sector
 		dw	offset cpm_2_8		;CPM DS 8   "
 		dw	offset dos_1_8		;DOS SS 8   "
 		dw	offset dos_2_8		;DOS DS 8   "
-        dw offset dos_720,offset dos_1440
 ;AT@
 		dw	offset dos_15		;DOS hi-dense 15 SPT 160 traks
+        dw offset dos_720,offset dos_1440
 ;
 ;	definition of disk table
 ;
@@ -686,74 +683,62 @@ f_sel_func	db	7
 fss		dw	length fss_@
 fss_@		db	'   S E L E C T   T Y P E   O F   D I S K E T T E   T O   F O R M A T   '
 ;
-f_keys		dw	7			;4 keys to display
-		dw	offset f_f3		;F3 key, etc. etc.
-		dw	offset f_f5
-		dw	offset f_f7
-		dw	offset f_f9
-        dw offset f_f2,offset f_f4,offset f_f6
-;
-f_f3		db	9,6,'F3 '		;row, col, keyname
-		dw	1			;lines in legend
-		db	9,14			;row, col of legend
-		dw	offset dos_single	;ASCII string
-;					
-dos_single	dw	length ds_@		;length of string
-ds_@		db	' PC-DOS single sided, 9 sectors'	;ASCII string
-;
-f_f5		db	11,6,'F5 '		;Wouldn't it be nice if there
-		dw	1			; were a real macro assembler
-		db	11,14			;  that would allow the
-		dw	offset dos_double	;    definition of structures
-;
-dos_double	dw	length dd_@
-dd_@		db	' PC-DOS double sided, 9 sectors'
-;
-f_f7		db	13,6,'F7 '
-		dw	1
-		db	13,14
-f_f7_prompt	dw	offset cpm_single
-;
-cpm_single	dw	length cs_@
-cs_@		db	' CP/M single sided, 8 sectors'
-;
-;AT@
-dos_high_dense	dw	length dhd_@
-dhd_@		db	' DOS FAT12 1.2M (5.25 inch)'
-;
-f_f9		db	15,6,'F9 '
-		dw	1
-		db	15,14
-		dw	offset cpm_double
-;
-cpm_double	dw	length cd_@
-cd_@		db	' CP/M double sided, 8 sectors'
-;
-f_f2 db 17,6,'F2 '
+; Seven format choices; each key box occupies three screen rows.
+f_keys dw 7
+        dw offset format_key_cpm160
+        dw offset format_key_cpm320
+        dw offset format_key_dos180
+        dw offset format_key_dos360
+        dw offset format_key_dos720
+        dw offset format_key_dos1200
+        dw offset format_key_dos1440
+format_key_cpm160 db 9,4,'F2 '
         dw 1
-        db 17,14
-        dw offset dos_720_name
-f_f4 db 19,6,'F4 '
+        db 10,14
+        dw offset cpm_single
+format_key_cpm320 db 12,4,'F3 '
+        dw 1
+        db 13,14
+        dw offset cpm_double
+format_key_dos180 db 15,4,'F4 '
+        dw 1
+        db 16,14
+        dw offset dos_single
+format_key_dos360 db 18,4,'F5 '
         dw 1
         db 19,14
-        dw offset dos_1440_name
-f_f6 db 21,6,'F6 '
+        dw offset dos_double
+format_key_dos720 db 9,45,'F6 '
         dw 1
-        db 21,14
+        db 10,55
+        dw offset dos_720_name
+format_key_dos1200 db 12,45,'F7 '
+        dw 1
+        db 13,55
         dw offset dos_high_dense
-dos_720_name dw length dos_720_text
-dos_720_text db ' DOS FAT12 720K (3.5 inch)'
-dos_1440_name dw length dos_1440_text
-dos_1440_text db ' DOS FAT12 1.44M (3.5 inch)'
-f_answers	dw	1			;number of lists
-		dw	offset fa		;list of acceptable answers
-;
-fa		db	offset fa_2 - offset fa_1	;number of keys
-fa_1		db	'=' or 80h, '?' or 80h		;key id with high
-		db	'A' or 80h, 'C' or 80h		; bit on
-		db '<' or 80h, '>' or 80h, '@' or 80h
-        db	1bh				;ESC key
-fa_2		equ	$				;F3 F5 F7 F9 ESC
+format_key_dos1440 db 15,45,'F8 '
+        dw 1
+        db 16,55
+        dw offset dos_1440_name
+cpm_single dw length cpm_single_text
+cpm_single_text db ' CP/M 160K (single-sided)'
+cpm_double dw length cpm_double_text
+cpm_double_text db ' CP/M 320K (double-sided)'
+dos_single dw length dos_single_text
+dos_single_text db ' DOS 180K (single-sided)'
+dos_double dw length dos_double_text
+dos_double_text db ' DOS 360K (double-sided)'
+dos_720_name dw length dos_720_name_text
+dos_720_name_text db ' DOS 720K (3.5 inch)'
+dos_high_dense dw length dos_high_dense_text
+dos_high_dense_text db ' DOS 1.2M (5.25 inch)'
+dos_1440_name dw length dos_1440_name_text
+dos_1440_name_text db ' DOS 1.44M (3.5 inch)'
+f_answers dw 1
+        dw offset fa
+fa      db offset fa_end - offset fa_keys
+fa_keys db 0bch,0bdh,0beh,0bfh,0c0h,0c1h,0c2h,1bh ; F2..F8, ESC
+fa_end  equ $
 ;
 sel_form_dsk	dw	length sfd_@
 sfd_@		db	'           S E L E C T   D I S K E T T E   T O   F O R M A T           '
