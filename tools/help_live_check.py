@@ -15,7 +15,7 @@ def run(*a):
 
 shutil.copyfile(R / "media/cdos86.img", F / "cdos86.img")
 run("mformat", "-C", "-i", "fat.img", "-t", "40", "-h", "2", "-n", "8", "-c", "2", "::")
-for p in ["help/help.cmd", "helphlp/help.hlp"]:
+for p in ["help/help.cmd", "helphlp/help.hlp", "putget/put.cmd"]:
     run("mcopy", "-i", "fat.img", str(R / "commands" / p), "::" + Path(p).name)
 cfg = (
     (R / "media/cdos86.cfg")
@@ -36,6 +36,7 @@ keys = {
     ":": "+Shift Semicolon -Shift",
     "[": "LeftBracket",
     "]": "RightBracket",
+    ".": "Period",
 }
 
 
@@ -75,7 +76,10 @@ if "--labels" in sys.argv:
              ("show", "LABEL displays the physical-root volume name on FAT")]
 for topic, _ in cases:
     command("cls", "clear-" + topic)
-    command("help " + topic + " [nopage]", topic)
+    if "--labels" in sys.argv:
+        command("put [" + topic + ".txt] help.cmd " + topic + " [nopage]", topic)
+    else:
+        command("help " + topic + " [nopage]", topic)
     command("", "return-" + topic)
 c.append("q")
 with (F / "pce.log").open("wb") as log:
@@ -95,6 +99,8 @@ for topic, expected in cases:
         for j in range(0, 3840, 160)
     )
     (F / (topic + ".txt")).write_text(s)
+    if "--labels" in sys.argv:
+        s = run("mtype", "-i", "fat.img", "::" + topic + ".txt").stdout.decode("ascii", "replace")
     assert expected in s, (topic, s)
 print(
     "PASS: native HELP reads " + ", ".join(topic for topic, _ in cases),
