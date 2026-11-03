@@ -1937,6 +1937,10 @@ hf_dev_open	equ	08h		; char device has been opened
 ;	*****************************
 
 ms2_f_create:
+        ; DOS 2.x handle CREATE cannot manufacture volume/directory entries.
+        test ms2_cx,18h ! jz ms2_create_regular
+        mov al,no_access ! jmp ms2_error_ret
+ms2_create_regular:
 	call	get_free_handle		; bx -> fresh hcb
 	call	swap_pdrive		; xchg hds pointers
 	jc	ms2_f_create_error	; if none available

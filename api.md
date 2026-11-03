@@ -36,11 +36,11 @@
 | 10 | FCB close | DOS 1.x | Implemented | Uses the opening directory saved in reserved FCB word 1Ch, then restores the current directory | — |
 | 11 | FCB find first | DOS 1.x | Implemented | FCB adapter → shared CP/M/FAT filesystem | — |
 | 12 | FCB find next | DOS 1.x | Implemented | FCB adapter → shared CP/M/FAT filesystem | — |
-| 13 | FCB delete | DOS 1.x | Implemented | FCB adapter → shared CP/M/FAT filesystem | — |
+| 13 | FCB delete | DOS 1.x | Implemented | Ordinary files; extended-FCB attribute 08h deletes only the matching FAT label | NEW (FAT labels) |
 | 14 | FCB sequential read | DOS 1.x | Implemented | FCB adapter → shared CP/M/FAT filesystem | — |
 | 15 | FCB sequential write | DOS 1.x | Implemented | FCB adapter → shared CP/M/FAT filesystem | — |
-| 16 | FCB create | DOS 1.x | Partial | Ordinary files; extended-FCB attribute 08h does not create a FAT volume label | — |
-| 17 | FCB rename | DOS 1.x | Implemented | FCB adapter → shared CP/M/FAT filesystem | — |
+| 16 | FCB create | DOS 1.x | Implemented | Extended FCB attribute 08h creates one FAT root label; duplicate/blank labels fail | NEW (FAT labels) |
+| 17 | FCB rename | DOS 1.x | Implemented | Ordinary files; extended-FCB attribute 08h renames the matching FAT label | NEW (FAT labels) |
 | 18 | Reserved/legacy in-use | Unused / stub | Unused | AL=00h; no service performed | — |
 | 19 | Get default drive | DOS 1.x | Implemented | — | — |
 | 1A | Set DTA | DOS 1.x | Implemented | — | — |
@@ -91,7 +91,7 @@ describe this kernel’s implementation. See Microsoft’s
 | 37 | Switch character / device availability | Partial | AL=0 queries DL, AL=1 sets from DL; AL=0 on success, AL=FFh for unsupported selectors, CF clear. Default `/`; shared within one console across EXEC and root launches. Device-availability selectors 2/3 remain unsupported | NEW (get/set switch character) |
 | 38 | Country information | Implemented | AL=0 returns the full 32-byte US record. Other selectors and DX=FFFFh return CF set, AX=2 | NEW |
 | 39 / 3A / 3B | Make / remove / change directory | Implemented | FAT hierarchical directories; CP/M user areas are not DOS directories | — |
-| 3C / 3D / 3E | Create / open / close handle | Implemented | 20 handle slots, initially 0-4 are standard devices. Close releases device and standard references; final disk references flush before reuse | NEW (handle lifecycle) |
+| 3C / 3D / 3E | Create / open / close handle | Implemented | 20 handle slots, initially 0-4 are standard devices. Close releases device and standard references; final disk references flush before reuse; CREATE rejects volume/directory attributes | NEW (handle lifecycle) |
 | 3F / 40 | Read / write handle | Implemented | Byte counts and shared position; EOF reads stop at the logical byte length, including size-plus-one requests | NEW (EOF boundary fix) |
 | 41 | Delete pathname | Implemented | Path parsing followed by native file deletion | — |
 | 42 | Seek handle | Implemented | Origins 0/1/2: beginning/current/end | — |
@@ -127,7 +127,7 @@ describe this kernel’s implementation. See Microsoft’s
 | Native file services | The same FCB calls reach CP/M or FAT media; directory, password, label and stamp operations are media-dependent, not interchangeable |
 | Native FAT search results | BLACK translates entries into CP/M-style records. Bytes 16 and 17 repeat flags: bit 80h indicates DOS representation, bit 40h a directory. Check the byte-0 XFCB guard before interpreting allocation bytes this way |
 | FAT names and F4 | Short names are matched without case. FAT byte 12 case bits do not activate CP/M F4 compatibility in the patched kernel; genuine CP/M F4 remains supported |
-| CP/M-only metadata | User areas, XFCB passwords and configurable directory labels/stamping are CP/M facilities; see SET/SHOW command notes for rejected FAT operations |
+| CP/M-only metadata | User areas, XFCB passwords and configurable stamping remain CP/M-only. FAT volume names use BDOS 100; SET/SHOW branch on actual FAT media |
 | Native CMD tail case (NEW) | Local header extension: byte 7Fh bit 1 (02h) opts into case preservation. Clear means historical uppercase conversion. CHSET TAIL=KEEP/UPPER edits the flag; filenames/default FCBs still use normal parsing. BATCH/ECHO/PUT/GET/RDR/SETENV/PATH opt in; DOS INT 21h is unchanged |
 | Program loading | Native CLI (E0h/96h) loads native programs; the shell separately selects CMD/BAT/COM/EXE and uses the PC-MODE loader for DOS programs. DOS EXEC is a third, DOS-caller interface |
 | Write verification | Direct XIOS AL=27h (39 decimal), CH=0/1 sets additional verification, CH=FFh queries; AX=BX returns 0/1. Local extension beyond 4.1; boot-time floppy and per-volume hard-disk verification remain additive |
@@ -268,7 +268,7 @@ Sources: [xcon1.lib](kernel/con/xcon1.lib), [xcon2.lib](kernel/con/xcon2.lib),
 | 0E | 14 | diskselect | BDOS | Implemented | — |
 | 0F | 15 | file open | BDOS | Implemented | — |
 | 10 | 16 | file close | BDOS | Implemented | — |
-| 11 | 17 | search first | BDOS | Implemented; FAT raw search returns labels as 20h metadata regardless of directory position | NEW (FAT label isolation) |
+| 11 | 17 | search first | BDOS | Implemented; FAT raw search returns the physical-root label as 20h metadata regardless of position/current subdirectory | NEW (FAT label isolation) |
 | 12 | 18 | search next | BDOS | Implemented; FAT raw file records exclude volume/LFN metadata | NEW (FAT label isolation) |
 | 13 | 19 | file delete | BDOS | Implemented | — |
 | 14 | 20 | file read seq | BDOS | Implemented | — |
@@ -335,7 +335,7 @@ Sources: [xcon1.lib](kernel/con/xcon1.lib), [xcon2.lib](kernel/con/xcon2.lib),
 | 51–61 | 81–97 | Unassigned | SUP | Illegal; error 2 | — |
 | 62 | 98 | Reset Alloc Vector | BDOS | Implemented | — |
 | 63 | 99 | Truncate File | BDOS | Implemented | — |
-| 64 | 100 | Set Dir Label | BDOS | Implemented | — |
+| 64 | 100 | Set Dir Label | BDOS | Implemented; FAT: extent=0, eleven name bytes, all spaces delete; CP/M unchanged | NEW (FAT name-only form) |
 | 65 | 101 | Return Dir Label | BDOS | Implemented | — |
 | 66 | 102 | Read File XFCB | BDOS | Implemented | — |
 | 67 | 103 | Write File XFCB | BDOS | Implemented | — |

@@ -9,8 +9,8 @@ It implements DIR, CLS, USER and the other supported TMP built-ins.
 USER omits the redundant CP/M-media note and PAUSE uses
 `Press any key to continue...`. DIR accepts native slash options and CP/M
 brackets, including a final omitted ]. BATCH is not a full COMMAND.COM:
-IF supports EXIST/DIREXIST with optional NOT; comparisons, FOR and CALL remain
-unimplemented. BATCH expands `%NAME%` from the current
+IF supports EXIST/DIREXIST and case-sensitive string equality with optional
+NOT. ERRORLEVEL, FOR and CALL remain unimplemented. BATCH expands `%NAME%` from the current
 console environment before command dispatch.
 
 `make check-batch-live` checks messages, CLS/DEL and an unrelated sentinel
@@ -69,3 +69,17 @@ subsequent opens reuse its sole-owner HDS. Only the eight mapping bytes are
 saved/restored, leaving reference counts to BDOS. CP/M predicates use native
 FCB searches. All exits restore the caller's drive, DMA and error mode.
 No new kernel API or DOS service is introduced. Run make check-batch-if.
+
+String equality uses pointer/length spans in the already expanded command,
+without filesystem calls or scratch operand copies. Quotes delimit whitespace
+and protect embedded ==, but remain in the bytewise comparison. The command
+tail is copied only after a true result, then redispatched without another
+expansion. Empty operands use ""; unterminated quotes and malformed syntax
+skip the line. make check-batch-strings covers the linked parser and live
+CP/M/FAT scripts; make check also runs the linked-instruction cases.
+
+Expansion keeps a BATCH-only side map of zero-length substitutions ending a
+source token. String IF rejects an unquoted missing operand on either side;
+it cannot silently consume the first command word as the RHS. No sentinel
+bytes enter ordinary command text. True nested IF shifts the side map with
+the removed prefix. Quoted empty values and literal suffixes remain valid.

@@ -129,6 +129,9 @@ condition_decide:
         stc
         ret
 condition_execute:
+        mov ax,condition_command
+        sub ax,offset clicb_cmd
+        call expand_shift_empty
         mov si,condition_command
         mov di,offset clicb_cmd
 condition_move_command:
@@ -194,7 +197,10 @@ condition_left_present:
         jmp condition_syntax
 condition_operator:
         add si,2
-        call lang_spaces
+        call condition_rhs_spaces
+        jnc condition_rhs_present
+        jmp condition_syntax
+condition_rhs_present:
         mov condition_right,si
         xor cx,cx
         xor dl,dl
@@ -232,6 +238,7 @@ condition_right_present:
 condition_compare_command:
         mov condition_command,si
         mov condition_result,0
+        mov cx,condition_right_length
         cmp cx,condition_left_length
         jne condition_compare_unequal
         mov si,condition_left
@@ -243,6 +250,30 @@ condition_compare_command:
         mov condition_result,1
 condition_compare_unequal:
         jmp condition_decide
+
+; Whitespace around == is allowed, but an empty substituted token is not
+; padding. Keep the missing right operand distinct from the following command:
+; IF VALUE == %MISSING% ECHO wrong must be a syntax error, not VALUE==ECHO.
+; Quotes/suffixes make a real nonempty operand and are handled by the lexer.
+condition_rhs_spaces:
+        cmp byte ptr [si],' '
+        je condition_rhs_blank
+        cmp byte ptr [si],TAB
+        je condition_rhs_blank
+        cmp byte ptr [si],0
+        je condition_rhs_missing
+        clc
+        ret
+condition_rhs_blank:
+        mov bx,si
+        sub bx,offset clicb_cmd
+        cmp expand_empty_positions[bx],0
+        jne condition_rhs_missing
+        inc si
+        jmps condition_rhs_spaces
+condition_rhs_missing:
+        stc
+        ret
 
 ; Require a real separator, rejecting IF=, NOT= and EXIST= spellings.
 condition_require_space:

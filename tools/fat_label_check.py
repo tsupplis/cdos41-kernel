@@ -187,7 +187,6 @@ for variant in ["none", "first", "last"]:
         ("dir.cmd b:", "external-dir"),
         ("sdir b:", "sdir"),
         ("show b:label", "show-label"),
-        ("set b: [name=newlabel]", "set-label"),
         ("set b:dosvol [ro,sys]", "set-label-file"),
         ("set b:*.* [ro,sys]", "set-files"),
         ("chdir b:\\sub", "chdir"),
@@ -244,14 +243,15 @@ for variant in ["none", "first", "last"]:
         assert "LABEL: absent" in screens["dos-label"], screens["dos-label"]
     assert "LABEL OPEN: denied" in screens["dos-label"], screens["dos-label"]
 
-    assert "requires CP/M media." in screens["show-label"], screens["show-label"]
-    assert "requires CP/M media." in screens["set-label"], screens["set-label"]
+    for topic in ["show-label", "subdir-show"]:
+        expected = "No volume label exists" if variant == "none" else "DOSVOL"
+        assert expected in screens[topic], screens[topic]
     assert "File not found" in screens["set-label-file"], screens["set-label-file"]
     assert re.search(r"Files Found = +2\b", screens["sdir"]), screens["sdir"]
     print(
         "PASS:",
         variant,
-        "label: DIR/SDIR filtering, DOS first/next/open, SET full-entry preservation and unchanged SHOW/SET media guards",
+        "label: DIR/SDIR filtering, DOS first/next/open, SET full-entry preservation and root-label SHOW display",
         flush=True,
     )
 (F / "results.json").write_text(json.dumps(results, indent=2))

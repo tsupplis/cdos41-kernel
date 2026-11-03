@@ -1200,8 +1200,8 @@ paths are false. Syntax and I/O failures skip the command even with NOT.
 The IF prefix is evaluated after one-pass expansion and before the existing
 comment/drive/built-in/alias/loader dispatcher. A true condition removes its
 prefix and uses that dispatcher without another expansion or echo pass.
-Nested IF is iterative. String/status comparisons, ELSE, blocks, FOR and
-CALL are not added. Resident PCTMP is unchanged by IF; no API is extended.
+Nested IF is iterative. String equality is covered by the later extension
+below; status comparisons, ELSE, blocks, FOR and CALL remain absent. Resident PCTMP is unchanged by IF; no API is extended.
 
 Filesystem evaluation uses native BDOS. For FAT, OPEN "." first obtains a
 private CAT/HDS through BLACK's existing copy-on-write path. Directory opens
@@ -1258,3 +1258,78 @@ that INT 21h AH=16h with extended-FCB attribute 08h reports success but creates
 an ordinary archive file (20h), not a volume label (08h). Existing file
 rename/delete paths also do not provide volume-label editing. This is a
 known API gap, not implemented as part of the enumeration correction.
+
+### BATCH IF string equality (local extension)
+
+IF [NOT] left==right command adds case-sensitive bytewise string equality
+alongside EXIST/DIREXIST. Balanced double quotes protect whitespace and ==
+inside operands, but remain part of comparison: "abc"=="abc" is true while
+"abc"==abc is false. Empty operands use ""; spaces/tabs around the operator
+are accepted. No numeric conversion, wildcard matching, /I, ordering,
+ERRORLEVEL, ELSE, blocks, FOR or CALL is added.
+
+Expansion remains a single pass before condition parsing. "%NAME%TOTO"
+therefore becomes "TOTO" when NAME is empty/undefined, or "ABCTOTO" when
+NAME=ABC. Quote characters introduced by values affect parsing; there is no
+escaping layer. Comparison operands alone gain quote-aware parsing; native
+argument splitting and filesystem operand grammar are unchanged.
+
+The parser compares spans of the expanded line without copying operands or
+calling filesystem services. NOT and true/false redispatch are shared with
+file predicates. Malformed operators, unbalanced quotes and missing operands
+or commands produce a syntax diagnostic and skip the line. Nested comparisons
+and mixed file/directory/string conditions use the same iterative dispatcher.
+There is no resident IF, new BDOS/INT 21h service or new private selector.
+
+A zero-length unquoted substitution used as a whole comparison operand is a
+syntax error on either side. Expansion records its token boundary in a small
+BATCH-only side array, without putting sentinels into command text. The RHS
+parser therefore cannot consume ECHO (or another command word) as the absent
+operand in VALUE == %MISSING% ECHO text. True IF shifts this side map with its
+removed prefix so nested conditions retain the same check. Quoted empties,
+literal suffixes such as %MISSING%TOTO and nonempty adjacent variables still
+work. Missing positional arguments follow the same rule. This is a one-way
+use of expansion metadata by IF, with no new kernel or cross-project service.
+
+make check runs linked production-byte cases covering quotes, empties, case,
+spacing, operator characters, literal keyword values, NOT, nested dispatch,
+malformed syntax and a guard against accidental filesystem calls. The live
+check-batch-strings target exercises CP/M/FAT scripts, literal suffixes after
+variables, missing/empty/value cases, native/DOS/alias/drive commands, GOTO,
+syntax recovery and EXIT 23 observed by the native parent. Existing file IF
+regressions remain in check-batch-if. See batch.md and HELP LANGUAGES BATCH IF.
+
+## FAT label editing through BDOS, native SET/SHOW and DOS FCBs
+
+BDOS 100 now accepts a FAT name-only FCB: drive byte, eleven name bytes,
+and extent zero. An all-space name removes the volume label. Nonzero
+extent rejects CP/M password/stamping requests. The service selects the
+resolved physical root through a temporary BDOS-local HDS view; it never
+changes a process CAT/HDS mapping. It validates names before writing, uses
+the normal read-only/cache/flush path, does not allocate/free data clusters,
+and preserves ordinary same-name files. CP/M's function-100 path is unchanged.
+Raw metadata queries likewise obtain the physical-root label even when
+ordinary enumeration is viewing a subdirectory. BDOS 101 stays unchanged:
+its synthetic 21h on FAT describes the timestamp bridge, not label presence.
+
+SET and SHOW retain identical shared sources in CDOS and CCP/M. Actual FAT
+media detection is the sole gate, so the FAT path is inactive on CCP/M 3.1,
+including its PC-MODE build without FAT. SET [NAME=...] accepts a flat
+11-character FAT label, quoted spaces and blank-name deletion; CP/M parsing
+is unchanged. Other metadata options keep their CP/M guard. SHOW LABEL
+prints a FAT name/no-label report, without invented password/stamp fields.
+
+PCTMP now routes explicit extended-FCB attribute 08h create (AH=16h), rename
+(17h) and delete (13h) through BDOS 100. CREATE rejects an existing label and
+blank names; CLOSE succeeds without allocating/closing an ordinary data FCB.
+Label data reads/writes cannot alias a same-name open ordinary file. RENAME
+matches the old FCB mask and expands destination '?' bytes; DELETE affects
+only a matching label. Handle CREATE (3Ch) rejects volume/directory bits as
+DOS 2.x requires. The previously documented AH=16h ordinary-file fallback
+is superseded by these label-aware adapters. No new INT 21h function exists.
+
+Verification includes 23 linked BDOS writer cases (full/RO/invalid-name/
+metadata requests and mapping restoration), raw enumeration cases, native
+and DOS live operations from subdirectories, same-name open-file protection,
+full 32-byte label protection under ordinary SET operations, OEM CP/M output
+comparisons, both CCP/M command builds and source identity checks.

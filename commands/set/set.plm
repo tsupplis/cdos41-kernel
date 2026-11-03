@@ -368,7 +368,7 @@ terminate: procedure;
    Use private mutable storage; preserve the caller's DMA offset and FCB.
    Directory/search state used by wildcard iteration is saved separately. */
 declare media$buffer (128) byte;
-declare media$fcb (16) byte initial ('????????????',0,0,0,0);
+declare media$fcb (36) byte initial ('????????????',0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
 
 dos$media: procedure byte;
     declare (old$dma,junk) address, n byte;
@@ -1164,8 +1164,55 @@ getbool: procedure;
 
 
                  /* sets the label name */
+/* FAT NAME is an eleven-character volume string, not an 8.3 filename.
+   Keep this path inert on CCP/M, whose raw media probe never reports FAT. */
+declare fat$label (36) byte, fat$pending byte initial(false);
+fat$name: procedure;
+    declare (p,start,last,n,q) address, c based p byte,
+            tail based q byte, quoted byte;
+    if fileref then call parse$error;
+    call fill(.fat$label,0,36);
+    call fill(.fat$label(1),' ',11);
+    fat$label(0) = cdisk+1;
+    p = parse$fn.buff$adr;
+    do while c = ' ' or c = tab; p = p+1; end;
+    quoted = false;
+    if c = 22h then quoted = true;
+    if quoted then p = p+1;
+    start = p;
+    if quoted then do while c <> 0 and c <> cr and c <> lf and c <> 22h;
+        p = p+1;
+    end;
+    else do while c <> 0 and c <> cr and c <> lf and c <> ']' and c <> ',';
+        p = p+1;
+    end;
+    last = p;
+    if quoted then do;
+        if c <> 22h then call parse$error;
+        p = p+1;
+        do while c = ' ' or c = tab; p = p+1; end;
+    end;
+    else do while last > start;
+        q = last-1;
+        if tail <> ' ' and tail <> tab then goto fat$trimmed;
+        last = last-1;
+    end;
+fat$trimmed:
+    n = last-start;
+    if n > 11 then call parse$error;
+    if n <> 0 then call copy(start,.fat$label(1),n);
+    if c = ']' then optdel = false;
+    else if c <> ',' and c <> 0 and c <> cr and c <> lf then
+        call parse$error;
+    if c = ']' or c = ',' then p = p+1;
+    parse$fn.buff$adr = p;
+    fat$pending,lblcmd = true;
+    ibp = parse;
+end fat$name;
+
 lname: procedure;
 
+    if dos$media then do; call fat$name; return; end;
     call getbool;
     call copy(.cmd(1),.fcbv(1),11);      /* copy label name */
     end lname;
@@ -1402,6 +1449,26 @@ write$label: procedure;
         call bdos$error;
         end err;
 
+    if fat$pending then do;
+        error$code = wrlbl(.fat$label);
+        if low(error$code) = 0ffh then do;
+            if high(error$code) <> 0 then call err;
+            call print(.('Cannot set DOS volume label.',0));
+            call terminate;
+        end;
+        call print(.('Volume label for drive ',0));
+        call printdrv;
+        call printx(.(' ',0));
+        if fat$label(1) = ' ' then
+            call printx(.('(none)',0));
+        else do;
+            declare k byte;
+            do k = 1 to 11; call printchar(fat$label(k)); end;
+        end;
+        call crlf;
+        fat$pending,lblcmd = false;
+        return;
+    end;
     call require$cpm;
     error$code = wrlbl(fcbp);
     if low(error$code) = 0ffh then 

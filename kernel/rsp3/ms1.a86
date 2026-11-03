@@ -4270,6 +4270,7 @@ ms_open:
 
 	mov ret_al,0				;initialize for success
 	call check_extended			;returns es:si,di = offset of dos fcb
+        test attribute,8 ! jz $+5 ! jmp dos_label_open
 	add di,12				;di points past file type
 
 ;	xor ax,ax ! mov cx,21
@@ -4591,6 +4592,148 @@ ms_commit:
 	mov al,ret_al
 	ret
 
+; DOS 2.x volume-label FCB adapter. All storage changes go through BDOS
+; 100, never through ordinary CREATE/DELETE/RENAME. The native service owns
+; root selection, validation, read-only checks and cache flushing. Neither
+; the process's current directory nor an ordinary same-name file is changed.
+dos_label_open:
+        cmp ms_ah,FCREATE ! jne $+5 ! jmp dos_label_create
+        jmp dos_label_error          ; labels cannot be opened for data I/O
+dos_label_close:
+        mov ret_al,0                ; CREATE already committed the entry
+        jmp restore_ms_dma
+
+dos_label_prepare:
+        push ds ! pop es
+        mov di,offset dos_label_fcb
+        mov cx,18 ! xor ax,ax ! rep stosw
+        les si,MS_FCB_PTR
+        mov di,offset dos_label_fcb
+        mov cx,12
+ dos_label_copy_input:
+        mov al,es:[si] ! mov [di],al
+        inc si ! inc di ! loop dos_label_copy_input
+        cmp dos_label_fcb,0 ! jne dos_label_drive_ready
+        mov al,cur_dsk ! inc al ! mov dos_label_fcb,al
+ dos_label_drive_ready:
+        mov si,offset dos_label_fcb+1
+        mov cx,11
+ dos_label_fold_input:
+        lodsb ! call dos_label_upper ! mov -1[si],al
+        loop dos_label_fold_input
+        call flush_buffer
+        mov buffer_activeb,FALSE
+        mov cl,25 ! call bdos
+        mov dos_label_saved_drive,al
+        mov dos_label_media,0ffh
+        mov dl,dos_label_fcb ! dec dl
+        mov cl,FSELDSK ! call bdos
+        cmp al,0ffh ! je dos_label_restore_drive
+        push ds ! pop es
+        mov dx,offset buffer ! call set_dma_ptr
+        mov di,offset search_fcb
+        mov cx,18 ! xor ax,ax ! rep stosw
+        mov search_fcb,'?'
+        mov dx,offset search_fcb
+        mov cl,FSEARCH ! call bdos
+        cmp al,0ffh ! je dos_label_restore_drive
+        cmp byte ptr buffer,20h ! jne dos_label_restore_drive
+        cmp byte ptr buffer+15,80h ! jne dos_label_restore_drive
+        mov dos_label_media,0
+ dos_label_restore_drive:
+        mov dl,dos_label_saved_drive
+        mov cl,FSELDSK ! call bdos
+        mov al,dos_label_media ! or al,al
+        ret
+
+dos_label_upper:
+        cmp al,'a' ! jb dos_label_upper_done
+        cmp al,'z' ! ja dos_label_upper_done
+        sub al,20h
+ dos_label_upper_done:
+        ret
+
+; Match the old label using the DOS FCB '?' convention, including padding.
+dos_label_match:
+        cmp byte ptr buffer+1,' ' ! je dos_label_no_match
+        cmp byte ptr buffer+1,0 ! je dos_label_no_match
+        mov si,offset dos_label_fcb+1
+        mov di,offset buffer+1
+        mov cx,11
+ dos_label_match_char:
+        lodsb
+        cmp al,'?' ! je dos_label_match_next
+        mov ah,al ! mov al,[di] ! call dos_label_upper
+        cmp al,ah ! jne dos_label_no_match
+ dos_label_match_next:
+        inc di ! loop dos_label_match_char
+        xor al,al ! ret
+ dos_label_no_match:
+        or al,0ffh ! ret
+
+dos_label_commit:
+        mov dx,offset dos_label_fcb
+        mov cl,100
+        mov al,dos_label_fcb ! dec al
+        mov ah,5 ! call check_error
+        or al,al ! jz $+5 ! jmp dos_label_error
+        mov ret_al,0
+        jmp restore_ms_dma
+
+dos_label_create:
+        call dos_label_prepare
+        jz $+5 ! jmp dos_label_error
+        ; DOS CREATE cannot replace an existing label; use label RENAME.
+        cmp byte ptr buffer+1,' ' ! je $+5 ! jmp dos_label_error
+        cmp dos_label_fcb+1,' ' ! ja $+5 ! jmp dos_label_error
+        ; Native NAME=blank means delete; DOS CREATE must reject blank names.
+        ; Do not allocate a data FCB or truncate any same-name regular file.
+        les di,MS_FCB_PTR
+        add di,12
+        mov cx,25 ! xor ax,ax ! rep stosb
+        les di,MS_FCB_PTR
+        mov es:word ptr MS_REC_SIZE[di],80h
+        jmp dos_label_commit
+
+dos_label_delete:
+        call dos_label_prepare
+        jz $+5 ! jmp dos_label_error
+        call dos_label_match
+        jz $+5 ! jmp dos_label_error
+        push ds ! pop es
+        mov di,offset dos_label_fcb+1
+        mov cx,11 ! mov al,' ' ! rep stosb
+        jmp dos_label_commit
+
+dos_label_rename:
+        call dos_label_prepare
+        jz $+5 ! jmp dos_label_error
+        call dos_label_match
+        jz $+5 ! jmp dos_label_error
+        les si,MS_FCB_PTR
+        mov al,es:16[si]
+        or al,al ! jz dos_label_destination
+        cmp al,dos_label_fcb ! je $+5 ! jmp dos_label_error
+ dos_label_destination:
+        add si,17
+        mov di,offset dos_label_fcb+1
+        mov bx,offset buffer+1
+        mov cx,11
+ dos_label_new_char:
+        mov al,es:[si] ! inc si
+        cmp al,'?' ! jne dos_label_new_literal
+        mov al,[bx]
+ dos_label_new_literal:
+        call dos_label_upper
+        mov [di],al ! inc di ! inc bx
+        loop dos_label_new_char
+        cmp dos_label_fcb+1,' ' ! ja $+5 ! jmp dos_label_error
+        jmp dos_label_commit
+
+dos_label_error:
+        mov ret_al,0ffh
+        jmp restore_ms_dma
+
 ms_close:
 ;=======
 ;
@@ -4605,6 +4748,7 @@ ms_close:
 ;
 
 	call check_extended			;returns es:si,di = offset of dos fcb
+        test attribute,8 ! jz $+5 ! jmp dos_label_close
 ms_close2:
 	mov ret_al,0				;initialize return code to success
 	call check_file_device ! JMPNZ auxclose	;exit if device specified
@@ -5032,6 +5176,7 @@ ms_delete:
 ;
 
 	call check_extended
+        test attribute,8 ! jz $+5 ! jmp dos_label_delete
 	call check_for_device ! jz not_deleting_device
 	  mov ret_al,0FFh
 	  ret
@@ -5195,6 +5340,7 @@ ms_rename:
 ;
 
 	call check_extended
+        test attribute,8 ! jz $+5 ! jmp dos_label_rename
 	add si,10H
 	call check_for_device
 	or al,al ! jz not_renaming_device
@@ -7718,6 +7864,8 @@ got_fcb:					;si = ptr to drive
 	pop si ! pop ds
 	call get_pdrive_hds			;if p: get hds
 	mov CPM_HDS_PTR[si],ax			;save in fcb
+        ; A volume FCB never aliases an ordinary open file of the same name.
+        test attribute,8 ! jz $+5 ! jmp find_fcb_error
 	les di,MS_FCB_PTR			;for return value
 	xor al,al
 	ret
@@ -8304,6 +8452,10 @@ rawbuf			db	0	;RAW INPUT BUFFER
 raw_flag		db	0	;=FF IF rawbuf FULL
 default_drive		db	0
 extended		db	0	;=FF IF EXTENDED FCB
+dos_label_fcb db 0
+        rb 35
+dos_label_saved_drive db 0
+dos_label_media db 0
 attribute		db	0	;CURRENT attribute
 				;BIT 1 = HIDDEN
 				;BIT 2 = SYSTEM

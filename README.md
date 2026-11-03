@@ -16,7 +16,7 @@ The assembly is based on partial 4.1 OEM sources corrected to align with Europea
 | Usability improvements | Command-line editing and recall, console shortcuts, paging and CLS |
 | Additional tools | ASM80, HEXCOM, Legacy CCP/M tools and floppy copy/compare commands |
 | Graphics | CGA plus EGA 0Dh/0Eh/10h and VGA 11h/12h/13h, with graphics drawing and palette services |
-| DOS compatibility | Extended DOS APIs, CON raw/cooked handle I/O, inherited standard handles and PUT/GET/RDR redirection for native CMD and DOS programs, Full DOS Batch Language |
+| DOS compatibility | 100% Coverage of DOS 2.10, Extended DOS APIs, CON raw/cooked handle I/O, inherited standard handles and PUT/GET/RDR redirection for native CMD and DOS programs, Full DOS Batch Language |
 | Date fixes | Patched native date/reporting utilities and corrected short-year input in DATE.EXE |
 
 
@@ -148,14 +148,14 @@ Stock DOS Plus 1.2 versus this CDOS rebuild.
 | Command processor | COMMAND.COM | PCTMP and BATCH |
 | Startup scripts | AUTOEXEC.BAT | Per-console startup scripts |
 | Batch arguments | `%0`–`%9`, SHIFT | `%0`–`%9`, SHIFT |
-| Batch control and messages | IF, GOTO, FOR, ECHO | ECHO, labels/GOTO, SHIFT, EXIT and IF EXIST/DIREXIST; string/status tests, FOR and CALL deferred |
+| Batch control and messages | IF, GOTO, FOR, ECHO | ECHO, labels/GOTO, SHIFT, EXIT and IF EXIST/DIREXIST/==; ERRORLEVEL, FOR and CALL deferred |
 | Echo control | ECHO ON/OFF | BATCH-only ECHO=ON/OFF and @ECHO; interactive ECHO prints text |
 | EXIT | COMMAND.COM command | BATCH-only; optional 0–255 status, otherwise 0 |
 | Environment variables | SET and `%NAME%` expansion | SETENV and BATCH `%NAME%` expansion; no interactive expansion |
 | Search-path commands | PATH built-in | PATH built-in and PATH.CMD for the DOS environment; SYSDISK and ORDER for native shell searching |
 | DOS program memory | ADDMEM and COMSIZE | Same-named PCTMP/BATCH built-ins: extra allocation and minimum DOS-program memory |
 | File attributes (ATTRIB role) | FSET on the reference 1.2 disk | SET changes read-only/system/archive attributes; SDIR inspects them. Different syntax; no exposed HIDDEN toggle |
-| Volume labels (LABEL role) | DOS volume-label utility on some system disks | SET d: [NAME=label.typ] and SHOW d: [LABEL] for CP/M disks; FAT label editing remains missing |
+| Volume labels (LABEL role) | DOS volume-label utility on some system disks | SET [NAME=...] and SHOW LABEL support CP/M directory labels and FAT volume names; blank FAT NAME deletes |
 | Native resident extensions | RSX loading; GENRSX supplied on some system disks | Resident System Processes (RSPs); no compatible RSX loader or GENRSX equivalent |
 | Input/output redirection and append | DOS pattern: `<`, `>`, `>>` | CP/M-Plus pattern: GET/PUT/RDR, extended to both native and DOS programs |
 | Command pipelines | `command1 \| command2` using temporary files | CP/M-Plus pattern: GET/PUT/RDR |
@@ -166,10 +166,11 @@ The internal-interface count uses the nine services identified in [api.md](api.m
 
 | DOS Plus commands without a matching CDOS command | CDOS alternative or gap |
 | --- | --- |
-| IF string/status tests, FOR | Missing from BATCH |
+| IF ERRORLEVEL, FOR | Missing from BATCH |
 | PROMPT, BREAK, VERIFY, SLICE | No corresponding shell commands |
 | ALARM, GRAFTABL, DEVICE | No direct command equivalents |
 | CHKDSK | CHKCPMFS checks CP/M allocation; no equivalent FAT checker |
+| LABEL  | LABEL is implemented using SET/SHOW |
 | MODE | SETUP/SETPORT cover some configuration functions; no complete MODE equivalent |
 | BACKG, FSET | Related functions are available through SYSTAT/STOP and SET respectively; command syntax differs |
 
@@ -292,11 +293,11 @@ case handling.
 | `ren` | Rename files | - | Recompiled from CCP/M-86 3.1 and adapted for parity | Additional tool | — |
 | `ren.exe` | Rename files through DOS | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical | — |
 | `sdir` | Detailed, sorted directory listing | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested | — |
-| `set` | Set file and drive attributes | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested | — |
+| `set` | Set file, drive and label attributes | 4.11 | Recompiled from CCP/M-86 3.1, adapted for parity and enhanced with FAT labels | Equivalent | — |
 | `setenv` | Display and edit the 1 KB per-console DOS environment | None | New native C implementation for CDOS 4.11 | Additional tool | KEEP |
 | `setport` | Configure serial ports and protocols | 4.11 | Reverse Engineered from CDOS 4.11 and patched | Equivalent | — |
 | `setup` | Customize system hardware settings | 4.11 | Reverse Engineered from CDOS 4.11 | Byte-identical | — |
-| `show` | Display disk space and drive information | 4.11 | Recompiled from CCP/M-86 3.1 and adapted for parity | Behavior tested | — |
+| `show` | Display disk space, drive and label information | 4.11 | Recompiled from CCP/M-86 3.1, adapted for parity and enhanced with FAT labels | Equivalent | — |
 | `submit` | Run SUB command files | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool | — |
 | `spl` | Manage the print spool queues and dispatch jobs to DSP | 4.11 | Reconstructed C from CDOS 4.11; DRC 1.11 build, ASM86 reference retained | Behavior tested | — |
 | `stop` | List processes and stop a selected entry | 4.11 | Reconstructed PL/M from CDOS 4.11; byte-identical assembly reference retained | Behavior tested | — |
@@ -347,6 +348,7 @@ system and the live regression checks.
 | `make` | Commands, kernel/RSPs, boot sources and eight images |
 | `make check` | Command headers, DATE parser, system layout, cursor, boot track and every packaged file/size |
 | `make check-tree` | TREE statistics and private FAT directory traversal |
+| `make check-batch-strings` | Case-sensitive IF equality, quotes, empty operands and variable concatenation |
 | `make check-batch-if` | File/directory predicates, full FAT paths and directory-state preservation |
 | `make check-batch-expand` | Environment/argument expansion, bounds and per-console isolation |
 | `make check-batch-exit` | Explicit/default BATCH status through native BDOS 108 |

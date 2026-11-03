@@ -57,6 +57,8 @@ cases = [
     ("languages batch goto", "GOTO :label"),
     ("languages batch exit", "decimal 0-255"),
     ("languages batch if", "IF [NOT] DIREXIST directory command"),
+    ("languages batch if files", "Directories do not satisfy EXIST"),
+    ("languages batch if strings", 'IF "%NAME%TOTO"=="TOTO" command'),
     ("languages batch variables", "Undefined names become empty"),
     ("set", "[PASSWORD=] alone"),
     ("setenv", "Native SETENV.CMD"),
@@ -66,6 +68,7 @@ cases = [
 ]
 import sys
 if "--path" in sys.argv: cases = [x for x in cases if x[0] == "path"]
+if "--batch" in sys.argv: cases = [x for x in cases if x[0] == "batch" or x[0].startswith("languages batch")]
 for topic, _ in cases:
     command("cls", "clear-" + topic)
     command("help " + topic + " [nopage]", topic)

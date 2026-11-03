@@ -26,6 +26,7 @@ if PCMODE
 	EXTRN chk_pcfcb:NEAR
 	EXTRN pc_chkrec:NEAR
 	EXTRN pcsearch:NEAR
+	EXTRN pc_set_label:NEAR
 	EXTRN renamef:NEAR
 	EXTRN setattsf:NEAR
 	EXTRN setstamp:NEAR

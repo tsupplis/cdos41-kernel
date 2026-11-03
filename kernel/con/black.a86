@@ -217,6 +217,7 @@ eject
 	EXTRN	wrbuff:NEAR
 	EXTRN	wrdir:NEAR
 	
+	PUBLIC pc_set_label
 	PUBLIC bdosrw
 	PUBLIC chk_pcfcb
 	PUBLIC closef
@@ -317,6 +318,14 @@ pcs5a:
         jmp pcs4
 
 pcsearch_label_scan:
+        push hdsaddr
+        mov hdsaddr,0
+        call setenddir
+pcsearch_root_label_next:
+        xor cx,cx
+        call getdir
+        or ax,ax
+        jz pcsearch_label_blank
         mov bx,dirp
         cmp byte ptr dname[bx],0
         je pcsearch_label_blank
@@ -331,13 +340,11 @@ pcsearch_label_scan:
         test al,08h
         jnz pcsearch_label_ready
 pcsearch_label_next:
-        xor cx,cx
-        call getdir
-        or ax,ax
-        jnz pcsearch_label_scan
+        jmp pcsearch_root_label_next
 pcsearch_label_blank:
         xor bx,bx                   ; no real name for the synthetic label
 pcsearch_label_ready:
+        pop hdsaddr
         jmp pcs6
 pcsearch_extents:
 	cmp searchl,3			;while(srchl == 3 && 
@@ -1288,6 +1295,116 @@ cls3:					;}
 	and info_fcb+module,03fh	;infop->module &= 0x3f;
 	or info_fcb+module,080h		;infop->module |= 0x80;
 	jmp close021
+
+; BDOS 100 FAT extension: the eleven name bytes are a volume label;
+; extent must be zero (no CP/M password/stamping options). Eleven spaces
+; delete the label. Work on the resolved physical root without changing
+; any process CAT/HDS mapping. All writes use the normal cache/RO checks.
+pc_set_label:
+        cmp info_fcb+extent,0
+        je $+5 ! jmp pc_label_invalid
+        mov si,offset info_fcb+fname
+        mov cx,11
+pc_label_validate:
+        lodsb
+        cmp al,20h
+        jae $+5 ! jmp pc_label_invalid
+        cmp al,7fh
+        jne $+5 ! jmp pc_label_invalid
+        call fat_upper
+        mov byte ptr -1[si],al
+        mov di,offset pc_label_badchars
+pc_label_badchar:
+        mov ah,cs:[di]
+        or ah,ah
+        jz pc_label_character_ok
+        cmp al,ah
+        jne $+5 ! jmp pc_label_invalid
+        inc di
+        jmps pc_label_badchar
+pc_label_character_ok:
+        loop pc_label_validate
+        cmp info_fcb+fname,' '
+        jne pc_label_name_ok
+        mov si,offset info_fcb+fname
+        mov cx,11
+pc_label_blank_check:
+        lodsb
+        cmp al,' '
+        je $+5 ! jmp pc_label_invalid
+        loop pc_label_blank_check
+pc_label_name_ok:
+        call checkwrite
+        push hdsaddr
+        push es
+        push ds
+        pop es
+        mov hdsaddr,0
+        call setenddir
+pc_label_find:
+        xor cx,cx
+        call getdir
+        or ax,ax
+        jz pc_label_missing
+        mov bx,ax
+        cmp byte ptr dname[bx],0
+        je pc_label_missing
+        cmp byte ptr dname[bx],0e5h
+        je pc_label_find
+        mov al,datts[bx]
+        and al,3fh
+        cmp al,0fh
+        je pc_label_find
+        test al,10h
+        jnz pc_label_find
+        test al,8
+        jz pc_label_find
+        cmp info_fcb+fname,' '
+        jne pc_label_store
+        mov byte ptr dname[bx],0e5h
+        jmps pc_label_write
+pc_label_missing:
+        cmp info_fcb+fname,' '
+        je pc_label_success
+        call setenddir
+        mov cx,1
+        call getdir
+        or ax,ax
+        jz pc_label_no_space
+        mov di,ax
+        mov cx,16
+        xor ax,ax
+        rep stosw
+pc_label_store:
+        mov di,dirp
+        mov si,offset info_fcb+fname
+        mov cx,11
+        rep movsb
+        mov bx,dirp
+        mov byte ptr datts[bx],8
+        mov word ptr block1[bx],0
+        mov word ptr dsize[bx],0
+        mov word ptr dsize+2[bx],0
+        call cnvcpd
+        call setpcd
+        call setcdr
+pc_label_write:
+        call wrdir
+        call flush
+pc_label_success:
+        xor al,al
+        mov lret,al
+        jmps pc_label_restore
+pc_label_no_space:
+        mov lret,0ffh
+pc_label_restore:
+        pop es
+        pop hdsaddr
+        ret
+pc_label_invalid:
+        jmp lret_eq_ff
+; DOS 2.x FCB characters: spaces are allowed inside a volume name.
+pc_label_badchars db '"*+,./:;<=>?[\]|',0
 
 makef:
 	mov cl,080h	

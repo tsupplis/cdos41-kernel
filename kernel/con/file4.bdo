@@ -1622,7 +1622,7 @@ func100:	;set directory label
 if PCMODE
 	cmp media_format,0		;is media CP/M format
 	je $+5				;yes
-	jmp lret_eq_ff			;no - PC format
+	jmp pc_set_label		;FAT: name-only root volume label
 endif
 
 	MOV info_fcb,21H		;SEARCH FOR SFCB'S IN DIRECTORY

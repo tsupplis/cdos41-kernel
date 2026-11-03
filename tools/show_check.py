@@ -187,7 +187,11 @@ def check(no_label=False, create=False, access=False):
                 text = re.sub(r"(?:CONCURRENT )?SHOW (?:2\.1|3\.3|4\.1N)", "SHOW #", text)
                 return re.sub(r"(Space:)\s+\d+k", r"\1 #k", text)
 
-            assert normalize(old) == normalize(new), (tail, old, new)
+            if tail == "b:label":
+                assert "requires CP/M media." in old, old
+                assert "No volume label exists for drive B:" in new, new
+            else:
+                assert normalize(old) == normalize(new), (tail, old, new)
             if tail == "a:space":
                 assert int(re.search(r"Space:\s+(\d+)k", new)[1]) == initial_cpm_free, (
                     initial_cpm_free,
@@ -202,7 +206,7 @@ def check(no_label=False, create=False, access=False):
                 ), (initial_fat_free, new)
             if tail in ("", "[space]"):
                 assert "N:" not in new and "O:" not in new and "P:" not in new, new
-            if tail in ("b:users", "b:label", "[b:users]"):
+            if tail in ("b:users", "[b:users]"):
                 assert "requires CP/M media." in new and "01/00/78" not in new, new
             if tail == "a:users":
                 assert re.search(r"Active Files:\s+0\s+1", new), new

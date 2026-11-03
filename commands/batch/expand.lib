@@ -22,6 +22,14 @@ batch_expand:
         mov long_line,FALSE
         jmp expand_too_long
 expand_begin:
+; Side metadata preserves a wholly empty substituted token without inserting
+; sentinel bytes into the actual command. IF can reject a missing operand
+; rather than consuming the first command word as its value.
+        push ds ! pop es
+        mov di,offset expand_empty_positions
+        mov cx,128
+        xor al,al
+        rep stosb
         call expand_snapshot
         mov si,offset clicb_cmd
         mov di,offset expand_line
@@ -50,9 +58,13 @@ expand_not_literal:
         ja expand_named
         inc si
         sub al,'0'
+        mov expand_insertion_start,di
         call expand_argument
-        jnc expand_next
+        jnc expand_argument_ready
         jmp expand_too_long
+expand_argument_ready:
+        call expand_note_empty
+        jmp expand_next
 expand_named:
         mov bx,si
 expand_find_close:
@@ -75,6 +87,7 @@ expand_name_available:
         mov expand_name_end,bx
         inc bx
         mov expand_resume,bx
+        mov expand_insertion_start,di
         call expand_lookup
         or si,si
         jz expand_value_done
@@ -87,6 +100,7 @@ expand_value:
         jmps expand_value
 expand_value_done:
         mov si,expand_resume
+        call expand_note_empty
         jmp expand_next
 expand_commit:
         xor al,al
@@ -108,6 +122,46 @@ expand_error:
 expand_return:
         pop es ! pop bp ! pop di ! pop si
         pop dx ! pop cx ! pop bx ! pop ax
+        ret
+
+; Record zero output only at a source token boundary. Literal suffixes,
+; another adjacent variable and closing quotes are not empty operands:
+; %MISSING%TOTO, %MISSING%%OTHER% and "%MISSING%" retain normal semantics.
+expand_note_empty:
+        cmp di,expand_insertion_start
+        jne expand_note_done
+        cmp byte ptr [si],' '
+        je expand_note_boundary
+        cmp byte ptr [si],TAB
+        je expand_note_boundary
+        cmp byte ptr [si],0
+        jne expand_note_done
+expand_note_boundary:
+        push bx
+        mov bx,di
+        sub bx,offset expand_line
+        mov expand_empty_positions[bx],1
+        pop bx
+expand_note_done:
+        ret
+
+; True IF removes a prefix before redispatching a nested command. Move the
+; side metadata by the same amount (AX characters), preserving source spans.
+; The actual command bytes contain no new markers and remain unchanged here.
+expand_shift_empty:
+        push ax ! push cx ! push si ! push di ! push es
+        push ds ! pop es
+        mov cx,128
+        sub cx,ax
+        mov si,offset expand_empty_positions
+        add si,ax
+        mov di,offset expand_empty_positions
+        cld
+        rep movsb
+        mov cx,ax
+        xor al,al
+        rep stosb
+        pop es ! pop di ! pop si ! pop cx ! pop ax
         ret
 
 ; Append one character, reserving byte 128 for the final NUL.

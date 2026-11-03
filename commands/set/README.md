@@ -5,7 +5,7 @@ Recompiled from the CCP/M-86 3.1 source; reference binary: CDOS SET 3.1
 
 Shared source: `ccpm86-kernel` and `cdos41-kernel` carry identical copies
 (see `check_shared_commands`). The DOS-media code is inert on CCP/M 3.1,
-which is built without PCMODE: it never presents a DOS pseudo-label, never
+including its PC-MODE build, which has no FAT support: it never presents a DOS pseudo-label, never
 writes directory-label byte 15, and its block numbers stay below 8000h, so
 the FCB disk-map flag tests cannot match.
 
@@ -41,7 +41,7 @@ directory.
 ## DOS media (CDOS)
 
 File attributes work on DOS media through the kernel mapping (CP/M
-ARCHIVE=ON clears DOS's archive-needed bit). Labels, XFCB passwords and
+ARCHIVE=ON clears DOS's archive-needed bit). XFCB passwords and
 stamping need CP/M media: SET probes BLACK's DOS pseudo-label (private FCB and
 buffer, DMA offset restored) and prints `This command/option requires CP/M
 media.` instead of prompting for a password or failing in INITDIR.
@@ -63,3 +63,15 @@ F1-F3 map to FAT, while F1-F4 remain available on CP/M disks. FAT F4 requests
 therefore have no effect. This intentional kernel change supersedes OEM
 behavior for the ambiguous FAT F4/case bit; see `../../patches.md` and
 `make check-fat-case` at the project root.
+
+## FAT volume names
+
+On actual FAT media, `[NAME=WORK]` creates/changes an eleven-character
+volume label; `[NAME="MY DISK"]` permits spaces and `[NAME=]` deletes it.
+The parser treats it as a volume string rather than an 8.3 filename.
+Only this NAME path uses the FAT BDOS 100 extension (extent zero).
+Password/stamping options retain their CP/M-media guard, including when
+combined with NAME; rejected combinations do not commit the pending name.
+The physical root is used without changing the current subdirectory.
+Ordinary files sharing the label's name are protected. CP/M NAME syntax and
+all CP/M password/stamp behavior are unchanged.

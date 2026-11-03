@@ -3,7 +3,7 @@
 This describes the BATCH.CMD shipped by this CDOS rebuild. It runs native
 CMD programs, DOS COM/EXE programs and shell commands from a `.BAT` file.
 It includes ECHO, SHIFT, labels/GOTO, EXIT, environment substitution and
-file/directory IF extensions. It is distinct from SUBMIT's `.SUB` language
+file/directory and string IF extensions. It is distinct from SUBMIT's `.SUB` language
 and is not a complete COMMAND.COM replacement.
 
 ## Starting and ending a script
@@ -120,13 +120,64 @@ executes the rest of that line through the ordinary command paths: shell
 built-ins, aliases, drive changes and external programs remain available.
 Conditional commands are not expanded again. Nested IF tests are supported
 on one line; a false outer test skips the rest. There is no ELSE, block
-syntax, string comparison or ERRORLEVEL test yet.
+syntax or ERRORLEVEL test yet. String comparisons are described below.
 
 Evaluation restores the original drive, DMA, error mode and directory mapping
 before executing or skipping the command. It does not borrow N:/O:/P: as a
 scratch drive. Missing files/directories yield false; malformed syntax or a
 drive/I/O failure reports an error and skips the command even with NOT.
 The whole expanded line still has the 127-character limit.
+
+## IF string comparisons
+
+```bat
+IF [NOT] left==right command
+IF [NOT] "left text" == "right text" command
+IF "%NAME%"=="" ECHO NAME is empty or undefined
+IF "%NAME%TOTO"=="TOTO" ECHO NAME is empty or undefined
+```
+
+Comparison is case-sensitive and byte-for-byte: `abc==ABC` and `01==1` are
+false. There is no numeric conversion, wildcard matching, ordering operator
+or `/I` flag. IF and NOT keywords still ignore case. Spaces or tabs may
+surround `==`; whitespace inside quoted operands is significant. `==` inside
+quotes is literal operand text, not the operator.
+
+Double quotes protect spaces but remain part of the compared text, following
+DOS-style literal comparison. `"abc"=="abc"` is true; `"abc"==abc` is false.
+Use `""` for an empty operand and quote substituted values on both sides.
+An unquoted leading EXIST/DIREXIST followed by whitespace selects the file
+predicate; quoting the operand avoids interpreting a value as a keyword.
+
+Substitution occurs before parsing, even inside quotes and next to literal
+text. In `IF "%NAME%TOTO"=="TOTO" command`, an empty or undefined NAME makes
+both operands `"TOTO"`; NAME=ABC makes the left operand `"ABCTOTO"`. Inserted
+percent signs are not expanded again. Substitution is textual: quote characters
+in a value participate in parsing; there is no escape/unescape operation.
+
+A true comparison executes its remaining command through the same dispatcher
+as file predicates. NOT reverses the result. File and string conditions can
+be nested on one line. Missing `==`, unbalanced quotes, missing operands or a
+missing command report a syntax error and skip the line, without changing
+files, directory mappings or return status. Normal EOF still returns zero;
+use EXIT for an explicit result.
+
+A zero-length substitution used as an unquoted whole operand is an error on
+either side. The following both report syntax errors when MISSING is undefined
+or empty; the command word is never consumed as a substitute right operand:
+
+```bat
+IF %MISSING% == VALUE ECHO never executed
+IF VALUE == %MISSING% ECHO never executed
+```
+
+Use `IF "%MISSING%"=="" command` to test an empty value. A literal suffix,
+such as `%MISSING%TOTO`, supplies a nonempty operand and remains valid. These
+rules also apply after removing an outer true IF and to missing `%0`–`%9`.
+
+This quote handling applies to comparison operands only. It does not change
+positional argument splitting or add quoted filenames to EXIST/DIREXIST.
+ELSE, blocks, ERRORLEVEL, FOR and CALL remain unimplemented.
 
 ## ECHO and command echo
 
@@ -290,7 +341,7 @@ its byte-length semantics.
 
 | Feature | Status |
 | --- | --- |
-| IF string comparisons / ELSE / blocks | Not implemented; file/directory predicates are supported |
+| IF ELSE / blocks | Not implemented; file/directory and string conditions are supported |
 | IF ERRORLEVEL | Not implemented; no conditional status test or stop-on-error language switch |
 | FOR | Not implemented |
 | CALL and return to a calling BAT | Not implemented; bare BAT invocation chains |
@@ -313,3 +364,7 @@ record boundaries, FAT/CP/M scripts and standalone ECHO redirection.
 
 `make check-batch-if` checks file/directory conditions, full FAT paths, command
 dispatch and preservation of directory mappings on disposable images.
+
+`make check-batch-strings` runs linked-instruction comparison tests and native
+CP/M/FAT scripts, including empty/value concatenation, quotes, case, nested
+predicates, normal command dispatch and EXIT status.
