@@ -22,19 +22,13 @@ for source in ["setenv/setenv.cmd","echo/echo.cmd"]:
 run("mmd","-i","fat.img","::SUB")
 (FOLDER/"known.txt").write_bytes(b"CPM\r\n\x1a")
 run("cpmcp","-f","ccpm86-320","a.logical","known.txt","0:KNOWN.TXT")
-(FOLDER/"remove.tmp").write_bytes(b"temporary")
-run("mcopy","-i","fat.img","remove.tmp","::")
-# Test-only DOS program; production commands keep their normal RASM86 build.
-(FOLDER/"dosif.asm").write_text("bits 16\ncpu 8086\norg 100h\nmov dx,message\nmov ah,9\nint 21h\nmov ax,4c00h\nint 21h\nmessage db 'DOS-STRING-PASS',13,10,'$'\n")
-run("nasm","-f","bin","dosif.asm","-o","DOSIF.COM")
-run("mcopy","-i","fat.img","DOSIF.COM","::")
 shutil.copyfile(ROOT/"commands/batch/tests/exittest.a86",FOLDER/"ifstat.a86")
 run("pcdev_rasm86","ifstat.a86")
 run("pcdev_linkcmd","ifstat=ifstat[data[origin[0],max[0]]]")
 run("mcopy","-i","fat.img","ifstat.cmd","::")
 # Producers exercise real native termination and DOS 4Ch/INT20h paths.
 for value in [0,1,7,255,256]:
-    (FOLDER/'nstat.a86').write_text(f"cseg\nstart:\nmov dx,{value}\nmov cl,108\nint 0e0h\nxor dx,dx\nxor cx,cx\nint 0e0h\ndseg\norg 100h\nrs 256\nend start\n")
+    (FOLDER/'nstat.a86').write_text(f"cseg\nstart:\nmov dx,{value}\nmov cl,108\nint 0e0h\nxor dx,dx\nxor cx,cx\nint 0e0h\ndseg\norg 100h\nrs 256\nend start\n".replace('\n','\r\n'))
     run('pcdev_rasm86','nstat.a86')
     run('pcdev_linkcmd','nstat=nstat[data[origin[0],max[0]]]')
     run('mcopy','-i','fat.img','nstat.cmd',f'::N{value}.CMD')

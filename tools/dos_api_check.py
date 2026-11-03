@@ -20,6 +20,29 @@ def check():
  mov word [{d('MS2_SS')}],ds
  mov word [0f804h],0
 '''
+    # Native BATCH observes DOS status without consuming DOS AH=4Dh.
+    for status in [0,7,255,0x0107,0xfffe,0xffff]:
+        near(original,c('MS2_STATUS_QUERY'),f"""mov word [{d('RETURN_CODE')}],{status}
+ call far [cs:target]
+ cmp ax,{status}
+ jne failed
+ cmp word [{d('RETURN_CODE')}],{status}
+ jne failed
+ call far [cs:target]
+ cmp ax,{status}
+ jne failed
+""")
+        near(original,c('MS2_GET_RETCODE'),f"""mov word [{d('RETURN_CODE')}],{status}
+ call far [cs:target]
+ cmp word [{d('MS2_RET_AX')}],{status}
+ jne failed
+ cmp word [{d('RETURN_CODE')}],0
+ jne failed
+ call far [cs:target]
+ cmp word [{d('MS2_RET_AX')}],0
+ jne failed
+""")
+    print('PASS: read-only native DOS status query and consuming AH=4Dh across six status/type words')
     count = 0
     for kind in ['disk', 'CON', 'NUL', 'AUX', 'COM1', 'LPT1']:
         for function in [0, 6, 7, 255]:

@@ -9,9 +9,9 @@ It implements DIR, CLS, USER and the other supported TMP built-ins.
 USER omits the redundant CP/M-media note and PAUSE uses
 `Press any key to continue...`. DIR accepts native slash options and CP/M
 brackets, including a final omitted ]. BATCH is not a full COMMAND.COM:
-IF supports EXIST/DIREXIST and case-sensitive string equality with optional
-NOT and ERRORLEVEL status thresholds. FOR and CALL remain unimplemented. BATCH expands `%NAME%` from the current
-console environment before command dispatch.
+IF supports EXIST/DIREXIST, case-sensitive string equality and ERRORLEVEL
+thresholds, all with optional NOT. FOR and CALL remain unimplemented. BATCH
+expands `%NAME%` from the current console environment before dispatch.
 
 `make check-batch-live` checks messages, CLS/DEL and an unrelated sentinel
 on disposable CP/M images. `make check-dir-options` also executes a BAT

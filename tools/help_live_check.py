@@ -59,6 +59,7 @@ cases = [
     ("languages batch if", "IF [NOT] DIREXIST directory command"),
     ("languages batch if files", "Directories do not satisfy EXIST"),
     ("languages batch if strings", 'IF "%NAME%TOTO"=="TOTO" command'),
+    ("languages batch if status", "True if the last program status is at least"),
     ("languages batch variables", "Undefined names become empty"),
     ("set", "[PASSWORD=] alone"),
     ("setenv", "Native SETENV.CMD"),

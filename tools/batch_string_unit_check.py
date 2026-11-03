@@ -219,4 +219,4 @@ environment db {",".join(str(c) for c in environment_bytes)}
         subprocess.run(["nasm","-f","bin","test.asm","-o","test.com"],cwd=folder,check=True,capture_output=True)
         result=subprocess.run(["emu2","test.com"],cwd=folder,capture_output=True,timeout=5)
         assert result.returncode==0,(number,text,expected,result.stdout,result.stderr)
-print(f"PASS: {len(cases)} linked IF comparison cases: case/quotes/empty operands, spacing, operator text, literal keywords, NOT, nested dispatch, malformed syntax, unquoted empty substitutions, nested provenance and no filesystem calls")
+print(f"PASS: {len(cases)} linked IF comparison/ERRORLEVEL cases: case/quotes/empty operands, spacing, operator text, literal keywords, NOT, nested dispatch, malformed syntax, unquoted empty substitutions, nested provenance, unsigned status thresholds and no filesystem calls")

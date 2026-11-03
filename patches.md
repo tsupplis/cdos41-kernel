@@ -1326,8 +1326,11 @@ is superseded by these label-aware adapters. No new INT 21h function exists.
 Verification includes 23 linked BDOS writer cases (full/RO/invalid-name/
 metadata requests and mapping restoration), raw enumeration cases, native
 and DOS live operations from subdirectories, same-name open-file protection,
-full 32-byte label protection under ordinary SET operations, OEM CP/M output
-comparisons, both CCP/M command builds and source identity checks.
+full 32-byte label protection under ordinary SET operations, 82 SET and
+26 SHOW OEM/rebuilt cases (including CP/M passwords, creation/access stamps
+and persisted attributes), both CCP/M command builds and source identity
+checks. Live fixtures use resolved ROM paths; SET compares variants
+sequentially, and SHOW supplies its own disposable PUT command.
 
 ### BATCH IF ERRORLEVEL and native DOS-status query
 

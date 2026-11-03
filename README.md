@@ -349,6 +349,7 @@ system and the live regression checks.
 | `make check` | Command headers, DATE parser, system layout, cursor, boot track and every packaged file/size |
 | `make check-tree` | TREE statistics and private FAT directory traversal |
 | `make check-batch-strings` | Case-sensitive IF equality, quotes, empty operands and variable concatenation |
+| `make check-batch-status` | Native/DOS return-status thresholds and persistence in BATCH |
 | `make check-batch-if` | File/directory predicates, full FAT paths and directory-state preservation |
 | `make check-batch-expand` | Environment/argument expansion, bounds and per-console isolation |
 | `make check-batch-exit` | Explicit/default BATCH status through native BDOS 108 |
