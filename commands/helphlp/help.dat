@@ -2524,7 +2524,18 @@ terminating. There is no automatic return-last-status rule.
 If this BATCH was started by CALL, its native parent resumes with that status.
 
 ///1CHKCPMFS
-CHKCPMFS
-Read-only CP/M directory/allocation consistency check on the current drive.
-Scans users 0-15; reports duplicate or invalid allocation and extent entries.
-Run on an idle drive. Does not repair disks; DOS/FAT media are rejected.
+CHKCPMFS drive: [FV]
+Read-only CP/M directory/allocation consistency check on the specified A:..P:.
+Exactly one drive is required; options follow it. V lists checked entries.
+Scans all users 0-15 and restores the original drive and user area.
+F is reserved and not implemented. Run on an idle drive; DOS/FAT is rejected.
+
+///1CHKDOSFS
+CHKDOSFS drive: [FV]
+FAT12/FAT16 consistency check on the specified A:..P:. Exactly one drive is
+required; options follow it. V lists checked entries. Without F, no disk writes.
+F offers confirmed file-size/EOF corrections and lost-chain recovery to
+FILEhhhh.CHK files, or confirmed release of lost clusters. File sizes are
+adjusted to chain capacity. Conflicting FAT copies and uncertain ownership
+block writes. Data sectors are preserved. Write failure may leave partial
+changes. Optional historical D/L/R/B modes are not provided.

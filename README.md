@@ -184,7 +184,7 @@ The internal-interface count uses the nine services identified in [api.md](api.m
 | PROMPT, BREAK, VERIFY, SLICE | No corresponding shell commands |
 | LABEL, BACKG, FSET | Mapped to SET/SHOW, SYSTAT/STOP and SET respectively; command syntax differs |
 | ALARM, GRAFTABL, DEVICE | No direct command equivalents |
-| CHKDSK | CHKCPMFS checks CP/M allocation; no equivalent FAT checker |
+| CHKDSK | CHKCPMFS checks CP/M allocation; CHKDOSFS checks and repairs FAT12/FAT16 (F/V supported; D/L/R/B not implemented) |
 | MODE | SETUP/SETPORT cover some configuration functions; no complete MODE equivalent |
 
 ## Distributions
@@ -194,9 +194,9 @@ The internal-interface count uses the nine services identified in [api.md](api.m
 | `cdos86.img` | Yes | Kernel, core file commands, ED, DATE, SDIR, SET, SHOW, SUBMIT, BATCH, ERA/ERAQ, PIP and shell alias targets |
 | `cdostools.img` | No | SUBMIT, TREE, ECHO.CMD, HELP, SYSTAT, CHSET, WINDOW/WMENU, PUT/GET/RDR, ERA and PIP |
 | `cdosdev.img` | No | ASM80/ASM86, DDT86, GENCMD, HEXCOM, GENCCPM, GENLDR, ED, SUBMIT and PIP |
-| `cdosmaint.img` | Yes | Kernel, INITDIR, DSKMAINT, DFORM, HDMAINT.CMD, SYSDISK, ERA and PIP |
+| `cdosmaint.img` | Yes | Kernel, INITDIR, DSKMAINT, DFORM, HDMAINT, SYSDISK, ERA and PIP |
 | `cdosmenu.img` | No | SPL, PRINT, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP, menu/terminal data, BAT examples and PIP |
-| `cdosdos.img` | No | SETENV.CMD, COPY.EXE, DATE.EXE, ERASE.EXE, PATH.CMD, LOADCCPM.COM, TIME.EXE, REN.EXE and REDOS.COM, core commands and PIP |
+| `cdosdos.img` | No | SETENV.CMD, COPY.EXE, DATE.EXE, ERASE.EXE, PATH.CMD, LOADCCPM.COM, TIME.EXE, REN.EXE, REDOS.COM and CHKDOSFS.CMD, core commands and PIP |
 | `cdosextras.img` | No | BACKREST, CARDFILE, DRTALK, their support files and PIP |
 | `cdosadmin.img` | No | FUNCTION, DCOPY/DCOMP, SETPORT, SETUP, STOP, CHKCPMFS, N with NATIONAL.MSG, FM with FM.CFG and TERM.DAT and PIP |
 
@@ -353,6 +353,7 @@ case handling.
 | `batch` | Run BAT command files | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Equivalent | KEEP |
 | `chdir / mkdir` | Change or create directories | 4.11 | Recompiled from CDOS 4.1; shared D.A86 implementation | Byte-identical | — |
 | `chkcpmfs` | Read-only CP/M directory allocation consistency check | - | New shared PL/M-86 checker for CDOS, CCP/M-86 and CP/M-86 | Additional tool | — |
+| `chkdosfs` | FAT12/FAT16 check and confirmed size/EOF correction and lost-chain recovery | DOS Plus CHKDSK 1.0 | Recreated in C from the DOS Plus binary; [scope and tests](commands/chkdosfs/README.md) | Additional tool | — |
 | `rmdir` | Remove directories | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Equivalent | — |
 | `chset` | Inspect or change CMD header flags | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Behavior tested | — |
 | `cls` | Clear the terminal screen | - | New; TMP built-in; VT52 ESC-E | Additional tool | — |

@@ -7,10 +7,11 @@ CMDINFO=cmdinfo
 TOOLS=chkdosfs.cmd
 OBJECTS=chkdosfs.obj fat.obj check.obj native.obj os.obj
 
-.PHONY: all check check-c check-ref clean
+.PHONY: all check check-c check-ref check-live clean
 .DELETE_ON_ERROR:
 all: $(TOOLS)
 check: all check-c check-ref
+	$(PYTHON) tests/parameters.py
 	$(CMDINFO) chkdosfs.cmd
 
 chkdosfs.cmd: $(OBJECTS) Makefile
@@ -40,3 +41,12 @@ check-c: all
 check-ref:
 	cmp reference/chkdsk.cmd $(REF)
 	$(PYTHON) disassemble.py --check
+
+# Requires the local kernel and boot track; uses disposable images only.
+check-live: all
+	$(PYTHON) tests/live.py
+	$(PYTHON) tests/live.py --fat16
+	$(PYTHON) tests/live.py --repair
+	$(PYTHON) tests/live.py --fat16 --repair
+	$(PYTHON) tests/live.py --recover
+	$(PYTHON) tests/live.py --fat16 --recover

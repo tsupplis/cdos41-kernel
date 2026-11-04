@@ -42,7 +42,7 @@ MENU_COMMANDS = ../commands/spl/spl.cmd ../commands/print/print.cmd ../commands/
 DOS_COMMANDS = ../commands/loadccpm/loadccpm.com ../commands/setenv/setenv.cmd ../commands/batch/batch.cmd ../commands/era/era.cmd \
     ../commands/copy/copy.exe ../commands/datetime/date.exe ../commands/erase/erase.exe \
     ../commands/path/path.cmd ../commands/datetime/time.exe ../commands/rename/ren.exe \
-    ../commands/redos/redos.com
+    ../commands/redos/redos.com ../commands/chkdosfs/chkdosfs.cmd
 
 EXTRAS_COMMANDS = ../extra/back.cmd ../extra/rest.cmd ../extra/brinst.cmd \
     ../extra/cardfile.cmd ../extra/cardfile.dis ../extra/cardfile.trm ../extra/control.br ../extra/drtalk.exe \

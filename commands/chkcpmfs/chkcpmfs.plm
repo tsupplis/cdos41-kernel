@@ -30,7 +30,7 @@ declare
      records$per$block, needed$blocks, entry$count, block$count,
      error$count, original$dma, drive$mask, ro$vector,
      extent$count, extent$key, table$offset, original$user) address,
-    (original$disk, disk, dcnt, entry$user, rc, system$version,
+    (verbose, original$disk, disk, dcnt, entry$user, rc, system$version,
      slots, slot, map$bit, protect$status, changed$ro,
      restore$failed, user$changed, scan$user,
      name$match, duplicate) byte;
@@ -321,20 +321,20 @@ show$usage: procedure;
     call newline;
     call print$string(.('  F      repair (not implemented)$'));
     call newline;
-    call print$string(.('  V      verbose (not implemented)$'));
+    call print$string(.('  V      verbose$'));
     call newline;
 end show$usage;
 
 options$requested: procedure byte;
     declare (first,last,i) address;
-    declare (c,valid) byte;
+    declare (c,valid,repair) byte;
     first = 1;
     last = buff(0);
     if last > 127 then last = 127;
-    do while first <= last and buff(first) = ' ';
+    do while first <= last and (buff(first) = ' ' or buff(first) = 9);
         first = first + 1;
     end;
-    do while last >= first and buff(last) = ' ';
+    do while last >= first and (buff(last) = ' ' or buff(last) = 9);
         last = last - 1;
     end;
     if first > last then do;
@@ -353,16 +353,16 @@ options$requested: procedure byte;
     disk = c - 'A';
     first = first + 2;
     if first <= last then do;
-        if buff(first) <> ' ' then do;
+        if buff(first) <> ' ' and buff(first) <> 9 then do;
             call show$usage;
             return 1;
         end;
     end;
-    do while first <= last and buff(first) = ' ';
+    do while first <= last and (buff(first) = ' ' or buff(first) = 9);
         first = first + 1;
     end;
     if first > last then return 0;
-    valid = 0;
+    valid, repair = 0;
     if buff(first) = '[' or buff(first) = '/' then do;
         if buff(first) = '[' and buff(last) = ']' then last = last - 1;
         first = first + 1;
@@ -370,9 +370,12 @@ options$requested: procedure byte;
         do i = first to last;
             c = buff(i);
             if c >= 'a' and c <= 'z' then c = c - 20h;
+            if c = 'F' then repair = 1;
+            if c = 'V' then verbose = 1;
             if c <> 'F' and c <> 'V' then valid = 0;
         end;
     end;
+    if valid and repair = 0 then return 0;
     if valid then
         call print$string(.('ERROR: Requested option is not implemented yet.$'));
     else
@@ -385,7 +388,7 @@ end options$requested;
 plmstart: procedure public;
     declare i address;
 
-    changed$ro, restore$failed, user$changed = 0;
+    verbose, changed$ro, restore$failed, user$changed = 0;
     system$version = mon2(12,0);
     original$dma = mon3(52,0);
     original$user = mon2(32,0ffh);
@@ -477,6 +480,13 @@ plmstart: procedure public;
             entry$user = dirbuf(dir$offset);
             if entry$user <= 15 then do;
                 entry$count = entry$count + 1;
+                if verbose then do;
+                    call print$string(.('USER $'));
+                    call decimal(entry$user);
+                    call print$string(.(' FILE $'));
+                    call print$file;
+                    call newline;
+                end;
                 call check$entry;
             end;
             dcnt = mon2(18,0);

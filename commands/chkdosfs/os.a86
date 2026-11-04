@@ -1,15 +1,16 @@
-        title 'CHKDOSFS - Concurrent DOS read-only disk interface'
+        title 'CHKDOSFS - Concurrent DOS disk interface'
 ;*****************************************************************************
 ; CHKDOSFS native adapter. DRI C near-call ABI, 16-bit parameters.
 ; Uses the same SYSDAT/DPB/XIOS interface as DOS Plus CHKDSK's CDOS branch.
-; No write entry is provided. C owns the MXdisk lifecycle; these routines
+; C enforces write permission and owns the MXdisk lifecycle; these routines
 ; preserve SI, DI, BP, DS and ES, and return status/pointers through AX.
 ;*****************************************************************************
-        public OSCALL,KINIT,KGETDP,KOPEN,KKEEP,KERROR,KREAD
+        public OSCALL,KINIT,KGETDP,KOPEN,KKEEP,KERROR,KREAD,KWRITE
         dseg
 sysseg  dw 0
 udaseg  dw 0
 pdaddr  dw 0
+io_func dw 0
 oldkeep dw 0
 olderr  db 0
         db 0
@@ -142,10 +143,16 @@ error_done:
         pop bp
         ret
 
-; KREAD(drive, track, sector, buffer): XIOS10, one physical sector.
+; KREAD/KWRITE(drive, track, sector, buffer): XIOS10/11, one sector.
 ; A 512-byte-aligned bounce buffer cannot cross a 64 KiB DMA page. Copy it
 ; to the C buffer only after a successful read, never after an I/O error.
 KREAD:
+        mov ax,10
+        jmps sector_io
+KWRITE:
+        mov ax,11
+sector_io:
+        mov io_func,ax
         push bp
         mov bp,sp
         push si
@@ -162,6 +169,17 @@ KREAD:
         and ax,0ffe0h
         push bp
         push ax
+        cmp io_func,11
+        jne prepare_iopb
+        push es
+        mov es,ax
+        mov si,10[bp]
+        xor di,di
+        mov cx,256
+        cld
+        rep movsw
+        pop es
+prepare_iopb:
         mov cx,4[bp]
         mov ch,1
         push cx
@@ -171,8 +189,8 @@ KREAD:
         xor ax,ax
         push ax
         mov es,udaseg
+        mov ax,io_func
         mov ds,sysseg
-        mov ax,10
         callf dword ptr .28h
         add sp,10
         pop dx
@@ -183,6 +201,8 @@ KREAD:
         push es
         or ax,ax
         jnz read_done
+        cmp io_func,10
+        jne read_done
         mov cx,ds
         mov es,cx
         mov ds,dx

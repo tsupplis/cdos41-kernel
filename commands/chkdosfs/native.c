@@ -1,18 +1,19 @@
 /* CHKDOSFS -- Concurrent DOS disk lifecycle.
- * Lock ownership and process state are restored on every exit path. There
- * is deliberately no native write entry in this report-only milestone.
+ * Lock ownership and process state are restored on normal exits. Native
+ * writes require F; BDOS drive state is reset after a write attempt.
  */
 #include <stdio.h>
 #include "chkdosfs.h"
-unsigned OSCALL(), KINIT(), KGETDP(), KOPEN(), KKEEP(), KERROR(), KREAD();
+unsigned OSCALL(), KINIT(), KGETDP(), KOPEN(), KKEEP(), KERROR(), KREAD(), KWRITE();
 static char queue[22]={0,0,0,0,0,0,0,0,'M','X','d','i','s','k',' ',' '};
 static int held,kept,errmode,selected;
 static unsigned drive,oldrive,spt;
 
 diskclose()
 {
-    if(errmode) { KERROR(0); errmode=0; }
     if(held) { OSCALL(139,queue); held=0; }
+    if(wrote) OSCALL(37,1<<drive);
+    if(errmode) { KERROR(0); errmode=0; }
     if(kept) { KKEEP(0); kept=0; }
     if(selected) { OSCALL(14,oldrive); selected=0; }
     return 0;
@@ -61,10 +62,26 @@ long sector;
 char *buf;
 {
     unsigned track,within;
-    if(!held || sector>=vol.sectors) return 0;
+    if(!held || sector<0 || sector>=vol.sectors) return 0;
     track=sector/spt; within=sector%spt;
     if(KREAD(drive,track,within,buf)) {
         printf("ERROR: Read error at sector %ld; check aborted.\n",sector);
+        return 0;
+    }
+    return 1;
+}
+
+/* Enforce F at the physical write boundary, even if a higher layer errs. */
+wrsect(sector,buf)
+long sector;
+char *buf;
+{
+    unsigned track,within;
+    if(!repair || !held || sector<0 || sector>=vol.sectors) return 0;
+    track=sector/spt; within=sector%spt;
+    wrote=1;
+    if(KWRITE(drive,track,within,buf)) {
+        printf("ERROR: Write error at sector %ld; repair aborted.\n",sector);
         return 0;
     }
     return 1;

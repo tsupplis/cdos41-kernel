@@ -10,8 +10,9 @@ struct volume {
     long fatbase, rootbase, database, sectors;
 };
 extern struct volume vol;
-extern int verbose, failed;
+extern int verbose, failed, repair, wrote;
 extern unsigned errors;
 extern unsigned wordget(), fatget();
+extern int fatset(), fatreset(), wrsect(), repairfs(), confirm();
 extern long longget();
 extern int rdsect(), fscheck(), geomset(), diskopen(), diskclose();

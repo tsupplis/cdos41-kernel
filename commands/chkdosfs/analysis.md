@@ -2,8 +2,8 @@
 
 This document records static findings from the original binary. Addresses are
 CODE-relative unless marked DATA. Routine names are assigned during analysis;
-compiler helper names and local block names are provisional. Runtime behaviour
-and compatibility with the rebuilt kernel still need testing.
+compiler helper names and local block names are provisional. The original behavior is inferred from the binary; tested C-port scope and
+remaining differences are documented in README.md.
 
 ## Container and implementation
 
@@ -19,7 +19,7 @@ and compatibility with the rebuilt kernel still need testing.
 
 The listing separates inline runtime strings and alignment bytes from code.
 Its byte column covers the complete header, CODE, DATA and trailing file padding.
-No rebuild from assembly is claimed: the C program will be the maintained output.
+No rebuild from assembly is claimed: the C program is the maintained output.
 
 ## Original command line
 
@@ -102,21 +102,21 @@ The C port should isolate these dependencies in a small assembly module.
   traversal. A damaged FAT must not cause an infinite loop or wraparound.
 - Original printf uses a 132-byte stack buffer. Bound new output formatting.
 
-## C recreation plan
+## C recreation
 
 | Module | Responsibility |
 |---|---|
-| `chkdosfs.c` | Options, drive lifecycle, diagnostics and summary |
-| `fat.c` | FAT12/16 entries, cache, checked cluster/sector arithmetic |
-| `check.c` | Directory/chain validation and cluster ownership |
-| `repair.c` | Explicit recovery actions and guarded commit |
-| `cpmif.a86` | BDOS/XIOS, DPB discovery, lock acquisition and restoration |
+| `chkdosfs.c` | Options, command lifecycle and confirmations |
+| `fat.c` | Cached FAT12/16 entries, mirrored writes and checked arithmetic |
+| `check.c` | Ownership, directory/chain checks, size/EOF corrections and recovery |
+| `native.c` | CDOS drive/lock lifecycle, physical I/O guard and cleanup |
+| `os.a86` | BDOS/XIOS, DPB discovery and preserved process state |
 
-Keep the algorithm independent of the native I/O adapter so disposable host
-images can exercise the same checker. Build the CMD with DRI C and RASM-86,
-following CHSET. First compare read-only results on clean and damaged FAT12/16
-images, then compare resulting bytes for each enabled repair. Tests must verify
-that report-only runs perform zero writes and that failed I/O aborts safely.
+The production checker and FAT writer also run against disposable host images.
+Native tests use the locally rebuilt CDOS kernel and disposable FAT12 floppies
+and FAT16 hard-disk partitions. Tests compare every resulting image byte, not
+only output. The maintained command supports the requested F/V interface;
+original optional D/L/R/B modes remain unsupported. See README.md for scope.
 
 ## Routine map
 
