@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include "chkdosfs.h"
 unsigned OSCALL();
-int verbose,repair,wrote;
+int verbose,repair,wrote,scan_erased,rebuild_contiguous,recover_directories,read_file_data;
 
 static upper(c)
 int c;
@@ -13,23 +13,26 @@ int c;
 
 static usage()
 {
-    printf("USAGE: CHKDOSFS drive: [FV]\n");
+    printf("USAGE: CHKDOSFS drive: [BDFLRV]\n");
     printf("  drive: A:..P:\n");
+    printf("  B      read file/directory data\n");
+    printf("  D      find erased-directory remnants\n");
     printf("  F      repair\n");
+    printf("  L      find contiguous-chain candidates\n");
+    printf("  R      find orphaned first-level directories\n");
     printf("  V      verbose\n");
     return 0;
 }
 
-/* Return 1 for supported options, -1 for recognized but not
- * implemented options, and 0 for malformed input. Do not accept a trailing
+/* Return 1 for supported options and 0 for malformed input. Do not accept a trailing
  * suffix after ], or silently treat a bare option introducer as success.
  */
 static options(s)
 char *s;
 {
     char token[16];
-    int i,c,bracket,pending;
-    bracket=*s=='['; s++; i=pending=0;
+    int i,c,bracket;
+    bracket=*s=='['; s++; i=0;
     while(*s && *s!=']' && i<15) token[i++]=upper(*s++);
     token[i]=0;
     if(!i || (*s && (!bracket || *s!=']' || s[1]))) return 0;
@@ -37,9 +40,13 @@ char *s;
         c=token[i];
         if(c=='V') verbose=1;
         else if(c=='F') repair=1;
+        else if(c=='D') scan_erased=1;
+        else if(c=='L') rebuild_contiguous=1;
+        else if(c=='R') recover_directories=1;
+        else if(c=='B') read_file_data=1;
         else return 0;
     }
-    return pending ? -1 : 1;
+    return 1;
 }
 
 main(argc,argv)
@@ -63,8 +70,7 @@ char **argv;
         opt=0;
         if(argc==3 && (s[0]=='/' || s[0]=='[')) opt=options(s);
         if(opt!=1) {
-            if(opt<0) printf("ERROR: Requested option is not implemented yet.\n");
-            else printf("ERROR: Invalid command option.\n");
+            printf("ERROR: Invalid command option.\n");
             usage(); OSCALL(108,2); return 2;
         }
     }

@@ -5,7 +5,7 @@
 ; CODE labels use segment-relative addresses; DATA references are near DS offsets.
 ; Semantic names are analyst-assigned. Local *_at_ labels retain traceability.
 ; make check verifies complete byte coverage and direct branch boundaries,
-; NOT assembler equivalence or functional correctness. No CMD is built yet.
+; NOT assembler equivalence or functional correctness. Production CMD is built from C.
 ; SHA256 2e3e8ebc58f7f1c3159dc7f261a8c1d7cb08ae4ba7a977770f9936294bff916c
 
 
@@ -2148,7 +2148,7 @@ create_recovered_root_entry_at_10d0:
 0000116C  83C406                add sp,0x6
 0000116F  A1C408                mov ax,[0x8c4] ; current_directory_entry
 00001172  50                    push ax
-00001173  E8180A                call ask_yes_no
+00001173  E8180A                call uppercase_string
 00001176  44                    inc sp
 00001177  44                    inc sp
 00001178  A1C408                mov ax,[0x8c4] ; current_directory_entry
@@ -3540,25 +3540,25 @@ bytes_equal_at_1b0a:
 00001B8D  C3                    ret
 
 ; ------------------------------------------------------------------------
-; ask_yes_no (CODE 1B0Eh)
-ask_yes_no:
+; uppercase_string (CODE 1B0Eh)
+uppercase_string:
 00001B8E  55                    push bp
 00001B8F  8BEC                  mov bp,sp
 00001B91  56                    push si
 00001B92  57                    push di
 00001B93  8B7604                mov si,[bp+0x4]
-00001B96  EB0E                  jmp ask_yes_no_at_1b26
-ask_yes_no_at_1b18:
+00001B96  EB0E                  jmp uppercase_string_at_1b26
+uppercase_string_at_1b18:
 00001B98  803C61                cmp byte [si],0x61
-00001B9B  7208                  jc ask_yes_no_at_1b25
+00001B9B  7208                  jc uppercase_string_at_1b25
 00001B9D  803C7A                cmp byte [si],0x7a
-00001BA0  7703                  ja ask_yes_no_at_1b25
+00001BA0  7703                  ja uppercase_string_at_1b25
 00001BA2  802C20                sub byte [si],0x20
-ask_yes_no_at_1b25:
+uppercase_string_at_1b25:
 00001BA5  46                    inc si
-ask_yes_no_at_1b26:
+uppercase_string_at_1b26:
 00001BA6  803C00                cmp byte [si],0x0
-00001BA9  75ED                  jnz ask_yes_no_at_1b18
+00001BA9  75ED                  jnz uppercase_string_at_1b18
 00001BAB  5F                    pop di
 00001BAC  5E                    pop si
 00001BAD  5D                    pop bp

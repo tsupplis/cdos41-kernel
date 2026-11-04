@@ -35,6 +35,11 @@ REF=../../dosplus/chkdsk.cmd
 
 check-c: all
 	$(PYTHON) tests/check.py
+	$(PYTHON) tests/safety.py
+	$(PYTHON) tests/contiguous.py
+	$(PYTHON) tests/directories.py
+	$(PYTHON) tests/reads.py
+	$(PYTHON) tests/reporting.py
 
 # The frozen disassembly input remains byte-identical to the DOS Plus original.
 # The C implementation is behavioural; no binary identity is claimed for it.
@@ -50,3 +55,11 @@ check-live: all
 	$(PYTHON) tests/live.py --fat16 --repair
 	$(PYTHON) tests/live.py --recover
 	$(PYTHON) tests/live.py --fat16 --recover
+	$(PYTHON) tests/live.py --deleted
+	$(PYTHON) tests/live.py --contiguous
+	$(PYTHON) tests/live.py --fat16 --contiguous
+	$(PYTHON) tests/live.py --directories
+	$(PYTHON) tests/live.py --fat16 --directories
+	$(PYTHON) tests/live.py --recover --read-test
+	$(PYTHON) tests/live.py --fat16 --read-test
+	$(PYTHON) tests/live.py --fat16 --directories --read-test

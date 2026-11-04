@@ -184,7 +184,7 @@ The internal-interface count uses the nine services identified in [api.md](api.m
 | PROMPT, BREAK, VERIFY, SLICE | No corresponding shell commands |
 | LABEL, BACKG, FSET | Mapped to SET/SHOW, SYSTAT/STOP and SET respectively; command syntax differs |
 | ALARM, GRAFTABL, DEVICE | No direct command equivalents |
-| CHKDSK | CHKCPMFS checks CP/M allocation; CHKDOSFS checks and repairs FAT12/FAT16 (F/V supported; D/L/R/B not implemented) |
+| CHKDSK | CHKCPMFS checks CP/M allocation; CHKDOSFS checks and repairs FAT12/FAT16 (B/D/F/L/R/V supported; confirmed conservative repairs) |
 | MODE | SETUP/SETPORT cover some configuration functions; no complete MODE equivalent |
 
 ## Distributions

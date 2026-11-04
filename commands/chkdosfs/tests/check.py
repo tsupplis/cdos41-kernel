@@ -4,32 +4,7 @@ from pathlib import Path
 import hashlib, struct, subprocess, tempfile
 ROOT=Path(__file__).resolve().parent.parent
 
-def fixture(bits=12,clusters=None,spc=1):
-    clusters=clusters or (700 if bits==12 else 6000)
-    limit=clusters+2
-    fatsiz=((limit*bits+7)//8+511)//512
-    root=32; base=1; data=base+2*fatsiz+2
-    total=data+clusters*spc
-    assert total<65536
-    b=bytearray(total*512)
-    struct.pack_into('<HBHBHHBHHH',b,11,512,spc,base,2,root,total,0xf8,fatsiz,17,4)
-    b[510:512]=b'\x55\xaa'
-    def fat(c,v,copy=None):
-        for k in range(2) if copy is None else [copy]:
-            off=(base+k*fatsiz)*512+(c*bits//8)
-            old=int.from_bytes(b[off:off+2],'little')
-            if bits==16:new=v
-            elif c&1:new=(old&15)|(v<<4)
-            else:new=(old&0xf000)|(v&4095)
-            b[off:off+2]=new.to_bytes(2,'little')
-    end=0xfff if bits==12 else 0xffff
-    fat(0,0xff8 if bits==12 else 0xfff8);fat(1,end)
-    def entry(slot,name,start,size=0,attr=0,sector=None):
-        off=(base+2*fatsiz if sector is None else sector)*512+slot*32
-        b[off:off+11]=name.ljust(11,b' ')
-        b[off+11]=attr
-        struct.pack_into('<H',b,off+26,start);struct.pack_into('<I',b,off+28,size)
-    return b,fat,entry,end,data
+from fixtures import fixture
 
 with tempfile.TemporaryDirectory(prefix='chkdosfs-') as temp:
     temp=Path(temp); exe=temp/'check'
@@ -159,22 +134,22 @@ with tempfile.TemporaryDirectory(prefix='chkdosfs-repair-') as temp:
         b,fat,entry,end,data=fixture(bits)
         entry(0,b'FILE0028CHK',0,0);fat(40,41);fat(41,end)
         b[(data+38)*512:(data+40)*512]=bytes([0xa7])*1024
-        original=bytes(b);entry(1,b'FILE0029CHK',40,1024)
+        original=bytes(b);entry(1,b'FILE0029CHK',40,1024,attr=32)
         repairing(str(bits)+'-recover-collision',original,bytes(b),answer='Y')
         # A cycle is recovered once, cut at its last cluster.
         b,fat,entry,end,data=fixture(bits)
         fat(40,41);fat(41,40);original=bytes(b)
-        fat(41,end);entry(0,b'FILE0028CHK',40,1024)
+        fat(41,end);entry(0,b'FILE0028CHK',40,1024,attr=32)
         repairing(str(bits)+'-recover-cycle',original,bytes(b),answer='Y')
         # Orphan components sharing a tail become distinct, disjoint files.
         b,fat,entry,end,data=fixture(bits)
         fat(40,42);fat(41,42);fat(42,end);original=bytes(b)
-        fat(41,end);entry(0,b'FILE0028CHK',40,1024);entry(1,b'FILE0029CHK',41,512)
+        fat(41,end);entry(0,b'FILE0028CHK',40,1024,attr=32);entry(1,b'FILE0029CHK',41,512,attr=32)
         repairing(str(bits)+'-recover-join',original,bytes(b),answer='Y')
         # A dangling pointer into a free cluster is not adopted as file data.
         b,fat,entry,end,data=fixture(bits)
         fat(40,41);original=bytes(b)
-        fat(40,end);entry(0,b'FILE0028CHK',40,512)
+        fat(40,end);entry(0,b'FILE0028CHK',40,512,attr=32)
         repairing(str(bits)+'-recover-free-tail',original,bytes(b),answer='Y')
         # Capacity failure is preflighted for the whole recovery, no writes.
         b,fat,entry,end,data=fixture(bits)
@@ -186,11 +161,11 @@ with tempfile.TemporaryDirectory(prefix='chkdosfs-repair-') as temp:
         root=1+2*((((702 if bits==12 else 6002)*bits+7)//8+511)//512)
         b[root*512+32:root*512+64]=b'Z'*32
         fat(40,end);original=bytes(b)
-        entry(0,b'FILE0028CHK',40,512);b[root*512+32]=0
+        entry(0,b'FILE0028CHK',40,512,attr=32);b[root*512+32]=0
         repairing(str(bits)+'-recover-end-marker',original,bytes(b),answer='Y')
         # Combined EOF, size and recovery changes with two confirmations.
         b,fat,entry,end,data=fixture(bits)
         entry(0,b'BROKEN  TXT',2,900);fat(40,end);original=bytes(b)
-        fat(2,end);entry(0,b'BROKEN  TXT',2,512);entry(1,b'FILE0028CHK',40,512)
+        fat(2,end);entry(0,b'BROKEN  TXT',2,512);entry(1,b'FILE0028CHK',40,512,attr=32)
         repairing(str(bits)+'-combined',original,bytes(b),answer='YY')
     print('PASS: %d size/EOF/recovery cases; exact directory/FAT changes checked'%(total-extra))

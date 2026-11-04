@@ -44,8 +44,8 @@ switch character; Concurrent DOS defaults to `/`.
 These are recovered semantics, not a claim that all combinations are safe or
 already tested. `/B` is not a full free-space surface scan. `/L` uses a specific
 adjacent-entry/contiguous-allocation heuristic, not arbitrary file undelete.
-The precise `/D` and `/R` interaction needs deliberately damaged reference
-fixtures before finalising the replacement's help text.
+D reports free-cluster remnants; R reconnects allocated orphan directories.
+The replacement tests D/R combinations and keeps free remnants diagnostic-only.
 
 ## Checker flow
 
@@ -115,8 +115,10 @@ The C port should isolate these dependencies in a small assembly module.
 The production checker and FAT writer also run against disposable host images.
 Native tests use the locally rebuilt CDOS kernel and disposable FAT12 floppies
 and FAT16 hard-disk partitions. Tests compare every resulting image byte, not
-only output. The maintained command supports the requested F/V interface;
-original optional D/L/R/B modes remain unsupported. See README.md for scope.
+only output. The maintained command supports the B/D/F/L/R/V interface. B reads complete referenced clusters,
+not a free-space surface scan, and aborts on read failure rather than continuing
+as the original did. No unreadable-data reconstruction or bad-cluster marking
+is attempted. See README.md for scope and conservative repair differences.
 
 ## Routine map
 
@@ -176,7 +178,7 @@ listing retain their address until their complete purpose has been established.
 | 1AA5h | `zero_memory` |
 | 1ABFh | `copy_bytes` |
 | 1AE3h | `bytes_equal` |
-| 1B0Eh | `ask_yes_no` |
+| 1B0Eh | `uppercase_string` |
 | 1B2Fh | `cleanup_and_exit` |
 | 1B44h | `main_wrapper` |
 | 1B54h | `get_kernel_segments` |
@@ -223,3 +225,36 @@ listing retain their address until their complete purpose has been established.
 | 232Ch | `strcmp_unused` |
 | 2353h | `stricmp_unused` |
 | 239Bh | `strlen` |
+
+## Verified D limitation and corrected detection
+
+In the original CODE 08B2h branch, 08DAh and 08F0h load the same
+current-directory-entry pointer before comparing it with '.' and '..'. The
+comparison helper at 1AE3h does not advance that global pointer. Both tests
+cannot succeed for the same eleven bytes. The intended check needs distinct
+first/second directory entries. D only prints a finding; F does not give it an
+automatic directory-restoration action. The C implementation corrects this
+comparison and keeps findings diagnostic-only, with additional validation and
+no writes to the free candidate clusters.
+
+## L reconstruction and conservative deviations
+
+Original CODE 11DAh computes rounded file length, compares start+length with
+the next directory entry's start, requires free FAT entries, and builds links.
+The caller skips the final directory entry of a cache cluster. L also suppresses
+ordinary EOF/size corrections. The replacement retains those rules and adds
+active-entry validation, complete ownership/overlap checks, checked arithmetic,
+preflight after confirmation and a bounded plan. It commits links tail-first;
+FAT12 starting entries that span sectors remain detection-only. File contents
+are never rewritten or certified by this heuristic.
+
+## R directory reconnection
+
+Original CODE 1032h selects directory recovery when R is set. It tests dot and
+dot-dot records in distinct slots and requires the parent pointer to be zero,
+then creates a root FILEhhhh.CHK entry with attribute 10h and zero size. Its
+ordinary recovered-file default attribute is 20h. The C replacement validates
+the whole tree and cross-candidate ownership before any root entries are
+written, and never rewrites candidate data or allocation links. R without F is
+diagnostic. Unlike the original release-on-decline branch, declining RF does
+not free unrelated orphan clusters. Invalid or uncertain trees remain unlinked.

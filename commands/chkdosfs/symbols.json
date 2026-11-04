@@ -52,7 +52,7 @@
     "1aa5": "zero_memory",
     "1abf": "copy_bytes",
     "1ae3": "bytes_equal",
-    "1b0e": "ask_yes_no",
+    "1b0e": "uppercase_string",
     "1b2f": "cleanup_and_exit",
     "1b44": "main_wrapper",
     "1b54": "get_kernel_segments",
@@ -175,7 +175,8 @@
     "1bfe": "Stack IOPB: drive/count, track, sector, DMA segment, DMA offset. DS=SYSDAT, ES=UDA; far call through SYSDAT:28h with AX=10/11.",
     "1c2c": "BDOS111 block console output with address, segment, length packet.",
     "1c5a": "Original printf uses a 132-byte local buffer. New code should bound formatted output.",
-    "200c": "Compiler long-arithmetic helpers operate on stack operands; replace with C unsigned long, not hand-ported stack tricks."
+    "200c": "Compiler long-arithmetic helpers operate on stack operands; replace with C unsigned long, not hand-ported stack tricks.",
+    "08b2": "D only reports free-cluster directory signatures. Bug: both dot/dot-dot comparisons load the same current-entry pointer (08DAh/08F0h); neither helper advances it."
   },
   "inline_data": [
     [

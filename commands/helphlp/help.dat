@@ -2531,11 +2531,23 @@ Scans all users 0-15 and restores the original drive and user area.
 F is reserved and not implemented. Run on an idle drive; DOS/FAT is rejected.
 
 ///1CHKDOSFS
-CHKDOSFS drive: [FV]
+CHKDOSFS drive: [BDFLRV]
 FAT12/FAT16 consistency check on the specified A:..P:. Exactly one drive is
 required; options follow it. V lists checked entries. Without F, no disk writes.
+B reads referenced file/directory clusters, including slack. It does not scan
+free space, reconstruct unreadable data or mark bad clusters. Read failures
+abort and block pending repairs. RB checks trees before RBF recovery.
+D reports erased-directory remnants in free clusters. It does not restore or
+modify those remnants, even with F. A read failure blocks repair.
+L finds missing contiguous chains using the next directory entry and free
+FAT entries. LF offers confirmed reconstruction only after ownership and
+boundary checks. It preserves file sizes/data and suppresses ordinary EOF/size
+corrections. Split-sector FAT12 heads and conflicting evidence are refused.
+R finds allocated orphaned first-level directories. RF reconnects validated
+complete trees with new root entries, preserving FAT chains and directory/file
+data. Conflicts or damaged trees are refused. Declining RF does not free data.
 F offers confirmed file-size/EOF corrections and lost-chain recovery to
 FILEhhhh.CHK files, or confirmed release of lost clusters. File sizes are
 adjusted to chain capacity. Conflicting FAT copies and uncertain ownership
 block writes. Data sectors are preserved. Write failure may leave partial
-changes. Optional historical D/L/R/B modes are not provided.
+changes.

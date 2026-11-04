@@ -62,9 +62,10 @@ long sector;
 char *buf;
 {
     unsigned track,within;
-    if(!held || sector<0 || sector>=vol.sectors) return 0;
+    if(failed || !held || sector<0 || sector>=vol.sectors) return 0;
     track=sector/spt; within=sector%spt;
     if(KREAD(drive,track,within,buf)) {
+        failed=1;
         printf("ERROR: Read error at sector %ld; check aborted.\n",sector);
         return 0;
     }
@@ -77,10 +78,11 @@ long sector;
 char *buf;
 {
     unsigned track,within;
-    if(!repair || !held || sector<0 || sector>=vol.sectors) return 0;
+    if(failed || !repair || !held || sector<0 || sector>=vol.sectors) return 0;
     track=sector/spt; within=sector%spt;
     wrote=1;
     if(KWRITE(drive,track,within,buf)) {
+        failed=1;
         printf("ERROR: Write error at sector %ld; repair aborted.\n",sector);
         return 0;
     }

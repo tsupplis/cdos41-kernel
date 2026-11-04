@@ -50,7 +50,7 @@ def generate():
          '; CODE labels use segment-relative addresses; DATA references are near DS offsets.',
          '; Semantic names are analyst-assigned. Local *_at_ labels retain traceability.',
          '; make check verifies complete byte coverage and direct branch boundaries,',
-         '; NOT assembler equivalence or functional correctness. No CMD is built yet.',
+         '; NOT assembler equivalence or functional correctness. Production CMD is built from C.',
          '; SHA256 '+META['sha256'],'']
     def row(offset,raw,text):out.append(f'{offset:08X}  {raw.hex().upper():<20}  {text}')
     def blob(offset,raw,name):
