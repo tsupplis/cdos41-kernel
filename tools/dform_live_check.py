@@ -33,6 +33,11 @@ run('cpmcp', '-f', 'ccpm86-320', 'logical.img',
     str(ROOT/'kernel/sysgen/ccpm.sys'), '0:CCPM.SYS')
 run('cpmcp', '-f', 'ccpm86-320', 'logical.img',
     str(ROOT/'commands/dform/dform.cmd'), '0:DFORM.CMD')
+if capacity==1440:
+    shutil.copyfile(ROOT/'tools/floppy_probe.a86',folder/'fatprobe.a86')
+    run('cpm86_asm86','fatprobe')
+    run('cpm86_gencmd','fatprobe.h86','8080')
+    run('cpmcp','-f','ccpm86-320','logical.img','fatprobe.cmd','0:FATPROBE.CMD')
 run('python3', str(ROOT/'tools/cpm86twist.py'), 'twist', 'logical.img', 'source.img')
 # Start with eight physical sectors and nonzero old data. Formatting must
 # replace the geometry and clear every directory/FAT byte, not merely the IDs.
@@ -68,7 +73,7 @@ assert 'BAD-ID' not in info and f'{total} + 0' in info, info
 run('psi', 'target.psi', '-O', 'raw', '-o', 'target.img')
 b = (folder/'target.img').read_bytes()
 assert len(b) == total*512
-boot=bytearray((ROOT/('commands/dform/fatboot.bin' if capacity==360 else 'commands/dform/dosbootx.bin')).read_bytes())
+boot=bytearray((ROOT/'commands/dform/fatboot.bin').read_bytes())
 struct.pack_into('<HBHBHHBHHHH',boot,11,512,spc,1,2,roots,total,media,spf,spt,2,0)
 assert b[:512] == boot
 fat=bytes([media,255,255])+bytes(spf*512-3)
@@ -80,15 +85,22 @@ probe = b'DFORM FAT12 interoperability check\r\n'
 (folder/'probe.txt').write_bytes(probe)
 run('mcopy', '-i', 'target.img', 'probe.txt', '::PROBE.TXT')
 assert run('mtype', '-i', 'target.img', '::PROBE.TXT').stdout == probe
+if capacity==1440:
+    # Exercise native BDOS allocation and record I/O past FAT sector seven.
+    probe_commands=['c f000000']
+    for ch in 'fatprobe':
+        probe_commands+=['key '+ch,'c 200000']
+    probe_commands+=['key Return','c 40000000','c 40000000',
+                     'save "native.bin" bin b800:0000 fa0','q']
+    pce(probe_commands,'native')
+    assert 'Native FAT write/read passed.' in screen('native')
 # Preserve the original empty format: the mtools probe must not occupy the
 # first root entry/cluster required by the historical system bootstrap.
 (folder/'formatted.img').write_bytes(b)
-# The shared cold-boot helper uses the configuration's relative ROM path.
-(folder/'rom').symlink_to((ROOT/'media/rom').resolve(), target_is_directory=True)
-from dskmaint_live_check import build_low_kernel, cold_boot
+from dskmaint_live_check import cold_boot
 cold_boot(folder, folder/'formatted.img', 'empty', '', None,
-          ['Not a boot disk', 'Insert boot disk'])
+          ['Insert boot disk'])
 cold_boot(folder, folder/'formatted.img', 'rebuilt', 'CCPM.SYS',
-          build_low_kernel(folder), ['Concurrent', 'A>'])
+          ROOT/'kernel/sysgen/ccpm.sys', ['Concurrent', 'A>'])
 print(f'PASS: CDOS {capacity}K format/verify, FAT12, mtools I/O, empty recovery and rebuilt kernel cold boot')
 shutil.rmtree(folder)

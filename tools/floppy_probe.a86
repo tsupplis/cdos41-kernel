@@ -1,0 +1,102 @@
+; Native FAT12 regression probe for disposable 1.44M media in drive B.
+; Write/read 1,433,600 bytes, crossing the old seven-sector FAT workspace.
+; Fixed 8080-model CMD; no DOS front end, raw sectors or host disk access.
+        cseg
+        org 100h
+start:
+        mov ax,cs
+        mov ds,ax
+        mov es,ax
+        mov ss,ax
+        mov sp,offset stack_top
+        cld
+        mov di,offset buffer
+        mov ax,0a5a5h
+        mov cx,64
+        rep stosw
+        mov dx,offset buffer
+        mov cl,26
+        int 0e0h
+        mov dx,offset write_fcb
+        mov cl,19
+        int 0e0h
+        mov dx,offset write_fcb
+        mov cl,22
+        int 0e0h
+        cmp al,0ffh
+        je failed
+        mov bp,11200
+write_record:
+        mov dx,offset write_fcb
+        mov cl,21
+        call bdos
+        or al,al
+        jnz failed
+        dec bp
+        jnz write_record
+        mov dx,offset write_fcb
+        mov cl,16
+        call bdos
+        cmp al,0ffh
+        je failed
+        mov dx,offset read_fcb
+        mov cl,15
+        call bdos
+        cmp al,0ffh
+        je failed
+        mov bp,11200
+read_record:
+        mov dx,offset read_fcb
+        mov cl,20
+        call bdos
+        or al,al
+        jnz failed
+        mov si,offset buffer
+        mov cx,128
+check_byte:
+        lodsb
+        cmp al,0a5h
+        jne failed
+        loop check_byte
+        dec bp
+        jnz read_record
+        mov dx,offset read_fcb
+        mov cl,20
+        call bdos
+        cmp al,1
+        jne failed
+        mov dx,offset read_fcb
+        mov cl,16
+        call bdos
+        mov dx,offset read_fcb
+        mov cl,19
+        call bdos
+        mov dx,offset passed
+        jmps report
+failed:
+        mov dx,offset failure
+report:
+        mov cl,9
+        int 0e0h
+        xor dx,dx
+        mov cl,0
+        int 0e0h
+bdos:
+        push bp
+        push ds
+        push es
+        int 0e0h
+        pop es
+        pop ds
+        pop bp
+        ret
+write_fcb db 2,'PROBE   BIN'
+        db 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+read_fcb db 2,'PROBE   BIN'
+        db 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+passed db 13,10,'Native FAT write/read passed.',13,10,'$'
+failure db 13,10,'Native FAT write/read FAILED.',13,10,'$'
+buffer rs 128
+        rs 512
+stack_top:
+        end

@@ -415,6 +415,24 @@ ddio_go:
 	db 26h ! lodsw		;*
 	mov word ptr cur_gap,ax ;*
 	
+; Our default BIOS table is shared across drives. Use the mounted drive's
+; BPB geometry here; preserve an application's private INT 1Eh table exactly.
+        mov ax,es
+        mov dx,ds
+        cmp ax,dx
+        jne ddio_parameters_ready
+        cmp si,offset int_1E_parms+7
+        jne ddio_parameters_ready
+        xor bh,bh
+        mov bl,drive
+        mov al,floppy_spt[bx]
+        or al,al
+        jz ddio_parameters_ready
+        mov cur_eot,al
+        cmp al,15
+        jb ddio_parameters_ready
+        mov cur_gap,1bh
+ddio_parameters_ready:
 	pop bx			; restore the table index
 	pop DS:ret_store	;* adjust the stack
 	call io_rw		;   and perform operation
@@ -795,15 +813,31 @@ flp_pg_ok:			;read will not cross 64K boundary
 nxt_track:
 	cmp mcnt,0
 	jz flp_ret
-	  inc track
-	  mov sector,0
-	  jmp flp_retry		; back to the top
+; Physical BIOS requests advance head before cylinder. Logical CP/M/DOS
+; requests retain their existing track numbering and translation in SEEK.
+        cmp ddio_entry,0ffh
+        jne next_logical_track
+        mov bl,cur_disk
+        xor bh,bh
+        cmp disk_modes[bx],0feh
+        je next_logical_track
+        cmp disk_modes[bx],0fch
+        je next_logical_track
+        xor ddio_head,1
+        jnz next_physical_head
+next_logical_track:
+        inc track
+next_physical_head:
+        mov sector,0
+        jmp flp_retry		; back to the top
 
 ;	return from floppy operation with extended error handling
 
 flp_ret:			; AL = 00 if successful
 	cmp	al,'X'		; if AL = 'X' then we're going
-	jz	flp_retry	;   to try a data rate switch
+        jne floppy_return_status
+        jmp flp_retry
+floppy_return_status:
 
 	mov	ah,disk_error	; AH = extended error code
 	push	ax

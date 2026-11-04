@@ -27,11 +27,6 @@ $(OBJECTS): $(LOCAL_INCLUDES) Makefile
 	@$(RASM86) $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
 	@grep -qiE 'Number of errors: +0\.' $*.log
 
-squiddm3.obj: dosbootx.inc
-dosbootx.inc: dosbootx.bin
-	bin2asm -m -f $@ $<
-	unix2dos $@
-
 # Compile PL/M sources; declarations and Makefile changes trigger recompilation.
 %.obj: %.plm Makefile $(wildcard *.lit *.def *.equ *.lib *.h *.dcl *.inc *.ext)
 	@$(INTEL_PLM86) $< debug 'optimize(3)' xref > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
@@ -69,7 +64,7 @@ dskmaint.raw: $(OBJECTS) dskraw.inp Makefile
 	mv dskraw.cmd $@
 	$(CMDINFO) $@
 
-dskmaint.cmd: dskmaint.raw dosboot.bin embed_boot.py Makefile
+dskmaint.cmd: dskmaint.raw dosboot.bin dosbootx.bin embed_boot.py Makefile
 	python3 embed_boot.py
 	$(CMDINFO) $@
 
@@ -77,3 +72,4 @@ check: check-boot
 check-boot: dskmaint.cmd
 	python3 embed_boot.py --check
 	python3 check_release.py
+	python3 check_formats.py

@@ -7,22 +7,18 @@ LINK86=pcdev_linkcmd
 BIN2ASM=bin2asm
 
 TOOLS=dform.cmd
-INCS=bootsect.inc loader.inc fatboot.inc dosbootx.inc
+INCS=bootsect.inc loader.inc fatboot.inc
 .PHONY: all check clean
 .DELETE_ON_ERROR:
-all: $(TOOLS) fatboot.bin dosbootx.bin
+all: $(TOOLS) fatboot.bin
 bootsect.inc loader.inc: %.inc: ../../boot/%.bin
 	$(BIN2ASM) -m -f $@ $<
 	unix2dos $@
 ../../boot/%.bin: ../../boot/%.a86
 	$(MAKE) -C ../../boot $*.bin
 
-# Share DSKMAINT's maintained 4.11 bootstrap; do not keep a second source.
-fatboot.bin: ../dskmaint/dosboot.a86 ../dskmaint/Makefile Makefile
-	$(MAKE) -C ../dskmaint dosboot.bin
-	cp ../dskmaint/dosboot.bin $@
-
-dosbootx.bin: ../dskmaint/dosbootx.a86 ../dskmaint/Makefile Makefile
+# Both formatters use the same header-aware floppy bootstrap.
+fatboot.bin: ../dskmaint/dosbootx.a86 ../dskmaint/Makefile Makefile
 	$(MAKE) -C ../dskmaint dosbootx.bin
 	cp ../dskmaint/dosbootx.bin $@
 
@@ -44,7 +40,6 @@ dform.cmd: dform.obj Makefile
 check: all
 	$(CMDINFO) dform.cmd
 	@test "$$(wc -c < fatboot.bin)" -eq 512
-	cmp fatboot.bin ../dskmaint/dosboot.bin
-	cmp dosbootx.bin ../dskmaint/dosbootx.bin
+	cmp fatboot.bin ../dskmaint/dosbootx.bin
 clean:
 	$(RM) *.cmd *.obj *.log *.bin *.inc *.sym *.lst *.h86

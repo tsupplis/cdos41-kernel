@@ -310,10 +310,6 @@ make_boot_sector:
 	cld
 	xor	di,di			;start again
 	mov si,offset pc_loader
-        cmp tracks_per_disk[bx],160
-        jne choose_boot_image_done
-        mov si,offset pc_loader_extended
-choose_boot_image_done:
 	mov	cx,bytes_sector[bx]	;one sector's worth
 	rep	movsb			;boot sector in image
 	push	di			;remember where we left off
@@ -638,9 +634,6 @@ dos_1440_tbl dw 512
         dw 224,2880
         db 0f0h
         dw 9,18,2,0
-pc_loader_extended:
-        include dosbootx.inc
-
 ;
 ;	definition of working IOPB
 ;

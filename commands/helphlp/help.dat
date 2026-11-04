@@ -338,7 +338,7 @@ Aliases:
 
 Native commands supplied across the eight disks:
   ASM80 ASM86 BACK BATCH BRINST CHDIR CHSET COPYMENU DATE DCOMP DCOPY DDT86
-  DIR DREDIX DSKMAINT DSP ED EDITMENU ERA ERAQ FM FUNCTION
+  DIR DREDIX DSKMAINT DFORM DSP ED EDITMENU ERA ERAQ FM FUNCTION
   GENCCPM GENCMD GENLDR GET HDMAINT HELP HEXCOM INITDIR MKDIR N PIP
   PRINT PRINTMGR PUT RDR REN REST RMDIR SDIR SET SETENV SETPORT SETUP SHOW
   PATH SPL STOP SUBMIT SYSDISK SYSTAT WINDOW WMENU
@@ -499,6 +499,8 @@ See the media README for complete disk contents.
       Without [8]/[9], validate a FAT12 BPB and probe sector nine. Success
   proves nine; failed probing alone never proves eight. Unknown eight-sector
   media needs [8]. A known BPB contradicting the selection is rejected.
+  Extended CDOS also detects 720K, 1.2M and 1.44M DOS FAT12 BPBs;
+  these use 80 cylinders. No capacity option is needed.
   [9] does not ignore unreadable sectors. DCOMP checks both geometries.
 
       DCOMP is read-only and reports differences by track and side.
@@ -536,6 +538,8 @@ See the media README for complete disk contents.
       Without [8]/[9], validate a FAT12 BPB and probe sector nine. Success
   proves nine; failed probing alone never proves eight. Unknown eight-sector
   media needs [8]. A known BPB contradicting the selection is rejected.
+  Extended CDOS also detects 720K, 1.2M and 1.44M DOS FAT12 BPBs;
+  these use 80 cylinders. No capacity option is needed.
   [9] does not ignore unreadable sectors. DCOMP checks both geometries.
 
       DCOPY formats all target tracks to source geometry before writing and
@@ -568,11 +572,13 @@ Alias for native ERAQ.CMD, which asks before deleting each matching file.
 
 ///1DFORM
   DFORM drive: [options]
-  [DOS] formats a 360K FAT12 disk with the DSKMAINT system bootstrap.
+  [DOS] or [DOS360] selects DOS FAT12 360K.
+  [DOS720], [DOS1200], [DOS1440] select DOS 720K, 1.2M, 1.44M.
+  All DOS profiles install a system bootstrap; [1] is incompatible.
   [V] verifies every track. Copy compatible CCPM.SYS as the first file.
-  DOS boot requires OSSTART=60 and contiguous allocation from cluster 2.
+  Use the normal CCPM.SYS; no separate system-install command is needed.
   The default is CP/M 320K; [1] selects CP/M 160K.
-  Example: DFORM B:[DOS] [V]. Confirm the target before answering Y.
+  Example: DFORM B:[DOS1440] [V]. Confirm the target before answering Y.
 
 ///1DIR
 Built-in shell/BATCH syntax:
@@ -674,12 +680,15 @@ These files are separate from the system HELP.HLP database.
 
   ///2FORMAT
   Press  F7 to prepare new disks for use or to reformat used disks.   You must
-  format a disk before you can record files on it.  There are four options:
+  format a disk before you can record files on it. Select:
 
-  1.  Format a single-sided disk with the DOS format.
-  2.  Format a double-sided disk with the DOS format.
-  3.  Format a single-sided disk with the CP/M format.
-  4.  Format a double-sided disk with the CP/M format.
+    F2  CP/M 160K             F6  DOS FAT12 720K
+    F3  CP/M 320K             F7  DOS FAT12 1.2M
+    F4  DOS FAT12 180K        F8  DOS FAT12 1.44M
+    F5  DOS FAT12 360K
+
+  For DOS boot (360K and larger), copy compatible CCPM.SYS as the first
+  file. Use the normal distribution kernel; no special build is needed.
 
   Select  the  option  you want by pressing the  corresponding  function  key.
   DSKMAINT  responds  by  asking for the disk drive.   Insert the disk  to  be

@@ -12,7 +12,7 @@ count = 0
 def case(tool, sides=2, tail='A: B:', memory=0x5100, mismatch=0,
          repeat=0, retry=0, formatting=0, memfail=0, error=None, native=False, version=None, full_version=0x1431,
          console_state=0, console_number=0, open_files=0, open_after_lock=0,
-         queue_fail=0, initial_keep=0, floppy_count=2, abort=-1, abort_write=-1, fail_native=0, fail_times=1, native_status=1, fail_probe=False, probe_drive=-1, sectors=8, second_sectors=None, bpb=1, extended=0, bad_ninth=0, cylinders=40):
+         queue_fail=0, initial_keep=0, floppy_count=2, abort=-1, abort_write=-1, fail_native=0, fail_times=1, native_status=1, fail_probe=False, probe_drive=-1, sectors=8, second_sectors=None, bpb=1, extended=0, bad_ninth=0, cylinders=40, bad_bpb=0):
     global count
     probe_error = native and '[1' not in tail and (
         sides == 1 or (fail_probe and fail_times >= 4))
@@ -46,7 +46,7 @@ def case(tool, sides=2, tail='A: B:', memory=0x5100, mismatch=0,
         if writes or (abort < 0 and not probe_error and not geometry_error) or (probe_error and probe_drive == 1) or second_geometry_error:
             touched |= 1 << second
     reset = int((not native and version in (None, 0x22)) or (native and bool(reads or writes or geometry_error)))
-    options = dict(CYLINDERS=cylinders, SECTORS=sectors, SECOND_SECTORS=second_sectors or sectors, BPB=bpb, EXTENDED=extended, BAD_NINTH=bad_ninth, NATIVE=int(native), OSVER=version if version is not None else (0x1431 if native else 0x22),
+    options = dict(BAD_BPB=bad_bpb, CYLINDERS=cylinders, SECTORS=sectors, SECOND_SECTORS=second_sectors or sectors, BPB=bpb, EXTENDED=extended, BAD_NINTH=bad_ninth, NATIVE=int(native), OSVER=version if version is not None else (0x1431 if native else 0x22),
                    NATIVE_STATUS=native_status, EXPECT_TOUCHED=touched,
                    FAIL_PROBE=int(fail_probe), PROBE_DRIVE=probe_drive,
                    FULL_VERSION=full_version, CONSOLE_STATE=console_state,
@@ -197,4 +197,8 @@ for tool in ('dcopy','dcomp'):
              cylinders=80,formatting=1)
         case('dcomp',native=True,full_version=0x1441,sectors=sectors,
              cylinders=80,mismatch=2)
+for tool in ('dcopy','dcomp'):
+    for sectors in (9,15,18):
+        case(tool,native=True,full_version=0x1441,sectors=sectors,
+             cylinders=80,bad_bpb=1,error='Incompatible or conflicting')
 print(f'PASS: {count} dual-OS simulated-disk cases (BDOS clobbers ES and working registers)')

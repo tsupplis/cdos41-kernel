@@ -3,7 +3,7 @@ from pathlib import Path
 import sys
 
 raw = Path('dskmaint.raw').read_bytes()
-boot = Path('dosboot.bin').read_bytes()
+boot = Path('dosbootx.bin').read_bytes()
 marker = b'PUT THE PC LOADER HERE'
 assert len(boot) == 512, 'DOSBOOT must be exactly one sector'
 assert raw.count(marker) == 1, 'Expected one PC_LOADER placeholder'
@@ -25,7 +25,7 @@ if '--check' in sys.argv:
     assert Path('dskmaint.cmd').read_bytes() == expected, 'Unexpected DSKMAINT bytes'
     # Independent sector from the DATA group of the 4.11 release command.
     reference = Path('../../base/dskmaint.cmd').read_bytes()
-    assert boot == reference[0x378d:0x398d], 'Boot sector differs from 4.11'
-    print('PASS: DOSBOOT is embedded; every other CMD byte is unchanged')
+    assert Path('dosboot.bin').read_bytes() == reference[0x378d:0x398d], 'Boot sector differs from 4.11'
+    print('PASS: header-aware DOSBOOTX is embedded; historical 4.11 DOSBOOT remains an independent reference')
 else:
     Path('dskmaint.cmd').write_bytes(expected)

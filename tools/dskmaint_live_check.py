@@ -52,37 +52,11 @@ def format_floppy(folder, capacity=360):
     for label in ('type','drive','confirm','formatted'):
         screen(folder,label)
     spt,spc,media,spf,roots={360:(9,2,0xfd,2,112),720:(9,2,0xf9,3,112),1200:(15,1,0xf9,7,224),1440:(18,1,0xf0,9,224)}[capacity]
-    sector=bytearray((ROOT/('commands/dskmaint/dosboot.bin' if capacity==360 else 'commands/dskmaint/dosbootx.bin')).read_bytes())
+    sector=bytearray((ROOT/'commands/dskmaint/dosbootx.bin').read_bytes())
     struct.pack_into('<HBHBHHBHHHH',sector,11,512,spc,1,2,roots,capacity*2,media,spf,spt,2,0)
     assert floppy.read_bytes()[:512] == sector, 'DSKMAINT did not write the release sector to drive B'
     run(folder,'mdir','-i','formatted.img','::')
     return floppy
-
-
-def build_low_kernel(folder):
-    # This release bootstrap enters at 0060:0000. Generate a matching system
-    # in isolation; the normal CP/M boot image uses OSSTART=6000h.
-    gen = folder/'sysgen'
-    gen.mkdir()
-    source=ROOT/'kernel/sysgen'
-    # Stage only declared RSPs. The selected response file owns inclusion,
-    # just as in the normal SYSGEN build; stale RSPs are never enumerated.
-    from sysgen_check import resident_names
-    names=resident_names((source/'ccpm.sys').read_bytes())
-    selected={'pin.rsp','clock.rsp','pctmp.rsp','confid.rsp'}
-    for pattern in ('*.con','*.rsp'):
-        for component in source.glob(pattern):
-            if component.suffix=='.rsp' and component.name not in selected:
-                continue
-            shutil.copyfile(component,gen/component.name)
-    response='genfidd.in' if 'CONFIDD' in names else 'genccpm.in'
-    recipe=(source/response).read_text()
-    assert recipe.count('osstart=6000') == 1
-    run(gen,'emu2',str(ROOT/'commands/genccpm/genccpm.cmd'),
-        input=recipe.replace('osstart=6000','osstart=60').encode(),timeout=30)
-    kernel=gen/'ccpm.sys'
-    assert int.from_bytes(kernel.read_bytes()[3:5],'little')==0x60
-    return kernel
 
 
 def cold_boot(folder, floppy, case, name, system, expected):
@@ -104,9 +78,9 @@ if __name__=='__main__':
     print('DSKMAINT diagnostics:',work,flush=True)
     floppy=format_floppy(work,capacity)
     print(f'PASS: DSKMAINT formatted DOS {capacity}K with the checked system bootstrap',flush=True)
-    cold_boot(work,floppy,'empty','',None,['Not a boot disk','Insert boot disk'])
-    system=build_low_kernel(work)
+    cold_boot(work,floppy,'empty','',None,['Insert boot disk'])
+    system=ROOT/'kernel/sysgen/ccpm.sys'
     cold_boot(work,floppy,'ccpm','CCPM.SYS',system,['Concurrent','A>'])
     cold_boot(work,floppy,'cpm3','CPM3.SYS',system,['Concurrent','A>'])
-    print('PASS: empty-disk recovery, both system filenames using the low-linked rebuilt kernel')
+    print('PASS: empty-disk recovery, both system filenames using the normal distribution kernel')
     shutil.rmtree(work)

@@ -15,6 +15,7 @@ The assembly is based on partial 4.1 OEM sources corrected to align with Europea
 | Source rebuild | Kernel, four RSP families, boot sources and command tools |
 | Usability improvements | Command-line editing and recall, console shortcuts, paging and CLS |
 | Additional tools | ASM80, HEXCOM, Legacy CCP/M tools and floppy copy/compare commands |
+| Floppy formats | CP/M 160/320K; DOS FAT12 360K, 720K, 1.2M and 1.44M |
 | Graphics | CGA plus EGA 0Dh/0Eh/10h and VGA 11h/12h/13h, with graphics drawing and palette services |
 | DOS compatibility | 100% Coverage of DOS 2.10, Extended DOS APIs, CON raw/cooked handle I/O, inherited standard handles and PUT/GET/RDR redirection for native CMD and DOS programs, Full DOS Batch Language |
 | Date fixes | Patched native date/reporting utilities and corrected short-year input in DATE.EXE |
@@ -181,7 +182,7 @@ The internal-interface count uses the nine services identified in [api.md](api.m
 | `cdos86.img` | Yes | Kernel, core file commands, ED, DATE, SDIR, SET, SHOW, SUBMIT, BATCH, ERA/ERAQ, PIP and shell alias targets |
 | `cdostools.img` | No | SUBMIT, TREE, ECHO.CMD, HELP, SYSTAT, CHSET, WINDOW/WMENU, PUT/GET/RDR, ERA and PIP |
 | `cdosdev.img` | No | ASM80/ASM86, DDT86, GENCMD, HEXCOM, GENCCPM, GENLDR, ED, SUBMIT and PIP |
-| `cdosmaint.img` | Yes | Kernel, INITDIR, DSKMAINT, HDMAINT.CMD, SYSDISK, ERA and PIP |
+| `cdosmaint.img` | Yes | Kernel, INITDIR, DSKMAINT, DFORM, HDMAINT.CMD, SYSDISK, ERA and PIP |
 | `cdosmenu.img` | No | SPL, PRINT, DREDIX, COPYMENU, EDITMENU, PRINTMGR, DSP, menu/terminal data, BAT examples and PIP |
 | `cdosdos.img` | No | SETENV.CMD, COPY.EXE, DATE.EXE, ERASE.EXE, PATH.CMD, LOADCCPM.COM, TIME.EXE, REN.EXE and REDOS.COM, core commands and PIP |
 | `cdosextras.img` | No | BACKREST, CARDFILE, DRTALK, their support files and PIP |
@@ -198,6 +199,90 @@ inserted. The kernel retains its historical `CCPM.SYS` filename.
 320 KB: **untwist → cpmtools `ccpm86-320` → twist**.
 The filesystem and boot track are generated locally.
 [Media recipes, contents and emulator usage](media/README.md).
+
+## Storage
+
+### Floppies
+
+| Format | Capacity | Read/write | DFORM | DSKMAINT |
+| --- | --- | --- | --- | --- |
+| CP/M | 160K | Yes | `[1]` | F2 |
+| CP/M | 320K | Yes | Default | F3 |
+| DOS | 160K / 320K | Yes | — | Copy operation only |
+| DOS | 180K | Yes | — | F4 |
+| DOS | 360K | Yes | `[DOS]` | F5 |
+| DOS | 720K | Yes | `[DOS720]` | F6 |
+| DOS | 1.2M | Yes | `[DOS1200]` | F7 |
+| DOS | 1.44M | Yes | `[DOS1440]` | F8 |
+
+DCOPY/DCOMP copy and compare these formats. To make a system floppy, format
+it and copy the normal `CCPM.SYS` first, before adding other files.
+
+### Hard disks
+
+The hard-disk driver supports BIOS CHS disks with **512-byte sectors and
+17 sectors per track**, using the geometry reported by the BIOS. It supports
+two physical disks. It does not require a particular disk model.
+
+Representative supported geometries (capacity is before partitioning):
+
+| Disk class | Cylinders | Heads | Sectors/track | Capacity |
+| --- | --- | --- | --- | --- |
+| 10 MB | 306 | 4 | 17 | 10.7 MB / 10.2 MiB |
+| 20 MB | 615 | 4 | 17 | 21.4 MB / 20.4 MiB |
+| 30 MB | 615 | 6 | 17 | 32.1 MB / 30.6 MiB |
+| 40 MB | 615 | 8 | 17 | 42.8 MB / 40.8 MiB |
+| 60 MB | 900 | 8 | 17 | 62.67 MB / 59.77 MiB |
+
+The BIOS must expose the selected geometry. CHS addressing permits cylinder
+numbers 0–1023; HDMAINT accepts three-digit starting cylinders and partition
+lengths. A disk larger than 32 MiB must be divided into smaller partitions;
+the limit below applies to each partition, not to the whole disk. Modern
+63-sector translated geometries and BIOS extended LBA access are not supported.
+
+### Partitions
+
+| Partition format | Supported size | Read/write | Create with HDMAINT | System boot |
+| --- | --- | --- | --- | --- |
+| Native CP/M (type DBh) | Below 32 MiB with the current HDMAINT; at most 8 MiB for CP/M-86 1.1 compatibility | Yes | Yes | Yes |
+| DOS FAT12 (type 01h) | Below 32 MiB, with fewer than 4,085 data clusters | Yes | Yes; cluster size selected automatically | Yes |
+| DOS FAT16 (type 04h) | Below 32 MiB | Yes | No | Not established |
+
+HDMAINT uses 16-bit sector calculations: do not create a partition of
+65,536 sectors (32 MiB) or larger. Filesystem metadata reduces usable file
+space. The 8 MiB CP/M compatibility limit is not the Concurrent DOS limit.
+
+| Layout rule | Support |
+| --- | --- |
+| Partitions per physical disk | One native CP/M and one DOS partition |
+| Maximum mounted hard-disk volumes | Four across two physical disks |
+| Partition order on disk | CP/M then DOS, or DOS then CP/M |
+| Duplicate partition types | Only the first CP/M and first DOS match in the MBR are mounted |
+| Partition placement | HDMAINT creates cylinder-aligned partitions, at least 10 cylinders long; cylinder 0 reserves the MBR sector |
+| Unsupported partition types | Extended/logical partitions, GPT, large FAT16 (type 06h) and FAT32 |
+
+With A: and B: assigned to floppies, drive letters are allocated as follows,
+regardless of the physical order of the partitions:
+
+| Physical disks | DOS partitions | CP/M partitions |
+| --- | --- | --- |
+| One | C: | D: |
+| Two | C: on disk 1, D: on disk 2 | E: on disk 1, F: on disk 2 |
+
+For approximately 30 MiB of each filesystem, use the 900-cylinder geometry
+above and create these two partitions with HDMAINT:
+
+| Partition | Starting cylinder | Length in cylinders | Raw capacity |
+| --- | --- | --- | --- |
+| CP/M | 0 | 450 | Approximately 29.88 MiB |
+| DOS FAT12 | 450 | 450 | Approximately 29.88 MiB |
+
+Both partitions fit the limits above. Usable file space is smaller because
+of filesystem metadata and loaders.
+
+An absent partition leaves its drive slot unavailable. To boot, make the
+desired partition active on the first hard disk, install its loaders with
+HDMAINT, then copy `CCPM.SYS` to that partition.
 
 ## Kernel and resident components
 
@@ -263,12 +348,12 @@ case handling.
 | `copymenu` | Copy menu definitions | 4.11 | Recompiled from CDOS 4.1 | Behavior tested | — |
 | `date` | Display or set the date | - | Recompiled from CCP/M-86 3.1 and adapted, Y2K patched | Additional tool | — |
 | `date.exe` | Display or set the date through DOS | 4.11 | Recompiled from CDOS 4.1 and adapted, short-year fix; commands/datetime | Equivalent | — |
-| `dcomp / dcopy` | Compare or copy CP/M/FAT floppies, including 360K | - | Ported from PC DOS 1.10; adapted for CDOS and 8/9-sector geometry | Additional tool | — |
+| `dcomp / dcopy` | Compare or copy CP/M/FAT floppies up to 1.44M | - | Ported from PC DOS 1.10; adapted for CDOS and extended floppy geometry | Additional tool | — |
 | `ddt86` | 8086 interactive debugger | - | Recompiled from CCP/M-86 3.1 | Additional tool | — |
 | `dir` | List directory contents | - | Recompiled from CCP/M-86 3.1 and adapted; separate CDOS 4.1 TMP built-in | Additional tool | — |
 | `dredix` | Full-screen text editor | 4.11 | Recompiled from CDOS 4.1 | Behavior tested | — |
-| `dform` | Command-line CP/M and 360K FAT12 floppy formatter | — | Adapted from CCP/M-86 DFORM | — | — |
-| `dskmaint` | Format, verify and copy diskettes | 4.11 | Recompiled from CDOS 4.1 with reconstructed 4.11 DOS boot sector | Behavior tested | — |
+| `dform` | Command-line CP/M and DOS FAT12 floppy formatter | — | Adapted from CCP/M-86 DFORM | — | — |
+| `dskmaint` | Format, verify and copy diskettes | 4.11 | Recompiled from CDOS 4.1 with reconstructed 4.11 DOS boot sector and extended DOS formats | Behavior tested | — |
 | `dsp` | Inspect print-spool information | 4.11 | Recompiled from CDOS 4.1 | Behavior tested | — |
 | `echo` | Write text to the native console | None | New native RASM86 implementation | Additional tool | KEEP |
 | `ed` | Line-oriented text editor | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool | — |
@@ -333,7 +418,7 @@ Only changes made for this 4.1 rebuild are recorded there.
 The IBM SQUID XIOS is the selected build. The alternative modular OEM XIOS
 is preserved separately; its link still needs the missing 8087.SIM input/profile.
 HDMAINT is rebuilt byte-for-byte, including its embedded CP/M and FAT boot
-stages, and supplied with its manual on the second OEM disk. See
+stages, and supplied with its manual on the maintenance disk. See
 [HDMAINT build notes](commands/hdmaint/README.md) for loader provenance and checks.
 Installation and cold boot from both CP/M and FAT12 hard-disk partitions
 have passed under PCE with the rebuilt kernel. HELP text and imported commands
@@ -379,7 +464,9 @@ system and the live regression checks.
 | `make dist` | Root-level disk images and disks.zip |
 | `make check-release-commands` | Compare 4.11 and rebuilt command behavior in PCE and run the DATE parser cases |
 | `make check-dskmaint-live` | Format a disposable FAT floppy and verify empty-disk recovery and both system filenames at cold boot |
-| `make check-dform-live` | Format and verify DOS 360K media, check empty-disk recovery and cold boot after copying a matching kernel |
+| `make check-dform-live` | Format/verify DOS 360K–1.44M, test native FAT I/O and cold boot with the normal distribution kernel |
+| `make check-floppy-boot` | Cold boot DOS 180K–1.44M with the normal distribution kernel |
+| `make check-floppy-bios` | DOS last-sector, cross-head and cross-cylinder reads on 360K–1.44M media |
 | `make check-dist` | Build and verify the disk archive |
 | `make clean` | Remove generated build outputs, media and releases |
 

@@ -30,10 +30,6 @@ fat_write_sector:
         cmp fat_lba,0
         jne fat_reserved_entries
         mov si,offset fat_boot_sector
-        cmp cylinders,40
-        je fat_boot_selected
-        mov si,offset extended_boot_sector
-fat_boot_selected:
         xor di,di
         mov cx,256
         rep movsw
@@ -89,9 +85,9 @@ fat_head_zero:
         inc fat_lba
         mov ax,fat_lba
         cmp ax,fat_metadata_end
-        jae near_fat12_2805_1
+        jae fat_metadata_complete
         jmp fat_write_sector
-near_fat12_2805_1:
+fat_metadata_complete:
         mov transfer_count,0
         mov transfer_sector,0
         ret

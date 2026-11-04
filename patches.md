@@ -552,9 +552,10 @@ rejection and the resulting CMD header bytes. PRINTMGR uses the 4.11 default of
 60 printed lines on a 66-line form and reports that default in help. PIP's
 interactive banner identifies the maintained 4.1N version.
 
-DSKMAINT now embeds the released 360 KB DOS bootstrap. The full sector matches
-4.11. A floppy formatted by the rebuilt utility cold-boots both original and
-locally generated systems linked for segment 0060h. See the DSKMAINT README.
+DSKMAINT initially embedded the released 360 KB DOS bootstrap, byte-identical
+to 4.11. Its fixed load address was subsequently replaced by the header-aware
+DOSBOOTX bootstrap described below; the normal distribution kernel now boots
+without a separate low-linked build. See the DSKMAINT README.
 
 ### National keyboard banks
 
@@ -1630,8 +1631,8 @@ The default distribution has no FIDD CONFIG.SYS/drivers. Its standard SYS is
 (12,560 resident bytes before final file rounding). Both retain four PC
 consoles, two UART AUX ports and the shared 16-directory/eight-data pool.
 README documents installing the optional image as CCPM.SYS and reversing the
-choice. The low-linked DOS-floppy fixture follows the standard system's
-resident selection instead of blindly including stale staged RSPs.
+choice. DOS-floppy boot checks now use this normal distribution system
+directly; the former low-linked fixture is no longer required.
 
 Checks validate explicit resident selections, identical CODE between images,
 response-file parity and the expected size difference. Profile budgets are
@@ -1646,9 +1647,65 @@ installs the selected INT 1Eh geometry and restores it before releasing the
 disk. No kernel extension is required. The CMD reserves DMA scratch through
 MIN without storing its zero-filled reservation in the executable.
 
-DOS formatting embeds the same maintained 4.11 bootstrap as DSKMAINT,
-replacing the initial non-system sector. The user copies compatible CCPM.SYS
-as the first file, contiguous from cluster 2; this bootstrap requires
-OSSTART=60. DFORM does not install the kernel. `check-dform-live` checks the
+DOS formatting embeds the same maintained header-aware bootstrap as DSKMAINT,
+replacing the initial non-system sector. The user copies the normal CCPM.SYS
+as the first file, contiguous from cluster 2. DFORM does not install the kernel. `check-dform-live` checks the
 written geometry/metadata, mtools interoperability, empty-media recovery and
 cold boot with a locally generated matching kernel on disposable images.
+
+### DOS floppy capacities: 720K, 1.2M and 1.44M
+
+The native SQUID XIOS recognises exact FAT12 BPBs for 720K and 1.44M;
+F9 no longer unconditionally means 1.2M. Extended DPBs cover both sizes,
+with nine-sector FAT workspaces (1 KiB extra per installed floppy, allocated
+at startup). CMOS types 3/4 retain 80-cylinder seeks without double stepping
+and use 250/500 kbps. Media changes clear stale geometry before login.
+Physical XIOS 35/36 and caller-CHRN format 29 use physical cylinder/head
+values without the old hard-coded 79-track CP/M reversal. Legacy logical
+CP/M I/O remains 40-cylinder; no larger CP/M formats are introduced.
+
+DFORM adds explicit DOS720/DOS1200/DOS1440 profiles; bare DOS still means
+360K. FAT/root metadata is written sector by sector across track boundaries.
+DSKMAINT exposes seven ordered F2–F8 choices in two columns, adds the new
+BPBs/CHRN entries and recognises their cluster counts for copy formatting.
+All DOS floppies share the labelled DOSBOOTX bootstrap. The original 4.11
+360K sector remains a checked reference. It normalises CS, relocates itself, installs
+BPB-selected BIOS EOT, reads contiguous CCPM.SYS/CPM3.SYS from cluster 2,
+skips the CMD header and enters the load segment specified in that header. Copying the
+system file is the user's responsibility; hard-disk loader files are not
+needed on floppies.
+
+DCOPY/DCOMP validate DOS geometry through the BPB and compare cylinders as
+well as sectors/head. Head slots grow to 16 KiB, aligned to avoid 64 KiB DMA
+wraps. DCOPY has 32 KiB resident scratch; DCOMP overlays geometry scratch
+with its 48 KiB small-buffer reservation. CMD LEN omits these zero-filled
+reservations; MIN retains them. Existing backends reject the new large
+profiles, retaining their 8/9-sector behavior.
+
+Checks include independent release-sector identity, linked DSKMAINT format
+and menu bindings, simulated CMD I/O with final-sector patterns, disposable
+native format/verify and cold boot, native 1.44M BDOS allocation/read/write
+of a 1,433,600-byte file, and full-image copy/compare. The system file grows
+by 512 bytes versus the preceding build; the FAT workspace increase is
+runtime memory per installed floppy, not a stored SYS expansion.
+
+DOS INT 13h regression: physical multi-sector requests now advance head
+before cylinder; logical CP/M/DOS track numbering is retained. With the
+XIOS-owned default INT 1Eh table, raw reads/writes select the mounted drive's
+BPB EOT instead of the shared nine-sector default. Application-owned tables
+are honoured unchanged. `check-floppy-bios` executes actual DOS COM probes
+for last-sector, cross-head and cross-cylinder reads on all four DOS sizes.
+
+### DOS floppy boot uses the normal distribution kernel
+
+The historical sector hard-coded segment 0060h, while the maintained kernel
+is linked at 6000h. DOSBOOTX now reads the load segment from CCPM.SYS's CMD
+header, loads its body there and enters that segment. It rejects an invalid
+CODE header, an implausible file length, low-memory overlap or a load extent
+that reaches the relocated loader. Its sector buffer and stack stay above
+the kernel throughout loading. The same bootstrap is used by DSKMAINT and
+DFORM at every DOS capacity; the original release sector is retained only
+for provenance checks. The workflow is format, copy normal CCPM.SYS first,
+then boot. The floppy tests use the actual distribution SYS, not a generated
+low-linked substitute. Header/payload duplication in DFORM and DSKMAINT was
+removed when the formats converged on this shared sector.

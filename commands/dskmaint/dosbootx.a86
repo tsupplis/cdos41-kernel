@@ -1,9 +1,9 @@
 ;*****************************************************************************
-; DOSBOOTX - FAT12 720K/1.2M/1.44M floppy bootstrap for Concurrent DOS.
+; DOSBOOTX - FAT12 floppy bootstrap for Concurrent DOS.
 ; The formatter supplies the BPB. CCPM.SYS/CPM3.SYS must occupy the first
 ; root entry and contiguous clusters starting at 2, as with the 4.11 loader.
-; The CMD header must specify OSSTART=0060h; skip its 128 bytes when loading.
-; Relocate before loading low memory. Read one sector per BIOS request so
+; Read the kernel load segment from its CMD header; skip the 128-byte header.
+; Relocate before loading the kernel. Read one sector per BIOS request so
 ; geometry and 64K DMA boundaries do not depend on the selected capacity.
 ;*****************************************************************************
         cseg 07c0h
@@ -87,25 +87,43 @@ cluster_two:
 ; File length in sectors, including the first sector's CMD header.
         mov ax,word ptr .21ch
         mov dx,word ptr .21eh
+        cmp dx,10            ; reject a corrupt file length >= 640 KiB
+        jb boot_file_size_valid
+        jmp not_bootable
+boot_file_size_valid:
         add ax,511
         adc dx,0
         mov cx,512
         div cx
         mov remaining,ax
         or ax,ax
-        jz not_bootable
+        jnz boot_file_nonempty
+        jmp not_bootable
+boot_file_nonempty:
         mov ax,word ptr .17
         add ax,15
         mov cl,4
         shr ax,cl
         add ax,root_lba
         mov file_lba,ax
-        mov destination,60h
         call read_sector
         cmp byte ptr .200h,1
         jne not_bootable
-        cmp word ptr .203h,60h
-        jne not_bootable
+; The normal distribution and historical low-linked kernels share this
+; path. Do not impose the old loader's fixed address on the user.
+        mov ax,word ptr .203h
+        cmp ax,60h
+        jb not_bootable
+        mov destination,ax
+        mov kernel_segment,ax
+        mov dx,remaining
+        mov cl,5
+        shl dx,cl
+        add ax,dx
+        jc not_bootable
+        mov dx,cs
+        cmp ax,dx
+        ja not_bootable           ; kernel must remain below relocated loader
         mov si,280h
         mov cx,192
         jmps copy_sector
@@ -127,11 +145,13 @@ copy_sector:
         inc file_lba
         dec remaining
         jnz load_sector
-        mov ax,60h
+        mov ax,kernel_segment
+        push ax                  ; dynamic far entry from the kernel header
+        xor dx,dx
+        push dx
         mov ds,ax
         mov ds,word ptr .6
-        xor dx,dx
-        jmpf system_entry
+        retf
 not_bootable:
         mov si,offset insert_message
         jmps fatal
@@ -150,12 +170,8 @@ wait_key:
         int 16h
         int 19h
         jmps wait_key
-; AX=LBA. ES=CS, destination buffer 0200h. Preserve all live loader state.
+; AX=LBA. ES=CS, destination buffer 0200h. Clobbers AX/BX/CX/DX; callers set their copy registers after reading.
 read_sector:
-        push ax
-        push cx
-        push dx
-        push bx
         xor dx,dx
         div word ptr .24
         mov cl,dl
@@ -177,24 +193,18 @@ read_retry:
         jnz read_retry
         jmp read_error
 read_done:
-        pop bx
-        pop dx
-        pop cx
-        pop ax
         ret
 parameters db 0dfh,2,25h,2,9,1bh,0ffh,6ch,0f6h,0fh,8
 root_lba dw 0
 file_lba dw 0
 remaining dw 0
-destination dw 60h
+destination dw 0
+kernel_segment dw 0
 retries db 0
 name_ccpm db 'CCPM    SYS'
 name_cpm3 db 'CPM3    SYS'
-insert_message db 13,10,'Not a boot disk. Insert boot disk',0
+insert_message db 13,10,'Insert boot disk',0
 error_message db 13,10,'Read error',0
         org 510
         dw 0aa55h
-        cseg 0060h
-        org 0
-system_entry:
         end

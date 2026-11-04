@@ -79,6 +79,9 @@ cpu 8086
 %ifndef BAD_NINTH
 %define BAD_NINTH 0
 %endif
+%ifndef BAD_BPB
+%define BAD_BPB 0
+%endif
 %ifndef CYLINDERS
 %define CYLINDERS 40
 %endif
@@ -586,6 +589,9 @@ disk_model:
     mov word [es:bx+24],SECOND_SECTORS
     mov word [es:bx+19],CYLINDERS*SIDES*SECOND_SECTORS
 .boot_fields_ready:
+%if BAD_BPB
+    mov word [es:bx+22],0
+%endif
 %endif
     pop ax
     pop di

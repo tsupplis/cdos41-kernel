@@ -1,6 +1,7 @@
 """Check the 4.11 DSKMAINT assembly modules and constants against the release."""
 from pathlib import Path
 import hashlib
+import re
 
 
 def groups(image):
@@ -32,14 +33,21 @@ assert hashlib.sha256(original).hexdigest() == 'e70332946f5325d7a85b31accf4dec83
 old_code, old_data = groups(original)
 code, data = groups(Path('dskmaint.cmd').read_bytes())
 
-# Offsets from DSKRAW.MAP. The release places CONST (020Ch bytes) before
-# the application DATA group. Its compiled HELP body is 0078h bytes longer.
-relocated(old_code[:0xd84], code[:0xd84], 0x20c, 316)
-relocated(old_code[0xd90:0xe76], code[0xd90:0xe76], 0x78, 1)
-relocated(old_code[0x1cea:0x1f5d], code[0x1c72:0x1ee5], 0x20c, 31)
-assert old_data[:0x236] == data[:0x236]
-assert old_data[0x236:0x442] == data[0x303c:0x3248]
-relocated(old_data[0x442:0x2ccc], data[0x236:0x2ac0], 0x20c, 140)
-assert old_data[0x2ccc:0x3228] == data[0x2ac0:0x301c]
-assert old_data[0x3228:0x3247] == data[0x301c:0x303b]
-print('PASS: assembly modules, FUNC10, startup, embedded loader, HELP data and constants match after checked relocations')
+# SQUIDDM3 now intentionally extends the format/menu implementation. Keep
+# independent release checks on unchanged compiled components, locating them
+# through the link map instead of assuming their historical offsets.
+maptext=Path('dskraw.map').read_text(errors='replace')
+def module_range(name,section):
+    block=maptext.split('map for module:  '+name)[1].split('map for module:')[0]
+    m=re.search(r'([0-9A-F]+)  \(0000:([0-9A-F]+)-[0-9A-F]+\)\s+'+section,block)
+    return int(m[2],16),int(m[1],16)
+fcode,flen=module_range('FUNC10','CODE')
+fdata,fdlen=module_range('FUNC10','DATA')
+assert flen==0x273 and fdlen==0x1f
+relocated(old_code[0x1cea:0x1f5d],code[fcode:fcode+flen],0x3228-fdata,31)
+helpdata,helplen=module_range('HELP','DATA')
+assert old_data[0x2ccc:0x2ccc+helplen]==data[helpdata:helpdata+helplen]
+const,constlen=module_range('HELP','CONST')
+assert constlen==0x20c and old_data[0x236:0x442]==data[const:const+constlen]
+assert old_data[0x3228:0x3247]==data[fdata:fdata+fdlen]
+print('PASS: unchanged FUNC10, HELP data and constants retain checked 4.11 equivalence; extended format/menu code is checked separately')

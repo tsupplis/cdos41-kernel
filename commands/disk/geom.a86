@@ -1,4 +1,4 @@
-; Shared 8/9-sector detection and DMA-safe transfer slots.
+; BPB-based DOS geometry detection, conservative 8/9 fallback and safe DMA.
 ; A credible 40-cylinder FAT12 BPB may identify eight-sector media. Otherwise
 ; successful sector-nine I/O proves nine; a failed probe alone proves nothing.
 ; [8]/[9] are explicit geometry selections, never permission to ignore I/O.
@@ -11,6 +11,7 @@ geometry_detect:
         push si ! push di ! push bp ! push es
         mov geometry_hint,0
         mov geometry_cylinders,40
+        mov geometry_candidate_cylinders,40
         mov es,verify_segment
         mov cl,1
         call geometry_sector
@@ -19,17 +20,17 @@ geometry_detect:
         jmp geometry_stop
 geometry_boot_read:
         cmp es:word ptr .11,512
-        je near_geom_7943_1
+        je geometry_sector_size_valid
         jmp geometry_try_nine
-near_geom_7943_1:
+geometry_sector_size_valid:
         cmp es:word ptr .14,1
-        je near_geom_7943_2
+        je geometry_reserved_valid
         jmp geometry_try_nine
-near_geom_7943_2:
+geometry_reserved_valid:
         cmp es:byte ptr .16,2
-        je near_geom_7943_3
+        je geometry_fat_count_valid
         jmp geometry_try_nine
-near_geom_7943_3:
+geometry_fat_count_valid:
         mov ax,es:word ptr .24
         cmp ax,8
         je geometry_bpb_spt
@@ -38,16 +39,20 @@ near_geom_7943_3:
         cmp ax,15
         je geometry_bpb_spt
         cmp ax,18
-        je near_geom_7943_4
+        je geometry_spt_supported
         jmp geometry_try_nine
-near_geom_7943_4:
+geometry_spt_supported:
 geometry_bpb_spt:
         mov bp,ax
         mov bx,es:word ptr .26
         cmp bx,1
-        jb geometry_try_nine
+        jae geometry_bpb_fallback_check_1
+        jmp geometry_try_nine
+geometry_bpb_fallback_check_1:
         cmp bx,2
-        ja geometry_try_nine
+        jbe geometry_bpb_fallback_check_2
+        jmp geometry_try_nine
+geometry_bpb_fallback_check_2:
         push dx              ; preserve the selected source/target drive
         mul bx
         mov bx,ax
@@ -56,68 +61,125 @@ geometry_bpb_spt:
         div bx
         or dx,dx
         pop dx
-        jnz geometry_try_nine
+        jz geometry_bpb_fallback_check_3
+        jmp geometry_try_nine
+geometry_bpb_fallback_check_3:
         cmp ax,40
         je geometry_bpb_cylinders
         cmp ax,80
-        je near_geom_7943_5
+        je geometry_cylinders_supported
         jmp geometry_try_nine
-near_geom_7943_5:
+geometry_cylinders_supported:
         cmp es:word ptr .26,2
-        je near_geom_7943_6
+        je geometry_double_sided_80
         jmp geometry_try_nine
-near_geom_7943_6:
+geometry_double_sided_80:
 geometry_bpb_cylinders:
-        mov geometry_cylinders,al
+        mov geometry_candidate_cylinders,al
         cmp es:word ptr .22,1
-        jb geometry_try_nine
+        jae geometry_bpb_fallback_check_4
+        jmp geometry_try_nine
+geometry_bpb_fallback_check_4:
         cmp es:word ptr .22,9
-        ja geometry_try_nine
+        jbe geometry_bpb_fallback_check_5
+        jmp geometry_try_nine
+geometry_bpb_fallback_check_5:
         cmp es:byte ptr .21,0f0h
         je geometry_bpb_media
         cmp es:byte ptr .21,0f9h
-        jb geometry_try_nine
+        jae geometry_bpb_fallback_check_6
+        jmp geometry_try_nine
+geometry_bpb_fallback_check_6:
 geometry_bpb_media:
         cmp es:word ptr .17,16
-        jb geometry_try_nine
+        jae geometry_bpb_fallback_check_7
+        jmp geometry_try_nine
+geometry_bpb_fallback_check_7:
         cmp es:word ptr .17,224
-        ja geometry_try_nine
+        jbe geometry_bpb_fallback_check_8
+        jmp geometry_try_nine
+geometry_bpb_fallback_check_8:
         cmp es:byte ptr .13,1
         je geometry_cluster_valid
         cmp es:byte ptr .13,2
-        je near_geom_7943_7
+        je geometry_cluster_supported
         jmp geometry_try_nine
-near_geom_7943_7:
+geometry_cluster_supported:
 geometry_cluster_valid:
+; A recognised 80-cylinder BPB must describe one exact supported FAT12 shape.
+; Do not retain an 80-cylinder hint from a rejected/partial BPB.
+        cmp geometry_candidate_cylinders,80
+        jne geometry_commit_bpb
+        cmp es:word ptr .24,9
+        jne geometry_bpb_high_density
+        cmp es:byte ptr .13,2
+        jne geometry_bad_large_bpb
+        cmp es:word ptr .17,112
+        jne geometry_bad_large_bpb
+        cmp es:word ptr .22,3
+        jne geometry_bad_large_bpb
+        cmp es:byte ptr .21,0f9h
+        jne geometry_bad_large_bpb
+        jmp geometry_commit_bpb
+geometry_bpb_high_density:
+        cmp es:byte ptr .13,1
+        jne geometry_bad_large_bpb
+        cmp es:word ptr .17,224
+        jne geometry_bad_large_bpb
+        cmp es:word ptr .24,15
+        jne geometry_bpb_1440
+        cmp es:word ptr .22,7
+        jne geometry_bad_large_bpb
+        cmp es:byte ptr .21,0f9h
+        jne geometry_bad_large_bpb
+        jmp geometry_commit_bpb
+geometry_bpb_1440:
+        cmp es:word ptr .24,18
+        jne geometry_bad_large_bpb
+        cmp es:word ptr .22,9
+        jne geometry_bad_large_bpb
+        cmp es:byte ptr .21,0f0h
+        je geometry_commit_bpb
+geometry_bad_large_bpb:
+        jmp geometry_conflict
+geometry_commit_bpb:
+        mov al,geometry_candidate_cylinders
+        mov geometry_cylinders,al
         mov al,es:byte ptr .24
         mov geometry_hint,al
 geometry_try_nine:
+        cmp geometry_candidate_cylinders,80
+        jne geometry_fallback_allowed
+        cmp geometry_hint,0
+        jne geometry_fallback_allowed
+        jmp geometry_conflict
+geometry_fallback_allowed:
         cmp geometry_hint,15
         je geometry_large_bpb
         cmp geometry_hint,18
         jne geometry_old_probe
 geometry_large_bpb:
         cmp geometry_cylinders,80
-        je near_geom_7943_8
+        je geometry_large_cylinders_valid
         jmp geometry_conflict
-near_geom_7943_8:
+geometry_large_cylinders_valid:
         cmp sector_override,0
-        je near_geom_7943_9
+        je geometry_large_no_override
         jmp geometry_conflict
-near_geom_7943_9:
+geometry_large_no_override:
         cmp os_mode,2
-        je near_geom_7943_10
+        je geometry_large_driver_ready
         jmp geometry_unsupported
-near_geom_7943_10:
+geometry_large_driver_ready:
         mov al,geometry_hint
         jmp geometry_selected
 geometry_old_probe:
         cmp sector_override,8
         jne geometry_native_capability
         cmp geometry_hint,9
-        jne near_geom_7943_11
+        jne geometry_eight_override_valid
         jmp geometry_conflict
-near_geom_7943_11:
+geometry_eight_override_valid:
         mov al,8
         jmp geometry_selected
 geometry_native_capability:
@@ -132,48 +194,48 @@ geometry_nine_probe:
         call geometry_sector
         jnc geometry_nine
         cmp geometry_hint,8
-        je near_geom_9053_1
+        je geometry_eight_hint_present
         jmp geometry_ambiguous
-near_geom_9053_1:
+geometry_eight_hint_present:
         cmp sector_override,9
-        jne near_geom_9053_2
+        jne geometry_no_nine_override
         jmp geometry_ambiguous
-near_geom_9053_2:
+geometry_no_nine_override:
 geometry_eight:
         mov al,8
         jmps geometry_selected
 geometry_nine:
         cmp geometry_hint,8
-        jne near_geom_7943_12
+        jne geometry_nine_probe_consistent
         jmp geometry_conflict
-near_geom_7943_12:
+geometry_nine_probe_consistent:
         mov al,9
 geometry_selected:
         cmp sector_override,0
         je geometry_compare
         cmp al,sector_override
-        je near_geom_7943_13
+        je geometry_override_matches
         jmp geometry_conflict
-near_geom_7943_13:
+geometry_override_matches:
 geometry_compare:
         cmp geometry_cylinders,80
         jne geometry_compare_known
         cmp os_mode,2
-        je near_geom_7943_14
+        je geometry_80_driver_ready
         jmp geometry_unsupported
-near_geom_7943_14:
+geometry_80_driver_ready:
 geometry_compare_known:
         cmp geometry_known,0
         je geometry_first
         cmp al,track_sectors
-        je near_geom_7943_15
+        je geometry_sector_counts_match
         jmp geometry_conflict
-near_geom_7943_15:
+geometry_sector_counts_match:
         mov ah,geometry_cylinders
         cmp ah,cylinder_limit
-        je near_geom_7943_16
+        je geometry_cylinder_counts_match
         jmp geometry_conflict
-near_geom_7943_16:
+geometry_cylinder_counts_match:
         jmps geometry_return
 geometry_first:
         mov track_sectors,al
@@ -243,8 +305,8 @@ geometry_sector_buffer:
 geometry_sector_done:
         ret
 
-; Every head occupies an 8 KiB slot, aligned on a physical 8 KiB boundary.
-; Nine sectors fit inside it and never cross a 64 KiB DMA page. Zero padding
+; Every head occupies a 16 KiB slot, aligned on a physical 16 KiB boundary.
+; Eighteen sectors fit inside it and never cross a 64 KiB DMA page. Zero padding
 ; allows DCOMP to compare two slots without treating unused bytes as data.
 clear_track_slot:
         push ax ! push cx ! push di
@@ -255,7 +317,7 @@ clear_track_slot:
         pop di ! pop cx ! pop ax
         ret
 
-; Install a private 512-byte, nine-sector BIOS parameter table under the
+; Install a private 512-byte, eighteen-sector BIOS parameter table under the
 ; already-acquired disk lock (or single-user CP/M). Restore the exact vector
 ; on every exit. CDOS direct XIOS services also consult this INT 1Eh table.
 disk_setup:
@@ -302,6 +364,7 @@ disk_restore_done:
         ret
         dseg
 cylinder_limit db 40
+geometry_candidate_cylinders db 40
 geometry_cylinders db 40
 track_sectors db 8
 sector_override db 0

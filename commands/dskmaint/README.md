@@ -5,33 +5,35 @@ from the 4.11 release. Command syntax and disk geometry choices are unchanged.
 
 ## DOS format and boot
 
-The earlier OEM sector displayed a non-system disk message. DSKMAINT now writes
-the 4.11 bootstrap, assembled from labelled instructions in dosboot.a86. All
-512 bytes match the independent release sector. The formatter overlays the BPB
-for the selected disk geometry. The loader accepts the 360 KB format (FDh).
+The format screen has two columns with seven choices:
 
-To boot, copy CCPM.SYS or CPM3.SYS as the first file on a newly formatted disk.
-The release loader checks the first root entry and cluster 2 and reads the file
-contiguously. It enters the kernel at 0060:0000. Generate the kernel for this
-floppy with GENCCPM OSSTART=60. The normal CP/M distribution uses OSSTART=6000
-and its own boot path.
+| Key | Format |
+| --- | --- |
+| F2 | CP/M 160K |
+| F3 | CP/M 320K |
+| F4 | DOS FAT12 180K (existing legacy option) |
+| F5 | DOS FAT12 360K |
+| F6 | DOS FAT12 720K |
+| F7 | DOS FAT12 1.2M |
+| F8 | DOS FAT12 1.44M |
+
+The formatter installs the shared, header-aware `dosbootx.a86` bootstrap.
+Copy the normal distribution `CCPM.SYS` as the first file on the newly
+formatted DOS floppy, then boot it. No special kernel build is required.
+The system file must be contiguous from cluster 2; `CPM3.SYS` is also
+accepted. Formatting installs the bootstrap, while copying the system file
+remains the user's responsibility. No DRIBIO/DRIDOS files are needed on
+floppies. The original 4.11 `dosboot.a86` is retained as a checked reference.
 
 ## Verification
 
-`make check` in this directory checks the embedded DOS sector and compares the
-seven main assembly modules, SCD startup and FUNC10 against 4.11. The main code
-contains 316 relocated data operands, FUNC10 contains 31, and the startup has
-one relocated call. The main data contains 140 relocated words. The release
-links the 020Ch-byte constants before DATA. The constants, help data and FUNC10
-data compare exactly after accounting for that layout.
+`make check` checks the independent 4.11 sector, verifies unchanged FUNC10,
+HELP data and constants against 4.11, and inspects the linked extended format
+profiles, BPBs, metadata, CHRN table and F2–F8 menu bindings. The extended
+format/menu module intentionally differs from the release; whole-executable
+byte equivalence is not claimed.
 
-The remaining compiled HELP body differs in instruction selection and size.
-The 4.11 and rebuilt executables displayed the same DSKMAINT main menu, first
-help page, next page and return-to-menu screen with the original HELP.HLP.
-Whole-executable byte identity is unverified.
-
-At the project root, `make check-dskmaint-live` runs the actual format command
-on a disposable 360 KB drive B. It checks the resulting sector and FAT, then
-cold-boots three copies: empty media displays the recovery prompt, original
-4.11 CCPM.SYS reaches A>, and a locally generated low-linked system named
-CPM3.SYS also reaches A>. Release disks and host filesystems are untouched.
+`make check-dskmaint-live` runs each DOS 360K/720K/1.2M/1.44M choice on
+disposable images, checks the written sector/FAT, then cold-boots both system
+filenames using the normal distribution kernel. No release image is
+modified.

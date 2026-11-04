@@ -193,7 +193,7 @@ check-release-commands: all
 
 .PHONY: check-dskmaint-live
 check-dskmaint-live: all
-	python3 tools/dskmaint_live_check.py
+	@set -e; for size in 360 720 1200 1440; do python3 tools/dskmaint_live_check.py --format $$size; done
 
 .PHONY: check-retcode
 check-retcode: media
@@ -304,8 +304,16 @@ check-disk:
 	$(MAKE) -C commands/disk check
 
 check-disk-live: all
-	python3 tools/disk_live_check.py
+	@set -e; for size in 360 720 1200 1440; do python3 tools/disk_live_check.py --format $$size; done
 
 .PHONY: check-dform-live
 check-dform-live: all
-	python3 tools/dform_live_check.py
+	@set -e; for size in 360 720 1200 1440; do python3 tools/dform_live_check.py --format $$size; done
+
+.PHONY: check-floppy-bios
+check-floppy-bios: all
+	@set -e; for size in 360 720 1200 1440; do python3 tools/floppy_bios_check.py --format $$size; done
+
+.PHONY: check-floppy-boot
+check-floppy-boot: all
+	python3 tools/floppy_boot_check.py
