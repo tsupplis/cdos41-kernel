@@ -32,6 +32,8 @@ start:
     mov ax,3000h
     mov ds,ax
     mov es,ax
+    mov byte [80h],2
+    mov word [81h],'A:'
     jmp 2000h:0
 
 bdos:

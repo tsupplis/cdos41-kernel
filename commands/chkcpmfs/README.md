@@ -2,7 +2,20 @@
 
 `CHKCPMFS.CMD` is the same read-only CP/M filesystem checker for CP/M-86,
 CCP/M-86 and Concurrent DOS 4.1. It scans ordinary file entries in user areas
-0–15 on the currently selected drive through BDOS. It does not modify the disk.
+0–15 on the specified drive through BDOS. It does not modify the disk.
+
+## Usage
+
+```
+CHKCPMFS drive: [FV]
+```
+
+Exactly one drive (A:..P:) is required. F (repair) and V (verbose) are
+reserved placeholders, not implemented options. Bracket forms (`[FV]`, `[V`)
+and slash forms (`/F`, `/V`) are recognized case-insensitively. Missing or extra drives and unsupported options display usage
+and stop without scanning. There is no HELP option. Diagnostics use `ERROR:`;
+the summary reports `Consistency errors:` and states the scan's limitations,
+following the same layout as CHKDOSFS.
 
 Before scanning, it checks the drive's BDOS read-only state. If the drive is
 writable, CHKCPMFS temporarily sets it read-only and resets the drive afterward

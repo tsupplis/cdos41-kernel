@@ -1,0 +1,201 @@
+        title 'CHKDOSFS - Concurrent DOS read-only disk interface'
+;*****************************************************************************
+; CHKDOSFS native adapter. DRI C near-call ABI, 16-bit parameters.
+; Uses the same SYSDAT/DPB/XIOS interface as DOS Plus CHKDSK's CDOS branch.
+; No write entry is provided. C owns the MXdisk lifecycle; these routines
+; preserve SI, DI, BP, DS and ES, and return status/pointers through AX.
+;*****************************************************************************
+        public OSCALL,KINIT,KGETDP,KOPEN,KKEEP,KERROR,KREAD
+        dseg
+sysseg  dw 0
+udaseg  dw 0
+pdaddr  dw 0
+oldkeep dw 0
+olderr  db 0
+        db 0
+bounce  rb 1056
+        cseg
+
+; Full-word BDOS result; preserve segment and C frame registers.
+OSCALL:
+        push bp
+        mov bp,sp
+        push si
+        push di
+        push ds
+        push es
+        mov cx,4[bp]
+        mov dx,6[bp]
+        int 0e0h
+        pop es
+        pop ds
+        pop di
+        pop si
+        pop bp
+        ret
+
+; Capture SYSDAT, current process descriptor and its UDA segment.
+KINIT:
+        push bp
+        push si
+        push di
+        push ds
+        push es
+        mov cx,154
+        int 0e0h
+        mov sysseg,es
+        mov cx,156
+        int 0e0h
+        mov pdaddr,bx
+        mov ax,es:10h[bx]
+        mov udaseg,ax
+        pop es
+        pop ds
+        pop di
+        pop si
+        pop bp
+        ret
+
+; KGETDP(drive, destination): copy all 29 bytes of the physical DPB.
+KGETDP:
+        push bp
+        mov bp,sp
+        push si
+        push di
+        push ds
+        push es
+        mov bx,4[bp]
+        shl bx,1
+        mov es,sysseg
+        mov bx,es:0c18h[bx]
+        xor ax,ax
+        or bx,bx
+        jz dpb_done
+        mov si,es:8[bx]
+        or si,si
+        jz dpb_done
+        mov di,6[bp]
+        push ds
+        push es
+        pop ds
+        pop es
+        mov cx,29
+        cld
+        rep movsb
+        mov ax,1
+ dpb_done:
+        pop es
+        pop ds
+        pop di
+        pop si
+        pop bp
+        ret
+
+; Open-drive vector, checked again after acquiring MXdisk.
+KOPEN:
+        push es
+        mov es,sysseg
+        mov ax,es:word ptr .88h
+        pop es
+        ret
+
+; KKEEP(1) saves/sets P_KEEP. KKEEP(0) restores the saved bit only.
+KKEEP:
+        push bp
+        mov bp,sp
+        push es
+        mov es,sysseg
+        mov bx,pdaddr
+        cmp word ptr 4[bp],0
+        jz keep_restore
+        mov ax,es:6[bx]
+        and ax,2
+        mov oldkeep,ax
+        or es:word ptr 6[bx],2
+        jmps keep_done
+keep_restore:
+        and es:word ptr 6[bx],0fffdh
+        mov ax,oldkeep
+        or es:6[bx],ax
+keep_done:
+        pop es
+        pop bp
+        ret
+
+; Return disk errors to the caller rather than offering Ignore; restore exactly.
+KERROR:
+        push bp
+        mov bp,sp
+        push es
+        mov es,udaseg
+        cmp word ptr 4[bp],0
+        jz error_restore
+        mov al,es:byte ptr .10h
+        mov olderr,al
+        mov es:byte ptr .10h,0feh
+        jmps error_done
+error_restore:
+        mov al,olderr
+        mov es:byte ptr .10h,al
+error_done:
+        pop es
+        pop bp
+        ret
+
+; KREAD(drive, track, sector, buffer): XIOS10, one physical sector.
+; A 512-byte-aligned bounce buffer cannot cross a 64 KiB DMA page. Copy it
+; to the C buffer only after a successful read, never after an I/O error.
+KREAD:
+        push bp
+        mov bp,sp
+        push si
+        push di
+        push ds
+        push es
+        mov ax,offset bounce
+        add ax,15
+        mov cl,4
+        shr ax,cl
+        mov dx,ds
+        add ax,dx
+        add ax,31
+        and ax,0ffe0h
+        push bp
+        push ax
+        mov cx,4[bp]
+        mov ch,1
+        push cx
+        push word ptr 6[bp]
+        push word ptr 8[bp]
+        push ax
+        xor ax,ax
+        push ax
+        mov es,udaseg
+        mov ds,sysseg
+        mov ax,10
+        callf dword ptr .28h
+        add sp,10
+        pop dx
+        pop bp
+        pop es
+        pop ds
+        push ds
+        push es
+        or ax,ax
+        jnz read_done
+        mov cx,ds
+        mov es,cx
+        mov ds,dx
+        xor si,si
+        mov di,10[bp]
+        mov cx,256
+        cld
+        rep movsw
+read_done:
+        pop es
+        pop ds
+        pop di
+        pop si
+        pop bp
+        ret
+        end
