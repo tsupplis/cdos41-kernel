@@ -25,6 +25,6 @@ all clean:
 	done
 
 check: all
-	@set -e; for d in $(SUBDIRS); do $(MAKE) -C $$d check; done
-	@set -e; for f in $(CMDS); do cmdinfo $$f; done
-	@python3 -c "from pathlib import Path; files='$(DOS_EXES)'.split(); assert all(Path(f).read_bytes()[:2]==b'MZ' for f in files), 'Expected DOS EXE header'; assert Path('loadccpm/loadccpm.com').read_bytes()[0]==0xe9, 'Expected LOADCCPM entry JMP'"
+	set -e; for d in $(SUBDIRS); do $(MAKE) -C $$d check; done
+	set -e; for f in $(CMDS); do cmdinfo $$f; done
+	python3 -c "from pathlib import Path; files='$(DOS_EXES)'.split(); assert all(Path(f).read_bytes()[:2]==b'MZ' for f in files), 'Expected DOS EXE header'; assert Path('loadccpm/loadccpm.com').read_bytes()[0]==0xe9, 'Expected LOADCCPM entry JMP'"
