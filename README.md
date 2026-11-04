@@ -22,17 +22,29 @@ The assembly is based on partial 4.1 OEM sources corrected to align with Europea
 
 
 <p align="center">
+<img src="images/windows.png" alt="Overlapping colour console windows" width="48%">
 <img src="images/ccpm86.png" alt="Concurrent DOS 4.11 running in PCE" width="48%">
-<img src="images/windows.png" alt="Overlapping console windows" width="48%">
-<br><sub>Concurrent DOS 4.11 &nbsp;·&nbsp; Console windows</sub><br>
-<img src="images/setup.png" alt="XIOS configuration menu" width="48%">
-<img src="images/basic.png" alt="Microsoft BASIC 5.50A" width="48%">
-<br><sub>System setup &nbsp;·&nbsp; Microsoft BASIC 5.50A</sub><br>
+<br><sub>Console windows &nbsp;·&nbsp; Concurrent DOS 4.11</sub><br>
+<img src="images/setup.png" alt="System configuration menu" width="48%">
 <img src="images/fm.png" alt="Concurrent DOS File Manager" width="48%">
-<img src="images/menu.png" alt="Concurrent DOS startup menu" width="48%">
-<br><sub>File Manager &nbsp;·&nbsp; Startup menu</sub>
-<br><img src="images/rose.png" alt="Rose screenshot" width="48%">
+<br><sub>System setup &nbsp;·&nbsp; File Manager</sub>
+</p>
+
+<p align="center">
+<img src="images/rose.png" alt="Rose graphics demonstration" width="48%">
 <br><sub>Rose</sub>
+</p>
+
+<p align="center">
+<img src="images/menu.png" alt="Concurrent DOS startup menu" width="48%">
+<img src="images/basic.png" alt="Microsoft BASIC 5.50A" width="48%">
+<br><sub>Startup menu &nbsp;·&nbsp; Microsoft BASIC 5.50A</sub><br>
+<img src="images/turbocpm.png" alt="Turbo Pascal running as a native CP/M-86 application" width="48%">
+<img src="images/turbodos.png" alt="Turbo Pascal running as a DOS application" width="48%">
+<br><sub>Turbo Pascal for CP/M-86 &nbsp;·&nbsp; Turbo Pascal for DOS</sub><br>
+<img src="images/dskmaint.png" alt="DSKMAINT floppy format selection" width="48%">
+<img src="images/pcmode.png" alt="DOS Turbo Pascal running under PC-MODE" width="48%">
+<br><sub>Disk maintenance &nbsp;·&nbsp; DOS applications under PC-MODE</sub>
 </p>
 
 The build follows the CCP/M project's source organization and toolchain.
