@@ -158,14 +158,11 @@ Stock DOS Plus 1.2 versus this CDOS rebuild.
 | CP/M hard-disk partitions | Not supported | Supported |
 | Hard-disk installation and boot | FAT partition only | FAT or CP/M partition |
 | National keyboard, screen and printer settings | N and NATIONAL.MSG | Same national setup support through N and NATIONAL.MSG |
-| Directory-tree statistics | TREE | TREE.CMD |
+| Directory-tree statistics | TREE | Portable TREE |
 | EXEs with short or unaligned headers | Loader defect affects some programs | Fixed |
 | Command processor | COMMAND.COM | PCTMP and BATCH |
 | Startup scripts | AUTOEXEC.BAT | Per-console startup scripts |
-| Batch arguments | `%0`–`%9`, SHIFT | `%0`–`%9`, SHIFT |
-| Batch control and messages | IF, GOTO, FOR, ECHO | ECHO, labels/GOTO, SHIFT, EXIT, IF EXIST/DIREXIST/==/ERRORLEVEL, FOR lists/ranges/files and CALL |
-| Echo control | ECHO ON/OFF | BATCH-only ECHO=ON/OFF and @ECHO; interactive ECHO prints text |
-| EXIT | COMMAND.COM command | BATCH-only; optional 0–255 status, otherwise 0 |
+| Batch support | DOS 2.0 Level | Enhance DOS 2.0 Level (CALL, DIREXIST, @ECHO, EXIT) |
 | Environment variables | SET and `%NAME%` expansion | SETENV and BATCH `%NAME%` expansion; no interactive expansion |
 | Search-path commands | PATH built-in | PATH built-in and PATH.CMD for the DOS environment; SYSDISK and ORDER for native shell searching |
 | DOS program memory | ADDMEM and COMSIZE | Same-named PCTMP/BATCH built-ins: extra allocation and minimum DOS-program memory |
@@ -184,8 +181,8 @@ The internal-interface count uses the nine services identified in [api.md](api.m
 | PROMPT, BREAK, VERIFY, SLICE | No corresponding shell commands |
 | LABEL, BACKG, FSET | Mapped to SET/SHOW, SYSTAT/STOP and SET respectively; command syntax differs |
 | ALARM, GRAFTABL, DEVICE | No direct command equivalents |
-| CHKDSK | CHKCPMFS checks CP/M allocation; CHKDOSFS checks and repairs FAT12/FAT16 (B/D/F/L/R/V supported; confirmed conservative repairs) |
-| MODE | SETUP/SETPORT cover some configuration functions; no complete MODE equivalent |
+| CHKDSK | CHKCPMFS checks CP/M allocation with confirmed metadata repairs; CHKDOSFS checks and repairs FAT12/FAT16 (B/D/F/L/R/V supported; confirmed conservative repairs) |
+| MODE | SETUP/SETPORT cover some configuration functions; no complete equivalent |
 
 ## Distributions
 
@@ -352,7 +349,7 @@ case handling.
 | `asm86` | 8086 assembler | - | Recompiled from CCP/M-86 3.1 and adapted | Additional tool | — |
 | `batch` | Run BAT command files | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Equivalent | KEEP |
 | `chdir / mkdir` | Change or create directories | 4.11 | Recompiled from CDOS 4.1; shared D.A86 implementation | Byte-identical | — |
-| `chkcpmfs` | Read-only CP/M directory allocation consistency check | - | New shared PL/M-86 checker for CDOS, CCP/M-86 and CP/M-86 | Additional tool | — |
+| `chkcpmfs` | CP/M allocation check and confirmed metadata repair | - | New shared PL/M-86 checker for CDOS, CCP/M-86 and CP/M-86 | Additional tool | — |
 | `chkdosfs` | FAT12/FAT16 check and confirmed size/EOF correction and lost-chain recovery | DOS Plus CHKDSK 1.0 | Recreated in C from the DOS Plus binary; [scope and tests](commands/chkdosfs/README.md) | Additional tool | — |
 | `rmdir` | Remove directories | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Equivalent | — |
 | `chset` | Inspect or change CMD header flags | 4.11 | Recompiled from CDOS 4.1 and adapted for parity | Behavior tested | — |

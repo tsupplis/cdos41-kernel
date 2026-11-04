@@ -65,10 +65,21 @@ Individual applications can use their own key bindings.
   ADDMEM=32<Enter>
 
 ///1ASM80
-ASM80 is the translated CP/M-80 assembler used to build 8080 programs.
-It is a development tool, separate from the native 8086 ASM86 assembler.
-Its source/output conventions follow CP/M-80 ASM; HEXCOM converts Intel
-HEX output to a flat COM file.
+ASM80 basename{.shp}
+
+Assembles basename.ASM as Intel 8080 source and produces basename.HEX
+and basename.PRN. With no suffix, source and output use the current drive.
+The optional three-letter suffix selects source, HEX and listing drives;
+use Z for either output to suppress it, or X for a console listing.
+
+  ASM80 PROG
+  ASM80 PROG.AAZ
+
+The second example reads A:PROG.ASM, writes A:PROG.HEX and suppresses
+PROG.PRN. This is the translated CP/M-80 assembler, not the native 8086
+ASM86 assembler. HEXCOM converts its Intel HEX output to a flat COM image.
+
+
 
 ///1asm86
     Syntax:
@@ -97,19 +108,20 @@ HEX output to a flat COM file.
     ASM86 filespec ($Ad Hd Pd Sd Fd)
 
     A   source file drive - .A86
-    d = (logical drives A-D)
+    d = (logical drives A-P)
 
     H   hex file drive    - .H86
-    d = (logical drives A-D, X,Y,Z)
+    d = (logical drives A-P, X,Y,Z)
 
     P   print file drive  - .LST
-    d = (logical drives A-D, X,Y,Z)
+    d = (logical drives A-P, X,Y,Z)
 
     S   symbol file drive - .SYM
-    d = (logical drives A-D, X,Y,Z)
+    d = (logical drives A-P, X,Y,Z)
 
     F   format of hex file- .H86
     d = (D=Digital Research, I=Intel)
+
 
 ///1BACK
   See the BACKREST command.
@@ -438,8 +450,8 @@ See the media README for complete disk contents.
   COPYMENU menu.dat newmenu.dat main
 
 ///1DATE
-  DATE.CMD is the native CP/M command. DATE.EXE on the DOS disk is the
-  separate DOS interface; use an explicit extension to select it.
+  DATE.CMD is the native CP/M command on CCP/M and CDOS. On CDOS,
+  DATE.EXE is the separate DOS interface; use an explicit extension to select it.
   Short years 00..77 mean 2000..2077; 78..99 mean 1978..1999.
 
     Syntax:
@@ -478,6 +490,7 @@ See the media README for complete disk contents.
     A>DATE SET
 
     Prompts you for date and time entries.
+
 
 ///1dcomp
   Syntax:
@@ -518,6 +531,7 @@ See the media README for complete disk contents.
       A>DCOMP A: B: [9]
       A>DCOMP A: A: [1] [8]
 
+
 ///1dcopy
   Syntax:
 
@@ -557,9 +571,110 @@ See the media README for complete disk contents.
       A>DCOPY A: B: [9]
       A>DCOPY A: A: [1] [8]
 
+
 ///1DDT86
-DDT86 is the interactive 8086 debugger on the tools disk. Use it to
-inspect memory and registers and trace program execution.
+    Syntax:
+
+    DDT86 {filespec}
+
+    Explanation:
+
+    DDT86  aids debugging of 8086 and 8088 programs.  DDT86 assumes a
+    default  filetype  of  CMD.   If  a  file  specification  is  not
+    included,  DDT86  is  loaded  into  User  Memory  without  a test
+    program. The test program is then loaded using the E command.  If
+    the  optional file specification is included in the command, both
+    DDT86 and the test program file specified by filespec are  loaded
+    into  memory. DDT86  does  not support passwords.  To exit DDT86,
+    press CTRL-C.
+
+    Do not use G, T or U until a test program has been loaded.
+    Use E to load a CMD program when starting DDT86 without a filename.
+
+    ///2EXAMPLES
+    Examples:
+
+    A>DDT86
+    A>DDT86 PROGRAM1
+    A>DDT86 PROGRAM2.CMD
+    A>DDT86 B:PROGRAM3.CMD
+
+    DDT86 Command Examples:
+
+    -D
+    -L1008:0,4F
+    -SW23a
+    -DW50:0
+    -F100,200,FF
+    -A10C
+    -Rprog.h86
+
+    ///2COMMANDS
+    DDT86 Command Summary:
+
+    The command character can be followed by one or  more  arguments.
+    Separate  arguments  from  one  another  by  commas or spaces; no
+    spaces are allowed between the command character  and  the  first
+    argument.
+
+    As             (Assemble)      Enter Assembly Language Statements
+    Bs,f,s1        (Block Compare) Compare Blocks of Memory
+    D{W}{s{,f}}    (Display)       Display Memory in Hexadecimal and ASCII
+    Efilespec      (Execution)     Load Program for Execution
+    Fs,f,bc        (Fill)          Fill Memory Block with a byte constant
+    FWs,f,wc       (Fill Word)     Fill Memory Block with a word constant
+    G{s}{,b1{,b2}} (Go)            Begin Execution with optional breakpoints
+    Hwc1,wc2       (Hex)           Hexadecimal Sum and Difference
+    Icommand tail  (Input)         Set Up Input Command Line
+    L{s{,f}}       (List)          List Memory in Mnemonic Form
+    Ms,f,d         (Move)          Move Memory Block
+    QI{W}n                         Read From I/O Port
+    QO{W}n,v                       Write To I/O Port
+    Rfilespec      (Read)          Read Disk File into Memory
+    S{W}s          (Set)           Set Memory Values
+    SRs,f,<string>                 Search For String
+    T{n}           (Trace)         Trace Program Execution
+    TS{n}          (Trace)         Trace and Show All Registers
+    U{n}           (Untrace)       Monitor execution without Trace
+    US{n}          (Untrace)       Monitor and Show all Registers
+    V              (Verify)        Show Memory Layout after Disk Read
+    Wfilespec      (Write)         Write Content of Block to Disk
+    X{r}           (Examine)       Examine and Modify CPU Registers
+
+
+    DDT-86 Command Parameters
+    -------------------------
+    Parameter   Replace With
+
+    bc          byte constant
+    b1          breakpoint one
+    b2          breakpoint two
+    d           destination for data
+    f           final address
+    n           number of instructions
+                to execute
+    r           register or flag name
+    s           starting address
+    W           word 16-bit
+    wc          word constant
+
+    ///3PARAMETERS
+    DDT-86 Command Parameters
+
+    Parameter   Replace With
+
+    bc          byte constant
+    b1          breakpoint one
+    b2          breakpoint two
+    d           destination for data
+    f           final address
+    n           number of instructions
+                to execute
+    r           register or flag name
+    s           starting address
+    W           word 16-bit
+    wc          word constant
+
 
 ///1DEL
 DEL filespec
@@ -609,6 +724,22 @@ its own CP/M [S], [Gn] and [P] options. Those are not a separate DIR RSP.
 previous user afterward. [S] is the same system-only filter in DIR.CMD.
 Use nD: (for example 3B:) to change user and drive together in TMP/BATCH;
 invalid users or unavailable drives leave the current context unchanged.
+
+    ///2CMD
+    DIR.CMD {filespec} {[S]} {[Gn]} {[P]}
+
+    Explicit DIR.CMD invokes the shared standalone native command.
+    [S] lists system files only; on CDOS FAT this includes hidden files.
+    [Gn] selects CP/M user n (0..15). [P] pauses after 23 screen rows,
+    using Press any key to continue...; Ctrl-C stops the listing.
+    Without [P], output is continuous. Options can be combined.
+
+    A>DIR.CMD B:*.CMD [S] [P]
+    A>DIR.CMD A: B: [P]
+
+    Interactive DIR and BATCH may use their own resident implementations;
+    their additional switches are documented in the parent DIR topic.
+
 
 ///1DREDIX
 DREDIX {filename}
@@ -712,12 +843,9 @@ direct-printing utility imported from CCP/M.
 
     Explanation:
 
-    ED is the Concurrent CP/M  character file editor.  You can rename
+    ED is the CP/M character file editor.  You can rename
     or redirect the  new  version  of  the  file  by  specifying  the
     destination drive or destination filespec.
-
-    Section 10  of the  Concurrent  CP/M  User's  Reference  Guide is
-    devoted to ED.
 
     ///2COMMANDS
     ED Command Summary:
@@ -730,7 +858,7 @@ direct-printing utility imported from CCP/M.
     B, -B         move CP to the beginning (B) or bottom (-B) of buffer
     nC, -nC       move CP n characters forward (C) or back (-C) through buffer
     nD, -nD       delete n characters before (-D) or from (D) the CP
-    E             save new file and return to Concurrent CP/M
+    E             save new file and return to the command prompt
     Fstring^Z     find character string
     H             save new file, re-edit using new file as the original file
     I<RETURN>     enter insert mode
@@ -745,7 +873,7 @@ direct-printing utility imported from CCP/M.
     Nstring       extended find string
     O             return to original file
     nP, -nP       move CP n lines forward and display n lines at console
-    Q             abandon new file, return to Concurrent CP/M
+    Q             abandon new file, return to the command prompt
     R             read X$$$$$$$.LIB file into buffer
     Rfilespec^Z   read filespec into buffer
     Sdelete string^Zinsert string^Z     substitute string
@@ -779,6 +907,7 @@ direct-printing utility imported from CCP/M.
     :5K
     :B5T
     :Rmyfile.txt
+
 
 ///1EDITMENU
   EDITMENU  is  used  to create a new menu or to  edit,  copy,  or  delete  an
@@ -1141,6 +1270,7 @@ prepared configuration and module set; see the kernel/sysgen directory.
 
     All values represented by n are hexadecimal paragraph addresses.
 
+
 ///1GENLDR
 GENLDR is the original CDOS loader-generation utility. It is supplied on
 the tools disk with LOADCCPM.COM. It generates loader material from the
@@ -1219,9 +1349,19 @@ The original detailed operating reference is retained in base/help.hlp.
        HELP><cr>
 
 ///1HEXCOM
-HEXCOM converts Intel HEX input to a flat COM binary. It is supplied as a
-development tool alongside ASM80 and ASM86. Use GENCMD, not HEXCOM, to
-package native CP/M-86 segmented H86 output into CMD format.
+HEXCOM basename
+
+Reads basename.HEX and writes basename.COM. A supplied .HEX extension
+is also accepted. The output is a flat memory image from the lowest to
+the highest loaded address, padded to a 128-byte CP/M record with Ctrl-Z.
+
+  HEXCOM PROG
+  HEXCOM B:PROG.HEX
+
+This is a development tool for Intel HEX input. Use GENCMD, not HEXCOM,
+to package native CP/M-86 segmented H86 output as a CMD program.
+
+
 
 ///1INITDIR
     Syntax:
@@ -1380,26 +1520,33 @@ by the shell and BATCH; no standalone PAUSE.CMD is needed.
 
 ///1PIP
   Syntax:
-  PIP {d:{[Gn]}}|filespec{[Gn]} = filespec{[o]},... | d:{[o]}
+
+              DESTINATION              SOURCE
+
+    PIP d:{Gn} | filespec{[Gn]} = filespec{[o]},... | d:{[o]}
 
   Explanation:
-  The file copy program PIP copies files, combines files, and transfers  files
-  between  disks,  printers,  consoles,  or  other  devices attached  to  your
-  computer.  The first filespec is the destination. The second filespec is the
-  source.  Use two or more source filespecs separated by commas to combine two
-  or  more  files  into one file.   [o] is any combination  of  the  available
-  options.   The  [Gn] option in the destination filespec tells PIP   to  copy
+
+  The file copy program  PIP  copies  files,  combines  files,  and
+  transfers  files  between  disks,  printers,  consoles,  or other
+  devices attached to your computer.  The  first  filespec  is  the
+  destination. The  second filespec is the source.  Use two or more
+  source filespecs separated by commas to combine two or more files
+  into  one file.  [o] is any combination of the available options.
+  The [Gn] option in the destination filespec  tells  PIP  to  copy
   your file to that user number.
 
-  PIP  with  no command tail displays an * prompt and awaits  your  series  of
-  commands,  entered  and  processed  one  line at  a  time.   The  source  or
-  destination can be any Concurrent logical device.
+  PIP with no command tail displays an *  prompt  and  awaits  your
+  series  of  commands,  entered  and processed one line at a time.
+  The source or destination can be any available logical device.
 
   ///2Examples
+
   COPY A FILE FROM ONE DISK TO ANOTHER
 
        A>PIP b:=a:draft.txt
        A>PIP b:draft.txt = a:
+
        B3>PIP myfile.dat=A:[G9]
        A9>PIP B:[G3]=myfile.dat
 
@@ -1412,7 +1559,7 @@ by the shell and BATCH; no standalone PAUSE.CMD is needed.
 
        A>PIP b:=draft.*
        A>PIP b:=*.*
-       B>PIP b:=c:.*.*
+       B>PIP b:=c:*.*
        C>PIP b:=*.txt[g5]
        C>PIP a:=*.cmd[wr]
        B>PIP a:[g3]=c:*.*
@@ -1437,32 +1584,40 @@ by the shell and BATCH; no standalone PAUSE.CMD is needed.
        A>PIP prn:=b:draft.txt
 
   ///2options
+
   PIP OPTIONS
 
-  A    Archive.  Copy only files that have been changed since the last copy.
+  A    Archive. Copy only files that have been  changed  since  the
+        last copy.
   C    Confirm. PIP prompts for confirmation before each file copy.
   Dn   Delete any characters past column n.
-  E    Echo transfer to window.
+  E    Echo transfer to console.
   F    Filter form-feeds from source data.
   Gn   Get from or go to user n.
-  H    Test for valid hex format.
-  I    Ignore :00 hex data records and test for valid hex format.
-  K    Kill display of filespecs on window.
-  L    Translate uppercase to lowercase.
-  N    Number output lines.
+  H    Test for valid Hex format.
+  I    Ignore :00 Hex data records and test for valid Hex format.
+  K    Kill display of filespecs on console.
+  L    Translate upper case to lower case.
+  N    Number output lines
   O    Object file transfer, ^Z ignored.
-  Pn   Set page length to n (default n=60).
-  Qs   Quit copying from source at string s.
+  Pn   Set page length to n.  (default n=60)
+  Qs^Z Quit copying from source at string s.
   R    Read files that have been set to SYStem.
-  Ss   Start copying from the source at the string s.
+  Ss^Z Start copying from the source at the string s.
   Tn   Expand tabs to n spaces.
-  U    Translate lowercase to uppercase.
+  U    Translate lower case to upper case.
   V    Verify that data has been written correctly.
-  W    Write over Read/Only files without window query.
+  W    Write over Read Only files without console query.
   Z    Zero the parity bit.
 
-  All options except C,G,K,O,R,V and W force an ASCII file transfer, character
-  by character, terminated by a ^Z.
+  [A] and [C] apply to explicit filenames as well as wildcards.
+
+  With [H] or [I], the first printable character of each HEX
+  record must be a colon (:).
+
+  All  options  except  C,G,K,O,R,V  and  W  force  an  ASCII  file
+  transfer, character by character, terminated by a ^Z.
+
 
 ///1PRINT
     Syntax:
@@ -1528,6 +1683,7 @@ by the shell and BATCH; no standalone PAUSE.CMD is needed.
 
     The above command causes PRINT to print all of the files with the
     DIR attribute in user 0 of drive B.
+
 
 ///1PRINTER
     Syntax:
@@ -1695,6 +1851,7 @@ A line beginning with a semicolon or period is also a comment.
     In the last example, the new filename already  exists.  The  user
     overrides the error by entering a Y at the prompt.
 
+
 ///1RENAME
   See REN.
 
@@ -1787,7 +1944,7 @@ A line beginning with a semicolon or period is also a comment.
     [XFCB]        Displays only files with XFCBs or date stamping.
     [NONXFCB]     Displays only files without XFCBs or date stamping.
 
-    DOS subdirectories display <DIR> instead of a file size in FULL/SIZE;
+    On CDOS, DOS subdirectories display <DIR> instead of a file size in FULL/SIZE;
     SHORT/SIZE prefix directory names with a backslash. Directory counts
     are separate from regular files. SYSTEM/HIDDEN require [SYS] or [DIR SYS].
 
@@ -1798,6 +1955,7 @@ A line beginning with a semicolon or period is also a comment.
     [PAGE] uses the native PCTMP message: Press any key to continue...
     Press a key for the next page, or Ctrl-C to stop. [LENGTH=n] controls
     repeated headers separately; it does not enable interactive pauses.
+
 
 ///1SET
 SET filespec [RO|RW,DIR|SYS,ARCHIVE=ON|OFF,F1=ON|OFF,...,F4=ON|OFF]
@@ -1810,19 +1968,19 @@ SET {d:} [DEFAULT=password]
 SET {d:} [CREATE=ON|OFF,ACCESS=ON|OFF,UPDATE=ON|OFF]
 SET [HELP]
 
-File attributes work on CP/M and DOS media through BDOS. F1-F4 are CP/M
+File attributes work on CP/M and, on CDOS, DOS media through BDOS. F1-F4 are CP/M
 file flags. FAT supports legacy F1-F3 only: its lowercase-extension flag
 is not F4, and SET leaves FAT case flags unchanged. FAT short names match
 without case. CP/M ARCHIVE=ON clears DOS's archive-needed bit; OFF sets it.
 
-On FAT, SET d: [NAME=WORK] creates or changes the volume name.
+On CDOS FAT, SET d: [NAME=WORK] creates or changes the volume name.
 SET d: [NAME="MY DISK"] accepts spaces, up to eleven characters.
 SET d: [NAME=] removes the FAT label. The physical root is used even
 from a subdirectory; ordinary files with the same name are unaffected.
 CP/M directory-label behavior is unchanged.
 
 HIDDEN=ON/OFF changes only the FAT hidden attribute. Wildcards and other
-file options may be combined. Requires actual DOS media and the BDOS 230
+file options may be combined. Requires CDOS DOS media and the BDOS 230
 capability handshake; older kernels are rejected. DIR/SDIR visibility and
 ERA/RM behavior are unchanged.
 
@@ -1845,6 +2003,7 @@ CREATE and ACCESS timestamps are mutually exclusive. Enabling either
 replaces the other; selecting both together is invalid. INITDIR must
 format the directory before timestamping can be enabled. UPDATE is
 independent. A bare filespec is not a query: use SDIR or SHOW to inspect.
+
 
 ///1SETENV
   SETENV [NAME[=value]]
@@ -1898,10 +2057,10 @@ in base/help.hlp in the source tree.
 
     Use the SHOW options to  display  drive  characteristics,  active
     user  numbers,  or the directory label. SHOW HELP displays a list
-    of available options. SPACE and DRIVE work on CP/M and DOS media.
-    LABEL displays the physical-root volume name on FAT, or reports no label.
+    of available options. SPACE and DRIVE work on CP/M media and, on CDOS, DOS media.
+    On CDOS FAT, LABEL displays the physical-root volume name, or no label.
     CP/M LABEL retains its password/stamping columns. USERS requires CP/M media.
-    Default SPACE listings omit N:/O:/P:, as in the OEM SHOW command.
+    On CDOS, default SPACE listings omit N:/O:/P:, as in the OEM command.
 
     ///2EXAMPLES
     Examples:
@@ -1936,6 +2095,7 @@ in base/help.hlp in the source tree.
     SHOW d:       ; SHOW with the optional drive specifier displays
                   ; information for the specified drive only.
 
+
 ///1SPL
 SPL starts the OEM spooler. It uses the SPLIN/SPLOUT and MXSPL queues and
 the supplied INDEX.DSP data. PRINTMGR manages spool requests; DSP displays
@@ -1966,6 +2126,7 @@ shell command. See also FREEMEMORY.
     A>SUBMIT START
     A>SUBMIT B:START
     A>SUBMIT MAX.SUB data1 data2 data3
+
 
 ///1SUSPEND
   Syntax:
@@ -2101,6 +2262,7 @@ system files or select the system search path. Use SYSDISK for that path.
 
           ->_
 
+
     Typing the appropriate letter in response to the menu obtains the
     associated  display. To  use SYSTAT without the menu, specify the
     menu option letter in the command, like this:
@@ -2140,6 +2302,7 @@ system files or select the system search path. Use SYSDISK for that path.
             continuous display, until you press a key.  Following the
             C with a space and a one  or two-digit  number causes the
             display to update every n seconds.
+
 
 ///1TIME
   Syntax:
@@ -2199,7 +2362,7 @@ system files or select the system search path. Use SYSDISK for that path.
     Explanation:
 
     TYPE displays an ASCII text file up to its CP/M Ctrl-Z end marker.
-    CP/M files end at Ctrl-Z or a record boundary; DOS files also stop
+    CP/M files end at Ctrl-Z or a record boundary; on CDOS, DOS files stop
     at their exact byte length, avoiding final-record padding. A last
     line does not need CR/LF. Wildcards are not accepted.
     [PAGE] pauses after 23 screen rows,
@@ -2224,6 +2387,7 @@ system files or select the system search path. Use SYSDISK for that path.
     B>TYPE a:document.law [PAGE]
     C>TYPE program.bas [PAGE]
     D>TYPE program.a86
+
 
 ///1USER
     Syntax:
@@ -2254,13 +2418,14 @@ WINDOW FULL N=n
 WINDOW CHANGE N=n PR=r,PC=c,NR=rows,NC=cols,VR=r,VC=c,TR=ROW,D=COLOR
 WINDOW WRITE N=n TYPE=WINDOW|CONSOLE|SETUP,FILE=filespec
 
-CDOS window numbers are 1..4. Screen and virtual coordinates are one-based:
+Window numbers are 0..3 on CCP/M-86 and 1..4 on CDOS. BDOS version
+selects the range at runtime. Screen/virtual coordinates are one-based:
 rows 1..24, columns 1..80. CHANGE validates its fields before changing XIOS;
 extents are clipped to the screen. VIEW reports all windows; TOP brings a
 window forward; FULL expands it to the screen.
 
 CHANGE fields (abbreviations allowed):
-  NUMBER/N       PC window number 1..4
+  NUMBER/N       Window number: CCP/M 0..3, CDOS 1..4
   PROW/PR        Physical top row
   PCOL/PC        Physical left column
   NROWS/NR       Window height
@@ -2284,10 +2449,11 @@ text ending at Ctrl-Z; disk-record padding is not part of the text.
 WINDOW does not require WMENU to be installed. The resident manager is
 a separate interactive interface to the same window services.
 
+
 ///1WMENU
 WMENU
 Installs and detaches the resident window manager. Once installed,
-Ctrl-Alt-Esc opens its menu; Ctrl-keypad-Plus remains available.
+Ctrl-Alt-Esc or Ctrl-Alt-0 opens its menu; Ctrl-keypad-Plus also works.
 
 Arrows or Space select a highlighted item; Return opens it:
   Place     Move the window with arrows
@@ -2299,11 +2465,12 @@ Arrows or Space select a highlighted item; Return opens it:
   Write     Save Window, Console or Setup output
   Abort     Return confirms unloading; Esc returns to the menu
 
-Window numbers are 1..4. Esc or Return leaves an editing submenu with
+Window numbers are 0..3 on CCP/M-86 and 1..4 on CDOS. Esc or Return leaves an editing submenu with
 live changes in effect. Esc from the main menu hides it without unloading.
 Write uses a default d:WINDOWn.TXT filename; Return writes, Esc cancels.
 Ctrl-Alt-1..4 and Ctrl-Alt-Tab remain the console-switch shortcuts.
 WINDOW provides the nonresident command-line interface.
+
 
 ///1ECHO
 ECHO {text}
@@ -2525,10 +2692,16 @@ If this BATCH was started by CALL, its native parent resumes with that status.
 
 ///1CHKCPMFS
 CHKCPMFS drive: [FV]
-Read-only CP/M directory/allocation consistency check on the specified A:..P:.
-Exactly one drive is required; options follow it. V lists checked entries.
-Scans all users 0-15 and restores the original drive and user area.
-F is reserved and not implemented. Run on an idle drive; DOS/FAT is rejected.
+CP/M directory allocation check on the specified A:..P:. Exactly one drive
+is required; options follow it. V lists checked entries. All users 0-15 are
+checked. Without F, no disk writes are made.
+F offers confirmed metadata repairs only: clear reserved extent bits and
+remove fully identical duplicate extents with matching timestamp information.
+File data, allocation maps, names, attributes and recorded lengths are retained.
+Conflicting extents, cross-links, invalid block references, record-count errors
+or ambiguous associated metadata prevent the whole repair plan.
+Run on an idle drive. Repairs use BIOS on CP/M and locked XIOS on CCP/M/CDOS.
+I/O failures stop writes; partial changes are reported. DOS/FAT is rejected.
 
 ///1CHKDOSFS
 CHKDOSFS drive: [BDFLRV]
