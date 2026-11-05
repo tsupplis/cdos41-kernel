@@ -16,7 +16,7 @@ The assembly is based on partial 4.1 OEM sources corrected to align with Europea
 | Usability improvements | Command-line editing and recall, console shortcuts, paging and CLS |
 | Additional tools | ASM80, HEXCOM, Legacy CCP/M tools and floppy copy/compare commands |
 | Floppy formats | CP/M 160/320K; DOS FAT12 360K, 720K, 1.2M and 1.44M |
-| Graphics | CGA plus EGA 0Dh/0Eh/10h and VGA 11h/12h/13h, with graphics drawing and palette services |
+| Graphics | CGA plus EGA 0Dh/0Eh/10h, monochrome 0Fh through VGA, and VGA 11h/12h/13h, with graphics drawing and palette services |
 | DOS compatibility | 100% Coverage of DOS 2.10, Extended DOS APIs, CON raw/cooked handle I/O, inherited standard handles and PUT/GET/RDR redirection for native CMD and DOS programs, Full DOS Batch Language |
 | Date fixes | Patched native date/reporting utilities and corrected short-year input in DATE.EXE |
 
@@ -456,6 +456,7 @@ system and the live regression checks.
 | `make check-batch-exit` | Explicit/default BATCH status through native BDOS 108 |
 | `make check-batch-language` | ECHO forms, script control, SHIFT/GOTO and DOS redirection |
 | `make check-graphics` | Assembled graphics guards and adapter gates; PCE VGA/EGA/CGA pixels, palettes, graphics text/TTY and restoration |
+| `make check-text40` | Booted 40-column text tests on CGA/EGA/VGA: cursor, wrapping, scrolling and restoration |
 | `make check-dos-switch` | DOS 37h get/set, native delimiter separation, EXEC sharing and launch persistence |
 | `make check-dos-allocation` | 1Bh/1Ch/36h geometry, FAT media pointer, invalid-drive rejection and default-drive preservation |
 | `make check-pce` | Boot, console switching, line editing/recall, DIR, PIP, CLS, USER and external SYSDISK.CMD |
@@ -482,6 +483,8 @@ system and the live regression checks.
 
 [Source pedigree](http://www.cpm.z80.de) · [License correspondence](LICENSE.md).
 
+---
+
 ## Companion projects
 
 | Project | Description |
@@ -499,7 +502,7 @@ system and the live regression checks.
 | [cpm86-make](https://github.com/tsupplis/cpm86-make)   | A simple submit based make tool for CP/M-86 |
 | [pcdos11-hacking](https://github.com/tsupplis/pcdos11-hacking) | PC-DOS 1.1 distribution, tools and notes |
 
---
+---
 
 ## License
 

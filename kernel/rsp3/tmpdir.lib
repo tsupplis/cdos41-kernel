@@ -1098,7 +1098,13 @@ notp:
     cmp al,',' ! je dir_user_set
     cmp al,']' ! je dir_user_set
     cmp al,'/' ! je dir_user_set
-    cmp al,'[' ! jne dir_bad_user
+    cmp al,'[' ! je dir_user_set
+; Compact bracket options may continue immediately after the user number.
+    cmp al,'L' ! je dir_user_set
+    cmp al,'W' ! je dir_user_set
+    cmp al,'S' ! je dir_user_set
+    cmp al,'P' ! je dir_user_set
+    cmp al,'G' ! jne dir_bad_user
  dir_user_set:
     mov cl,DIR_USERNUM
     call bdos

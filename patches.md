@@ -1709,3 +1709,51 @@ for provenance checks. The workflow is format, copy normal CCPM.SYS first,
 then boot. The floppy tests use the actual distribution SYS, not a generated
 low-linked substitute. Header/payload duplication in DFORM and DSKMAINT was
 removed when the formats converged on this shared sector.
+
+## DIR compact option combinations
+
+The shared DIR.CMD decoder now consumes every P/S/Gn flag in a compact token,
+including [SP], [PG0] and [G0SP], and validates user numbers / unknown letters.
+The shell/BATCH DIR parser also accepts another valid flag immediately after
+Gn; previously [G0P] failed even though [PG0] worked. The original delimiters,
+slash options and user-context restoration remain intact. No BDOS API change.
+
+The native combined-option regression covers shell DIR, DIR.CMD and unchanged
+SDIR/TYPE using disposable CP/M disks. TYPE's single paging setting may follow
+an inline password; SDIR keyword lists retain space/comma separation and their
+existing modifiers. The CCP/M standalone source and regression driver match.
+
+## CGA graphics services and truthful mode queries
+
+- DOS INT 10h now uses the existing guarded graphics packet/ROM path in
+  modes 04h/05h/06h for cursor, character read/write, teletype, scrolling and
+  pixel operations. Page-zero, foreground-owner and coordinate checks apply.
+  AH=0Bh keeps its existing palette ABI; EGA palette/DAC packets are rejected.
+- XIOS function 30 CH=4 returns the actual native mode and 40/80 columns.
+  DOS dispatch and AH=0Fh use it. CH=1 retains its historical behavior,
+  including CDOS's graphics-as-text result, for existing native callers.
+- Graphics regressions cover CGA modes on CGA, EGA and VGA, exact mode/column
+  queries, pixels/XOR, bounds/pages, character readback, TTY cursor advance,
+  scrolling and return to text. Assembled-XIOS tests cover cursor/rectangle
+  bounds, ownership, raw queries and unchanged legacy queries.
+- That CGA patch did not add EGA monochrome; the subsequent VGA-only
+  extension is documented below.
+
+## 40-column text
+
+The existing mode 00h/01h handlers remain in place. Native bottom-row
+scrolling and line insertion/deletion now use the selected text width rather
+than an unconditional 80-column stride. Shared booted fixtures verify these
+operations alongside BIOS cursor, character and scroll services on CGA,
+EGA and VGA.
+
+## EGA monochrome mode through VGA
+
+Mode 0Fh (640×350 monochrome) follows the existing guarded BIOS graphics
+path. Native mode B0h, ESC a parameter 0Fh and DOS INT 10h expose the same
+mode. Capability bit 3 advertises it only when VGA is detected. Existing
+mode numbers and capability bits keep their meaning. Pixel bounds, video
+and intensity bits, XOR, graphics text and restoration are covered by the
+booted VGA regression; CGA and EGA reject this request unchanged.
+
+Physical EGA monochrome monitor startup/routing remains deferred.

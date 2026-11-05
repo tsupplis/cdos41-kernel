@@ -317,3 +317,13 @@ check-floppy-bios: all
 .PHONY: check-floppy-boot
 check-floppy-boot: all
 	python3 tools/floppy_boot_check.py
+
+.PHONY: check-options
+check-options: all
+	python3 -B tools/option_combinations_check.py
+
+.PHONY: check-text40
+check-text40: all
+	python3 tools/graphics_check.py cga text40
+	python3 tools/graphics_check.py ega text40
+	python3 tools/graphics_check.py vga text40

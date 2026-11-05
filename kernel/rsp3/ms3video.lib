@@ -14,13 +14,22 @@ eg_dos_dispatch:
 	je	eg_dos_fallback
 	push	ax ! push bx ! push cx ! push dx ! push si
 	mov	al,30
-	mov	ch,1
+	mov	ch,4
 	call	backdoor
-	cmp	al,50h
+	cmp	al,20h
 	jb	eg_dos_not_enhanced
-	cmp	al,0A0h
+	cmp	al,50h
+	jae	eg_dos_packet_mode
+	; Preserve the legacy CGA palette ABI (BH is a selector, not a page).
+	pop	si ! pop dx ! pop cx ! pop bx ! pop ax
+	cmp	ah,0Bh
+	je	eg_dos_fallback
+	jmp	eg_dos_packet_ready
+eg_dos_packet_mode:
+	cmp	al,0B0h
 	ja	eg_dos_not_enhanced
 	pop	si ! pop dx ! pop cx ! pop bx ! pop ax
+eg_dos_packet_ready:
 	push	bx
 	mov	bx,ax
 	or	bh,80h
@@ -72,4 +81,4 @@ eg_dos_cursor_copy:
 eg_dos_result_done:
 	ret
 
-eg_dos_modes db 10h,0Dh,0Eh,11h,12h,13h
+eg_dos_modes db 10h,0Dh,0Eh,11h,12h,13h,0Fh

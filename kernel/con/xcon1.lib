@@ -377,6 +377,9 @@ get_set_screen:
 	jmp	screen_bad_param	; skip if too high
 
 	call	point_vs		; bx -> vs_
+	cmp	ch,4
+	jne	$+5
+	jmp	eg_screen_query
 	cmp	ch,3
 	jnz	screen_regular
 	jmp	screen_ega_palette
@@ -570,8 +573,10 @@ screen_ega_palette:
 	jae	screen_ega_bad
 	cmp	vs_screen_mode,50h
 	jb	screen_ega_unsupported
+	cmp	vs_screen_mode,0B0h
+	ja	screen_ega_unsupported
 	cmp	vs_screen_mode,0A0h
-	jae	screen_ega_unsupported
+	je	screen_ega_unsupported
 	mov	al,vs_bit
 	test	graphic_bits,al
 	jz	screen_ega_unsupported
@@ -603,7 +608,7 @@ graph_vector	dw	screen_bad_param, general_graph
 		dw	black_white_640, ega_640_350
 		dw	eg_320_200, eg_640_200
 		dw	eg_vga_mono, eg_vga_color
-		dw	eg_vga_256, screen_not_sup
+		dw	eg_vga_256, eg_ega_mono
 		dw	screen_not_sup, screen_not_sup
 		dw	screen_not_sup, screen_not_sup
 
@@ -1035,7 +1040,11 @@ vc_lf_show:
 vc_lf_scroll:
 	sub	ax,ax		; zero offset from
 	mov	di,ax		;   the top left
-	mov	si,crt_cols*2	; one row down
+	mov	al,vs_width
+	cbw
+	shl	ax,1
+	mov	si,ax
+	xor	ax,ax		; offset from top
 	jmp	z_line		; delete one line to scroll
 
 
@@ -1049,7 +1058,8 @@ vc_out_bs:
 
 	mov	dl,vs_width	; if at left, wrap
 	sub	dx,0101h	; up one, left one
-	jns	put_cursor	; if not at top
+	js	$+5
+	jmp	put_cursor	; if not at top
 vc_bs1:
 	ret			; if top left, bag it
 
@@ -1183,11 +1193,15 @@ erase1:
 
 ;	esc L  -  insert a blank line
 z_insert_line:
-	mov	al,crt_cols
+	mov	al,vs_width
 	mul	vs_crt_rows	; ax = crt size
 	dec	ax
 	mov	di,ax
-	sub	ax,crt_cols
+	push	dx
+	xor	dx,dx
+	mov	dl,vs_width
+	sub	ax,dx
+	pop	dx
 	mov	si,ax
 	shl	di,1		; end of screen
 	shl	si,1		; one line up
@@ -1204,23 +1218,33 @@ z_delete_line:
 	mov	dl,0
 	call	point_cursor	; di -> line start
 	mov	si,di
-	add	si,crt_cols*2	; next row down
+	push	ax
+	mov	al,vs_width
+	cbw
+	shl	ax,1
+	add	si,ax
+	pop	ax	; next row down
 
 ;	external entry point
 ;	entry:	si,di set up for movsw
 ;		ax = count from top of screen
 z_line:
 	xchg	cx,ax		; cx = count
-	mov	al,crt_cols
+	mov	al,vs_width
 	mul	vs_crt_rows	; ax = crt size
-	sub	ax,crt_cols
+	push	dx
+	xor	dx,dx
+	mov	dl,vs_width
+	sub	ax,dx
+	pop	dx
 	xchg	ax,cx
 	sub	cx,ax		; cx = character count
 	jbe	zline1		; skip if nothing to move
 
 	call	z_movsw		; movsw in vc_segment
 z_line1:
-	mov	cx,crt_cols	; one line's worth
+	xor	cx,cx
+	mov	cl,vs_width	; one line's worth
 	jmps	erase		; blank one line
 
 ;	repeat movsw in current screen segment
@@ -1475,7 +1499,7 @@ z_video_enhanced_scan:
 	je	z_video_set
 	inc	si
 	add	cl,10h
-	cmp	cl,0B0h
+	cmp	cl,0C0h
 	jb	z_video_enhanced_scan
 	ret				; unsupported enhanced mode, no alias
 z_video_legacy:

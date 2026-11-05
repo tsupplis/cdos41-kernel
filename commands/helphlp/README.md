@@ -1,21 +1,20 @@
-# HELP database
+# HELP source standard
 
-`help.dat` is the maintained reference for commands packaged by this project
-and the selected 4.1 PCTMP shell. It combines relevant original 4.1 material
-from `base/help.hlp` with the maintained CCP/M import documentation and local
-usability changes. The original binary database remains an archival reference;
-all distribution disks now use the rebuilt `commands/helphlp/help.hlp`.
-The HELP program itself is built separately in `../help`; this directory
-only indexes `help.dat` with that program's native `[C]` indexer.
+The same presentation rules apply to all three kernel projects.
 
-The command catalogue distinguishes shell built-ins, aliases, external CMD
-and DOS programs, and resident system services. Obsolete unavailable tools
-are removed. Native 4.1 topics cover ORDER, COMSIZE, ADDMEM, 8087, SUSPEND,
-directories, menus, backup/restore and the OEM utilities. Local topics retain
-paging, password/media behavior, new console keys and window corrections.
-Some guides are intentionally concise to fit the existing 320 KB tools disk;
-the complete original operating reference remains in base/help.hlp.
+- Store `help.dat` as UTF-8/ASCII text with LF line endings, spaces and host EOF.
+  The index recipe creates a CRLF temporary copy for the native HELP compiler.
+- Use uppercase topic names. Level-one markers start at column 1; each deeper
+  level adds four spaces before `///`. Keep the existing topic hierarchy.
+- Indent body text by four spaces. Preserve internal table columns and command
+  literals. Use one blank line between paragraphs and before the next topic.
+- Use `Syntax:`, `Explanation:`, `Options:` and `Examples:` consistently.
+  Informational topics need only the headings that make sense for their content.
+- Use braces for optional syntax and literal brackets for bracket options.
+  Keep implementation-specific spellings and examples faithful to the parser.
+- Share text where command capabilities match. Identify genuine platform/version
+  differences explicitly; do not advertise another build's unsupported options.
+- Keep common DIR help identical; resident extensions belong in DIR RESIDENT.
 
-`make check-help` validates topic coverage against media inputs and built-ins,
-removed topics, every generated index pointer and the editor/data cleanup.
-The native HELP indexer builds help.hlp from the saved CRLF source.
+`make check` verifies this style. `help.hlp` is always generated from `help.dat`;
+do not edit the indexed binary. Style checking does not assert runtime parity.
