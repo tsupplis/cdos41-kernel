@@ -293,6 +293,8 @@ launch_delay:
         call oscall
         jmp launch_wait
 launch_completed:
+        cmp result,0
+        jne launch_release
         mov cx,11
         call pccall
         mov status,ax

@@ -54,3 +54,20 @@ char *raw,*text,*dma,*newraw;
     for(i=1;i<12;++i) newraw[i]=(raw[i]&128)|expected[i-1];
     return 1;
 }
+
+/* Original CODE155D: local resets name/type attribute bits; system sets
+ * read-only and system. BDOS applies the actual filesystem semantics. */
+int fm_set_attributes(drive,user,raw,system,restore_dma)
+int drive,user,system;char *raw,*restore_dma;
+{
+    char fcb[36];int i,saved,result;
+    if(drive<1 || drive>16 || user<0 || user>15 || !raw || !restore_dma)
+        return 0;
+    for(i=0;i<36;++i)fcb[i]=0;
+    fcb[0]=drive;
+    for(i=1;i<12;++i)fcb[i]=raw[i]&127;
+    if(system){fcb[9]|=128;fcb[10]|=128;}
+    saved=BDOS(32,255)&255;BDOS(32,user);
+    result=(BDOS(30,fcb)&255)!=255;
+    BDOS(32,saved);BDOS(26,restore_dma);return result;
+}

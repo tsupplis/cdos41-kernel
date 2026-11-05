@@ -18,3 +18,17 @@ int fm_copy_named();
  * Caller must restrict different users on one drive to CP/M media.
  */
 int fm_copy_users();
+
+/* Single-drive removable root-directory copy. Caller first confirms
+ * "Single drive copy (Y/N)?" and verifies removable drive/root eligibility.
+ * fm_copy_swapped(drive,raw,user,dma,cancel,swap): 1 success,0 cancel,-1 error.
+ * swap(side), 0 source/1 destination: 1 inserted,0 cancel,-1 UI failure.
+ * Caller must request the correct medium; volume identity is operator-owned.
+ * All handles close before prompts; 32 full records buffered per exchange.
+ * Failed cleanup can retain destination temp/backup (fm_copy_recovery).
+ * Source restoration is requested before returning; cancellation of that
+ * final request returns error, and caller must not trust/rescan source view.
+ */
+int fm_copy_swapped();
+/* False if the final source insertion was not confirmed. */
+int fm_copy_swap_ready();

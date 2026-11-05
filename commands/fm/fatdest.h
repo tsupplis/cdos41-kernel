@@ -30,3 +30,14 @@ int fm_fat_clone();
  * Returns1 on success,0 on failure; call before valid() on the changed alias.
  */
 int fm_fat_refresh_owned();
+
+/* Resolve the source's physical full path and return a scratch root alias.
+ * fm_fat_root(source,path,capacity,dma): 14..16 on success, 0 on failure.
+ * At most66 path characters plus NUL. Source and pins never move; consumes
+ * search state, restores caller user/DMA. Requires a spare owned/free alias
+ * and stable mounted media. Caller may use the returned root for file I/O.
+ */
+int fm_fat_root();
+
+/* Same operation, also excludes protect from scratch-alias allocation. */
+int fm_fat_root_protected();

@@ -3,3 +3,5 @@
  * Inputs and newraw remain unchanged on failure. DMA is never changed.
  */
 int fm_rename_file();
+
+int fm_set_attributes();

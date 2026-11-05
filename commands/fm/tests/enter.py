@@ -16,6 +16,7 @@ static int mock(int fn,intptr_t arg) {
 #define FM_TEST_ENTER
 #include "native.c"
 int BDOS(fn,arg) int fn;intptr_t arg; {return mock(fn,arg);}
+int FMLOC(){return 0;}
 int main(void) {
     char entry[32];int i;
     memset(entry,0,32);memset(entry+1,' ',11);entry[1]=entry[2]='.';entry[16]=64;

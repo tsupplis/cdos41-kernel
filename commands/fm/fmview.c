@@ -1,6 +1,6 @@
 /* Experimental FM reconstruction. Not the distributed FM replacement.
  * Current drive, FAT directories and CP/M users; Escape exits/backtracks.
- * Drive Copy, Rename and Delete are enabled; external launching is pending.
+ * File operations and native/DOS external launching use local adapters.
  */
 #include "fm.h"
 #include "event.h"
@@ -21,6 +21,8 @@
 #include "copynam.h"
 #include "fatdest.h"
 #include "spawn.h"
+#include "launch.h"
+#include "backup.h"
 #include "runjob.h"
 #include "extjob.h"
 static int launch_console_error;
@@ -46,12 +48,17 @@ static struct fm_layout layout;
 static struct fm_config config;
 static struct fm_focus focus;
 static int menu_selected;
+static int details;
 static int copy_menu,copy_choosing,copy_user_choosing,copy_target_user;
 static char copy_message[80];
 static struct fm_navigation copy_navigation;
 static char *copy_labels[]={"Help","Copy to A:","Copy to B:","Copy to C:",
     "Copy to D:","Copy to Drive","Copy to Dir #1","Copy to Dir #2",
     "Copy to Dir","Copy to New Name"};
+static int backup_menu;
+static struct fm_navigation backup_navigation;
+static char *backup_labels[]={"Help","Files to A:","Dir to A:",
+    "Files to B:","Dir to B:","Restore"};
 static int copy_destination();
 static int picker_cancel();
 static int normal, menuattr, promptattr, keyattr, limited;
@@ -66,6 +73,48 @@ char *string;
     }
     return 1;
 }
+/* MENU POSITION 2/4/5 uses the width of its horizontal rectangle.
+ * Side menus retain one column. Navigation and drawing share cell geometry.
+ */
+static int command_menu(copy)
+int copy;
+{
+    struct fm_navigation *nav;
+    int border,rows,columns,width,cell,i,entry,row,column,attr,maximum;
+    char *label;
+    nav=copy ? &copy_navigation : &focus.navigation;
+    border=layout.menu.height>=3;
+    rows=layout.menu.height-(border?2:0);
+    width=layout.menu.width-(border?2:0);
+    columns=1;cell=width;
+    if(config.value[1]==2 || config.value[1]==4 || config.value[1]==5) {
+        cell=(config.value[8]&255)+3;
+        if(cell<3) cell=3;
+        columns=width/cell;
+        if(columns<1) columns=1;
+        cell=width/columns;
+    }
+    nav->columns=columns;nav->capacity=rows*columns;
+    if(nav->selected<=nav->offset ||
+       nav->selected>nav->offset+nav->capacity)
+        nav->offset=((nav->selected-1)/columns)*columns;
+    nav->offset=(nav->offset/columns)*columns;
+    maximum=((nav->count+columns-1)/columns)*columns-nav->capacity;
+    if(maximum<0) maximum=0;
+    if(nav->offset>maximum) nav->offset=maximum;
+    if(border && !fm_frame(&canvas,&layout.menu,1,menuattr)) return 0;
+    for(i=0;i<nav->capacity;++i) {
+        entry=nav->offset+i;
+        if(entry>=nav->count) break;
+        label=copy ? copy_labels[entry] :
+            fm_menu_items[(focus.setup ? fm_file_menu_count : 0)+entry].label;
+        attr=(copy || focus.active) && entry+1==nav->selected ? menu_selected : menuattr;
+        row=layout.menu.row+(border?1:0)+i/columns;
+        column=layout.menu.column+(border?1:0)+(i%columns)*cell;
+        if(!text(row,column,label,cell,attr)) return 0;
+    }
+    return 1;
+}
 static int decoration()
 {
     int row,column,i;
@@ -73,35 +122,20 @@ static int decoration()
     for(row=0;row<24;++row)
         for(column=0;column<80;++column)
             (*canvas.cell)(row,column,' ',normal);
-    if(copy_menu) {
+    if(backup_menu) {
         if(layout.menu.height>=3) fm_frame(&canvas,&layout.menu,1,menuattr);
-        for(i=0;i<copy_navigation.capacity;++i) {
+        for(i=0;i<backup_navigation.capacity;++i) {
             int entry;
-            entry=copy_navigation.offset+i;
-            if(entry>=copy_navigation.count) break;
+            entry=backup_navigation.offset+i;
+            if(entry>=backup_navigation.count) break;
             text(layout.menu.row+(layout.menu.height>=3 ? 1 : 0)+i,
                  layout.menu.column+(layout.menu.height>=3 ? 1 : 0),
-                 copy_labels[entry],layout.menu.width-(layout.menu.height>=3 ? 2 : 0),
-                 entry+1==copy_navigation.selected ? menu_selected : menuattr);
+                 backup_labels[entry],layout.menu.width-(layout.menu.height>=3 ? 2 : 0),
+                 entry+1==backup_navigation.selected ? menu_selected : menuattr);
         }
-    } else if(layout.menu.height>=3) {
-        fm_frame(&canvas,&layout.menu,1,menuattr);
-        for(i=0;i<focus.navigation.capacity;++i) {
-            int entry,attr;
-            entry=focus.navigation.offset+i;
-            if(entry>=focus.navigation.count) break;
-            attr=focus.active && entry+1==focus.navigation.selected ? menu_selected : menuattr;
-            text(layout.menu.row+1+i,layout.menu.column+1,
-                 fm_menu_items[(focus.setup ? fm_file_menu_count : 0)+entry].label,
-                 layout.menu.width-2,attr);
-        }
-    } else {
-        text(layout.menu.row,layout.menu.column,
-             fm_menu_items[fm_focus_index(&focus)].label,layout.menu.width,
-             focus.active ? menu_selected : menuattr);
-    }
+    } else if(!command_menu(copy_menu)) {fm_console_end(&console);return 0;}
     text(layout.prompt.row,layout.prompt.column,
-         notice ? notice : copy_menu ?
+         notice ? notice : backup_menu ? "Files Selected for File Backup" : copy_menu ?
          ">>>  CHOOSE A DESTINATION FOR THE FILES SHOWN BELOW  >>>>" :
          copy_user_choosing ? "select destination directory" :
          copy_choosing ? "Copy to Drive: Enter selects; Escape cancels" : focus.active ? fm_menu_items[fm_focus_index(&focus)].description :
@@ -110,7 +144,7 @@ static int decoration()
          "FMVIEW: Tab menu; F9 directories; arrows move; Escape exits",
          layout.prompt.width,promptattr);
     if(layout.prompt.row+layout.prompt.height<24)
-        text(23,0,"Prototype: DOS launching and some actions are pending",80,keyattr);
+        text(23,0,"Experimental FM reconstruction - original remains distributed",80,keyattr);
     if(input.active) {
         text(layout.prompt.row,layout.prompt.column,"Subset: ",8,promptattr);
         text(layout.prompt.row,layout.prompt.column+8,input.text,
@@ -120,11 +154,180 @@ static int decoration()
          "Directory list truncated at 256 entries",layout.prompt.width,promptattr);
     return fm_console_end(&console);
 }
+int BDOS();
+/* CODE 02F1/73A5: 40-column long entries, 26-character size/date suffix.
+ * FAT extended-search records retain DOS time/date/size at 22/24/28.
+ * CP/M uses BDOS35, final-byte count, and BDOS102 modified/create stamp.
+ * Unknown or rejected metadata stays blank; source directory bytes are read-only. */
+static char detail_lines[48][27];
+static unsigned detail_word(p)
+char *p;
+{ return (p[0]&255) | ((unsigned)(p[1]&255)<<8); }
+static int detail_leap(year)
+int year;
+{ return year%4==0 && (year%100!=0 || year%400==0); }
+static void detail_decimal(out,width,value)
+char *out;
+int width;
+long value;
+{
+    int i,n;
+    n=width;
+    for(i=0;i<width;++i) out[i]=' ';
+    do {out[--width]='0'+value%10;value/=10;} while(width && value);
+    if(value) for(i=0;i<n;++i) out[i]='*';
+}
+static void detail_date(out,year,month,day,hour,minute)
+char *out;
+int year,month,day,hour,minute;
+{
+    if(year<1978 || year>2157 || month<1 || month>12 || day<1 || day>31 ||
+       hour<0 || hour>23 || minute<0 || minute>59) return;
+    detail_decimal(out+10,2,(long)month);
+    out[12]='-';out[13]='0'+day/10;out[14]='0'+day%10;out[15]='-';
+    detail_decimal(out+16,4,(long)year);
+    out[25]=hour>=12 ? 'p' : 'a';hour%=12;if(!hour) hour=12;
+    detail_decimal(out+20,2,(long)hour);
+    out[22]=':';out[23]='0'+minute/10;out[24]='0'+minute%10;
+}
+static void detail_line(raw,out)
+char *raw,*out;
+{
+    char work[36];
+    long bytes,records;
+    unsigned date,time,days;
+    int i,result,year,month,day,hour,minute,span,stamp;
+    static int months[]={31,28,31,30,31,30,31,31,30,31,30,31};
+    for(i=0;i<26;++i) out[i]=' ';out[26]=0;
+    if(fat) {
+        bytes=detail_word(raw+30)>=32768U ? 100000000L : (long)detail_word(raw+28) |
+              ((long)detail_word(raw+30)<<16);
+        detail_decimal(out,8,bytes);
+        date=detail_word(raw+24);time=detail_word(raw+22);
+        if(!date) return;
+        detail_date(out,1980+(date>>9),(date>>5)&15,date&31,
+                    time>>11,(time>>5)&63);
+        return;
+    }
+    for(i=0;i<36;++i) work[i]=0;
+    work[0]=drive;for(i=1;i<12;++i) work[i]=raw[i]&127;
+    result=BDOS(35,work);
+    if((result&255)!=255) {
+        records=(long)detail_word(work+33) |
+                ((long)(work[35]&255)<<16);
+        /* Original zero-record special case still displays its 128-byte
+         * final record convention when byte13 is zero. */
+        bytes=(records ? records-1 : 0)*128L;
+        bytes+=(raw[13]&127) ? raw[13]&127 : 128;
+        detail_decimal(out,8,bytes);
+    }
+    for(i=12;i<36;++i) work[i]=0;
+    result=BDOS(102,work);__BDOS(26,dma);
+    if((result&255)==255) return;
+    stamp=detail_word(work+28) ? 28 : 24;
+    days=detail_word(work+stamp);if(!days) return;
+    hour=((work[stamp+2]&255)>>4)*10+(work[stamp+2]&15);
+    minute=((work[stamp+3]&255)>>4)*10+(work[stamp+3]&15);
+    --days;year=1978;
+    while(days>=(unsigned)(365+detail_leap(year))) {
+        days-=365+detail_leap(year);++year;
+    }
+    month=1;
+    while(month<12) {
+        span=months[month-1]+(month==2 && detail_leap(year));
+        if(days<(unsigned)span) break;
+        days-=span;++month;
+    }
+    day=days+1;detail_date(out,year,month,day,hour,minute);
+}
+static void details_prepare()
+{
+    int i,j,index;
+    if(!details || directories || drives) return;
+    for(i=0;i<browser.navigation.capacity;++i) {
+        index=browser.navigation.offset+i;
+        if(index>=browser.navigation.count) break;
+        for(j=0;j<count;++j) if(names[index]==files[j].name) break;
+        if(j<count) detail_line(files[j].raw,detail_lines[i]);
+        else {for(j=0;j<26;++j) detail_lines[i][j]=' ';detail_lines[i][26]=0;}
+    }
+}
+static int details_draw()
+{
+    int i,index,row,column,attr;
+    if(!details || directories || drives) return 1;
+    for(i=0;i<browser.navigation.capacity;++i) {
+        index=browser.navigation.offset+i;
+        if(index>=browser.navigation.count) break;
+        row=browser.area.row+1+i/browser.navigation.columns;
+        column=browser.area.column+1+(i%browser.navigation.columns)*browser.stride+13;
+        attr=index+1==browser.navigation.selected ? browser.selected : browser.normal;
+        if(!text(row,column,detail_lines[i],26,attr)) return 0;
+    }
+    return 1;
+}
+static int details_action()
+{
+    int selected;
+    focus.active=0;
+    if(!details && layout.files.width<42) {
+        notice="File pane is too narrow for Size/Date";return 1;
+    }
+    details=!details;
+    if(directories || drives) return 1;
+    selected=browser.navigation.selected;
+    if(!fm_browser_open(&browser,names,browser.navigation.count,&layout.files,
+            details ? 40 : 14,normal,fm_attribute(config.value[2],config.value[3],1))) return 0;
+    while(browser.navigation.selected<selected) fm_browser_key(&browser,12);
+    return 1;
+}
+
+/* CODE 8EDB/9752: case-insensitive typed filename prefix selection.
+ * Delete edits an active search (CODE91DD), otherwise it unmarks as before.
+ * Search operates on sorted display identities and never changes the subset.
+ */
+static char search_prefix[13];
+static int search_length;
+static int search_key(key)
+int key;
+{
+    int i,j,ch,selected,oldlength;
+    if(key==127 && search_length) {
+        search_prefix[--search_length]=0;return 1;
+    }
+    if(key==24) {search_length=0;search_prefix[0]=0;return 1;}
+    if(key<33 || key>126 || key==',' || key=='?') {
+        search_length=0;search_prefix[0]=0;return -1;
+    }
+    if(key>='a' && key<='z') key-=32;
+    if(search_length==12) return 1;
+    oldlength=search_length;search_prefix[search_length++]=key;
+    search_prefix[search_length]=0;
+    for(i=0;i<browser.navigation.count;++i) {
+        for(j=0;j<search_length;++j) {
+            ch=names[i][j]&127;if(ch>='a' && ch<='z') ch-=32;
+            if(ch!=search_prefix[j]) break;
+        }
+        if(j==search_length) {
+            selected=i+1;
+            /* Navigate through the existing paging core; no independent
+             * scroll calculation can split a column or lose a mark. */
+            fm_browser_key(&browser,1);
+            while(browser.navigation.selected<selected) fm_browser_key(&browser,12);
+            return 1;
+        }
+    }
+    search_length=oldlength;search_prefix[search_length]=0;
+    return 1;
+}
+
 static int repaint()
 {
     int ok;
+    details_prepare();
     if(!decoration() || !fm_console_begin(&console)) return 0;
     ok=fm_browser_draw(&browser,&canvas);
+    if(ok) ok=details_draw();
     if(ok && !directories && !drives) ok=fm_marks_draw(&marks,&browser,&canvas);
     if(!fm_console_end(&console)) ok=0;
     return ok;
@@ -172,7 +375,8 @@ static int refresh()
         }
         fm_directory_sort(names,total);
     }
-    return fm_browser_open(&browser,names,total,&layout.files,14,normal,
+    return fm_browser_open(&browser,names,total,&layout.files,
+                    details && !directories && !drives ? 40 : 14,normal,
                     fm_attribute(config.value[2],config.value[3],1));
 }
 static int directory_view()
@@ -338,6 +542,42 @@ int limit;
         target[length]=0;
     } while(1);
 }
+/* Directory management keys from original CODE330D dispatch. */
+static int directory_manage(operation)
+int operation;
+{
+    char name[13];int i,n,r,selected;
+    if(!directories || drives)return 1;
+    if(!operation && !fat) {
+        user=0;__BDOS(32,0);
+    } else {
+        if(!fat){notice="This function requires a FAT directory";return 1;}
+        if(operation==1) {
+            r=text_ask("Enter a new directory name:",name,12);
+            if(r==-2)return 0;
+            if(r!=1)return 1;
+        } else if(operation==2) {
+            selected=browser.navigation.selected-1;
+            if(selected<0 || selected>=browser.navigation.count)return 1;
+            for(i=0;i<count;++i)if(names[selected]==files[i].name)break;
+            if(i==count || !files[i].directory || files[i].name[0]=='.') {
+                notice="Select a child directory";return 1;
+            }
+            for(n=0;n<12 && files[i].name[n]!=' ';++n)name[n]=files[i].name[n];
+            name[n]=0;
+        } else name[0]=0;
+        if(!fm_native_directory(drive,name,operation)) {
+            notice=operation==1?"Cannot create directory":
+                   operation==2?"Cannot remove directory (not empty or in use)":
+                                "Cannot change to root directory";
+            return 1;
+        }
+        if(drive>=14)fm_fat_refresh_owned(drive);
+    }
+    directories=0;focus.active=0;fm_marks_clear(&marks);
+    return refresh();
+}
+
 static int name_ask(prefix,name,target,limit)
 char *prefix,*name,*target;
 int limit;
@@ -455,6 +695,34 @@ int result,destination,destuser;
     }
     return 1;
 }
+/* Original single-drive prompts accept one key, not an editable line. */
+static int copy_swap_key(message)
+char *message;
+{
+    int key,ok;
+    if(!fm_console_begin(&console)) return -1;
+    ok=text(21,0,message,80,promptattr);
+    if(!fm_console_end(&console) || !ok) return -1;
+    do {
+        key=fm_console_key(&console,0,0,0);
+        if(key==-1) __BDOS(142,0);
+    } while(key==-1);
+    return key<0 ? -1 : key;
+}
+static int copy_swap_prompt(side)
+int side;
+{
+    int key;
+    key=copy_swap_key(side ?
+      "Insert destination diskette press enter (any other key ABORTS): " :
+      "Insert source diskette press enter (any other key ABORTS): ");
+    return key<0 ? -1 : key==13;
+}
+static int copy_swap_transfer(sd,raw,dd,restore,cancel)
+int sd,dd;char *raw,*restore;int (*cancel)();
+{
+    return fm_copy_swapped(sd,raw,user,restore,cancel,copy_swap_prompt);
+}
 static int copy_destination(destination)
 int destination;
 {
@@ -466,7 +734,21 @@ int destination;
         if(*fm_fat_destination_error()) {notice=fm_fat_destination_error();return 1;}
     }
     if(same) {
-        notice="Destination must be different than source";return 1;
+        int location[4],answer;
+        if(destination!=drive || fm_native_permanent(drive,fat)!=0 ||
+           (fat && (!FMLOC(drive,location) || location[2]!=0))) {
+            notice="Destination must be different than source";return 1;
+        }
+        answer=copy_swap_key("Single drive copy (Y/N)?");
+        if(answer<0) return 0;
+        if(answer!='Y' && answer!='y') {notice="Copy aborted";return 1;}
+        copy_menu=copy_choosing=focus.active=0;
+        fm_copy_reset();
+        ops.transfer=copy_swap_transfer;ops.cancel=copy_cancel;ops.notice=copy_notice;
+        result=fm_copy_batch(&browser,files,count,&marks,drive,drive,dma,&ops);
+        /* Do not continue operating a source view over an unknown medium. */
+        if(!fm_copy_swap_ready()) return 0;
+        return copy_status(result,drive,user);
     }
     if(!(fm_native_drives()&((unsigned)1<<(destination-1))) && !fm_fat_valid(destination)) {
         notice="Drive not configured";return 1;
@@ -669,6 +951,23 @@ char *command;
     if(!result) notice=fm_spawn_error();
     return result;
 }
+/* CODE 028C/1EFB: drive prompt, 0x4e-byte input buffer (77 text bytes).
+ * The reconstruction returns through its existing child-launch bridge. */
+static int command_action()
+{
+    char command[78],heading[3];
+    int result;
+    focus.active=0;launch_console_error=0;
+    heading[0]='A'+drive-1;heading[1]='>';heading[2]=0;
+    result=text_ask(heading,command,77);
+    if(result==-2) return 0;
+    if(result<=0) return 1;
+    result=run_invoke(command);
+    if(launch_console_error) return 0;
+    if(result && !refresh_retained()) return 0;
+    return 1;
+}
+
 static int run_report(message)
 char *message;
 { notice=message;return 1; }
@@ -697,6 +996,97 @@ int index;
     if(launch_console_error || result<0) return 0;
     if(result && !refresh_retained()) return 0;
     return 1;
+}
+/* Backup uses the original six-choice menu. All selections survive the
+ * external operation; Restore returns here, Backup returns to file view. */
+static int backup_action()
+{
+    if(directories || drives || !fm_native_permanent(drive,fat)) {
+        notice="Select a hard disk drive to backup or restore";return 1;
+    }
+    focus.active=0;backup_menu=1;
+    backup_navigation.count=6;backup_navigation.selected=1;
+    backup_navigation.offset=0;backup_navigation.columns=1;
+    backup_navigation.capacity=layout.menu.height>=3 ? layout.menu.height-2 : 1;
+    return 1;
+}
+static int backup_key(key)
+int key;
+{
+    int entry,dest,whole,result;
+    if(key==27) {backup_menu=0;return 1;}
+    if(key>=0xbc && key<=0xc0) entry=key-0xbb;
+    else if(key==13) entry=backup_navigation.selected-1;
+    else if(key=='?' || key==1) entry=0;
+    else {fm_navigate(&backup_navigation,key);return 1;}
+    if(!entry) {
+        launch_console_error=0;
+        run_invoke("HELP.CMD BACKREST");
+        return !launch_console_error;
+    }
+    dest=entry<=2 ? 1 : 2;whole=entry==2 || entry==4;
+    if(entry!=5 && !(fm_native_drives()&((unsigned)1<<(dest-1)))) {
+        notice="Bad drive";return 1;
+    }
+    launch_console_error=0;
+    result=fm_backup_run(&browser,files,count,&marks,drive,user,fat,
+                         dest,whole,entry==5,dma,run_invoke);
+    if(launch_console_error || result==-2) return 0;
+    if(result!=1) notice=fm_backup_io_error();
+    if(entry!=5) backup_menu=0;
+    return refresh_retained();
+}
+/* Attributes keep unsuccessful entries marked, as original CODE5AEA. */
+static int attributes_action(system)
+int system;
+{
+    int i,k;
+    if(directories || drives) {notice="Select files first";return 1;}
+    focus.active=0;
+    if(!marks.count && browser.navigation.selected)
+        fm_marks_key(&marks,browser.navigation.selected,browser.navigation.count,44);
+    for(i=0;i<browser.navigation.count;++i) if(marks.value[i]) {
+        for(k=0;k<count && names[i]!=files[k].name;++k) ;
+        if(k<count && !files[k].directory &&
+           fm_set_attributes(drive,user,files[k].raw,system,dma))
+            fm_marks_key(&marks,i+1,browser.navigation.count,127);
+    }
+    notice=marks.count ? "File attributes not changed" : 0;
+    return refresh_retained();
+}
+static int system_transfer(sd,raw,dd,restore,cancel)
+int sd,dd;char *raw,*restore;int (*cancel)();
+{
+    int result;
+    result=fm_copy_users(sd,user,raw,dd,0,raw,restore,cancel);
+    if(result==1 && !fm_set_attributes(dd,0,raw,1,restore))result=-1;
+    return result;
+}
+static int system_copy_action()
+{
+    struct fm_copier ops;
+    int destination,original,fatdest,result;
+    char path[68];
+    if(directories || drives) {notice="Select files first";return 1;}
+    destination=FMSYSDISK();
+    if(destination<1 || destination>16) {notice="System disk is unavailable";return 1;}
+    original=drive;
+    if(!fm_native_drive(destination)) {notice="System disk is unavailable";return 1;}
+    fatdest=fatmedia();
+    if(!fm_native_drive(original))return 0;
+    if(fatdest) {
+        destination=fm_fat_root_protected(destination,path,sizeof(path),dma,drive);
+        if(!destination) {notice=fm_fat_destination_error();return 1;}
+        if(fat && fm_fat_same(drive,destination)) {
+            notice="Destination must be different than source";return 1;
+        }
+    } else if(destination==drive && user==0) {
+        notice="Destination must be different than source";return 1;
+    }
+    focus.active=0;fm_copy_reset();
+    ops.transfer=system_transfer;ops.cancel=copy_cancel;ops.notice=copy_notice;
+    result=fm_copy_batch(&browser,files,count,&marks,drive,destination,dma,&ops);
+    return copy_status(result,destination,0);
 }
 static int print_notice(name)
 char *name;
@@ -778,7 +1168,11 @@ char **argv;
             else if(key<0) result=-1;
             else {
                 notice=0;
-                if(copy_menu) result=copy_key(key) ? 1 : -1;
+                if(focus.active || directories || drives || input.active || copy_menu || key>=128) {
+                    search_length=0;search_prefix[0]=0;
+                }
+                if(backup_menu) result=backup_key(key) ? 1 : -1;
+                else if(copy_menu) result=copy_key(key) ? 1 : -1;
                 else if(copy_user_choosing && key==27) {
                     copy_user_choosing=0;result=picker_cancel() ? 1 : -1;
                 }
@@ -788,14 +1182,19 @@ char **argv;
                 else if(copy_choosing && key==13) result=drive_select() ? 1 : -1;
                 else if(copy_choosing) result=fm_browser_key(&browser,key)>0 ? 1 : 0;
                 else if(input.active) result=subset_key(key) ? 1 : -1;
+                else if(directories && !drives && (key==0xbf || key==0xc0 || key==0xc3))
+                    result=directory_manage(key==0xbf?1:key==0xc0?2:0) ? 1 : -1;
+                else if(directories && !drives && key==0xbc)
+                    result=directory_select() ? 1 : -1;
                 else if((key==0xbd || key==0xbe) && directories && !drives)
                     result=book_set(key-0xbd) ? 1 : -1;
                 else if(key==0xc1 || key==0xc2) result=book_go(key-0xc1) ? 1 : -1;
                 else if((key==0xbf || key==5) && !directories && !drives) result=run_action() ? 1 : -1;
                 else if(key==0xbc || key==2) result=type_action() ? 1 : -1;
                 else if(key==0xc3) result=directory_view() ? 1 : -1;
+                else if(key==0xc4 || key==0xea) result=command_action() ? 1 : -1;
                 else {
-                    action=fm_focus_key(&focus,key);
+                    action=fm_focus_key(&focus,key==0 ? 3 : key);
                     if(action==2) {
                         if(fm_focus_index(&focus)==1) result=directory_view() ? 1 : -1;
                         else if(fm_focus_index(&focus)==2) {fm_input_open(&input);result=1;}
@@ -805,7 +1204,12 @@ char **argv;
                         else if(fm_focus_index(&focus)==6) result=copy_action();
                         else if(fm_focus_index(&focus)==7) result=rename_action() ? 1 : -1;
                         else if(fm_focus_index(&focus)==8) result=delete_action() ? 1 : -1;
+                        else if(fm_focus_index(&focus)==9) result=backup_action() ? 1 : -1;
                         else if(fm_focus_index(&focus)==11) result=run_action() ? 1 : -1;
+                        else if(fm_focus_index(&focus)==15) result=details_action() ? 1 : -1;
+                        else if(fm_focus_index(&focus)==17) result=system_copy_action() ? 1 : -1;
+                        else if(fm_focus_index(&focus)==18 || fm_focus_index(&focus)==19)
+                            result=attributes_action(fm_focus_index(&focus)==18) ? 1 : -1;
                         else if(fm_focus_index(&focus)==25 || fm_external_available(fm_focus_index(&focus)))
                             result=external_action(fm_focus_index(&focus)) ? 1 : -1;
                         else {notice="This action is not yet implemented";result=1;}
@@ -816,7 +1220,8 @@ char **argv;
                         else if(key==13 && drives) result=drive_select() ? 1 : -1;
                         else if(key==13 && directories) result=directory_select() ? 1 : -1;
                         else {
-                            action=(!directories && !drives) ?
+                            action=(!directories && !drives) ? search_key(key) : -1;
+                            if(action<0) action=(!directories && !drives) ?
                                 fm_marks_key(&marks,browser.navigation.selected,
                                              browser.navigation.count,key) : -1;
                             if(action>=0) result=action;

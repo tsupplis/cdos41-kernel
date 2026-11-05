@@ -6,6 +6,7 @@
 int BDOS();
 int FMLOC();
 static int owned[3];
+static int protected_alias;
 static int pinned[3];
 static int signature[3][3];
 static char *error;
@@ -50,7 +51,7 @@ int source,allowsame;char *raw,*dma;
     if(!FMLOC(source,src) || src[0]<1 || src[0]>13) goto done;
     alias=0;
     for(i=0;i<3;++i) {
-        if(i+14==source || pinned[i]) continue;
+        if(i+14==source || i+14==protected_alias || pinned[i]) continue;
         error="Cannot inspect destination aliases";
         if(!FMLOC(i+14,loc)) goto done;
         if(owned[i]) {
@@ -175,3 +176,108 @@ int alias;
     error="";
     return 1;
 }
+
+/* FIND_PATH (commands/d/path.a86) walks parents and finds each child by
+ * cluster. Walk our scratch alias instead of overwriting saved kernel HDS
+ * bytes as original FM CODE7113 did. Source and pinned aliases never move.
+ */
+static int root_path(source,path,capacity,dma)
+int source,capacity;
+char *path,*dma;
+{
+    char dot[32],fcb[36],record[128],tail[67],name[13];
+    int original[4],loc[4],seen[33];
+    int alias,user,i,j,n,used,depth,child,slot,found,result,cluster;
+    char *entry;
+    result=0;alias=0;used=0;depth=0;
+    error="Invalid FAT path request";
+    if(!path || capacity<4 || !dma || source<1 || source>16) return 0;
+    path[0]=0;tail[0]=0;
+    user=BDOS(32,255)&255;
+    error="Cannot inspect source directory";
+    if(!FMLOC(source,original) || original[0]<1 || original[0]>13)
+        goto finish;
+    for(i=0;i<32;++i) dot[i]=0;
+    for(i=1;i<12;++i) dot[i]=' ';
+    dot[1]='.';dot[16]=64;
+    alias=fm_fat_capture(source,dot,dma);
+    if(!alias) goto finish;
+    BDOS(32,0);
+    for(;;) {
+        error="Cannot inspect path directory";
+        if(!FMLOC(alias,loc) || !loc[3] || loc[0]!=original[0] ||
+           loc[1]!=original[1]) goto finish;
+        child=loc[2];
+        if(!child) break;
+        error="Invalid or excessive FAT directory depth";
+        if(depth==33) goto finish;
+        for(i=0;i<depth;++i) if(seen[i]==child) goto finish;
+        seen[depth++]=child;
+        for(i=0;i<36;++i) fcb[i]=0;
+        for(i=1;i<12;++i) fcb[i]=' ';
+        fcb[0]=alias|128;fcb[1]='.';fcb[2]='.';
+        BDOS(26,record);
+        error="Cannot read parent directory";
+        if((BDOS(15,fcb)&255)!=0) goto finish;
+        if(!fm_fat_refresh_owned(alias)) goto finish;
+        error="Directory media changed during path lookup";
+        if(!FMLOC(alias,loc) || loc[0]!=original[0] ||
+           loc[1]!=original[1]) goto finish;
+        for(i=0;i<36;++i) fcb[i]=0;
+        for(i=1;i<12;++i) fcb[i]='?';
+        fcb[0]=alias|128;
+        slot=BDOS(17,fcb);found=0;
+        for(;;) {
+            error="Cannot find directory in parent";
+            if((slot&255)==255) goto finish;
+            if(slot<0 || slot>3) goto finish;
+            entry=record+slot*32;
+            cluster=(entry[26]&255)|((entry[27]&255)<<8);
+            if((entry[16]&64) && cluster==child &&
+               (entry[1]&127)!='.') {
+                if(!valid(entry)) goto finish;
+                n=0;
+                for(i=1;i<9 && (entry[i]&127)!=' ';++i)
+                    name[n++]=entry[i]&127;
+                if((entry[9]&127)!=' ') {
+                    name[n++]='.';
+                    for(i=9;i<12 && (entry[i]&127)!=' ';++i)
+                        name[n++]=entry[i]&127;
+                }
+                name[n]=0;found=1;break;
+            }
+            fcb[0]=alias|128;slot=BDOS(18,fcb);
+        }
+        error="FAT directory path is too long";
+        j=n+(used?1:0);
+        if(!found || used+j+3>66 || used+j+4>capacity) goto finish;
+        for(i=used;i>=0;--i) tail[i+j]=tail[i];
+        for(i=0;i<n;++i) tail[i]=name[i];
+        if(used) tail[n]='\\';
+        used+=j;
+    }
+    error="Source directory changed during path lookup";
+    if(!FMLOC(source,loc)) goto finish;
+    for(i=0;i<4;++i) if(loc[i]!=original[i]) goto finish;
+    path[0]='A'+original[0]-1;path[1]=':';path[2]='\\';
+    for(i=0;i<=used;++i) path[i+3]=tail[i];
+    result=alias;error="";
+finish:
+    BDOS(32,user);BDOS(26,dma);
+    return result;
+}
+
+/* Scoped exclusion prevents path discovery on a physical drive from reusing
+ * its caller's active floating source. No ownership or pin state changes. */
+int fm_fat_root_protected(source,path,capacity,dma,protect)
+int source,capacity,protect;char *path,*dma;
+{
+    int previous,result;
+    previous=protected_alias;protected_alias=protect;
+    result=root_path(source,path,capacity,dma);
+    protected_alias=previous;
+    return result;
+}
+int fm_fat_root(source,path,capacity,dma)
+int source,capacity;char *path,*dma;
+{return fm_fat_root_protected(source,path,capacity,dma,0);}

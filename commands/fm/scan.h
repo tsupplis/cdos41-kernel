@@ -25,3 +25,6 @@ int fm_scan();
 int fm_native_scan();
 int fm_native_enter();
 #endif
+
+/* FAT-only root(0), create(1), remove(2), concrete 8.3 name. */
+int fm_native_directory();

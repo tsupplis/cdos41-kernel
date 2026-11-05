@@ -221,3 +221,131 @@ int sd,dd;char *raw,*dma;int (*cancel)();
     }
     return fm_copy_named(sd,raw,dd,raw,dma,cancel);
 }
+
+/* Single-drive removable-media copy, original CODE4271..44FB. All handles
+ * close before a swap. The operator identifies source/destination media;
+ * BDOS provides no portable trustworthy removable-volume identity.
+ */
+static char swapbuffer[4096];
+static int swapsource=1;
+int fm_copy_swap_ready() {return swapsource;}
+static int swaprecord(fcb,position)
+char *fcb;long position;
+{
+    fcb[33]=position&255;
+    fcb[34]=(position>>8)&255;
+    fcb[35]=(position>>16)&255;
+    return 0;
+}
+static int swapmedia(side,drive,user,dma,ask)
+int side,drive,user;char *dma;int (*ask)();
+{
+    int r;
+    BDOS(26,dma);
+    swapsource=0;
+    r=(*ask)(side);
+    if(r!=1) return r<0 ? -1 : 0;
+    /* Original403E resets disks after confirming insertion. */
+    if((BDOS(13,0)&255)==255) return -1;
+    BDOS(14,drive-1);BDOS(32,user);BDOS(26,dma);
+    swapsource=side==0;
+    return 1;
+}
+int fm_copy_swapped(drive,raw,user,dma,cancel,swap)
+int drive,user;char *raw,*dma;int (*cancel)(),(*swap)();
+{
+    char fcb[36],name[11],temp[11],backup[11],search[128];
+    long position;
+    int entryuser,entrydrive,result,side,opened,own,exists,backed;
+    int n,i,r,ro,eof,first;
+    fm_copy_reset();swapsource=1;
+    if(!dma) return -1;
+    entryuser=BDOS(32,255)&255;entrydrive=BDOS(25,0)&255;
+    result=-1;side=opened=own=backed=0;position=0L;first=1;eof=0;
+    if(drive<1 || drive>16 || user<0 || user>15 || !raw ||
+       !swap || !validname(raw) || (raw[16]&64)) goto finish;
+    normal(name,raw);
+    for(;;) {
+        if(cancel && (*cancel)()) {result=0;goto finish;}
+        fcbinit(fcb,drive,name);BDOS(32,user);BDOS(26,dma);
+        if((BDOS(15,fcb)&255)==255) goto finish;
+        opened=1;n=0;
+        while(n<32) {
+            if(cancel && (*cancel)()) {result=0;goto finish;}
+            if(position+n>16777215L) goto finish;
+            swaprecord(fcb,position+n);
+            BDOS(32,user);BDOS(26,swapbuffer+n*128);
+            r=BDOS(33,fcb)&255;
+            if(r==1 || r==4) {eof=1;break;}
+            if(r) goto finish;
+            ++n;
+        }
+        BDOS(32,user);
+        if((BDOS(16,fcb)&255)==255) goto finish;
+        opened=0;
+        r=swapmedia(1,drive,user,dma,swap);
+        if(r!=1) {side=-1;result=r==0?0:-1;goto finish;}
+        side=1;
+        if(first) {
+            exists=lookup(drive,user,name,search,&ro);
+            if(exists<0 || (exists && ro)) goto finish;
+            if(!unused(drive,user,temp,'P',search,name)) goto finish;
+            if(exists && !unused(drive,user,backup,'B',search,name)) goto finish;
+            fcbinit(fcb,drive,temp);BDOS(32,user);
+            if((BDOS(22,fcb)&255)==255) goto finish;
+            opened=own=1;first=0;
+        } else {
+            fcbinit(fcb,drive,temp);BDOS(32,user);
+            if((BDOS(15,fcb)&255)==255) goto finish;
+            opened=1;
+        }
+        for(i=0;i<n;++i) {
+            if(cancel && (*cancel)()) {result=0;goto finish;}
+            swaprecord(fcb,position+i);
+            BDOS(32,user);BDOS(26,swapbuffer+i*128);
+            if((BDOS(34,fcb)&255)!=0) goto finish;
+        }
+        BDOS(32,user);
+        if((BDOS(16,fcb)&255)==255) goto finish;
+        opened=0;position+=n;
+        if(eof) break;
+        r=swapmedia(0,drive,user,dma,swap);
+        if(r!=1) {side=-1;result=r==0?0:-1;goto finish;}
+        side=0;
+    }
+    if(cancel && (*cancel)()) {result=0;goto finish;}
+    r=lookup(drive,user,name,search,&ro);
+    if(r<0 || (r && ro) || r!=exists) goto finish;
+    if(exists) {
+        if(!renamefile(drive,user,name,backup)) goto finish;
+        backed=1;
+    }
+    if(!renamefile(drive,user,temp,name)) {
+        if(backed) {
+            if(renamefile(drive,user,backup,name)) backed=0;
+            else remember(backup);
+        }
+        goto finish;
+    }
+    own=0;
+    if(backed && !removefile(drive,user,backup)) {remember(backup);goto finish;}
+    result=1;
+finish:
+    if(opened) {
+        BDOS(32,user);
+        if((BDOS(16,fcb)&255)==255) result=-1;
+    }
+    if(own) {
+        /* Never remove a destination temporary while source is inserted. */
+        if(side!=1 || !removefile(drive,user,temp)) {
+            if(!recovery[0]) remember(temp);
+            if(result==1) result=-1;
+        }
+    }
+    if(side && swap) {
+        r=swapmedia(0,drive,user,dma,swap);
+        if(r!=1) result=-1;
+    }
+    BDOS(14,entrydrive);BDOS(32,entryuser);BDOS(26,dma);
+    return result;
+}

@@ -7,7 +7,7 @@ CMDINFO=cmdinfo
 PYTHON=python3
 REF=../../extra/fm.cmd
 TOOLS=fmcheck.cmd fmview.cmd
-OBJECTS=fmcheck.obj config.obj cfgio.obj menu.obj focus.obj select.obj selectio.obj marks.obj type.obj typeio.obj viewer.obj prtext.obj printjob.obj printio.obj renjob.obj renio.obj deljob.obj delio.obj copyjob.obj copyio.obj copynam.obj book.obj fatdest.obj fatloc.obj spawn.obj launch.obj runjob.obj extjob.obj screen.obj layout.obj frame.obj keys.obj navigate.obj dirlist.obj scan.obj native.obj browse.obj conio.obj event.obj term.obj fmxios.obj
+OBJECTS=fmcheck.obj config.obj cfgio.obj menu.obj focus.obj select.obj selectio.obj marks.obj type.obj typeio.obj viewer.obj prtext.obj printjob.obj printio.obj renjob.obj renio.obj deljob.obj delio.obj copyjob.obj copyio.obj copynam.obj book.obj fatdest.obj fatloc.obj spawn.obj launch.obj runjob.obj extjob.obj backup.obj screen.obj layout.obj frame.obj keys.obj navigate.obj dirlist.obj scan.obj native.obj browse.obj conio.obj event.obj term.obj fmxios.obj
 
 .PHONY: all check check-c check-ref reference clean
 .DELETE_ON_ERROR:
@@ -69,6 +69,11 @@ check-c: all
 	$(PYTHON) -B tests/spawn.py
 	$(PYTHON) -B tests/runjob.py
 	$(PYTHON) -B tests/extjob.py
+	$(PYTHON) -B tests/backjob.py
+	$(PYTHON) -B tests/backio.py
+	$(PYTHON) -B tests/fatpath.py
+	$(PYTHON) -B tests/swap.py
+	$(PYTHON) -B tests/attributes.py
 	$(PYTHON) -B tests/layout.py
 	$(PYTHON) -B tests/frame.py
 	$(PYTHON) -B tests/keys.py

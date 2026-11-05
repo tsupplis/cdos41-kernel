@@ -9,6 +9,7 @@ int __BDOS();
 int sprintf();
 #define main fmview_main
 #include "fmview.c"
+int fm_native_directory(){return 0;}
 #undef main
 static int native_drive=1,capture_result=14,clone_result=16,pins[17],valid_alias=1;
 static int captures,clones,same_location,location_error,copy_calls,batch_calls,lastdest,lastuser;
