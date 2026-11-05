@@ -62,7 +62,12 @@
     "5cbc": "action_boot_hard_disk",
     "0dc8": "directory_format_name",
     "0e70": "directory_enumerate",
-    "20a4": "directory_sort_names"
+    "20a4": "directory_sort_names",
+    "6dc3": "screen_lock_begin",
+    "6dd7": "screen_lock_end",
+    "6dec": "screen_lock_reacquire",
+    "6e01": "screen_lock_release_for_bdos",
+    "6917": "keyboard_drain_pending"
   },
   "notes": {
     "5ded": "Skip ASCII spaces only. Tabs are not consumed.",
@@ -73,7 +78,8 @@
     "6ccd": "ESC Y followed by row+32 and column+32; position words at DATA 2E44 and 2E46.",
     "0dc8": "12-column padded display name, attribute bits stripped; dot test uses raw byte at entry+9.",
     "0e70": "BDOS 17/18 search with DMA buffer; distinct file/directory pointer lists; directory flag at returned entry+10h bit 40h.",
-    "20a4": "Pointer quicksort; compares first 12 display bytes via DEC7h; caller sorts files and directories separately."
+    "20a4": "Pointer quicksort; compares first 12 display bytes via DEC7h; caller sorts files and directories separately.",
+    "6e01": "Release direct-screen semaphore before BDOS output; 6DECh reacquires it afterward. Not an output lock."
   },
   "dispatch_tables": [
     {

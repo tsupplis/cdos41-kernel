@@ -11,8 +11,8 @@ user testing of layout, configuration, keys and file operations.
 | ASM86 reconstruction | Not yet implemented; the listing is not assembler source |
 | Configuration parser | First C module; native and host regression target |
 | Menu metadata | 28 entries recovered; labels, commands and selection bounds checked |
-| UI cores | Read-only pane composes names, key translation, navigation and rendering; live terminal integration pending |
-| Directory display | Formatting, sorting and bounded BDOS search tested; interactive integration pending |
+| UI cores | Read-only pane composes names, key translation, navigation and rendering; live read-only browser validated |
+| Directory display | Formatting, sorting and bounded BDOS search tested; current-drive file pane integrated |
 | Operations, launch | Not implemented |
 | Distribution replacement | Not enabled |
 
@@ -21,13 +21,14 @@ user testing of layout, configuration, keys and file operations.
 Uses `drccpm_cc` and `drccpm_link`, following WINDOW and CHKDOSFS.
 
 ```
-make              # FMCHECK tests reconstructed cores; not a file manager
+make              # FMCHECK core tests and experimental FMVIEW browser
 make check        # reference byte coverage, host and native core checks
+make check-live   # disposable PCE FAT browser regression
 make reference    # explicitly regenerate the reviewed reference listing
 make clean
 ```
 
-The executable is `fmcheck.cmd`; there is deliberately no replacement
+The executables are `fmcheck.cmd` and `fmview.cmd`; there is no replacement
 `fm.cmd` yet. `disassemble.py` uses NDISASM only as a decoder, not an assembler.
 No parent build or media recipe is changed.
 
@@ -59,7 +60,10 @@ is not assembly equivalence, code comprehension or functional parity.
 | `scan.c` | Bounded read-only search with injected BDOS operations |
 | `actions.c` (planned) | Copy, rename, delete, type and print |
 | `launch.c` (planned) | External tools, command shell, return to FM |
+| `event.c` (started) | Read-only input/navigation/repaint loop and Escape cleanup |
+| `conio.c` (started) | Direct-screen lock ownership, BDOS-output boundary and mapped input |
 | `browse.c` (started) | Read-only pane, selection highlight and repaint |
+| `term.c`, `fmxios.a86` (started) | CDOS window discovery and guarded direct-screen backend |
 | `native.c` (started) | Native BDOS search callbacks; console backend pending |
 | `fm.c` (planned) | Application state and event loop |
 
@@ -172,10 +176,30 @@ Tests capture bytes on both the host and the actual DR C executable.
 
 This is not yet a native rendering backend. The original wraps output through
 CODE `6E01h`/`6DECh` and uses a console lock at `6FB3h`; replacing these with
-unprotected character writes would miss concurrency behaviour. The native
+holding that direct-screen lock during BDOS output would risk deadlock. The native
 sink must handle that transaction before a live preview is enabled. The C border renderer and colour mapping are now recovered and tested against
 the original DATA tables (512 colour cases and six border comparisons). Native
 console output, resizing and repaint integration remain.
+
+## Console ownership and input
+
+The original acquires its direct-screen semaphore at `6DC3h`, releases it at
+`6DD7h`, and temporarily releases/reacquires it around BDOS output through
+`6E01h`/`6DECh`. This is a direct-memory lock, not an output-stream mutex.
+`conio.c` keeps that ownership explicit and releases it before input polling.
+Output failures still attempt to restore prior ownership; failed acquisition
+never leaves the state marked locked. Host tests exercise failure paths and
+input mapping; native DR C tests verify callback ordering and normalized input.
+
+`fm_native_key` uses BDOS 6 readiness/read calls. Input passes through the
+recovered terminal remapping and normalization, preserving a real NUL byte.
+`term.c` now discovers the current console through a local WINDOW-style XIOS
+bridge (`fmxios.a86`). It requires BDOS identity 1441h, validates console number
+and image pointer, writes only within the 24x80 virtual image while locked,
+and refreshes the physical window after unlocking. The status line is untouched.
+Host tests simulate the gateway and verify discovery, bounds and lock ordering;
+the native backend is assembled/linked but has not yet been exercised in PCE.
+Terminal-map discovery and live console tests remain pending. The adapter does not yet enable an interactive executable.
 
 ## Key translation
 
@@ -239,9 +263,8 @@ Search state is consumed, so searches cannot be interleaved.
 
 Host tests cover all four DMA slots, user filtering, FAT/CP/M classification,
 capacity boundaries and cleanup. The native DR C executable searches a disposable
-host directory through emu2 and verifies its files are unchanged. This is not
-yet a live CDOS FAT-directory test. Media detection, paths, metadata interpretation
-and integration into the browser remain pending.
+host directory through emu2 and verifies its files are unchanged. The separate live test exercises a FAT directory on CDOS through PCE. Full paths,
+metadata interpretation and directory changes remain pending.
 
 The native callback table is assigned at runtime: DR C 1.11 produced incorrect
 code-address relocations for its static aggregate initializer. The native test
@@ -257,14 +280,36 @@ scrolling, repaint, clipping and empty lists; DR C tests exercise key dispatch.
 
 Column spacing is supplied explicitly. The integration fixture uses 14 cells;
 this is not yet a claim that every original FM grid mode has been recovered.
-Native keyboard acquisition, console locking, menu focus and directory changes
-remain to be connected before an interactive FM executable can be offered.
+`event.c` now drives the pane through the console callbacks: idle input does
+not repaint, navigation repaints under screen ownership, and Escape exits with
+no lock held. Failed rendering also releases ownership. Tests cover that full
+sequence. Terminal maps, menu focus and directory changes remain pending.
+
+## Experimental live browser
+
+Run `FMVIEW` without arguments on CDOS 4.1. It shows sorted files from the
+current drive/user, with arrow navigation, Home/End scrolling and Escape to
+exit. It uses a fixed initial layout; menus are disabled reference labels.
+The search retains at most 256 entries and reports truncation. Directories
+are filtered from this first pane. FM.CFG loading and file operations are
+not yet integrated.
+
+The local XIOS adapter locks the virtual screen only while painting. It disables
+programmable-key expansion with ESC 6 while open and restores the prior mode
+on exit; otherwise arrow keys can disappear into empty key definitions.
+
+`make check-live` boots a disposable image and checks a 90-file FAT listing,
+selection attributes after Right/Down, End scrolling, Home, and clean Escape
+return. The FAT image must remain byte-identical. Core checks and this live
+regression pass; this is not full FM parity or approval to replace the original.
+Live artifacts are retained in the printed temporary directory for inspection;
+the emulator exits after the scenario and has a 90-second timeout.
 
 ## Host preview
 
 `make preview` produces `preview.svg` using the C layout, frame and colour
-modules. It shows the default blank file pane and original menu labels.
-It is not a running FM: directory contents, selection, key legend and native
+modules. It shows synthetic filenames, a selected entry and the original menu labels.
+It is not a running FM: the file list is synthetic, and the key legend and native
 console transactions are not yet integrated. Do not use it as parity evidence.
 
 ## Acceptance before replacement

@@ -31,3 +31,31 @@ char *restore_dma;
     operations.next = next;
     return fm_scan(&operations,drive,user,fat,files,capacity,count,restore_dma);
 }
+
+/* Public BDOS direct input: test readiness before reading, preserving NUL.
+ * No echo, no discarded type-ahead and no assumptions about BIOS scan pairs.
+ */
+int fm_native_key()
+{
+    int key;
+    if (!(__BDOS(6,254)&1)) return -1;
+    key=__BDOS(6,253)&255;
+    return key;
+}
+
+/* Extended FCB open changes this process's FAT directory mapping.
+ * No ordinary file is opened and no directory entry is written.
+ */
+int fm_native_enter(drive,entry)
+int drive;
+char *entry;
+{
+    char fcb[36];
+    int i;
+    if(drive<1 || drive>16 || !entry || !(entry[16]&64) ||
+       (__BDOS(12,0)&65535)!=0x1441) return 0;
+    for(i=0;i<36;++i) fcb[i]=0;
+    fcb[0]=drive|128;
+    for(i=1;i<12;++i) fcb[i]=entry[i]&127;
+    return (__BDOS(15,fcb)&255)==0;
+}

@@ -17,7 +17,7 @@ class Canvas(C.Structure):
 with tempfile.TemporaryDirectory() as tmp:
     lib=Path(tmp)/'browse.so'
     subprocess.run(['cc','-std=c89','-shared','-fPIC','-Wno-deprecated-non-prototype',
-        *[str(root/f) for f in ('browse.c','navigate.c','keys.c','frame.c','dirlist.c')],
+        *[str(root/f) for f in ('browse.c','navigate.c','keys.c','frame.c','dirlist.c','event.c','conio.c')],
         '-o',str(lib)],check=True)
     dll=C.CDLL(str(lib));view=Browser();area=Rect(2,3,30,5)
     names=(C.c_char_p*8)(*[('F%07d.CMD'%i).encode() for i in range(7,-1,-1)])
@@ -61,4 +61,33 @@ with tempfile.TemporaryDirectory() as tmp:
     def failed(y,x,ch,attr):return 0
     broken=Canvas(24,80,failed)
     assert not dll.fm_browser_draw(C.byref(view),C.byref(broken))
+    # Drive the same pane through the console event pump.
+    NoArg=C.CFUNCTYPE(C.c_int)
+    Put=C.CFUNCTYPE(C.c_int,C.c_int)
+    class Console(C.Structure):
+        _fields_=[('acquire',NoArg),('release',NoArg),('put',Put),('read',NoArg),('held',C.c_int)]
+    order=[];pending=[0xcd,-1,27]
+    @NoArg
+    def acquire():order.append('acquire');return 1
+    @NoArg
+    def release():order.append('release');return 1
+    @NoArg
+    def read():order.append('read');return pending.pop(0)
+    @Put
+    def put(c):return 1
+    console=Console(acquire,release,put,read,0)
+    assert dll.fm_browser_open(C.byref(view),names,8,C.byref(area),14,7,112)
+    assert dll.fm_browser_paint(C.byref(view),C.byref(canvas),C.byref(console))
+    assert order==['acquire','release'] and not console.held
+    order.clear()
+    args=(C.byref(view),C.byref(canvas),C.byref(console),None,None,0)
+    assert dll.fm_browser_step(*args)==1 and view.navigation.selected==2
+    assert order==['read','acquire','release'] and not console.held
+    order.clear()
+    assert dll.fm_browser_step(*args)==0 and order==['read']
+    order.clear()
+    assert dll.fm_browser_step(*args)==2 and order==['read'] and not console.held
+    pending.append(0xcd);order.clear()
+    assert dll.fm_browser_step(C.byref(view),C.byref(broken),C.byref(console),None,None,0)==-1
+    assert order==['read','acquire','release'] and not console.held
 print('PASS: browser sorting/key/scroll/render integration, selection highlight, empty/short repaint and output failure')

@@ -6,12 +6,21 @@
 #include "keys.h"
 #include "dirlist.h"
 #include "scan.h"
+#include "conio.h"
 #ifdef HOST_TEST
 #include <stdio.h>
 #else
 int printf();
 #endif
 int failures;
+static int console_events;
+static int console_acquire() { console_events=console_events*10+1; return 1; }
+static int console_release() { console_events=console_events*10+2; return 1; }
+static int console_put(ch)
+int ch;
+{ console_events=console_events*10+3; return ch==65; }
+static int console_read() { return 0xc8; }
+
 static char screen_bytes[8];
 static int screen_length;
 static int capture(bytes, length)
@@ -38,6 +47,7 @@ main()
     struct fm_layout layout;
     struct fm_navigation navigation;
     struct fm_browser browser;
+    struct fm_console console;
     static int file_row[]={0,0,0,3,0};
     static int file_col[]={0,0,20,0,0};
     static int file_width[]={60,80,60,80,80};
@@ -93,6 +103,13 @@ main()
     verify(fm_browser_open(&browser,names,3,&layout.files,14,7,112) &&
         fm_browser_key(&browser,0xcd)==1 && browser.navigation.selected==2,
         "browser key integration");
+    console.acquire=console_acquire; console.release=console_release;
+    console.put=console_put; console.read=console_read; console.held=0;
+    console_events=0;
+    verify(fm_console_begin(&console) && fm_console_write(&console,"A",1) &&
+        console_events==1231 && console.held,"console output lock ordering");
+    verify(fm_console_key(&console,0,0,0)==11 && !console.held,
+        "console input releases lock and normalizes key");
     screen.rows=24; screen.columns=80; screen.write=capture;
     verify(fm_screen_position(&screen,23,79) && screen_length==4 &&
         screen_bytes[0]==27 && screen_bytes[1]=='Y' &&

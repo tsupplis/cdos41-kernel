@@ -74,3 +74,56 @@ char **input;
     config->value[keyword - 14] = value & 255;
     return keyword;
 }
+
+/* DATA defaults with the PC reset at CODE 5D3Ah applied. */
+int fm_config_defaults(config)
+struct fm_config *config;
+{
+    static char defaults[FM_CONFIG_COUNT]={2,1,0,5,0,4,15,1,17,1,0,2,0,0,14,1};
+    int i;
+    if (!config) return 0;
+    for(i=0;i<FM_CONFIG_COUNT;++i) config->value[i]=defaults[i];
+    return 1;
+}
+int fm_config_begin(reader)
+struct fm_config_reader *reader;
+{
+    reader->used=reader->overflow=reader->ended=reader->assignments=0;
+    return 1;
+}
+static int line_end(config,reader)
+struct fm_config *config;
+struct fm_config_reader *reader;
+{
+    char *line;
+    reader->line[reader->used]=0;
+    line=reader->line;
+    /* Reject an oversized line as a unit; never interpret its suffix. */
+    if (!reader->overflow && fm_config_assignment(config,&line))
+        ++reader->assignments;
+    reader->used=reader->overflow=0;
+    return reader->assignments;
+}
+int fm_config_feed(config,reader,ch)
+struct fm_config *config;
+struct fm_config_reader *reader;
+int ch;
+{
+    if (reader->ended) return 0;
+    ch &= 255;
+    if (ch==26) {
+        line_end(config,reader);reader->ended=1;return 0;
+    }
+    if (ch==13 || ch==10) line_end(config,reader);
+    else if (reader->used<81) reader->line[reader->used++]=ch;
+    else reader->overflow=1;
+    return 1;
+}
+int fm_config_finish(config,reader)
+struct fm_config *config;
+struct fm_config_reader *reader;
+{
+    if (!reader->ended) line_end(config,reader);
+    reader->ended=1;
+    return reader->assignments;
+}

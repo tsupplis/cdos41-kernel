@@ -2894,24 +2894,24 @@ code_15b8:
 code_15ca:
 0000164A  55                               push bp
 0000164B  8BEC                             mov bp,sp
-0000164D  E8F357                           call code_6dc3
+0000164D  E8F357                           call screen_lock_begin
 00001650  FF7606                           push word [bp+0x6]
 00001653  FF7604                           push word [bp+0x4]
 00001656  E82768                           call code_7e00
 00001659  83C404                           add sp,0x4
-0000165C  E8F857                           call code_6dd7
+0000165C  E8F857                           call screen_lock_end
 0000165F  5D                               pop bp
 00001660  C3                               ret
 
 code_15e1:
 00001661  55                               push bp
 00001662  8BEC                             mov bp,sp
-00001664  E8DC57                           call code_6dc3
+00001664  E8DC57                           call screen_lock_begin
 00001667  FF7606                           push word [bp+0x6]
 0000166A  FF7604                           push word [bp+0x4]
 0000166D  E8DE6F                           call code_85ce
 00001670  83C404                           add sp,0x4
-00001673  E8E157                           call code_6dd7
+00001673  E8E157                           call screen_lock_end
 00001676  5D                               pop bp
 00001677  C3                               ret
 
@@ -2927,15 +2927,15 @@ code_15f8:
 0000168B  C3                               ret
 
 code_160c:
-0000168C  E8B457                           call code_6dc3
+0000168C  E8B457                           call screen_lock_begin
 0000168F  E89067                           call code_7da2
-00001692  E8C257                           call code_6dd7
+00001692  E8C257                           call screen_lock_end
 00001695  C3                               ret
 
 code_1616:
-00001696  E8AA57                           call code_6dc3
+00001696  E8AA57                           call screen_lock_begin
 00001699  E8A46F                           call code_85c0
-0000169C  E8B857                           call code_6dd7
+0000169C  E8B857                           call screen_lock_end
 0000169F  C3                               ret
 
 code_1620:
@@ -3419,7 +3419,7 @@ code_19a6:
 00001A49  E82C4E                           call code_67f8
 00001A4C  44                               inc sp
 00001A4D  44                               inc sp
-00001A4E  E8F253                           call code_6dc3
+00001A4E  E8F253                           call screen_lock_begin
 00001A51  B83B00                           mov ax,0x3b
 00001A54  50                               push ax
 00001A55  B016                             mov al,0x16
@@ -3458,7 +3458,7 @@ code_19a6:
 00001A9C  44                               inc sp
 
 code_1a1d:
-00001A9D  E8B753                           call code_6dd7
+00001A9D  E8B753                           call screen_lock_end
 
 code_1a20:
 00001AA0  FF7606                           push word [bp+0x6]
@@ -3586,7 +3586,7 @@ code_1aef:
 00001BBA  83C404                           add sp,0x4
 
 code_1b3d:
-00001BBD  E88352                           call code_6dc3
+00001BBD  E88352                           call screen_lock_begin
 00001BC0  2BC0                             sub ax,ax
 00001BC2  50                               push ax
 00001BC3  50                               push ax
@@ -3696,7 +3696,7 @@ code_1bbb:
 00001C9F  EB23                             jmp code_1c44
 
 code_1c21:
-00001CA1  E89F51                           call code_6dc3
+00001CA1  E89F51                           call screen_lock_begin
 00001CA4  B80B00                           mov ax,0xb
 00001CA7  50                               push ax
 00001CA8  2BC0                             sub ax,ax
@@ -3776,7 +3776,7 @@ code_1c44:
 00001D41  44                               inc sp
 
 code_1cc2:
-00001D42  E81251                           call code_6dd7
+00001D42  E81251                           call screen_lock_end
 00001D45  E8C159                           call code_7689
 00001D48  8BE5                             mov sp,bp
 00001D4A  5D                               pop bp
@@ -4189,13 +4189,13 @@ code_1fde:
 0000207C  50                               push ax
 0000207D  E8E249                           call code_69e2
 00002080  83C404                           add sp,0x4
-00002083  E8BD4D                           call code_6dc3
+00002083  E8BD4D                           call screen_lock_begin
 00002086  E89E4B                           call code_6ba7
 00002089  FF7604                           push word [bp+0x4]
 0000208C  E8A8FF                           call code_1fb7
 0000208F  44                               inc sp
 00002090  44                               inc sp
-00002091  E8C34D                           call code_6dd7
+00002091  E8C34D                           call screen_lock_end
 00002094  5D                               pop bp
 00002095  C3                               ret
 
@@ -4213,7 +4213,7 @@ code_2016:
 000020A7  50                               push ax
 000020A8  E8B749                           call code_69e2
 000020AB  83C404                           add sp,0x4
-000020AE  E8924D                           call code_6dc3
+000020AE  E8924D                           call screen_lock_begin
 000020B1  B81E12                           mov ax,0x121e
 000020B4  50                               push ax
 000020B5  E87FFF                           call code_1fb7
@@ -4243,7 +4243,7 @@ code_2016:
 000020E9  44                               inc sp
 
 code_206a:
-000020EA  E86A4D                           call code_6dd7
+000020EA  E86A4D                           call screen_lock_end
 000020ED  5D                               pop bp
 000020EE  C3                               ret
 
@@ -6221,7 +6221,7 @@ code_2f0a:
 00002FEF  50                               push ax
 00002FF0  E833AE                           call code_dda6
 00002FF3  83C404                           add sp,0x4
-00002FF6  E84A3E                           call code_6dc3
+00002FF6  E84A3E                           call screen_lock_begin
 00002FF9  2BC0                             sub ax,ax
 00002FFB  50                               push ax
 00002FFC  A00818                           mov al,[0x1808]
@@ -6254,7 +6254,7 @@ code_2f0a:
 00003036  50                               push ax
 00003037  E8884E                           call code_7e42
 0000303A  83C408                           add sp,0x8
-0000303D  E8173E                           call code_6dd7
+0000303D  E8173E                           call screen_lock_end
 00003040  B80100                           mov ax,0x1
 00003043  50                               push ax
 00003044  FF760A                           push word [bp+0xa]
@@ -11622,9 +11622,9 @@ code_59b5:
 00005A3D  E8C6A6                           call code_0086
 00005A40  83C404                           add sp,0x4
 00005A43  E85C23                           call code_7d22
-00005A46  E8FA13                           call code_6dc3
+00005A46  E8FA13                           call screen_lock_begin
 00005A49  E83626                           call code_8002
-00005A4C  E80814                           call code_6dd7
+00005A4C  E80814                           call screen_lock_end
 00005A4F  E84EBC                           call code_1620
 00005A52  8B46FA                           mov ax,[bp-0x6]
 00005A55  EB02                             jmp code_59d9
@@ -12884,9 +12884,9 @@ code_63ff:
 
 code_6409:
 00006489  E81619                           call code_7d22
-0000648C  E8B409                           call code_6dc3
+0000648C  E8B409                           call screen_lock_begin
 0000648F  E8F01B                           call code_8002
-00006492  E8C209                           call code_6dd7
+00006492  E8C209                           call screen_lock_end
 00006495  E87112                           call code_7689
 00006498  E8D69E                           call code_02f1
 0000649B  E802B2                           call code_1620
@@ -13444,7 +13444,7 @@ code_6853:
 code_6863:
 000068E3  E8230E                           call code_7689
 000068E6  E83004                           call code_6c99
-000068E9  E8AB00                           call code_6917
+000068E9  E8AB00                           call keyboard_drain_pending
 000068EC  EB54                             jmp code_68c2
 
 code_686e:
@@ -13553,7 +13553,7 @@ code_690a:
 00006993  83C404                           add sp,0x4
 00006996  C3                               ret
 
-code_6917:
+keyboard_drain_pending:
 00006997  E90D00                           jmp code_6927
 
 code_691a:
@@ -14034,7 +14034,7 @@ terminal_0ade_entry_06:
 
 terminal_emit_escape:
 00006D7B  52                               push dx
-00006D7C  E80201                           call code_6e01
+00006D7C  E80201                           call screen_lock_release_for_bdos
 00006D7F  B21B                             mov dl,0x1b
 00006D81  B106                             mov cl,0x6
 00006D83  CDE0                             int byte 0xe0
@@ -14042,11 +14042,11 @@ terminal_emit_escape:
 
 terminal_emit_character:
 00006D86  52                               push dx
-00006D87  E8F700                           call code_6e01
+00006D87  E8F700                           call screen_lock_release_for_bdos
 00006D8A  5A                               pop dx
 00006D8B  B106                             mov cl,0x6
 00006D8D  CDE0                             int byte 0xe0
-00006D8F  E8DA00                           call code_6dec
+00006D8F  E8DA00                           call screen_lock_reacquire
 00006D92  C3                               ret
 
 terminal_copy_words:
@@ -14119,7 +14119,7 @@ terminal_0ade_entry_0a:
 00006E41  5D                               pop bp
 00006E42  C3                               ret
 
-code_6dc3:
+screen_lock_begin:
 00006E43  A1482E                           mov ax,[0x2e48]
 00006E46  50                               push ax
 00006E47  2BC0                             sub ax,ax
@@ -14129,7 +14129,7 @@ code_6dc3:
 00006E50  C706A82E0100                     mov word [0x2ea8],0x1
 00006E56  C3                               ret
 
-code_6dd7:
+screen_lock_end:
 00006E57  A1482E                           mov ax,[0x2e48]
 00006E5A  50                               push ax
 00006E5B  B80100                           mov ax,0x1
@@ -14139,7 +14139,7 @@ code_6dd7:
 00006E65  C706A82E0000                     mov word [0x2ea8],0x0
 00006E6B  C3                               ret
 
-code_6dec:
+screen_lock_reacquire:
 00006E6C  A1A82E                           mov ax,[0x2ea8]
 00006E6F  0BC0                             or ax,ax
 00006E71  740D                             jz code_6e00
@@ -14153,7 +14153,8 @@ code_6dec:
 code_6e00:
 00006E80  C3                               ret
 
-code_6e01:
+; Release direct-screen semaphore before BDOS output; 6DECh reacquires it afterward. Not an output lock.
+screen_lock_release_for_bdos:
 00006E81  A1A82E                           mov ax,[0x2ea8]
 00006E84  0BC0                             or ax,ax
 00006E86  740E                             jz code_6e16
@@ -30142,8 +30143,8 @@ code_e319:
 00012070  00000000000000000000000000000000 bytes ; ................
 
 ; Unresolved indirect control transfers:
-; CODE 768D: jmp word near [bx+0xa]
 ; CODE 769B: jmp word near [bx+0xe]
+; CODE 768D: jmp word near [bx+0xa]
 ; CODE 76A9: jmp word near [bx+0x10]
 ; CODE 7686: jmp word near [bx+0x8]
 ; CODE 76B4: call word near [bx+0x12]

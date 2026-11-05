@@ -23,4 +23,5 @@ struct fm_search_ops {
  */
 int fm_scan();
 int fm_native_scan();
+int fm_native_enter();
 #endif
