@@ -35,19 +35,11 @@ stos_burst	equ	168	; string store per vert retrace
 neg4		equ	-4	; for reverse indexing
 blank		equ	0720h	; space
 
-q_make		equ	86h
-q_open		equ	87h
-q_read		equ	89h
-q_write		equ	8Bh
 
 ;	video controller port numbers
 
 cursor_start		equ	10
-cursor_end		equ	11
-display_start_hi	equ	12
-display_start_low	equ	13
 cursor_hi		equ	14
-cursor_low		equ	15
 
 
 ;********************************************************
@@ -395,7 +387,7 @@ screen_regular_mode:
 	jz	$+5
 	jmp	screen_bad_param	;   then bag it
 
-screen_get:
+; screen_get:
 	mov	al,vs_screen_mode	; get our current state
 	mov	ah,80d			;   and our column width
 	cmp	al,50h			; enhanced modes report their native number
@@ -432,7 +424,7 @@ screen_set_owner:
 	test	al,0F0h			;   and if in graphics
 	jnz	screen_graphics_clear	;   erase it
 
-screen_alpha_clear:
+; screen_alpha_clear:
 	push	bx
 	call	z_erase			; clear an alpha screen
 	pop	bx
@@ -1854,7 +1846,7 @@ sw_stat_set:
 	cmp	vs_bottom,crt_rows_p - 1
 	jb	sw_stat_on	; skip if above the bottom
 
-sw_stat_off:
+; sw_stat_off:
 	not	al		; to turn sl off, complement
 	and	sl_pc_flag,al	;   and mask the bit off
 	jmps	sw_stat_clear	; now force an update

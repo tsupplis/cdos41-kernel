@@ -28,7 +28,6 @@ bytes_per_sector	equ	512
 
 fdc_port	equ	03F2h	    ;all bits clear on channel reset
 fdc_stat	equ	03F4h	    ;status port for disk controller
-fdc_data	equ	fdc_stat+1  ;data port for disk controller
 fdc_rate	equ	03F7h	    ;data rate for the new PC
 
 		;7 6 5 4 3 2 1 0
@@ -41,7 +40,6 @@ fdc_rate	equ	03F7h	    ;data rate for the new PC
 
 fdc_on		equ	00001100b	;mask to keep the 8272 unreset
 fdc_reset_bit	equ	00000100b	;8272 reset when low
-fdc_no_motor	equ	11111100b	;mask for no motors
 fdc_cmnd_read	equ	01100110b	;mfm, skip deleted data, read
 fdc_cmnd_write	equ	01000101b	;mfm, write
 fdc_cmnd_format	equ	01001101b	;mfm, format
@@ -61,8 +59,6 @@ f_sectors	equ	8		;CP/M sectors per diskette track
 f_gap		equ	50h		;this is IBM's, not August's
 f_fill		equ	0E5h		;CP/M blank directory fill char
 
-r_bytes		equ	2		;magic number for 512 bytes
-r_dtl		equ	0FFh
 
 ;	hyper drive versus old drive values follow
 
@@ -136,10 +132,7 @@ gp_fl	equ	word ptr 16[bp]		; gap and fill used by format
 ;	Some equates in the Disk Parameter Header (DPH)
 ;	and the Disk Parameter Block.
 
-xlt	equ	0	;translation table offset in DPH
 dpb	equ	8	;disk parameter block offset in DPH
-spt	equ	0	;sectors per track offset in DPB
-psh	equ	15	;physical shift factor offset in DPB
 PERM	equ	8000h	;* permanent media indicator in CKS
 
 ;	Addresses which need updating in low memory for PC Mode
@@ -152,7 +145,6 @@ pc_chip_status		equ	42h	; = our disk_results
 
 pc_lastrate	equ	byte ptr .8Bh	;* last data rate (AT)
 pc_dsk_state	equ	byte ptr .90h	;* current diskette state (AT)
-pc_dsk_state_st	equ	byte ptr .92h	;* start state for current op (AT)
 pc_dsk_trk	equ	byte ptr .94h	;* current physical cylinder number
 
 PC_STATE_HYP_96		equ	15h	;* hyper in hyper
@@ -398,7 +390,7 @@ ddio_rw:
         xor ah,ah
         mov TRACK,ax             ; physical cylinder; seek uses ddio_head
 
-ddio_go:
+; ddio_go:
 	mov ax, word ptr cur_N	   ;* save N and eot in command string
 	mov DS:word ptr N_store,ax ;*
 	mov ax, word ptr cur_gap   ;* and gpl and dtl
@@ -641,7 +633,7 @@ check_fat_loop:
 	inc si ! inc si			; if not, try another
 	loop	check_fat_loop		; fall through on failure
 
-not_a_fat:
+; not_a_fat:
 	mov	ax,offset dpbs		; assume single sided
 	cmp	floppy_type,01h		; if not double sided
 	jnz	flop_size_good		;   then skip
@@ -856,7 +848,7 @@ floppy_return_status:
 	shl	bx,1		;* word table
 	mov	door_count[bx], DOOR_OPEN_TICKS  ;* how many to wait before
 	pop	bx				 ;* faking the door-open
-flp_ret1:			;*
+; flp_ret1:			;*
 	ret
 
 
@@ -1153,7 +1145,7 @@ disk_init:
 
 ;	First time through, or after controller reset, recal the drive
 
-disk_recal:
+; disk_recal:
 	call motor_on
 	call recal			;back to track zero
 	call wait_sense_get		;sense interrupt cycle
@@ -1191,7 +1183,7 @@ disk_routine_1:
 	cmp disk_error,80h		;if it's a timeout error
 	jz disk_ctrl_reset		;  then reset the controller
 	
-disk_routine_2:
+; disk_routine_2:
 	call fdc_status_get
 	mov al,d_r_st0
 	and al,0c0h			;mask out for termination bits

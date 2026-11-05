@@ -12,15 +12,12 @@ eject						; Apr. 1, 1985
 ;************************************************
 
 divide_interrupt	equ	00h
-single_step_interrupt	equ	01h
 nmi_interrupt		equ	02h
-one_byte_interrupt	equ	03h
 overflow_interrupt	equ	04h
 clock_interrupt		equ	08h
 keyboard_interrupt	equ	09h
 aux1_interrupt		equ	0Bh
 aux0_interrupt		equ	0Ch
-hd_hard_interrupt	equ	0Dh
 disk_interrupt		equ	0Eh
 
 equip_int		equ	11h		; ROS equipment check int
@@ -37,9 +34,6 @@ disk_parms_interrupt	equ	1Eh		;* diskette parameters ptr.
  int_1E_vec_seg		equ	int_1E_vec_off + 2
 
 hd_code_interrupt	equ	40h		; pass along to floppy
-hd_param_interrupt	equ	41h		; hard disk param pointer
-os_interrupt		equ	224		; normal CCP/M-86 entry
-debugger_interrupt	equ	225		; debugger entry to O.S.
 flag_interrupt		equ	228		; to get an unused flag
 fidds_interrupt		equ	229		; for attachamatic drives
 xios_interrupt		equ	230		; for ver 1.0 back door
@@ -211,7 +205,7 @@ check_286_done:
 
 ;	read PC AT cmos ram and convert bcd to binary
 
-read_286_bcd:
+; read_286_bcd:
 	call	read_286_cmos		; grab the byte
 	mov	ah,al
 	mov	cl,4
@@ -885,7 +879,7 @@ hd_init:
 	xor	ax,ax
 	mov	es,ax			;point to vector seg
 
-hd_patch_step_rate:			;step option bits off
+; hd_patch_step_rate:			;step option bits off
 	and	es:byte ptr .hd_control_byte,0F8h or (not SLOW_SEEK)
 
 	les	ax,es:.HD_PTR		;get hard disk int ptr
@@ -962,7 +956,7 @@ hd_init_drive2:
 
 ;	now try to log in second pc dos partition
 
-hd_init_pc1:
+; hd_init_pc1:
 	lea	si,hd_info1
 	call	hd_init_hdinf		; setup #2's info vector
 	mov	cx,1			; physical drive number

@@ -89,8 +89,6 @@ false		equ	0
 
 					;process control functions:
 p_delay		equ	141		;delay specified number of ticks
-p_dispatch	equ	142		;let other another process run
-p_pdadr		equ	156		;dbl word ptr of process descriptor
 p_term		equ	143		;terminate process
 
 					;device control functions:
@@ -101,7 +99,6 @@ dev_flagset	equ	133		;flag set
 flag_set_ignored equ	2Ah		;* only error to cause retry
 
 					;Time function:
-t_seconds	equ	155		;get date,hours,minutes,seconds
 
 
 ;	Definition of flag table used by by CCP/M and this XIOS
@@ -109,7 +106,6 @@ t_seconds	equ	155		;get date,hours,minutes,seconds
 					;0 - is reserved
 tick_flag	equ	1		;tick flag number
 sec_flag	equ	2		;seconds flag number
-min_flag	equ	3		;minutes flag number
 
 					;XIOS flags:
 fdc_flag	equ	4		;disk operation flag
@@ -123,7 +119,6 @@ aux_flag_out1	equ	11		; port 1 output flag
 sc0_flag	equ	12		; hang up serial con 0
 sc1_flag	equ	13		; hang up serial con 1
 
-last_flag	equ	13
 
 
 ;********************************************************
@@ -183,37 +178,15 @@ p_parent	equ	word ptr p_mem + 8
 p_cons		equ	byte ptr p_parent + word
 p_list		equ	byte ptr p_cons + 4
 
-pd_len		equ	30H
 
 ;	Values of Process descriptor p_status field:
 
-ps_run		equ	0	;in ready list root
-ps_poll		equ	1	;in poll list
-ps_delay	equ	2	;in delay list
-ps_swap		equ	3	;in swap list
-ps_term		equ	4	;terminating
-ps_sleep	equ	5	;sleep processing
-ps_dq		equ	6	;in dq list
-ps_nq		equ	7	;in nq list
-ps_flagwait	equ	8	;in flag table
-ps_ciowait	equ	9	;waiting for character
 
 ;	Bit flags in Process descriptor p_flag field:
 
 pf_sys		equ	0001h	;system process
 pf_keep		equ	0002h	;do not terminate
-pf_kernal	equ	0004h	;resident in kernal
-pf_pure		equ	0008h	;pure memory descibed
-pf_table	equ	0010h	;from pd table
-pf_resource	equ	0020h	;waiting for resource
-pf_raw		equ	0040h	;raw console i/o
-pf_ctlc		equ	0080h	;abort pending
-pf_active	equ	0100h	;active tty
 pf_tempkeep	equ	0200h	;don't terminate yet...
-pf_ctld		equ	0400h	;explicit detach occured
-pf_childabort	equ	0800h	;child terminated abnormally
-pf_noctls	equ	1000h	;control S not allowed
-pf_dskld	equ	2000h	;process was loaded from disk
 
 
 ;************************************************
@@ -258,18 +231,11 @@ cf_lineedit	equ	040h
 c_owner		equ	word ptr 00h
 c_mimic		equ	byte ptr 08h
 c_state		equ	word ptr 0Eh
-c_maxbufsiz	equ	word ptr 10h
-ccblen		equ	2ch
 
 ;CCB state flags
 
-csm_buffered	equ	00001h
 csm_background	equ	00002h
-csm_purging	equ	00004h
 csm_noswitch	equ	00008h
-csm_suspend	equ	00010h
-csm_abort	equ	00020h
-csm_filefull	equ	00040h
 csm_ctrlS	equ	00080h
 csm_ctrlO	equ	00100h
 csm_ctrlP	equ	00200h
@@ -336,7 +302,6 @@ pic_ocw_nseoi		equ	020h	;non specific end of interupt
 pic_ocw_seoi		equ	060h	;specific end of interupt channel 0
 
 disk_channel		equ	06h
-keyboard_channel	equ	01h
 timer_channel		equ	00h
 
 
@@ -990,7 +955,7 @@ near_scan_ok:
 	jmp scan_code_ok
 test_alt_num:
 
-nat_alt_scan:
+; nat_alt_scan:
 	cmp	al,047h
 	jnc	nat_plain_scan
 	test	byte ptr down_bits,08h
@@ -1401,7 +1366,7 @@ nat_screen:
 	mov	byte ptr nat_no_echo_map,00h
 	jnz	nat_screen_pilcrow
 
-nat_screen_find:
+; nat_screen_find:
 	mov	bx,offset pr_uk_from
 
 nat_screen_loop:
@@ -1846,7 +1811,6 @@ i_disk_ret:				;*
 
 
 timer_0_reg		equ	040h		;first counter timer port
-timer_1_reg		equ	041h
 timer_2_reg		equ	042h
 timer_cmnd_reg		equ	043h		;command port
 
@@ -1857,7 +1821,6 @@ beep_cmnd		equ	10110110b	;timer 2 lsb,msb binary
 beep_on			equ	03h
 beep_off		equ	0fch
 
-port_a			equ	060h
 port_b			equ	061h
 port_c			equ	062h
 
@@ -2088,7 +2051,7 @@ i_nmi:
 
 ;	memory parity error interrupt
 
-i_parity:
+; i_parity:
 	push cs ! pop ds		; there's no coming back
 	push cs ! pop es		; so forget the registers
 	mov	di,offset parity_p_msg
@@ -2298,7 +2261,6 @@ fatal_a_msg	db	'0000:0000  '
 fatal_div	db	'  Division'
 fatal_ovf	db	'  Overflow'
 fatal_unx	db	'Unexpected'
-fatal_type_len	equ	offset $ - offset fatal_unx
 
 fatal_resp	db	0		; allow any key
 

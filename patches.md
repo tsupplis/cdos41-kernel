@@ -1761,3 +1761,12 @@ these return to their startup selection for colour graphics and text.
 EGA, VGA, CGA and Hercules. Tests cover pixel read/write and XOR, bounds,
 page rejection, graphics characters/TTY, scrolling, mode queries, actual
 BIOS modes and text restoration. Hercules retains text-only operation.
+
+## XIOS assembler symbol headroom
+
+Removed 75 unreferenced XIOS EQU constants and retained 23 unreferenced
+code-location names as comments instead of assembled labels. Data/storage
+layout symbols remain intact. ASM86 symbol count falls from 2,389 to 2,291
+and reported utilisation from 99% to 95%. The complete rebuilt xios.con
+is byte-identical; all surviving symbol values are unchanged. Graphics,
+cursor and RTC assembled-code checks pass.

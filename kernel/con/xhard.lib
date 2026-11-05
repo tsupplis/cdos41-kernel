@@ -39,7 +39,6 @@ hd_spt		equ	17		;sectors per track on XT and AT
   IBM_xfer_ofs	rw	1		;transfer buffer offset address
   IBM_xfer_seg	rw	1		;transfer buffer segment address
   IBM_XFER_PTR equ dword ptr ibm_xfer_ofs
-  HD_IOPB_SIZE	equ	offset $
 ;IBM_iopb ENDS
 
 ;	definition of IBM XT hard disk partition table record
@@ -256,10 +255,7 @@ eject
 ;	CP/M to physical sector sizes supported.
 ;****************************************************************************
 
-HD_HW_INTERRUPT		equ	0dh		;IBM controller interrupt
 HD_INTERRUPT		equ	13h		;IBM entry point for hard disk
-HD_PARMS_INTERRUPT	equ	41h		;points to hard disk parms
-HD_FD_INTERRUPT		equ	40h		;ROS revectors floppy io here
 HD_ROS_DATASEG		equ	40h
 HD_OPTION_ADDR		equ	76h		;ibm controller option control
 
@@ -778,7 +774,7 @@ write_fid:
 
 ;	FIDDS take off point
 
-fidds_go:
+; fidds_go:
 ;	call	aux_drive_fix	; get past floppies and DOS
 ;	mov	ax,num_hard	; get past cp/m partitions too
 ;	sub	aux_drive,al	; zero base the drive code
@@ -1372,15 +1368,12 @@ pc_rw_count	rb	1		;for at multi count down
 
 
 ;PC_boot_rec	struct
-  PC_BR_jump	equ	byte ptr 0	;normally contains jump over record
-  PC_BR_name	equ	byte ptr 3	;contains ASCII vendor ID
   PC_BR_secsiz	equ	word ptr 11	; # of bytes per sector (512)
   PC_BR_allocsiz equ	byte ptr 13	; # of sectors per allocation unit
   PC_BR_reserved equ	word ptr 14	; # of reserved sectors (1)
   PC_BR_nfats	equ	byte ptr 16	; # of fats
   PC_BR_dirmax	equ	word ptr 17	; # of directory entries
   PC_BR_totsec	equ	word ptr 19	; # of sectors total in image
-  PC_BR_fatid	equ	byte ptr 21	;  holds a copy of the fat id byte
   PC_BR_fatsec	equ	word ptr 22	; # of sectors in a fat
 ;PC_boot_rec ENDS
 

@@ -170,7 +170,7 @@ conin_done:
 	jne	pc_kb_ret		;  but ignore SCROLL LOCK
 	cmp	al,3
 	je	pc_kb_ret		;  (unless CTRL-BREAK)
-pc_get_scan1:
+; pc_get_scan1:
 	jmp	conin_wait
 pc_kb_ret:
 	ret
@@ -679,7 +679,7 @@ sl_move_pd:
 	mov	al,p_list[si]	; al = default printer
 	add	al,'0'		; ascii offset
 	mov	smsg_pnum,al	; save it
-s_ctrlS:
+; s_ctrlS:
 	mov ax,c_state[bx]
 	test ax,csm_ctrlS ! jz s_ctrlO
 	  mov s_msgctrlS,'S^' ! jmps s_ctrlP
@@ -692,7 +692,7 @@ s_ctrlP:
 	  mov dl,'=' ! mov dh,c_mimic[bx]
 	  add dh,'0' ! mov smsg_ctrlP_num,dx
 s_mode:
-s_get_openvec:			; display a letter for each drive
+; s_get_openvec:			; display a letter for each drive
 				; with open files  ABCDEF*
 	mov	dx,open_vec	; BDOS sets this vector in SYSDAT
 	mov	di,offset smsg_openvec
@@ -710,7 +710,7 @@ s_get_open2:
 s_get_open3:
 	loop	s_get_open1
 
-s_window:
+; s_window:
  mov al,'8'
  test key_mode,1
  jz sl_store_bits
@@ -753,7 +753,7 @@ sl_time:
 	cmp	sl_clk_flag,0	; if clocks disabled
 	jz	sl_display	;   then skip
 
-sl_hours:
+; sl_hours:
 	mov	al,tod_hour	; get current hour from sysdat
 	cmp	al,sl_hour_save	; if no change
 	jz	sl_minutes	;   then skip

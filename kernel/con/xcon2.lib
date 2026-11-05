@@ -494,7 +494,7 @@ get_crt_c:
 	push	dx
 	mov	dl,vs_mode
 	mov	ds,vs_crt_seg	; mono or color
-get_crt_c0:
+; get_crt_c0:
 	test	dl,sync_bit
 	jz	get_c3		; if no sync, skip
 
@@ -633,8 +633,6 @@ vs_right	equ	byte ptr 4[bx]
 vs_bottom	equ	byte ptr 5[bx]
 vs_old_t_l	equ	word ptr 6[bx]		; last t l corner
 vs_old_b_r	equ	word ptr 8[bx]		; last b r corner
-vs_crt_size	equ	word ptr 10[bx]		; total rows, columns
-vs_win_size	equ	word ptr 12[bx]		; including invisible
 vs_view_point	equ	word ptr 14[bx]		; window top left
 vs_rows		equ	word ptr 16[bx]		; window row count
 vs_rowsb	equ	byte ptr 16[bx]
@@ -666,8 +664,6 @@ vs_pfk_exp	equ	byte ptr 51[bx]		; pfk expansion flag
 vs_mx		equ	byte ptr 52[bx]		; mutual exclusion sema
 vs_back_count	equ	byte ptr 53[bx]		; XIOS back door count
 vs_back_ax	equ	word ptr 54[bx]		; ax for XIOS back door
-vs_back_bx	equ	word ptr 56[bx]
-vs_back_cx	equ	word ptr 58[bx]
 vs_back_dx	equ	word ptr 60[bx]
 vs_screen_mode	equ	byte ptr 62[bx]		; alpha/graphics mode
 vs_screen_save	equ	byte ptr 63[bx]		; saves the old mode
@@ -850,7 +846,6 @@ eject
 
 VID_ax		equ	word ptr 0	;ax register
 VID_al		equ	byte ptr 0
-VID_ah		equ	byte ptr 1
 VID_bx		equ	word ptr 2	;bx register
 VID_bl		equ	byte ptr 2
 VID_bh		equ	byte ptr 3

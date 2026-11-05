@@ -148,7 +148,7 @@ eg_owned:
 	mov	cx,cs:eg_modes-16+4[di]
 	mov	bp,cs:eg_modes-16+6[di]
 	pop	di
-eg_dimensions:
+; eg_dimensions:
 	test	si,80h
 	jz	$+5
 	jmp	eg_owned_packet

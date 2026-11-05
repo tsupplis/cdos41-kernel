@@ -92,9 +92,6 @@ aux_port_m_stat	equ	6		; ro dsr and cts
 dr		equ	01h		; data ready
 tbe		equ	20h		; xmit buf empty
 r_t_p_mask	equ	0Bh		; rec/trans/prot int en
-rec_int		equ	04h		; from int id reg
-tran_int	equ	02h		; from int id reg
-no_int		equ	01h		; no hardware interrupt
 dsr_bit		equ	20h		; from modem status
 cts_bit		equ	10h		; from modem status
 rts_bit		equ	02h		; also with int en
@@ -651,7 +648,7 @@ i_aux_retry:
 ;*							*
 ;********************************************************
 
-i_aux_receive:
+; i_aux_receive:
 	mov	dx,aux_port_status	; just to double check
 	call	aux_port_in		;   we look at line status
 	test	al,dr			; if not data ready
