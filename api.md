@@ -214,8 +214,8 @@ for cursor and palette reads. Native requests rejected before hardware access
 return FFFFh; DOS rejected reads retain the original result registers.
 Legacy native simple selectors retain their ABI.
 
-Sources: [xcon1.lib](kernel/con/xcon1.lib), [xcon2.lib](kernel/con/xcon2.lib),
-[xbegin.lib](kernel/con/xbegin.lib), [ms1.a86](kernel/rsp3/ms1.a86).
+Sources: [console sources](kernel/con/xios/README.md), ,
+[core sources](kernel/con/xios/core.a86), [ms1.a86](kernel/rsp3/ms1.a86).
 
 ## DOS and BIOS interrupts
 
@@ -539,9 +539,9 @@ traced, not that every subfunction and device has passed conformance testing.
 | Native CLI | [command.sup](kernel/con/command.sup), [load.sup](kernel/con/load.sup) |
 | CP/M/FAT dispatch and translated entries | [bdosif.bdo](kernel/con/bdosif.bdo), [black.a86](kernel/con/black.a86), [file3.bdo](kernel/con/file3.bdo) |
 | Enabled raw-disk implementation | [pcbdos.a86](kernel/con/pcbdos.a86), [file4.bdo](kernel/con/file4.bdo) |
-| AUX ownership and hardware | [aux.cio](kernel/con/aux.cio), [console.cio](kernel/con/console.cio), [xaux.lib](kernel/con/xaux.lib) |
-| Video, console and keyboard | [xcon1.lib](kernel/con/xcon1.lib), [xcon2.lib](kernel/con/xcon2.lib), [xbegin.lib](kernel/con/xbegin.lib), [xchar.lib](kernel/con/xchar.lib) |
-| RTC initialization and write-back | [xrtc.lib](kernel/con/xrtc.lib), [xinit.lib](kernel/con/xinit.lib) |
+| AUX ownership and hardware | [aux.cio](kernel/con/aux.cio), [console.cio](kernel/con/console.cio), [device sources](kernel/con/xios/devices.a86) |
+| Video, console and keyboard | [console sources](kernel/con/xios/README.md), [core sources](kernel/con/xios/core.a86) |
+| RTC initialization and write-back | [core sources](kernel/con/xios/core.a86) |
 | Media-dependent utility contracts | [SET](commands/set/README.md), [SHOW](commands/show/README.md), [SDIR](commands/sdir/README.md) |
 | DOS 2.0 internal-function assignments | [Microsoft SYSCALL.txt](https://github.com/microsoft/MS-DOS/blob/main/v2.0/source/SYSCALL.txt), [GETSET.ASM](https://github.com/microsoft/MS-DOS/blob/main/v2.0/source/GETSET.ASM) |
 | Local patches | [patches.md](patches.md) |
