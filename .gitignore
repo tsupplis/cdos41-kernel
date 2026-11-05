@@ -69,3 +69,5 @@
 /commands/dform/*.inc
 
 /commands/dskmaint/dosbootx.inc
+
+/kernel/con/.xios/

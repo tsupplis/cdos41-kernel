@@ -508,3 +508,7 @@ system and the live regression checks.
 ## License
 
 CP/M-derived material is covered by the [CP/M license](LICENSE.md); other material uses the [MIT license](LICENSE-bis.md), unless specified otherwise in a subdirectory.
+
+XIOS uses [three assembly entry files with functional includes](kernel/con/xios/README.md), linked
+into one component. Build and fixed-interface validation run through the normal
+`make -C kernel/con xios.con` target.
