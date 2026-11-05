@@ -456,6 +456,7 @@ system and the live regression checks.
 | `make check-batch-exit` | Explicit/default BATCH status through native BDOS 108 |
 | `make check-batch-language` | ECHO forms, script control, SHIFT/GOTO and DOS redirection |
 | `make check-graphics` | Assembled graphics guards and adapter gates; PCE VGA/EGA/CGA, EGA monochrome and Hercules checks: pixels, palettes, graphics text/TTY and restoration |
+| `make check-hercules` | Native and DOS Hercules graphics, text/cursor/scrolling, exit restoration and plain-MDA rejection |
 | `make check-text40` | Booted 40-column text tests on CGA/EGA/VGA: cursor, wrapping, scrolling and restoration |
 | `make check-dos-switch` | DOS 37h get/set, native delimiter separation, EXEC sharing and launch persistence |
 | `make check-dos-allocation` | 1Bh/1Ch/36h geometry, FAT media pointer, invalid-drive rejection and default-drive preservation |
