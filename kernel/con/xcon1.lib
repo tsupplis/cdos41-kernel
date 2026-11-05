@@ -392,7 +392,8 @@ screen_regular_mode:
 	jz	screen_set		;   then skip
 
 	cmp	ch,1			; if not get mode
-	jnz	screen_bad_param	;   then bag it
+	jz	$+5
+	jmp	screen_bad_param	;   then bag it
 
 screen_get:
 	mov	al,vs_screen_mode	; get our current state
@@ -416,6 +417,9 @@ screen_set:
 	jnz	screen_set_owner
 	jmp	screen_not_sup		; another console must not reset the BIOS
 screen_set_owner:
+	cmp	enhanced_mono,0
+	je	$+5
+	jmp	eg_mono_set
 ;*	cmp	num_color,0		; if there's no color monitor
 	cmp	vs_crt_seg,mono_seg	;*
 	jz	mono_card		;   then just clear mono
@@ -454,9 +458,20 @@ screen_set_done:
 
 ;	if on monochrome, just erase the screen
 
+eg_mono_set:
+	cmp	cl,0B0h
+	jne	mono_card
+	jmp	screen_set_only
 mono_card:
-	call	z_erase			; erase the screen
-;	jmps	screen_not_sup		;   and return false
+	cmp	cl,9
+	je	$+7
+	cmp	cl,1
+	jne	screen_not_sup
+	mov	ch,9
+	mov	al,vs_bit
+	not	al
+	and	graphic_bits,al
+	jmp	general_alpha
 
 ;	error returns
 
@@ -482,7 +497,8 @@ screen_set_only:
 	jz	screen_set_go		;   then branch to alpha
 
 	test	cl,00Fh			; if both nibbles on
-	jnz	screen_bad_param	;   then bag it
+	jz	$+5
+	jmp	screen_bad_param	;   then bag it
 
 	mov	al,vs_bit
 	not	al			; if anybody else is in
@@ -605,10 +621,10 @@ alpha_vector	dw	screen_bad_param, general_alpha
 
 graph_vector	dw	screen_bad_param, general_graph
 		dw	color_320, black_white_320
-		dw	black_white_640, ega_640_350
-		dw	eg_320_200, eg_640_200
-		dw	eg_vga_mono, eg_vga_color
-		dw	eg_vga_256, eg_ega_mono
+		dw	black_white_640, eg_set_graphics
+		dw	eg_set_graphics, eg_set_graphics
+		dw	eg_set_graphics, eg_set_graphics
+		dw	eg_set_graphics, eg_set_graphics
 		dw	screen_not_sup, screen_not_sup
 		dw	screen_not_sup, screen_not_sup
 
@@ -712,7 +728,8 @@ general_graph:
 	jnz	general_graph_set	;   then skip
 	mov	ch,40h			; pretend we're bw 640
 general_graph_set:
-	cmp	enhanced_video,0
+	mov	al,enhanced_mono
+	or	al,enhanced_video
 	jz	graph_variables
 	cmp	bios_graphics,0
 	jnz	graph_variables		; never copy graphics into the text image
@@ -736,15 +753,6 @@ black_white_640:
 	mov	ax,071Eh		; video mode / color sel
 	jmp	color_graph_init	; native EGA entry follows
 
-ega_640_350:
-	cmp	enhanced_ega,0
-	jnz	ega_640_go
-	jmp	screen_not_sup
-ega_640_go:
-	call	general_graph
-	mov	al,10h
-	jmp	enhanced_graph_init
-
 color_graph_init:
 	cmp	enhanced_video,0
 	jz	legacy_graph_init
@@ -759,7 +767,7 @@ color_graph_init:
 enhanced_graph_init:
 	sub	ah,ah
 	mov	bios_graphics,1
-	call	video_bios
+	call	eg_set_mode
 	sub	ax,ax
 	ret
 legacy_graph_init:
@@ -823,7 +831,7 @@ video_init_loop:
 enhanced_alpha:
 	mov	al,enhanced_text
 	sub	ah,ah
-	call	video_bios
+	call	eg_set_mode
 	; BIOS mode 2/3 also restores the adapter's standard 25-row font.
 	mov	bios_graphics,0
 	ret
@@ -1492,12 +1500,12 @@ z_video_param:
 	call	restore_state	; back to con_normal
 	cmp	al,0Dh
 	jb	z_video_legacy
-	mov	si,offset eg_bios_modes
+	mov	si,offset eg_modes+24
 	mov	cl,50h
 z_video_enhanced_scan:
 	cmp	al,cs:byte ptr [si]
 	je	z_video_set
-	inc	si
+	add	si,8
 	add	cl,10h
 	cmp	cl,0C0h
 	jb	z_video_enhanced_scan

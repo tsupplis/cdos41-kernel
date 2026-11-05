@@ -1911,14 +1911,7 @@ int_10_f15:
 	mov	bl,al
 	mov	al,cs:eg_dos_modes[bx]
 	pop	bx
-	mov	ah,80
-	cmp	al,0Dh
-	je	eg_dos_query_narrow
-	cmp	al,13h
-	jne	eg_dos_query_done
-eg_dos_query_narrow:
-	mov	ah,40
-eg_dos_query_done:
+	; AH already contains the column count returned by XIOS CH=4.
 	mov	MS_AX,ax
 	mov ms_bh,0
 	jmp int_10_exit

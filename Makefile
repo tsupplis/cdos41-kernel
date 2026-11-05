@@ -217,6 +217,8 @@ check-graphics: all
 	python3 tools/graphics_check.py
 	python3 tools/graphics_check.py ega
 	python3 tools/graphics_check.py cga
+	python3 tools/graphics_check.py egamono
+	python3 tools/graphics_check.py hgc
 
 # DOS option-prefix state, EXEC and launch persistence on disposable media.
 .PHONY: check-dos-switch
