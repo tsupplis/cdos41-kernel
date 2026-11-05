@@ -11,7 +11,9 @@ user testing of layout, configuration, keys and file operations.
 | ASM86 reconstruction | Not yet implemented; the listing is not assembler source |
 | Configuration parser | First C module; native and host regression target |
 | Menu metadata | 28 entries recovered; labels, commands and selection bounds checked |
-| UI, directory model, operations, launch | Not implemented |
+| UI cores | Layout, frames, colours, key translation and navigation tested separately; native integration pending |
+| Directory display | Formatting, sorting and bounded BDOS search tested; interactive integration pending |
+| Operations, launch | Not implemented |
 | Distribution replacement | Not enabled |
 
 ## Build
@@ -19,8 +21,8 @@ user testing of layout, configuration, keys and file operations.
 Uses `drccpm_cc` and `drccpm_link`, following WINDOW and CHKDOSFS.
 
 ```
-make              # FMCHECK is a configuration test, not a file manager
-make check        # reference byte coverage and C parser checks
+make              # FMCHECK tests reconstructed cores; not a file manager
+make check        # reference byte coverage, host and native core checks
 make reference    # explicitly regenerate the reviewed reference listing
 make clean
 ```
@@ -49,12 +51,15 @@ is not assembly equivalence, code comprehension or functional parity.
 | `config.c` (started) | Configuration keywords and numeric assignments |
 | `menu.c` (started) | Ordered file/setup menu descriptors |
 | `layout.c` (started) | All five menu positions and expanded bottom menu |
-| `screen.c` (started) | Cursor protocol and output sink; frames/colour/redraw pending |
-| `keys.c` (planned) | Terminal input translated into FM actions |
-| `directory.c` (planned) | Drives, users, FAT paths, sorting and selection |
+| `screen.c` (started) | Cursor protocol and output sink; native transactions pending |
+| `frame.c` | Border cells and original colour translation |
+| `keys.c` | Terminal remapping and key normalization |
+| `navigate.c` | Selection and viewport movement; event-loop integration pending |
+| `dirlist.c` | Original display-name formatting and sorting |
+| `scan.c` | Bounded read-only search with injected BDOS operations |
 | `actions.c` (planned) | Copy, rename, delete, type and print |
 | `launch.c` (planned) | External tools, command shell, return to FM |
-| `native.c` (planned) | BDOS interfaces and platform-dependent access |
+| `native.c` (started) | Native BDOS search callbacks; console backend pending |
 | `fm.c` (planned) | Application state and event loop |
 
 Keep all original layouts, prompts and bindings traceable to the reference.
@@ -148,12 +153,12 @@ are not yet established; do not invent new syntax.
 | Command menu | 0 | 60 | 20 | 21 |
 | Prompt | 21 | 0 | 80 | 1 |
 
-Coordinates are zero-based. Borders, the remaining bottom area and key legend
-are not drawn yet. Positions 1/2/3/4/5 put the menu right/bottom/left/top/bottom respectively.
+Coordinates are zero-based. Borders are available in the host preview; the
+remaining bottom area and key legend are not drawn yet. Positions 1/2/3/4/5 put the menu right/bottom/left/top/bottom respectively.
 Position 5 uses a one-row menu; position 2 uses three or eight rows depending
 on DATA `0D00h`. The source of that mode flag still needs tracing. Invalid rectangles are rejected before drawing.
 
-`tests/layout.py` executes the original straight-line calculation with a
+`tests/layout.py` executes the original geometry calculation with a
 strict, limited instruction interpreter and compares 480 configurations with
 the compiled C module. Native DR C checks also cover every position. This checks geometry, not
 the eventual screen appearance.
@@ -170,6 +175,76 @@ unprotected character writes would miss concurrency behaviour. The native
 sink must handle that transaction before a live preview is enabled. The C border renderer and colour mapping are now recovered and tested against
 the original DATA tables (512 colour cases and six border comparisons). Native
 console output, resizing and repaint integration remain.
+
+## Key translation
+
+`keys.c` reproduces CODE `66EEh..6749h` (terminal mapping) and
+`68C8h..6909h` (normalization). Mapping is sequential: an output byte may
+match a later source entry. The source-table NUL terminator is respected.
+
+| Translated input | FM control value |
+|---|---|
+| C8h / D0h / CBh / CDh | 11 / 10 / 8 / 12 |
+| C7h or C9h | 1 |
+| CFh or D1h | 26 |
+| D2h / D3h | comma / 127 |
+| Tab | 3 |
+| BBh or E1h | question mark |
+| Other bytes | Unchanged |
+
+All 256 inputs are compared with the original machine-code routine.
+Native DR C tests cover navigation values, Escape and cascading mappings.
+Actual input acquisition, terminal-table discovery and context-sensitive actions
+still need integration; this is not an interactive file manager yet.
+
+## Selection and scrolling
+
+`navigate.c` translates the selection and viewport routines at CODE
+`88D7h..89FDh`, `8FFDh..9028h`, `90B7h..91DCh` and `92EDh..933Ah`.
+Left/Right wrap at the list ends; Up/Down do not. On an incomplete final row,
+Down can scroll the viewport without changing the selected entry. First/last
+movement uses the normalized control values; their meaning remains contextual.
+
+The core has no disk or screen side effects. Tests cover ten reference-derived
+boundary cases, 121,200 visibility/alignment invariants and native DR C cases.
+These are not a full differential execution of the original navigation loop.
+Marking, filename search and event-loop integration remain pending.
+
+## Directory display
+
+`dirlist.c` preserves the 12-column name conversion at CODE `0DC8h` and
+pointer sorting at `20A4h`. Attribute bits are stripped, basename padding is
+removed, and the extension remains space-padded. The original raw-byte test
+for adding the dot is retained. Sorting is case-sensitive over the display
+name; it does not regroup by extension or invent a directories-first policy.
+The original sorts separate file and directory lists.
+
+The sort preserves the original pivot/swaps but iterates its larger partition
+to bound stack depth. Checks cover name fixtures, all 2,048 attribute-bit
+combinations, ordering permutations and duplicate/sorted/reversed lists.
+Native DR C checks cover formatting and sorting too.
+
+Enumeration at `0E70h` uses BDOS search functions 17/18 and a DMA buffer.
+Returned directory entries use bit 40h at offset 10h to identify directories;
+this is the BDOS representation, not the raw FAT directory layout.
+
+`scan.c` now enumerates one explicit drive/user into caller-owned storage,
+retains the raw 32-byte entries and reports truncation separately from success.
+The caller supplies the known media type: CP/M allocation bytes must never be
+mistaken for directory flags. Drive and FAT mapping are unchanged; user and
+caller-supplied DMA address are restored on completion, truncation and invalid
+search results. The caller must supply a DMA address in its own data segment.
+Search state is consumed, so searches cannot be interleaved.
+
+Host tests cover all four DMA slots, user filtering, FAT/CP/M classification,
+capacity boundaries and cleanup. The native DR C executable searches a disposable
+host directory through emu2 and verifies its files are unchanged. This is not
+yet a live CDOS FAT-directory test. Media detection, paths, metadata interpretation
+and integration into the browser remain pending.
+
+The native callback table is assigned at runtime: DR C 1.11 produced incorrect
+code-address relocations for its static aggregate initializer. The native test
+covers this compiler constraint.
 
 ## Host preview
 

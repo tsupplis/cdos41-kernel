@@ -1,12 +1,12 @@
 # FM — staged DR C reconstruction; the distributed original stays in extra/.
-# all builds the configuration regression tool, not a replacement FM.CMD.
+# all builds the core regression tool, not a replacement FM.CMD.
 DRC86=drccpm_cc
 DRCLINK86=drccpm_link
 CMDINFO=cmdinfo
 PYTHON=python3
 REF=../../extra/fm.cmd
 TOOLS=fmcheck.cmd
-OBJECTS=fmcheck.obj config.obj menu.obj screen.obj layout.obj frame.obj keys.obj
+OBJECTS=fmcheck.obj config.obj menu.obj screen.obj layout.obj frame.obj keys.obj navigate.obj dirlist.obj scan.obj native.obj
 
 .PHONY: all check check-c check-ref reference clean
 .DELETE_ON_ERROR:
@@ -14,11 +14,11 @@ OBJECTS=fmcheck.obj config.obj menu.obj screen.obj layout.obj frame.obj keys.obj
 all: $(TOOLS)
 
 fmcheck.cmd: $(OBJECTS) Makefile
-	@$(DRCLINK86) fmcheck=fmcheck,config,menu,screen,layout,frame,keys > fmcheck-link.log 2>&1; result=$$?; cat fmcheck-link.log; test $$result -eq 0
+	@$(DRCLINK86) fmcheck=fmcheck,config,menu,screen,layout,frame,keys,navigate,dirlist,scan,native > fmcheck-link.log 2>&1; result=$$?; cat fmcheck-link.log; test $$result -eq 0
 	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' fmcheck-link.log
 	$(CMDINFO) $@
 
-%.obj: %.c fm.h menu.h screen.h layout.h frame.h keys.h Makefile
+%.obj: %.c fm.h menu.h screen.h layout.h frame.h keys.h navigate.h dirlist.h scan.h Makefile
 	@$(DRC86) -o$@ $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
 	@! grep -qiE '(^|[[:space:]:])error([[:space:]:]|[0-9]|$$)|[1-9][0-9]* error\(s\) detected|fatal' $*.log
 	@test -s $@
@@ -31,13 +31,16 @@ check-ref: fmorg.dis disassemble.py symbols.json $(REF)
 	$(PYTHON) -B disassemble.py --check
 
 check-c: all
-	$(CC) -DHOST_TEST -std=c89 -Wno-deprecated-non-prototype config.c menu.c screen.c layout.c frame.c keys.c fmcheck.c -o fmcheck-host
+	$(CC) -DHOST_TEST -std=c89 -Wno-deprecated-non-prototype config.c menu.c screen.c layout.c frame.c keys.c navigate.c dirlist.c scan.c fmcheck.c -o fmcheck-host
 	./fmcheck-host
 	$(PYTHON) -B tests/config.py
 	$(PYTHON) -B tests/menu.py
 	$(PYTHON) -B tests/layout.py
 	$(PYTHON) -B tests/frame.py
 	$(PYTHON) -B tests/keys.py
+	$(PYTHON) -B tests/navigate.py
+	$(PYTHON) -B tests/directory.py
+	$(PYTHON) -B tests/scan.py
 	$(PYTHON) -B tests/native.py
 
 check: check-ref check-c

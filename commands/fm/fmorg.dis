@@ -1806,7 +1806,7 @@ code_0ce8:
 00000DA5  8A4604                           mov al,[bp+0x4]
 00000DA8  32E4                             xor ah,ah
 00000DAA  50                               push ax
-00000DAB  E84201                           call code_0e70
+00000DAB  E84201                           call directory_enumerate
 00000DAE  83C412                           add sp,0x12
 00000DB1  A3E817                           mov [0x17e8],ax
 00000DB4  A1E817                           mov ax,[0x17e8]
@@ -1867,7 +1867,7 @@ code_0d92:
 00000E21  50                               push ax
 00000E22  A1EA17                           mov ax,[0x17ea]
 00000E25  50                               push ax
-00000E26  E8FB12                           call code_20a4
+00000E26  E8FB12                           call directory_sort_names
 00000E29  83C406                           add sp,0x6
 00000E2C  B80C00                           mov ax,0xc
 00000E2F  50                               push ax
@@ -1875,7 +1875,7 @@ code_0d92:
 00000E33  50                               push ax
 00000E34  A1EE17                           mov ax,[0x17ee]
 00000E37  50                               push ax
-00000E38  E8E912                           call code_20a4
+00000E38  E8E912                           call directory_sort_names
 00000E3B  83C406                           add sp,0x6
 00000E3E  E830F5                           call code_02f1
 00000E41  A1EA17                           mov ax,[0x17ea]
@@ -1883,7 +1883,8 @@ code_0d92:
 00000E46  5D                               pop bp
 00000E47  C3                               ret
 
-code_0dc8:
+; 12-column padded display name, attribute bits stripped; dot test uses raw byte at entry+9.
+directory_format_name:
 00000E48  55                               push bp
 00000E49  8BEC                             mov bp,sp
 00000E4B  83EC0C                           sub sp,0xc
@@ -1968,7 +1969,8 @@ code_0e5b:
 00000EEE  5D                               pop bp
 00000EEF  C3                               ret
 
-code_0e70:
+; BDOS 17/18 search with DMA buffer; distinct file/directory pointer lists; directory flag at returned entry+10h bit 40h.
+directory_enumerate:
 00000EF0  55                               push bp
 00000EF1  8BEC                             mov bp,sp
 00000EF3  81ECBE00                         sub sp,0xbe
@@ -2138,7 +2140,7 @@ code_0fbd:
 0000104E  5B                               pop bx
 0000104F  03C3                             add ax,bx
 00001051  50                               push ax
-00001052  E8F3FD                           call code_0dc8
+00001052  E8F3FD                           call directory_format_name
 00001055  83C404                           add sp,0x4
 
 code_0fd8:
@@ -2278,7 +2280,7 @@ code_1098:
 00001178  5B                               pop bx
 00001179  03C3                             add ax,bx
 0000117B  50                               push ax
-0000117C  E8C9FC                           call code_0dc8
+0000117C  E8C9FC                           call directory_format_name
 0000117F  83C404                           add sp,0x4
 
 code_1102:
@@ -3267,7 +3269,7 @@ code_1897:
 00001933  50                               push ax
 00001934  A1EA17                           mov ax,[0x17ea]
 00001937  50                               push ax
-00001938  E8E907                           call code_20a4
+00001938  E8E907                           call directory_sort_names
 0000193B  83C406                           add sp,0x6
 0000193E  E9D700                           jmp code_1998
 
@@ -3325,7 +3327,7 @@ code_1910:
 0000199F  50                               push ax
 000019A0  A1EA17                           mov ax,[0x17ea]
 000019A3  50                               push ax
-000019A4  E87D07                           call code_20a4
+000019A4  E87D07                           call directory_sort_names
 000019A7  83C406                           add sp,0x6
 000019AA  C746F60000                       mov word [bp-0xa],0x0
 000019AF  EB57                             jmp code_1988
@@ -4272,7 +4274,8 @@ code_206f:
 00002122  5D                               pop bp
 00002123  C3                               ret
 
-code_20a4:
+; Pointer quicksort; compares first 12 display bytes via DEC7h; caller sorts files and directories separately.
+directory_sort_names:
 00002124  55                               push bp
 00002125  8BEC                             mov bp,sp
 00002127  56                               push si
@@ -4417,7 +4420,7 @@ code_215d:
 00002221  FF7608                           push word [bp+0x8]
 00002224  56                               push si
 00002225  FF7604                           push word [bp+0x4]
-00002228  E8F9FE                           call code_20a4
+00002228  E8F9FE                           call directory_sort_names
 0000222B  83C406                           add sp,0x6
 0000222E  FF7608                           push word [bp+0x8]
 00002231  8B4606                           mov ax,[bp+0x6]
@@ -4431,7 +4434,7 @@ code_215d:
 0000223E  8B4604                           mov ax,[bp+0x4]
 00002241  03C3                             add ax,bx
 00002243  50                               push ax
-00002244  E8DDFE                           call code_20a4
+00002244  E8DDFE                           call directory_sort_names
 00002247  83C406                           add sp,0x6
 0000224A  EB29                             jmp code_21f5
 
@@ -4448,12 +4451,12 @@ code_21cc:
 0000225C  8B4604                           mov ax,[bp+0x4]
 0000225F  03C3                             add ax,bx
 00002261  50                               push ax
-00002262  E8BFFE                           call code_20a4
+00002262  E8BFFE                           call directory_sort_names
 00002265  83C406                           add sp,0x6
 00002268  FF7608                           push word [bp+0x8]
 0000226B  56                               push si
 0000226C  FF7604                           push word [bp+0x4]
-0000226F  E8B2FE                           call code_20a4
+0000226F  E8B2FE                           call directory_sort_names
 00002272  83C406                           add sp,0x6
 
 code_21f5:
@@ -5915,7 +5918,7 @@ code_2c81:
 00002D62  50                               push ax
 00002D63  FF76D2                           push word [bp-0x2e]
 00002D66  FF76D4                           push word [bp-0x2c]
-00002D69  E884E1                           call code_0e70
+00002D69  E884E1                           call directory_enumerate
 00002D6C  83C412                           add sp,0x12
 00002D6F  A3F017                           mov [0x17f0],ax
 00002D72  A21018                           mov [0x1810],al
@@ -30139,21 +30142,21 @@ code_e319:
 00012070  00000000000000000000000000000000 bytes ; ................
 
 ; Unresolved indirect control transfers:
+; CODE 768D: jmp word near [bx+0xa]
+; CODE 769B: jmp word near [bx+0xe]
 ; CODE 76A9: jmp word near [bx+0x10]
 ; CODE 7686: jmp word near [bx+0x8]
 ; CODE 76B4: call word near [bx+0x12]
-; CODE 768D: jmp word near [bx+0xa]
 ; CODE 76E4: call word near [bx+0x16]
-; CODE 769B: jmp word near [bx+0xe]
+; CODE 76C4: call word near [bx+0x14]
+; CODE 8C41: call ax
 ; CODE 7671: jmp word near [bx+0x2]
 ; CODE 766B: jmp word near [bx]
 ; CODE 767F: jmp word near [bx+0x6]
 ; CODE 76A2: jmp word near [bx+0x1a]
-; CODE 76C4: call word near [bx+0x14]
-; CODE 8C41: call ax
+; CODE 765D: jmp word near [bx+0x1e]
 ; CODE 7664: jmp word near [bx+0x20]
 ; CODE 7678: jmp word near [bx+0x4]
-; CODE 765D: jmp word near [bx+0x1e]
 ; CODE 09E7: call ax
 ; CODE D61F: call ax
 ; CODE C48E: jmp dx

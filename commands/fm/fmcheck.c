@@ -4,6 +4,9 @@
 #include "screen.h"
 #include "layout.h"
 #include "keys.h"
+#include "navigate.h"
+#include "dirlist.h"
+#include "scan.h"
 #ifdef HOST_TEST
 #include <stdio.h>
 #else
@@ -34,13 +37,28 @@ main()
     struct fm_config config;
     struct fm_screen screen;
     struct fm_layout layout;
+    struct fm_navigation navigation;
     static int file_row[]={0,0,0,3,0};
     static int file_col[]={0,0,20,0,0};
     static int file_width[]={60,80,60,80,80};
     static int file_height[]={21,18,21,18,20};
     char *p, *before;
     unsigned value;
+    char name[FM_NAME_SIZE];
+    char *names[3];
     int i;
+#ifndef HOST_TEST
+    static struct fm_file files[128];
+    static char saved_dma[128];
+    int count, found, result;
+    __BDOS(26,saved_dma);
+    result=fm_native_scan(1,0,0,files,128,&count,saved_dma);
+    found=0;
+    for (i=0;i<count;++i)
+        if (files[i].name[0]=='F' && files[i].name[1]=='M' &&
+            files[i].name[2]=='P' && files[i].name[3]=='R') found=1;
+    verify(result==1 && found,"native read-only directory search");
+#endif
     for (i=0;i<FM_CONFIG_COUNT;++i) config.value[i]=0;
     config.value[8]=17; config.value[9]=1; config.value[11]=2;
     for (i=0;i<5;++i) {
@@ -57,6 +75,19 @@ main()
         fm_key_normalize(0xcb)==8 && fm_key_normalize(0xcd)==12,"navigation key normalization");
     verify(fm_key_translate(65,"AB","BC",2)==67,"cascading terminal key map");
     verify(fm_key_normalize(27)==27,"escape passthrough");
+    navigation.count=8; navigation.selected=6; navigation.offset=0;
+    navigation.capacity=6; navigation.columns=3;
+    verify(fm_navigate(&navigation,10)==1 && navigation.selected==6 &&
+        navigation.offset==3,"incomplete final row scroll");
+    navigation.selected=1; navigation.offset=0;
+    verify(fm_navigate(&navigation,8)==1 && navigation.selected==8 &&
+        navigation.offset==3,"left wraps to final item");
+    verify(fm_directory_name("\0TEST    CMD",name,FM_NAME_SIZE) &&
+        name[4]=='.' && name[7]=='D' && name[8]==' ' && name[12]==0,
+        "directory display name");
+    names[0]="Z.CMD       "; names[1]="A.TXT       "; names[2]="A.CMD       ";
+    verify(fm_directory_sort(names,3) && names[0][2]=='C' &&
+        names[1][2]=='T' && names[2][0]=='Z',"directory name ordering");
     screen.rows=24; screen.columns=80; screen.write=capture;
     verify(fm_screen_position(&screen,23,79) && screen_length==4 &&
         screen_bytes[0]==27 && screen_bytes[1]=='Y' &&

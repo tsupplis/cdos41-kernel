@@ -59,7 +59,10 @@
     "5c4e": "action_system_attributes",
     "5c7a": "action_local_attributes",
     "5ca4": "action_load_function_keys",
-    "5cbc": "action_boot_hard_disk"
+    "5cbc": "action_boot_hard_disk",
+    "0dc8": "directory_format_name",
+    "0e70": "directory_enumerate",
+    "20a4": "directory_sort_names"
   },
   "notes": {
     "5ded": "Skip ASCII spaces only. Tabs are not consumed.",
@@ -67,7 +70,10 @@
     "5e82": "Case-insensitive keyword including equals; spaces significant; 29-entry pointer table DATA 2DD4.",
     "5f43": "Load configuration and assign byte-valued settings.",
     "b3d4": "Runtime lowercases command tail before argument parser; application syntax still unverified.",
-    "6ccd": "ESC Y followed by row+32 and column+32; position words at DATA 2E44 and 2E46."
+    "6ccd": "ESC Y followed by row+32 and column+32; position words at DATA 2E44 and 2E46.",
+    "0dc8": "12-column padded display name, attribute bits stripped; dot test uses raw byte at entry+9.",
+    "0e70": "BDOS 17/18 search with DMA buffer; distinct file/directory pointer lists; directory flag at returned entry+10h bit 40h.",
+    "20a4": "Pointer quicksort; compares first 12 display bytes via DEC7h; caller sorts files and directories separately."
   },
   "dispatch_tables": [
     {
