@@ -167,8 +167,16 @@ Tests capture bytes on both the host and the actual DR C executable.
 This is not yet a native rendering backend. The original wraps output through
 CODE `6E01h`/`6DECh` and uses a console lock at `6FB3h`; replacing these with
 unprotected character writes would miss concurrency behaviour. The native
-sink must handle that transaction before a live preview is enabled. Frames,
-colour attributes, resizing and repaint remain to be reconstructed.
+sink must handle that transaction before a live preview is enabled. The C border renderer and colour mapping are now recovered and tested against
+the original DATA tables (512 colour cases and six border comparisons). Native
+console output, resizing and repaint integration remain.
+
+## Host preview
+
+`make preview` produces `preview.svg` using the C layout, frame and colour
+modules. It shows the default blank file pane and original menu labels.
+It is not a running FM: directory contents, selection, key legend and native
+console transactions are not yet integrated. Do not use it as parity evidence.
 
 ## Acceptance before replacement
 

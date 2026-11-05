@@ -3,6 +3,7 @@
 #include "menu.h"
 #include "screen.h"
 #include "layout.h"
+#include "keys.h"
 #ifdef HOST_TEST
 #include <stdio.h>
 #else
@@ -52,6 +53,10 @@ main()
     config.value[1]=2;
     verify(fm_layout_calculate(&layout,&config,24,80,1) &&
         layout.menu.height==8 && layout.files.height==13,"expanded bottom menu");
+    verify(fm_key_normalize(0xc8)==11 && fm_key_normalize(0xd0)==10 &&
+        fm_key_normalize(0xcb)==8 && fm_key_normalize(0xcd)==12,"navigation key normalization");
+    verify(fm_key_translate(65,"AB","BC",2)==67,"cascading terminal key map");
+    verify(fm_key_normalize(27)==27,"escape passthrough");
     screen.rows=24; screen.columns=80; screen.write=capture;
     verify(fm_screen_position(&screen,23,79) && screen_length==4 &&
         screen_bytes[0]==27 && screen_bytes[1]=='Y' &&
