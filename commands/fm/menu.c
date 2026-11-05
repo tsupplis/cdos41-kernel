@@ -31,7 +31,7 @@ struct fm_menu_item fm_menu_items[] = {
     { "memory_disk", "Memory Disk", "Set up a memory disk", "SETUP MDISK", 0, 32767 },
     { "boot_hard_disk", "Boot From H D", "Boot Concurrent from the hard disk", "HDMAINT BOOT", 0, 32767 },
     { "hard_disk_maintenance", "Hard Disk Maint", "Format, verify, change partitions, etc.", "HDMAINT", 0, 32767 },
-    { "diskette_maintenance", "Diskette  Maint", "Format, verify and copy diskettes", "DSKMAINT", 0, 32767 },
+    { "diskette_maintenance", "Diskette  Maint", "Format, verify and copy diskettes", "DSKMAINT", 0, 32767 }
 };
 int fm_menu_count = 28;
 int fm_file_menu_count = 17;

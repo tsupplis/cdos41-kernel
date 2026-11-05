@@ -48,7 +48,7 @@ is not assembly equivalence, code comprehension or functional parity.
 |---|---|
 | `config.c` (started) | Configuration keywords and numeric assignments |
 | `menu.c` (started) | Ordered file/setup menu descriptors |
-| `screen.c` (planned) | Frames, windows, colours, clipping and redraw |
+| `screen.c` (started) | Cursor protocol and output sink; frames/colour/redraw pending |
 | `keys.c` (planned) | Terminal input translated into FM actions |
 | `directory.c` (planned) | Drives, users, FAT paths, sorting and selection |
 | `actions.c` (planned) | Copy, rename, delete, type and print |
@@ -135,6 +135,18 @@ Alternate terminal text mentions space/backspace navigation and TERM.DAT.
 Do not replace this with a PC-only scan-code assumption. The runtime lowercases
 the command tail before argument parsing. Application arguments and switches
 are not yet established; do not invent new syntax.
+
+## Rendering boundary
+
+`screen.c` emits the recovered cursor-position and visibility sequences to an
+injected sink. Positioning is checked against supplied terminal dimensions.
+Tests capture bytes on both the host and the actual DR C executable.
+
+This is not yet a native rendering backend. The original wraps output through
+CODE `6E01h`/`6DECh` and uses a console lock at `6FB3h`; replacing these with
+unprotected character writes would miss concurrency behaviour. The native
+sink must handle that transaction before a live preview is enabled. Frames,
+colour attributes, resizing and repaint remain to be reconstructed.
 
 ## Acceptance before replacement
 
