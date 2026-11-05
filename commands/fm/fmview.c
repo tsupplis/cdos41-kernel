@@ -340,6 +340,8 @@ char **argv;
 {
     int i,j,result,key,action,original_user,original_drive;
     if(argc!=1) { printf("USAGE: FMVIEW\n"); return 1; }
+    /* Return BDOS file errors to this process instead of aborting the UI. */
+    __BDOS(45,255);
     drive=(__BDOS(25,0)&255)+1;user=__BDOS(32,255)&255;original_user=user;original_drive=drive;
     for(i=0;i<16;++i) for(j=0;j<11;++j) masks[i][j]='?';
     fm_config_defaults(&config);
