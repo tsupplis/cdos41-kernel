@@ -7,10 +7,12 @@ CMDINFO=cmdinfo
 PYTHON=python3
 REF=../../extra/fm.cmd
 TOOLS=fmcheck.cmd fmview.cmd
-OBJECTS=fmcheck.obj config.obj cfgio.obj menu.obj focus.obj select.obj selectio.obj marks.obj type.obj typeio.obj viewer.obj prtext.obj printjob.obj printio.obj renjob.obj renio.obj screen.obj layout.obj frame.obj keys.obj navigate.obj dirlist.obj scan.obj native.obj browse.obj conio.obj event.obj term.obj fmxios.obj
+OBJECTS=fmcheck.obj config.obj cfgio.obj menu.obj focus.obj select.obj selectio.obj marks.obj type.obj typeio.obj viewer.obj prtext.obj printjob.obj printio.obj renjob.obj renio.obj deljob.obj delio.obj copyjob.obj copyio.obj copynam.obj book.obj fatdest.obj fatloc.obj screen.obj layout.obj frame.obj keys.obj navigate.obj dirlist.obj scan.obj native.obj browse.obj conio.obj event.obj term.obj fmxios.obj
 
 .PHONY: all check check-c check-ref reference clean
 .DELETE_ON_ERROR:
+# DR C/LINK86 wrappers share scratch files, even for distinct object targets.
+.NOTPARALLEL:
 
 all: $(TOOLS)
 
@@ -24,7 +26,7 @@ fmview.cmd: fmview.obj $(filter-out fmcheck.obj,$(OBJECTS)) fmview.inp Makefile
 	@! grep -qiE 'undefined|unresolved|syntax error|unable|fatal' fmview-link.log
 	$(CMDINFO) $@
 
-%.obj: %.c fm.h menu.h screen.h layout.h frame.h keys.h navigate.h dirlist.h scan.h browse.h conio.h event.h term.h focus.h select.h marks.h type.h typeio.h viewer.h prtext.h printjob.h renjob.h renio.h Makefile
+%.obj: %.c fm.h menu.h screen.h layout.h frame.h keys.h navigate.h dirlist.h scan.h browse.h conio.h event.h term.h focus.h select.h marks.h type.h typeio.h viewer.h prtext.h printjob.h renjob.h renio.h deljob.h delio.h copyjob.h copyio.h copynam.h book.h fatdest.h Makefile
 	@$(DRC86) -o$@ $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
 	@! grep -qiE '(^|[[:space:]:])error([[:space:]:]|[0-9]|$$)|[1-9][0-9]* error\(s\) detected|fatal' $*.log
 	@test -s $@
@@ -57,6 +59,12 @@ check-c: all
 	$(PYTHON) -B tests/printjob.py
 	$(PYTHON) -B tests/renio.py
 	$(PYTHON) -B tests/renjob.py
+	$(PYTHON) -B tests/delio.py
+	$(PYTHON) -B tests/deljob.py
+	$(PYTHON) -B tests/copyio.py
+	$(PYTHON) -B tests/copyjob.py
+	$(PYTHON) -B tests/copynam.py
+	$(PYTHON) -B tests/fatdest.py
 	$(PYTHON) -B tests/layout.py
 	$(PYTHON) -B tests/frame.py
 	$(PYTHON) -B tests/keys.py
@@ -79,7 +87,8 @@ preview:
 	$(PYTHON) -B tests/preview.py
 
 .PHONY: check-live check-live-default check-live-release check-live-custom check-live-users
-# Build first, then use make -j4 check-live for independent disposable machines.
+# .NOTPARALLEL serializes builds and live targets. After building, independent
+# test scripts may be explicitly launched together on disposable machines.
 check-live: check-live-default check-live-release check-live-custom check-live-users
 
 check-live-default: all
@@ -98,7 +107,40 @@ check-live-users: all
 check-live: check-live-rename-fat check-live-rename-cpm
 
 check-live-rename-fat: all
-	$(PYTHON) -B tests/rename_live.py --media fat --boot-image ../../media/cdos86.img
+	$(PYTHON) -B tests/rename_live.py --media fat --delete --boot-image ../../media/cdos86.img
 
 check-live-rename-cpm: all
-	$(PYTHON) -B tests/rename_live.py --media cpm --boot-image ../../media/cdos86.img
+	$(PYTHON) -B tests/rename_live.py --media cpm --delete --boot-image ../../media/cdos86.img
+
+.PHONY: check-live-copy-fat check-live-copy-cpm
+check-live: check-live-copy-fat check-live-copy-cpm
+
+check-live-copy-fat: all
+	$(PYTHON) -B tests/copy_live.py --media fat --boot-image ../../media/cdos86.img
+
+check-live-copy-cpm: all
+	$(PYTHON) -B tests/copy_live.py --media cpm --boot-image ../../media/cdos86.img
+
+.PHONY: check-live-copynam-fat check-live-copynam-cpm
+check-live: check-live-copynam-fat check-live-copynam-cpm
+
+check-live-copynam-fat: all
+	$(PYTHON) -B tests/copynam_live.py --media fat --boot-image ../../media/cdos86.img
+
+check-live-copynam-cpm: all
+	$(PYTHON) -B tests/copynam_live.py --media cpm --boot-image ../../media/cdos86.img
+
+.PHONY: check-live-fatdest
+check-live: check-live-fatdest
+
+check-live-fatdest: all
+	$(PYTHON) -B tests/fatdest_live.py --boot-image ../../media/cdos86.img
+
+.PHONY: check-live-book-fat check-live-book-cpm
+check-live: check-live-book-fat check-live-book-cpm
+
+check-live-book-fat: all
+	$(PYTHON) -B tests/book_live.py --media fat --boot-image ../../media/cdos86.img
+
+check-live-book-cpm: all
+	$(PYTHON) -B tests/book_live.py --media cpm --boot-image ../../media/cdos86.img

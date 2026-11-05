@@ -17,7 +17,9 @@ user testing of layout, configuration, keys and file operations.
 | Type | Internal read-only paged viewer; menu or F2/Ctrl-B, marked files or current file |
 | Print | Internal list-device printing; selected files, cancellation and selection retention |
 | Rename | Per-file prompt; skip/cancel, native collision refusal and retained selections |
-| Copy, delete, launch | Not implemented |
+| Delete | One explicit confirmation; failed files retained, protected attributes unchanged |
+| Copy | Drive, new-name, CP/M user, FAT directory and Dir #1/#2 destinations implemented; disk swapping pending |
+| Launch | Not implemented |
 | Distribution replacement | Not enabled |
 
 ## Build
@@ -27,7 +29,7 @@ Uses `drccpm_cc` and `drccpm_link`, following WINDOW and CHKDOSFS.
 ```
 make              # FMCHECK core tests and experimental FMVIEW
 make check        # reference byte coverage, host and native core checks
-make -j4 check-live # disposable FAT/configuration and CP/M-user scenarios
+make check-live   # disposable FAT/configuration and CP/M-user scenarios
 make reference    # explicitly regenerate the reviewed reference listing
 make clean
 ```
@@ -36,6 +38,11 @@ The executables are `fmcheck.cmd` and `fmview.cmd`; there is no replacement
 `fm.cmd` yet. `disassemble.py` uses NDISASM only as a decoder, not an assembler.
 No parent build or media recipe is changed. Maintained LINK86 `.inp` files follow
 PRINT and avoid the command-tail limit when linking the shared modules.
+
+Native DR C/LINK86 wrappers share scratch files: concurrent compiles can
+produce an object from the wrong source or corrupt compiler input. The Makefile
+serializes its targets even with `-j`. After building, independent live-test
+Python scripts may be run concurrently in their separate disposable machines.
 
 ## Reference
 
@@ -67,7 +74,10 @@ is not assembly equivalence, code comprehension or functional parity.
 | `type.c`, `typeio.c`, `viewer.c` | Text conversion, native read-only FCB stream and paged Type action |
 | `prtext.c`, `printjob.c`, `printio.c` | Printer text conversion, selected-file batch and native list ownership |
 | `renjob.c`, `renio.c` | Rename selection loop and validated native rename |
-| `actions.c` (planned) | Copy and delete |
+| `deljob.c`, `delio.c` | Confirmed file deletion and concrete-name BDOS adapter |
+| `copyjob.c`, `copynam.c`, `copyio.c` | Copy selection, validated destination names and transactional record transfer |
+| `fatdest.c` | Verified process-local FAT destination aliases without changing the source mapping |
+| `book.c` | Session bookmarks with independent directory identities and navigation clones |
 | `launch.c` (planned) | External tools, command shell, return to FM |
 | `event.c` | Read-only input/navigation/repaint loop and Escape cleanup |
 | `conio.c` | Direct-screen lock ownership, BDOS-output boundary and mapped input |
@@ -304,23 +314,27 @@ sequence. Alternate terminal maps and the complete action dispatcher remain pend
 
 ## Experimental live browser
 
-Run `FMVIEW` without arguments on CDOS 4.1. It is an experimental read-only
-file manager, not the replacement FM.CMD. Rename modifies files; the other
-implemented file actions only read them.
+Run `FMVIEW` without arguments on CDOS 4.1. It is an experimental
+file manager, not the replacement FM.CMD. Copy, Rename and Delete modify files; Type and Print only read them.
 
 | Control | Current behaviour |
 |---|---|
 | Arrows, Home/End | Move selection and scroll |
 | Tab | Switch between files and menu |
-| Enter in menu | Open File Directory, Subset, Drive, Type, Print, Rename or Set Up System; other actions report unavailable |
+| Enter in menu | Open File Directory, Subset, Drive, Type, Print, Copy, Rename, Delete or Set Up System; other actions report unavailable |
 | Subset | Enter a wildcard filespec (12 characters maximum); native BDOS parsing, per-drive filter |
 | Drive | Select a configured drive; Escape cancels |
 | Comma / Insert | Mark the current file without moving |
 | Delete | Unmark the current file; never deletes a file |
+| Delete menu | One Y + Enter confirmation for marked files, or current file; other answers cancel |
+| Copy menu | Copy marked/current files to a drive, new name, CP/M user or FAT directory; any key stops transfer |
 | Rename menu | Prompt for each marked file, or current file; blank skips, Escape cancels remaining files |
 | Print menu | Print marked files, or the current file; any key stops printing |
 | F2 / Ctrl-B / Type menu | Display marked files, or the current file when none are marked |
 | F9 | Show FAT directories or CP/M users 0–15 |
+| F3 / F4 in directory view | Set Dir #1 / Dir #2 to the highlighted directory or user |
+| F7 / F8 in file view | Navigate to Dir #1 / Dir #2 |
+| F7 / F8 in Copy menu | Copy to Dir #1 / Dir #2 |
 | Enter in directory view | Enter selected directory/user; `..` returns to the parent |
 | Escape | Back from setup/menu/directory view; exit from files |
 
@@ -330,14 +344,14 @@ entries and reports truncation. FAT directory mapping is process-local, and
 exit restores the initial drive and CP/M user. Cancelling a picker preserves
 marks and the file position, including after switching between pickers. Accepting
 a directory, drive or subset clears marks. Invalid subsets leave the filter
-unchanged. No copy, delete or launch operation is enabled. Typed full
-paths and filename-search selection remain pending.
+unchanged. External launching, typed full paths and filename-search selection
+remain pending. Copy destinations are described below.
 
 The XIOS adapter locks only while painting. ESC 6 disables programmable-key
 expansion while open; exit restores its previous state. Full-word version checks
 use the local BDOS bridge: DR C's `__BDOS` wrapper returns only a byte.
 
-After `make`, `make -j4 check-live` runs independent disposable PCE scenarios:
+After `make`, `make check-live` runs independent disposable PCE scenarios:
 defaults, release FM.CFG, custom left-hand colours, and CP/M users/system FM.CFG.
 Checks cover selection attributes, scrolling, setup/menu return, FAT child/parent
 entry, cancellation, user 0/4/15, empty views and clean exit. The custom scenario
@@ -405,7 +419,104 @@ trailing tokens are rejected before the mutation call. Existing destinations
 are left to BDOS's collision check; no preflight race is introduced. Host tests
 cover parsing, native errors, per-file decisions and selection retention.
 `tests/rename_live.py --media fat|cpm --boot-image PATH` checks disposable files,
-including collision refusal, cancellation and content preservation.
+including collision refusal, cancellation and content preservation. Both FAT
+and CP/M live Rename scenarios pass. FM selects BDOS return-error mode (45)
+for its own process so a collision returns to the dialog instead of aborting FM.
+
+## Delete
+
+`deljob.c` follows CODE `4FFEh`/`5165h`: `ERASE, are you sure (Y=yes) ? `
+applies to the selected batch. Y/y followed by Enter confirms; blank, another
+answer or Escape cancels without changing selections. Delete removes only
+concrete files, never directories or wildcard names. Successful files disappear
+after rescan; failed files remain marked and the first failure is selected.
+
+`delio.c` calls BDOS 19 once per file using a fresh FCB. It does not clear
+read-only/system attributes, retry failures or force deletion. Host tests cover
+confirmation, selection mapping, protected failures and unchanged input data.
+The live Rename scenarios accept `--delete` to additionally check refusal,
+cancellation, confirmed removal and preservation of a read-only selected file
+and unselected files on disposable FAT and CP/M disks. Both live scenarios
+pass, including byte comparisons of every surviving file.
+
+## Copy
+
+`copyjob.c` follows CODE `4766h`: copy marked files, or the current file when
+none are marked. Completed files are unmarked; the first failure or any-key
+cancellation stops the batch and retains unfinished selections. The destination
+menu supports A–D and the configured-drive picker. Same-drive copies require
+a different filename, CP/M user area or FAT directory.
+
+`copynam.c` implements Copy to New Name: `Copy <name> to ? `, up to 15 input
+characters, optional `A:`–`P:` prefix and one concrete 8.3 filename. Blank skips
+that file; Escape cancels remaining prompts. Invalid or identical destinations
+retry. Successful copies leave source files unchanged and clear their marks.
+
+Copy to Dir on CP/M media selects user 0–15. Each native source/destination
+operation selects its own user; all exits restore the caller's user and DMA.
+Cancelling the picker preserves source selections.
+
+On FAT media, Copy to Dir selects a child directory or the parent entry when
+available; the synthetic `.` entry denotes the current directory and is refused
+as the source location. `fatdest.c` maps the destination through an unused
+N:/O:/P: alias using extended BDOS open. Read-only native inspection verifies
+its physical drive, media sequence and directory identity. It never replaces
+an inherited alias; if none is available, copying is refused. Owned aliases
+remain process-local until process termination because extended close is not
+an unmap operation. The source drive mapping remains unchanged throughout.
+This picker selects a destination from the current directory list; arbitrary
+path input and single-drive disk swapping remain pending.
+
+Dir #1/#2 are session bookmarks, set with F3/F4 in directory view from the
+highlighted directory or CP/M user. The confirmation is `DIR #1 set to: ` or
+`DIR #2 set to: ` followed by its display location. F7/F8 navigate from file
+view, or copy the selected files when the Copy menu is active. Unset bookmarks
+report `first set Dir #1` or `first set Dir #2`.
+
+CP/M bookmarks capture their drive/user values. FAT bookmarks pin an owned
+alias and save physical drive, media sequence and directory cluster; navigation
+uses a separate working clone, so entering a child cannot change the saved
+bookmark. The saved signature is checked against the kernel's current mapping,
+but this does not force a media login or proactively detect disk replacement.
+FAT bookmark use is supported on stable mounted media only; disk swapping
+remains unsupported. Two FAT bookmarks and a working clone can occupy all
+three floating aliases. An operation requiring another alias then refuses
+safely rather than replacing an inherited, pinned or active source mapping.
+Bookmarks are not persisted in FM.CFG.
+
+`copyio.c` copies full 128-byte records, including Ctrl-Z and binary data.
+Like the original, writable destinations are replaced without confirmation;
+read-only destinations are refused. Unlike the original fixed `COPYTMP.$$$`,
+unused temporary and backup names protect existing files. Commit follows
+successful reads, writes and closes; failed replacement attempts restore the
+old name. A failed rollback reports the retained recovery filename. No source
+attributes are propagated. Host tests cover cancellation, I/O failures,
+collisions, rollback and selection retention.
+
+`tests/copy_live.py --media fat|cpm --boot-image PATH` checks disposable
+FAT→CP/M and CP/M→CP/M copies. Both pass exact binary comparisons, writable
+replacement, read-only refusal, same-drive refusal, selection retention and
+temporary-file cleanup. The named-copy scenarios additionally exercise same-drive FAT and CP/M
+destinations, invalid-name retry, skip/cancel and explicit drive prefixes.
+Both named-copy scenarios pass. The CP/M scenario also passes user 0→1
+copying, same-user refusal, picker cancellation and restoration of the source
+user, with exact destination-byte comparison.
+
+`tests/fatdest_live.py --boot-image PATH` passes on a disposable FAT image:
+current-location refusal, picker cancellation, writable replacement with exact
+binary records, read-only failure followed by batch stop, retained selections,
+unchanged source files and root view after reopening FM in a fresh process.
+The corresponding target is `make check-live-fatdest`. Host adapter tests
+cover alias ownership and verification; the live test checks observable
+mapping restoration, not internal kernel reference counts.
+
+`tests/book_live.py --media fat|cpm --boot-image PATH` passes for both media.
+It verifies F3/F4 setting, F7/F8 navigation and Copy destinations, exact binary
+payloads, unchanged source files and restored shell context. The FAT scenario
+also verifies refusal when aliases are exhausted and return to the saved
+directory after entering a child through its navigation clone. The CP/M
+scenario revisits bookmarks after an ordinary user-area change. Run these with
+`make check-live-book-fat` and `make check-live-book-cpm`.
 
 ## Host preview
 

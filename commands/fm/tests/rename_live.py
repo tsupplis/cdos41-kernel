@@ -3,6 +3,7 @@ from pathlib import Path
 import argparse,re,shutil,subprocess,tempfile,sys
 p=argparse.ArgumentParser()
 p.add_argument('--boot-image',type=Path,required=True)
+p.add_argument('--delete',action='store_true')
 p.add_argument('--media',choices=['fat','cpm'],required=True)
 a=p.parse_args();R=Path(__file__).resolve().parents[3]
 F=Path(tempfile.mkdtemp(prefix='fm-rename-'+a.media+'-'));print(F,flush=True)
@@ -17,11 +18,13 @@ for name,data in contents.items():(F/name).write_bytes(data)
 if a.media=='fat':
  run('mformat','-C','-i','data.img','-t','40','-h','2','-n','8','-c','2','::')
  for file in [R/'commands/fm/fmview.cmd']+[F/n for n in contents]:run('mcopy','-i','data.img',str(file),'::')
+ if a.delete:run('mattrib','-i','data.img','+r','::TWO.TXT')
 else:
  shutil.copy(R/'media/base.img',F/'data.img');twist('untwist','data.img','data.logical')
  twist('untwist','cdos86.img','boot.logical')
  data=bytearray((F/'data.logical').read_bytes());data[:4096]=(F/'boot.logical').read_bytes()[:4096];(F/'data.logical').write_bytes(data)
  for file in [R/'commands/fm/fmview.cmd']+[F/n for n in contents]:run('cpmcp','-f','ccpm86-320','data.logical',str(file),'0:')
+ if a.delete:run('cpmchattr','-f','ccpm86-320','data.logical','r','0:TWO.TXT')
  twist('twist','data.logical','data.img')
 cfg=(R/'media/cdos86.cfg').read_text().replace('driver = "sdl"','driver = "null"').replace('driver      = "sdl:lowpass=5000"','driver      = "null"').replace('cdostools.img','data.img')
 cfg=re.sub(r'(?m)^path\s*=\s*"([^"\n]+)"',lambda m:'path = "'+str((R/'media'/m[1]).resolve())+'"',cfg)
@@ -40,6 +43,11 @@ rename();command('a:bad');snap('drive_rejected');command('*.txt');snap('wild_rej
 rename();command('new.txt');snap('renamed')
 keys('Home','Right','Comma','Right','Comma');rename();keys('Return','Esc');snap('skipped')
 rename();keys('Return');command('third.txt');snap('partial')
+if a.delete:
+ def erase():keys('Tab','Home',*(['Down']*8),'Return')
+ erase();snap('erase_prompt');command('n');snap('decline')
+ erase();keys('Esc');snap('erase_cancel')
+ keys('Right','Comma','Right','Comma');erase();command('y');snap('erased')
 keys('Esc');snap('exit');c.append('q')
 with (F/'pce.log').open('wb') as log:
  subprocess.run(['pce-ibmpc','-c','cdos86.cfg','-t','null','-g','vga'],cwd=F,input=('\n'.join(c)+'\n').encode(),stdout=log,stderr=log,timeout=90,check=True)
@@ -56,6 +64,13 @@ assert 'NOT RENAMED' in screens['skipped']
 assert 'NEW.TXT' in screens['partial'] and 'THIRD.TXT' in screens['partial'] and 'THREE.TXT' not in screens['partial']
 assert 'FMVIEW: closed' in screens['exit'] and 'B>' in screens['exit']
 expected={'NEW.TXT':contents['ONE.TXT'],'TWO.TXT':contents['TWO.TXT'],'THIRD.TXT':contents['THREE.TXT'],'FMVIEW.CMD':(R/'commands/fm/fmview.cmd').read_bytes()}
+if a.delete:
+ assert 'ERASE, are you sure (Y=yes) ?' in screens['erase_prompt']
+ for state in ['decline','erase_cancel']:
+  assert all(name in screens[state] for name in ['NEW.TXT','THIRD.TXT','TWO.TXT'])
+ assert 'NOT ERASED' in screens['erased'] and 'TWO.TXT' in screens['erased']
+ assert 'NEW.TXT' not in screens['erased'] and 'THIRD.TXT' not in screens['erased']
+ expected.pop('NEW.TXT');expected.pop('THIRD.TXT')
 if a.media=='fat':
  listing=run('mdir','-b','-i','data.img','::').decode().upper()
  for old in ['ONE.TXT','THREE.TXT']:assert old not in listing
@@ -68,4 +83,7 @@ else:
   run('cpmcp','-f','ccpm86-320','result.logical','0:'+name,str(F/'result.bin'))
   actual=(F/'result.bin').read_bytes();assert actual[:len(data)]==data and len(actual)<len(data)+128
 assert all(name in listing for name in expected)
+if a.delete:
+ assert 'NEW.TXT' not in listing and 'THIRD.TXT' not in listing
+ print('PASS: '+a.media+' Delete refusal, Escape, confirmation, read-only failure retained and unselected files preserved')
 print('PASS: '+a.media+' Rename, collision/no overwrite, invalid names, skip/cancel, retained selections, exact file contents and clean exit')
