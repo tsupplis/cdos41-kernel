@@ -648,6 +648,9 @@ egcaps_done:
 	cmp	enhanced_mono,0
 	je	$+5
 	or	bl,8
+	cmp	hgc_present,0
+	je	$+5
+	or	bl,10h
 	ret
 
 ;	restore normal status line operation

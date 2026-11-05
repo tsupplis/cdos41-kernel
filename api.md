@@ -155,6 +155,7 @@ console escape stream, without executing a DOS program.
 | 12 | 640×480, 16 colours | VGA | 90h | 12h | Implemented |
 | 13 | 320×200, 256 colours | VGA | A0h | 13h | Implemented |
 | 0F | 640×350 monochrome, video/intensity planes | EGA with monochrome monitor, or VGA | B0h | 0Fh | Implemented |
+| 7F | 720×348 monochrome, 90×43 graphics text | Hercules only; project extension | C0h | 7Fh | Implemented |
 | Other graphics modes | VESA and nonstandard modes | — | Not assigned | Not supported | No compatibility claim |
 
 Text modes use the existing native console/window implementation. DOS mode
@@ -171,10 +172,10 @@ stride. The 80-column console backing layout remains unchanged.
 | Native interface | Contract |
 | --- | --- |
 | `ESC a` | Emit bytes 1Bh, 61h, then the binary mode parameter above (not ASCII digits) |
-| XIOS function 30 decimal | CH=0 sets the mode byte in CL for console DL; CH=1 retains the historical query; CH=4 returns the actual native mode in AL and column count in AH (40 or 80). DOS AH=0Fh uses CH=4. This is an XIOS entry, **not** BDOS function 30 or a permitted direct-BIOS packet selector |
+| XIOS function 30 decimal | CH=0 sets the mode byte in CL for console DL; CH=1 retains the historical query; CH=4 returns the actual native mode in AL and column count in AH (40, 80 or 90). DOS AH=0Fh uses CH=4. This is an XIOS entry, **not** BDOS function 30 or a permitted direct-BIOS packet selector |
 | CGA palette extension | XIOS function 30, CH=2, CL=CGA colour-select value (bits 0–5); graphics owner only |
 | EGA palette extension | XIOS function 30, CH=3, CL=palette entry 0–15, DH=6-bit EGA colour, DL=console; requires native planar mode 50h–90h or B0h and graphics ownership |
-| Capability probe | INT E6h, AL=1Eh (30 decimal), input BX=0: AX=4745h (`EG`), BX bit 0 enables BIOS 10h (native 50h), bit 1 enables 0Dh/0Eh, bit 2 enables VGA 11h/12h/13h and DAC, bit 3 enables 0Fh (native B0h) on EGA monochrome or VGA; probe before selecting |
+| Capability probe | INT E6h, AL=1Eh (30 decimal), input BX=0: AX=4745h (`EG`), BX bit 0 enables BIOS 10h (native 50h), bit 1 enables 0Dh/0Eh, bit 2 enables VGA 11h/12h/13h and DAC, bit 3 enables 0Fh (native B0h) on EGA monochrome or VGA, bit 4 enables Hercules C0h; probe before selecting |
 | Console switching | BIOS-backed graphics keeps the foreground console until the owner restores text mode; there is no per-console saved EGA/VGA graphics framebuffer |
 
 CGA graphics modes 04h/05h/06h use the same guarded packet path for DOS
@@ -189,7 +190,7 @@ Mode 0Fh requires an EGA monochrome console or detected VGA. Its video and
 intensity use pixel bits 0 and 2 (values 0, 1, 4, 5); planar XOR is supported.
 EGA monochrome retains its mode-7 text console and rejects colour-mode
 requests. Colour EGA, CGA and Hercules reject mode 0Fh without changing mode.
-Hercules remains supported as a monochrome text console, without graphics.
+Hercules additionally supports native mode C0h, described below.
 
 Planar graphics uses the captured adapter ROM through the XIOS IRQ/PIC
 and private-stack guard, without calling the intercepted INT 10h. Page zero
@@ -220,10 +221,10 @@ Sources: [xcon1.lib](kernel/con/xcon1.lib), [xcon2.lib](kernel/con/xcon2.lib),
 
 | INT | Selector | Service | Status / limit | Implementation | Extension |
 | --- | --- | --- | --- | --- | --- |
-| 10 | AH=00 | Set video mode | Implemented: text/CGA and EGA/VGA modes in the graphics table | PCTMP + XIOS | — |
+| 10 | AH=00 | Set video mode | Implemented: text/CGA, EGA/VGA and project Hercules modes in the graphics table | PCTMP + XIOS | — |
 | 10 | AH=01 | Set cursor shape | Implemented | PCTMP + XIOS | — |
 | 10 | AH=02 | Set cursor position | Implemented; bounded to console | PCTMP + XIOS | — |
-| 10 | AH=03 | Get cursor position/shape | Partial in text: position returned, CX=0; CGA and enhanced graphics return ROM position/shape | PCTMP + XIOS | — |
+| 10 | AH=03 | Get cursor position/shape | Partial in text: position returned, CX=0; CGA and EGA/VGA graphics return ROM position/shape; Hercules returns logical position/shape | PCTMP + XIOS | — |
 | 10 | AH=04 | Light pen | No operation | PCTMP | — |
 | 10 | AH=05 | Select display page | No operation; one page exposed | PCTMP | — |
 | 10 | AH=06 / 07 | Scroll up / down | Implemented; bounded rectangle | PCTMP + XIOS | — |
@@ -544,3 +545,51 @@ traced, not that every subfunction and device has passed conformance testing.
 | Media-dependent utility contracts | [SET](commands/set/README.md), [SHOW](commands/show/README.md), [SDIR](commands/sdir/README.md) |
 | DOS 2.0 internal-function assignments | [Microsoft SYSCALL.txt](https://github.com/microsoft/MS-DOS/blob/main/v2.0/source/SYSCALL.txt), [GETSET.ASM](https://github.com/microsoft/MS-DOS/blob/main/v2.0/source/GETSET.ASM) |
 | Local patches | [patches.md](patches.md) |
+
+## Native Hercules graphics
+
+CDOS XIOS function 30, CH=0, CL=C0h, DL=console selects Hercules
+720×348 graphics, page zero. CH=4 returns AL=C0h and AH=90. Capability
+query INT E6h AL=30 adds BX bit 4 for a detected active Hercules adapter.
+Select native text mode 09h (or general text 01h) to restore the saved
+monochrome console. Detection probes vertical-sync transitions only on a
+legacy active monochrome adapter; EGA/VGA and plain MDA are excluded.
+
+XIOS function 31 pixel selectors 0Ch/0Dh use the existing nine-byte packet:
+AX, BX, CX=x, DX=y, console. Page BH must be zero; coordinates are bounded
+to x=0..719, y=0..347. Write colour bit 0 is the pixel value, with bit 7
+requesting XOR; read returns AX=0 or 1. Rejected calls return FFFFh.
+Native graphics text uses a 90×43 grid of 8×8 cells; the bottom four raster
+lines are untouched by text operations. Packet selectors 01h/02h/03h store
+cursor shape, set position and query position; the cursor is logical only,
+with no visible overlay. Selectors 08h/09h/0Ah read, repeat-write and
+character-write at the cursor. Reads match framebuffer glyphs, returning
+AL=character and AH=0 (or AX=0 if no glyph matches). Writes clip at the last
+cell, retain cursor position, use BL bit 0 as colour and bit 7 for XOR.
+
+Selector 0Eh handles teletype output, backspace, CR, LF, wrapping and
+bottom-row scrolling; BEL is a no-op. Selectors 06h/07h scroll up/down
+within a checked character rectangle: CX=top-left, DX=bottom-right,
+AL=rows (zero clears), BH bit 0=fill colour. Scroll operations preserve
+the cursor. Page-bearing services require BH=0. The historical simple
+ABI for cursor/teletype calls remains supported.
+
+Characters 0..127 use the PC ROM font; 128..255 use an installed INT 1Fh
+extension. Writing an extended character without that font returns FFFFh.
+Palette services remain unsupported.
+
+DOS INT 10h/AH=00h, AL=7Fh selects the same Hercules mode through the DOS interface.
+Mode 7Fh is a project extension, not an IBM BIOS or original Hercules BIOS
+assignment. ESC a parameter 7Fh also selects it. AH=0Fh reports AL=7Fh,
+AH=90, BH=0; the BIOS data area records mode 7Fh, 90 columns and a 32 KB
+page while graphics is active. The firmware itself does not implement this
+mode: pixel, character, cursor, teletype and scroll calls are mediated by XIOS.
+These calls have the same behaviour and limits as the native services above.
+
+Mode 7Fh is rejected without changing modes on MDA, CGA, EGA and VGA.
+Selecting mode 07h or terminating the DOS program restores monochrome text,
+including its saved contents and BIOS mode/column values. Page one remains
+unsupported. `make check-hercules` covers native CMD and DOS COM programs.
+Programs requiring third-party Hercules BIOS extensions are not implicitly
+compatible with this project-specific interface.
+Register programming follows the [Hercules GB101 owner's manual](https://www.dosdays.co.uk/media/hercules/hgc/GB101_Owners-Manual_text.pdf).

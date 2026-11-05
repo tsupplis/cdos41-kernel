@@ -409,7 +409,8 @@ screen_set:
 	jnz	screen_set_owner
 	jmp	screen_not_sup		; another console must not reset the BIOS
 screen_set_owner:
-	cmp	enhanced_mono,0
+	mov	al,enhanced_mono
+	or	al,hgc_present
 	je	$+5
 	jmp	eg_mono_set
 ;*	cmp	num_color,0		; if there's no color monitor
@@ -451,6 +452,9 @@ screen_set_done:
 ;	if on monochrome, just erase the screen
 
 eg_mono_set:
+	cmp	cl,0C0h
+	jne	$+5
+	jmp	screen_set_only
 	cmp	cl,0B0h
 	jne	mono_card
 	jmp	screen_set_only
@@ -617,7 +621,7 @@ graph_vector	dw	screen_bad_param, general_graph
 		dw	eg_set_graphics, eg_set_graphics
 		dw	eg_set_graphics, eg_set_graphics
 		dw	eg_set_graphics, eg_set_graphics
-		dw	screen_not_sup, screen_not_sup
+		dw	hgc_graphics, screen_not_sup
 		dw	screen_not_sup, screen_not_sup
 
 
@@ -720,7 +724,8 @@ general_graph:
 	jnz	general_graph_set	;   then skip
 	mov	ch,40h			; pretend we're bw 640
 general_graph_set:
-	mov	al,enhanced_mono
+	mov	al,hgc_present
+	or	al,enhanced_mono
 	or	al,enhanced_video
 	jz	graph_variables
 	cmp	bios_graphics,0
@@ -821,6 +826,12 @@ video_init_loop:
 ; attribute controller and font planes as well as the CRTC.
 ; Keep graphics ownership set until text hardware and font are ready.
 enhanced_alpha:
+	cmp	vs_screen_mode,0C0h
+	jne	hgc_alpha_bios
+	call	hgc_text
+	mov	bios_graphics,0
+	ret
+hgc_alpha_bios:
 	mov	al,enhanced_text
 	sub	ah,ah
 	call	eg_set_mode
@@ -1499,7 +1510,7 @@ z_video_enhanced_scan:
 	je	z_video_set
 	add	si,8
 	add	cl,10h
-	cmp	cl,0C0h
+	cmp	cl,0D0h
 	jb	z_video_enhanced_scan
 	ret				; unsupported enhanced mode, no alias
 z_video_legacy:

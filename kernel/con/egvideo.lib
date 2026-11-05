@@ -102,7 +102,7 @@ eg_cga_upper:
 	jmp	eg_reject
 	jmp	eg_owner_check
 eg_enhanced_owner:
-	cmp	vs_screen_mode,0B0h
+	cmp	vs_screen_mode,0C0h
 	jbe	$+5
 	jmp	eg_reject
 	cmp	bios_graphics,0
@@ -149,6 +149,19 @@ eg_owned:
 	mov	bp,cs:eg_modes-16+6[di]
 	pop	di
 ; eg_dimensions:
+	cmp	vs_screen_mode,0C0h
+	jne	hgc_services_ready
+	mov	ax,si
+	and	ax,7Fh
+	cmp	ax,11
+	je	$+5
+	jmp	hgc_check_palette
+	jmp	eg_owned_bad
+hgc_check_palette:
+	cmp	ax,16
+	jne	hgc_services_ready
+	jmp	eg_owned_bad
+hgc_services_ready:
 	test	si,80h
 	jz	$+5
 	jmp	eg_owned_packet
@@ -177,6 +190,9 @@ eg_owned_packet:
 	jmp	eg_pixel
 	; Derive character bounds from pixel dimensions and ROM font height.
 	shr	cx,1 ! shr cx,1 ! shr cx,1
+	mov	ax,43
+	cmp	bp,348
+	je	eg_cell_bounds
 	mov	ax,25
 	cmp	bp,480
 	je	$+5
@@ -235,6 +251,9 @@ eg_pixel:
 	cmp	es:word ptr 6[di],bp
 	jb	$+5
 	jmp	eg_owned_bad
+	cmp	vs_screen_mode,0C0h
+	jne	$+5
+	jmp	hgc_pixel
 	cmp	vs_screen_mode,0A0h
 	jne	$+5
 	jmp	eg_chain4_pixel
@@ -309,8 +328,14 @@ eg_packet_call:
 	mov	bx,es:word ptr 2[di]
 	mov	cx,es:word ptr 4[di]
 	mov	dx,es:word ptr 6[di]
-	call	video_bios
+	call	eg_graphics_bios
 	pop	bx
+	cmp	hgc_present,0
+	je	hgc_result_kind
+	cmp	video_result_ax,0FFFFh
+	jne	hgc_result_kind
+	jmp	eg_read_result
+hgc_result_kind:
 	cmp	si,3
 	jne	$+5
 	jmp	eg_packet_results
@@ -359,7 +384,7 @@ eg_simple_tty:
 	mov	al,cl
 	mov	bl,15
 eg_simple_call:
-	call	video_bios
+	call	eg_graphics_bios
 	pop	bx
 	cmp	si,3
 	je	$+5
@@ -507,6 +532,7 @@ eg_modes:
 	db	12h,4,80,0 ! dw 640,480	; 90h
 	db	13h,4,40,0 ! dw 320,200	; A0h
 	db	0Fh,8,80,0 ! dw 640,350	; B0h
+	db	7Fh,10h,90,0 ! dw 720,348	; C0h: project Hercules extension
 
 enhanced_vga db 0
 video_result_ax dw 0
@@ -521,7 +547,7 @@ eg_screen_query:
 	mov	ah,80
 	cmp	al,20h
 	jb	eg_query_text
-	cmp	al,0B0h
+	cmp	al,0C0h
 	ja	eg_query_done
 	push	si ! push ax
 	xor	ah,ah
@@ -563,3 +589,525 @@ eg_set_mode:
 
 enhanced_mono db 0
 eg_equipment db 0
+
+; Hercules page-zero backend. Native C0h maps to project DOS mode 7Fh.
+; Register values and interleaving follow the GB101 owner's manual.
+hgc_detect:
+ push ax ! push bx ! push cx ! push dx ! push es
+ mov ax,40h
+ mov es,ax
+ cmp es:word ptr .63h,mono_port
+ jne hgc_detect_done
+ mov ah,12h
+ mov bx,0FF10h
+ int 10h
+ cmp bh,1
+ jbe hgc_detect_done         ; EGA/VGA monochrome is not Hercules
+ mov dx,3BAh
+ in al,dx
+ and al,80h
+ mov ah,al
+ mov cx,0FFFFh
+hgc_probe:
+ in al,dx
+ and al,80h
+ cmp al,ah
+ jne hgc_found
+ loop hgc_probe
+ jmps hgc_detect_done
+hgc_found:
+ mov hgc_present,1
+ mov enhanced_text,7
+hgc_detect_done:
+ pop es ! pop dx ! pop cx ! pop bx ! pop ax
+ ret
+
+hgc_graphics:
+ cmp hgc_present,0
+ jne $+5
+ jmp screen_not_sup
+ call general_graph
+ mov bios_graphics,1
+ mov hgc_cursor,0
+ mov hgc_shape,0607h
+ push bx ! push es
+ mov dx,3BFh
+ mov al,1                  ; page zero only: leave B800h available
+ out dx,al
+ mov si,offset hgc_graph_regs
+ mov ax,0002h
+ mov cx,4000h
+ call hgc_set
+ mov ax,5A7Fh
+ mov cx,8000h
+ call hgc_bda
+ pop es ! pop bx
+ xor ax,ax
+ ret
+
+hgc_text:
+ push ax ! push bx ! push cx ! push dx ! push si ! push di ! push es
+ mov si,offset hgc_text_regs
+ mov ax,0720h
+ mov cx,2000
+ call hgc_set
+ mov dx,3BFh
+ xor al,al
+ out dx,al
+ mov ax,5007h
+ mov cx,1000h
+ call hgc_bda
+ pop es ! pop di ! pop si ! pop dx ! pop cx ! pop bx ! pop ax
+ ret
+
+; AL=mode control without display enable, AH=clear attribute, CX=words.
+hgc_set:
+ push ax ! push cx
+ mov dx,3B8h
+ out dx,al
+ mov dx,3B4h
+ xor ah,ah
+ mov cx,16
+hgc_register:
+ mov al,ah
+ out dx,al
+ inc dx
+ lodsb
+ out dx,al
+ dec dx
+ inc ah
+ loop hgc_register
+ mov ax,0B000h
+ mov es,ax
+ xor di,di
+ pop cx ! pop ax
+ push ax
+ mov al,32
+ test ah,ah
+ jnz $+4
+ xor al,al
+ cld
+ rep stosw
+ pop ax
+ or al,8
+ mov dx,3B8h
+ out dx,al
+ ret
+
+; Bounds/page/ownership have already been checked by eg_pixel.
+hgc_pixel:
+ push bx
+ mov bp,si
+ mov ax,es:word ptr 6[di]
+ mov dx,ax
+ and dx,3
+ mov cl,13
+ shl dx,cl
+ push dx
+ shr ax,1 ! shr ax,1
+ mov bx,90
+ mul bx
+ pop dx
+ add ax,dx
+ mov cx,es:word ptr 4[di]
+ mov bl,es:byte ptr [di]
+ mov di,cx
+ shr di,1 ! shr di,1 ! shr di,1
+ add di,ax
+ mov ax,0B000h
+ mov es,ax
+ and cl,7
+ mov ah,80h
+ shr ah,cl
+ mov al,es:byte ptr [di]
+ cmp bp,13
+ je hgc_read
+ test bl,80h
+ jnz hgc_xor
+ test bl,1
+ jnz hgc_set_bit
+ not ah
+ and al,ah
+ jmps hgc_store
+hgc_set_bit:
+ or al,ah
+ jmps hgc_store
+hgc_xor:
+ test bl,1
+ jz hgc_store
+ xor al,ah
+hgc_store:
+ mov es:byte ptr [di],al
+ xor ax,ax
+ pop bx
+ ret
+hgc_read:
+ and al,ah
+ mov ax,0
+ jz $+3
+ inc ax
+ pop bx
+ ret
+
+hgc_present db 0
+hgc_graph_regs db 35h,2Dh,2Eh,07h,5Bh,02h,57h,57h,02h,03h,0,0,0,0,0,0
+hgc_text_regs db 61h,50h,52h,0Fh,19h,06h,19h,19h,02h,0Dh,0Bh,0Ch,0,0,0,0
+
+; Native graphics text: 90 x 43 cells of eight scan lines. The final four
+; raster lines are outside the text grid. Use the PC ROM 8x8 font and the
+; optional INT 1Fh extension for characters 128..255; no shadow text image.
+eg_graphics_bios:
+ cmp hgc_present,0
+ jne hgc_bios
+ jmp video_bios
+hgc_bios:
+ push ax ! push bx ! push cx ! push dx ! push si ! push di ! push bp ! push ds ! push es
+ mov hgc_args,ax
+ mov hgc_args+2,bx
+ mov video_result_bx,bx
+ mov hgc_args+4,cx
+ mov hgc_args+6,dx
+ mov al,ah
+ xor ah,ah
+ shl ax,1
+ mov bx,ax
+ call hgc_functions[bx]
+ mov cs:video_result_ax,ax
+ pop es ! pop ds ! pop bp ! pop di ! pop si ! pop dx ! pop cx ! pop bx ! pop ax
+ ret
+hgc_functions dw hgc_error,hgc_cursor_shape,hgc_cursor_set,hgc_cursor_get
+ dw hgc_error,hgc_error,hgc_scroll,hgc_scroll,hgc_char_read
+ dw hgc_write,hgc_write,hgc_error,hgc_error,hgc_error,hgc_tty,hgc_error,hgc_error
+hgc_error:
+ mov ax,0FFFFh
+ ret
+hgc_cursor_shape:
+ mov ax,hgc_args+4
+ mov hgc_shape,ax
+ xor ax,ax
+ ret
+hgc_cursor_set:
+ mov ax,hgc_args+6
+ cmp al,90
+ jae hgc_error
+ cmp ah,43
+ jae hgc_error
+ mov hgc_cursor,ax
+ xor ax,ax
+ ret
+hgc_cursor_get:
+ mov ax,hgc_shape
+ mov video_result_cx,ax
+ mov ax,hgc_cursor
+ mov video_result_dx,ax
+ xor ax,ax
+ ret
+
+; AL=character -> DS:SI font. CF set if the extension font is absent.
+hgc_font:
+ xor ah,ah
+ mov si,ax
+ mov ax,0F000h
+ mov ds,ax
+ cmp si,128
+ jb hgc_rom_font
+ sub si,128
+ xor ax,ax
+ mov ds,ax
+ mov ax,word ptr .7Ch
+ mov dx,word ptr .7Eh
+ or ax,dx
+ jz hgc_font_missing
+ mov ax,word ptr .7Ch
+ mov ds,dx
+ jmps hgc_font_offset
+hgc_rom_font:
+ mov ax,0FA6Eh
+hgc_font_offset:
+ shl si,1 ! shl si,1 ! shl si,1
+ add si,ax
+ clc
+ ret
+hgc_font_missing:
+ stc
+ ret
+
+; DX=row,column -> ES:DI first scan byte. Preserve DX.
+hgc_cell:
+ push dx
+ mov al,dh
+ xor ah,ah
+ mov di,180
+ mul di
+ pop dx
+ mov di,ax
+ mov al,dl
+ xor ah,ah
+ add di,ax
+ mov ax,0B000h
+ mov es,ax
+ ret
+hgc_next_scan:
+ add di,2000h
+ test di,8000h
+ jz hgc_scan_done
+ sub di,8000h
+ add di,90
+hgc_scan_done:
+ ret
+
+; AL=character, BL=colour/XOR, DX=cell; preserve caller registers, return CF.
+hgc_draw:
+ push ax ! push bx ! push cx ! push dx ! push si ! push di ! push ds ! push es
+ push ax
+ call hgc_cell
+ pop ax
+ call hgc_font
+ jc hgc_draw_done
+ mov cx,8
+hgc_draw_row:
+ lodsb
+ test bl,1
+ jnz hgc_draw_colour
+ xor al,al
+hgc_draw_colour:
+ test bl,80h
+ jz hgc_draw_replace
+ xor al,es:byte ptr [di]
+hgc_draw_replace:
+ mov es:byte ptr [di],al
+ call hgc_next_scan
+ loop hgc_draw_row
+ clc
+hgc_draw_done:
+ pop es ! pop ds ! pop di ! pop si ! pop dx ! pop cx ! pop bx ! pop ax
+ ret
+
+hgc_write:
+ mov dx,hgc_cursor
+ mov cx,hgc_args+4
+ jcxz hgc_write_done
+ mov bx,hgc_args+2
+hgc_write_loop:
+ mov al,byte ptr hgc_args
+ call hgc_draw
+ jnc $+5
+ jmp hgc_error
+ inc dl
+ cmp dl,90
+ jb hgc_write_next
+ xor dl,dl
+ inc dh
+ cmp dh,43
+ jae hgc_write_done
+hgc_write_next:
+ loop hgc_write_loop
+hgc_write_done:
+ xor ax,ax
+ ret
+
+; Match glyph bytes against the framebuffer, so direct pixel writes are seen.
+hgc_char_read:
+ xor bx,bx
+hgc_match_char:
+ push ds
+ mov dx,hgc_cursor
+ call hgc_cell
+ mov al,bl
+ call hgc_font
+ jc hgc_match_absent
+ mov cx,8
+hgc_match_row:
+ lodsb
+ cmp al,es:byte ptr [di]
+ jne hgc_match_next
+ call hgc_next_scan
+ loop hgc_match_row
+ pop ds
+ mov al,bl
+ xor ah,ah
+ ret
+hgc_match_next:
+ pop ds
+ inc bl
+ jnz hgc_match_char
+ xor ax,ax
+ ret
+hgc_match_absent:
+ pop ds
+ xor ax,ax
+ ret
+
+hgc_tty:
+ mov dx,hgc_cursor
+ mov al,byte ptr hgc_args
+ cmp al,7
+ je hgc_write_done
+ cmp al,8
+ je hgc_backspace
+ cmp al,13
+ je hgc_carriage
+ cmp al,10
+ je hgc_linefeed
+ mov bx,hgc_args+2
+ call hgc_draw
+ jnc $+5
+ jmp hgc_error
+ inc dl
+ cmp dl,90
+ jb hgc_tty_save
+hgc_carriage:
+ xor dl,dl
+ cmp byte ptr hgc_args,13
+ je hgc_tty_save
+hgc_linefeed:
+ inc dh
+ cmp dh,43
+ jb hgc_tty_save
+ mov dh,42
+ push dx
+ push hgc_args ! push hgc_args+2 ! push hgc_args+4 ! push hgc_args+6
+ mov hgc_args,0601h
+ mov hgc_args+2,0
+ mov hgc_args+4,0
+ mov hgc_args+6,2A59h
+ call hgc_scroll
+ pop hgc_args+6 ! pop hgc_args+4 ! pop hgc_args+2 ! pop hgc_args
+ pop dx
+ jmps hgc_tty_save
+hgc_backspace:
+ test dl,dl
+ jz hgc_tty_save
+ dec dl
+hgc_tty_save:
+ mov hgc_cursor,dx
+ xor ax,ax
+ ret
+
+; AX=scan line, DL=byte-column -> DI=Hercules address. Preserve DX.
+hgc_scan_address:
+ push dx
+ mov di,ax
+ and di,3
+ mov cl,13
+ shl di,cl
+ shr ax,1 ! shr ax,1
+ mov cx,90
+ mul cx
+ add di,ax
+ pop dx
+ mov al,dl
+ xor ah,ah
+ add di,ax
+ ret
+
+; Rectangle bounds are checked by eg_rectangle. Copy raster rows in the
+; appropriate direction; line counts at least the rectangle height clear it.
+hgc_scroll:
+ mov ax,hgc_args+4
+ mov al,ah
+ xor ah,ah
+ shl ax,1 ! shl ax,1 ! shl ax,1
+ mov hgc_top,ax
+ mov ax,hgc_args+6
+ mov al,ah
+ xor ah,ah
+ inc ax
+ shl ax,1 ! shl ax,1 ! shl ax,1
+ dec ax
+ mov hgc_bottom,ax
+ mov al,byte ptr hgc_args
+ xor ah,ah
+ shl ax,1 ! shl ax,1 ! shl ax,1
+ mov hgc_shift,ax
+ mov bp,hgc_top
+ cmp byte ptr hgc_args+1,6
+ je hgc_scroll_row
+ mov bp,hgc_bottom
+hgc_scroll_row:
+ mov dx,hgc_args+4
+ mov ax,bp
+ call hgc_scan_address
+ push di
+ mov ax,bp
+ cmp byte ptr hgc_args+1,6
+ jne hgc_scroll_down
+ add ax,hgc_shift
+ jmps hgc_scroll_source
+hgc_scroll_down:
+ sub ax,hgc_shift
+hgc_scroll_source:
+ cmp hgc_shift,0
+ je hgc_scroll_fill
+ cmp ax,hgc_top
+ jb hgc_scroll_fill
+ cmp ax,hgc_bottom
+ ja hgc_scroll_fill
+ call hgc_scan_address
+ mov si,di
+ pop di
+ mov cl,byte ptr hgc_args+6
+ sub cl,byte ptr hgc_args+4
+ inc cl
+ xor ch,ch
+ push ds
+ mov ax,0B000h
+ mov ds,ax
+ mov es,ax
+ cld
+ rep movsb
+ pop ds
+ jmps hgc_scroll_advance
+hgc_scroll_fill:
+ pop di
+ mov cl,byte ptr hgc_args+6
+ sub cl,byte ptr hgc_args+4
+ inc cl
+ xor ch,ch
+ mov ax,0B000h
+ mov es,ax
+ xor al,al
+ test byte ptr hgc_args+3,1
+ jz hgc_scroll_clear
+ dec al
+hgc_scroll_clear:
+ cld
+ rep stosb
+hgc_scroll_advance:
+ cmp byte ptr hgc_args+1,6
+ jne hgc_scroll_reverse
+ inc bp
+ cmp bp,hgc_bottom
+ ja $+5
+ jmp hgc_scroll_row
+ xor ax,ax
+ ret
+hgc_scroll_reverse:
+ cmp bp,hgc_top
+ je $+6
+ dec bp
+ jmp hgc_scroll_row
+ xor ax,ax
+ ret
+
+hgc_cursor dw 0
+hgc_shape dw 0607h
+hgc_args dw 0,0,0,0
+hgc_top dw 0
+hgc_bottom dw 0
+hgc_shift dw 0
+
+; Keep DOS mode queries and the BIOS data area consistent. The firmware
+; itself does not implement 7Fh; all its graphics services are mediated.
+hgc_bda:
+ push es
+ mov dx,40h
+ mov es,dx
+ mov es:byte ptr .49h,al
+ mov es:byte ptr .4Ah,ah
+ mov es:byte ptr .4Bh,0
+ mov es:word ptr .4Ch,cx
+ mov es:word ptr .4Eh,0
+ mov es:byte ptr .62h,0
+ pop es
+ ret

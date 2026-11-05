@@ -1773,7 +1773,7 @@ eg_dos_set_scan:
 	je	eg_dos_set_found
 	inc	bx
 	add	cl,10h
-	cmp	cl,0C0h
+	cmp	cl,0D0h
 	jb	eg_dos_set_scan
 	pop	bx
 	jmp	int_10_exit
@@ -1902,7 +1902,7 @@ int_10_f15:
 		xor bh,bh
 	cmp	al,50h
 	jb	eg_dos_query_legacy
-	cmp	al,0B0h
+	cmp	al,0C0h
 	ja	eg_dos_query_legacy
 	push	bx
 	sub	al,50h

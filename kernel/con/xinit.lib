@@ -75,6 +75,7 @@ INIT:
 	call	check_hi_mem		; from C000 up
 	call	ndp_init		; check for an 8087
 	call	compaq			; do before any video setup
+	call	hgc_detect	; bounded legacy monochrome probe
 	call	detect_cursor		; EGA/VGA character-height cursor
 	call	fix_crt			; mono/color vs_ variables
 	call	fix_disk_tables		; match disk tables to equip

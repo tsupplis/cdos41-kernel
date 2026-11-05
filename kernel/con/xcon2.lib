@@ -864,15 +864,7 @@ reorg_mv2_code	equ	offset $
 
 ;	New XIOS function 31 used to support ROS video emulation
 pc_video:
-	test	al,80h
-	jnz	eg_video_entry
-	cmp	al,16
-	je	eg_video_entry
-	cmp	al,12
-	je	eg_video_entry
-	cmp	al,13
-	jne	eg_video_legacy
-eg_video_entry:
+; Offer simple native calls as well as packets to the graphics owner.
 	call	eg_try_video
 	jc	eg_video_legacy
 	ret
