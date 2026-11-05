@@ -21,6 +21,12 @@ int fm_rename_file(){return 1;}
 int fm_rename_files(){return 1;}
 int fm_delete_file(){return 1;}
 int fm_delete_files(){return 1;}
+int fm_spawn(){return 1;}
+char *fm_spawn_error(){return "error";}
+int fm_run_file(){return 1;}
+int fm_external(){return 1;}
+int fm_external_boot(){return 1;}
+int fm_external_available(){return 1;}
 int fm_copy_file(){return 1;}
 int fm_copy_named(){return 1;}
 int fm_copy_names(){return 1;}

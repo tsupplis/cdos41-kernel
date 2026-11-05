@@ -7,7 +7,7 @@ CMDINFO=cmdinfo
 PYTHON=python3
 REF=../../extra/fm.cmd
 TOOLS=fmcheck.cmd fmview.cmd
-OBJECTS=fmcheck.obj config.obj cfgio.obj menu.obj focus.obj select.obj selectio.obj marks.obj type.obj typeio.obj viewer.obj prtext.obj printjob.obj printio.obj renjob.obj renio.obj deljob.obj delio.obj copyjob.obj copyio.obj copynam.obj book.obj fatdest.obj fatloc.obj screen.obj layout.obj frame.obj keys.obj navigate.obj dirlist.obj scan.obj native.obj browse.obj conio.obj event.obj term.obj fmxios.obj
+OBJECTS=fmcheck.obj config.obj cfgio.obj menu.obj focus.obj select.obj selectio.obj marks.obj type.obj typeio.obj viewer.obj prtext.obj printjob.obj printio.obj renjob.obj renio.obj deljob.obj delio.obj copyjob.obj copyio.obj copynam.obj book.obj fatdest.obj fatloc.obj spawn.obj launch.obj runjob.obj extjob.obj screen.obj layout.obj frame.obj keys.obj navigate.obj dirlist.obj scan.obj native.obj browse.obj conio.obj event.obj term.obj fmxios.obj
 
 .PHONY: all check check-c check-ref reference clean
 .DELETE_ON_ERROR:
@@ -46,6 +46,7 @@ check-ref: fmorg.dis disassemble.py symbols.json $(REF)
 check-c: all
 	$(CC) -DHOST_TEST -std=c89 -Wno-deprecated-non-prototype config.c menu.c screen.c layout.c frame.c keys.c navigate.c dirlist.c scan.c browse.c conio.c event.c fmcheck.c -o fmcheck-host
 	./fmcheck-host
+	$(PYTHON) -B tests/pce.py
 	$(PYTHON) -B tests/config.py
 	$(PYTHON) -B tests/cfgio.py
 	$(PYTHON) -B tests/menu.py
@@ -65,6 +66,9 @@ check-c: all
 	$(PYTHON) -B tests/copyjob.py
 	$(PYTHON) -B tests/copynam.py
 	$(PYTHON) -B tests/fatdest.py
+	$(PYTHON) -B tests/spawn.py
+	$(PYTHON) -B tests/runjob.py
+	$(PYTHON) -B tests/extjob.py
 	$(PYTHON) -B tests/layout.py
 	$(PYTHON) -B tests/frame.py
 	$(PYTHON) -B tests/keys.py
@@ -144,3 +148,8 @@ check-live-book-fat: all
 
 check-live-book-cpm: all
 	$(PYTHON) -B tests/book_live.py --media cpm --boot-image ../../media/cdos86.img
+
+.PHONY: check-live-run
+check-live: check-live-run
+check-live-run: all
+	$(PYTHON) -B tests/run_live.py --boot-image ../../media/cdos86.img

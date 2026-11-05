@@ -19,7 +19,7 @@ user testing of layout, configuration, keys and file operations.
 | Rename | Per-file prompt; skip/cancel, native collision refusal and retained selections |
 | Delete | One explicit confirmation; failed files retained, protected attributes unchanged |
 | Copy | Drive, new-name, CP/M user, FAT directory and Dir #1/#2 destinations implemented; disk swapping pending |
-| Launch | Not implemented |
+| Launch | CMD/COM/EXE/BAT Run, external commands, Function/Serial chains and boot-tool prompts implemented; Backup pending |
 | Distribution replacement | Not enabled |
 
 ## Build
@@ -78,7 +78,7 @@ is not assembly equivalence, code comprehension or functional parity.
 | `copyjob.c`, `copynam.c`, `copyio.c` | Copy selection, validated destination names and transactional record transfer |
 | `fatdest.c` | Verified process-local FAT destination aliases without changing the source mapping |
 | `book.c` | Session bookmarks with independent directory identities and navigation clones |
-| `launch.c` (planned) | External tools, command shell, return to FM |
+| `spawn.c`, `launch.a86`, `runjob.c`, `extjob.c` | Program resolution, native/DOS launch, Run and external menu actions |
 | `event.c` | Read-only input/navigation/repaint loop and Escape cleanup |
 | `conio.c` | Direct-screen lock ownership, BDOS-output boundary and mapped input |
 | `browse.c` | Read-only pane, selection highlight and repaint |
@@ -344,8 +344,8 @@ entries and reports truncation. FAT directory mapping is process-local, and
 exit restores the initial drive and CP/M user. Cancelling a picker preserves
 marks and the file position, including after switching between pickers. Accepting
 a directory, drive or subset clears marks. Invalid subsets leave the filter
-unchanged. External launching, typed full paths and filename-search selection
-remain pending. Copy destinations are described below.
+unchanged. Typed full paths and filename-search selection remain pending.
+Copy and launch coverage are described below.
 
 The XIOS adapter locks only while painting. ESC 6 disables programmable-key
 expansion while open; exit restores its previous state. Full-word version checks
@@ -517,6 +517,32 @@ also verifies refusal when aliases are exhausted and return to the saved
 directory after entering a child through its navigation clone. The CP/M
 scenario revisits bookmarks after an ordinary user-area change. Run these with
 `make check-live-book-fat` and `make check-live-book-cpm`.
+
+## Program launching
+
+Run accepts one CMD/COM/EXE/BAT file, with no argument prompt, from the menu
+or F5/Ctrl-E. Native launch waits for console reattachment; DOS launch also
+waits for a detached child to terminate before releasing its loader resources.
+The bridge restores the caller's priority, drive, user and DMA, then redraws FM.
+
+`extjob.c` uses the original executable and argument records for Help, Edit,
+disk copy/format, Free Memory, function keys, serial ports, system defaults,
+memory disk and disk-maintenance tools. Function/Serial setup chains and the
+DOS/CP/M boot-tool prompt are implemented. Help preserves marks; Edit accepts
+zero or one explicitly marked file. Successful ordinary tool calls clear
+marks; failures retain them. Argument overflow is rejected rather than
+truncated. The Backup workflow remains pending.
+
+The project contains its own DR C/ASM launch code and has no utility-library
+build dependency on another repository. `tests/run_live.py` combines native,
+DOS and BAT launches, repeated format changes, a detached DOS child, malformed
+EXE rejection, editor and chained-tool argument capture, boot prompts,
+selection errors, return/navigation and executable preservation on disposable
+media. The combined regression passes; this does not replace final user
+acceptance of FM.
+The launch harness advances in short steps and waits for keyboard/screen
+readiness, with bounded timeouts and automatic emulator cleanup. It reports
+emulator elapsed time and retains named checkpoint snapshots for failures.
 
 ## Host preview
 

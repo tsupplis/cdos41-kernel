@@ -20,6 +20,10 @@
 #include "copyio.h"
 #include "copynam.h"
 #include "fatdest.h"
+#include "spawn.h"
+#include "runjob.h"
+#include "extjob.h"
+static int launch_console_error;
 #include "book.h"
 static struct fm_book bookmarks[2];
 static char book_message[80];
@@ -106,7 +110,7 @@ static int decoration()
          "FMVIEW: Tab menu; F9 directories; arrows move; Escape exits",
          layout.prompt.width,promptattr);
     if(layout.prompt.row+layout.prompt.height<24)
-        text(23,0,"Prototype: external launching is disabled",80,keyattr);
+        text(23,0,"Prototype: DOS launching and some actions are pending",80,keyattr);
     if(input.active) {
         text(layout.prompt.row,layout.prompt.column,"Subset: ",8,promptattr);
         text(layout.prompt.row,layout.prompt.column+8,input.text,
@@ -307,17 +311,12 @@ char *message;
 }
 /* Rename and named Copy share editing; limits and headings follow each
  * original dialog. No console lock is held while waiting for a key. */
-static int name_ask(prefix,name,target,limit)
-char *prefix,*name,*target;
+static int text_ask(heading,target,limit)
+char *heading,*target;
 int limit;
 {
-    char heading[40];
-    int i,j,key,ok,length;
-    i=0;
-    while(*prefix) heading[i++]=*prefix++;
-    for(j=0;j<12 && name[j] && name[j]!=' ';++j) heading[i++]=name[j];
-    heading[i++]=' ';heading[i++]='t';heading[i++]='o';
-    heading[i++]=' ';heading[i++]='?';heading[i++]=' ';heading[i]=0;
+    int i,key,ok,length;
+    for(i=0;heading[i];++i) ;
     length=0;target[0]=0;
     do {
         if(!fm_console_begin(&console)) return -2;
@@ -338,6 +337,26 @@ int limit;
         else if(key<=126 && length<limit) target[length++]=key;
         target[length]=0;
     } while(1);
+}
+static int name_ask(prefix,name,target,limit)
+char *prefix,*name,*target;
+int limit;
+{
+    char heading[40];
+    int i,j;
+    i=0;
+    while(*prefix) heading[i++]=*prefix++;
+    for(j=0;j<12 && name[j] && name[j]!=' ';++j) heading[i++]=name[j];
+    heading[i++]=' ';heading[i++]='t';heading[i++]='o';
+    heading[i++]=' ';heading[i++]='?';heading[i++]=' ';heading[i]=0;
+    return text_ask(heading,target,limit);
+}
+static int boot_ask(target)
+char *target;
+{
+    int result;
+    result=text_ask("Hard disk partition type? (DOS or CP/M)",target,5);
+    return result==-2 ? -1 : result>0 ? 1 : 0;
 }
 static int rename_ask(name,target)
 char *name,*target;
@@ -634,6 +653,51 @@ int key;
     notice="This destination is not yet implemented";
     return 1;
 }
+/* Release the FM screen/key mode before giving the console to a child.
+ * No display lock survives the launch or console-reattach wait. */
+static int run_invoke(command)
+char *command;
+{
+    int result;
+    if(!fm_term_close(&console)) {launch_console_error=1;return 0;}
+    __BDOS(6,27);__BDOS(6,'e');
+    __BDOS(6,27);__BDOS(6,'E');
+    result=fm_spawn(command,dma);
+    __BDOS(45,255);
+    if(!fm_term_open(&canvas,&console)) {launch_console_error=1;return 0;}
+    __BDOS(6,27);__BDOS(6,'f');
+    if(!result) notice=fm_spawn_error();
+    return result;
+}
+static int run_report(message)
+char *message;
+{ notice=message;return 1; }
+static int run_action()
+{
+    struct fm_runner ops;
+    int result;
+    if(directories || drives) {notice="Please select one file";return 1;}
+    focus.active=0;launch_console_error=0;
+    ops.invoke=run_invoke;ops.report=run_report;
+    result=fm_run_file(&browser,files,count,&marks,drive,&ops);
+    if(launch_console_error || result<0) return 0;
+    if(result && !refresh()) return 0;
+    return 1;
+}
+static int external_action(index)
+int index;
+{
+    struct fm_runner ops;
+    int result;
+    if(directories || drives) {notice="Return to the file view first";return 1;}
+    focus.active=0;launch_console_error=0;
+    ops.invoke=run_invoke;ops.report=run_report;
+    if(index==25) result=fm_external_boot(&browser,files,count,&marks,boot_ask,&ops);
+    else result=fm_external(index,&browser,files,count,&marks,&ops);
+    if(launch_console_error || result<0) return 0;
+    if(result && !refresh_retained()) return 0;
+    return 1;
+}
 static int print_notice(name)
 char *name;
 {
@@ -727,6 +791,7 @@ char **argv;
                 else if((key==0xbd || key==0xbe) && directories && !drives)
                     result=book_set(key-0xbd) ? 1 : -1;
                 else if(key==0xc1 || key==0xc2) result=book_go(key-0xc1) ? 1 : -1;
+                else if((key==0xbf || key==5) && !directories && !drives) result=run_action() ? 1 : -1;
                 else if(key==0xbc || key==2) result=type_action() ? 1 : -1;
                 else if(key==0xc3) result=directory_view() ? 1 : -1;
                 else {
@@ -740,6 +805,9 @@ char **argv;
                         else if(fm_focus_index(&focus)==6) result=copy_action();
                         else if(fm_focus_index(&focus)==7) result=rename_action() ? 1 : -1;
                         else if(fm_focus_index(&focus)==8) result=delete_action() ? 1 : -1;
+                        else if(fm_focus_index(&focus)==11) result=run_action() ? 1 : -1;
+                        else if(fm_focus_index(&focus)==25 || fm_external_available(fm_focus_index(&focus)))
+                            result=external_action(fm_focus_index(&focus)) ? 1 : -1;
                         else {notice="This action is not yet implemented";result=1;}
                     } else if(action<0) {
                         if(key==27 && (directories || drives)) {
