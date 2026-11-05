@@ -1,0 +1,52 @@
+; Source: xbegin.lib (devices)
+xdata                   dseg    para public 'CODE'
+;********************************************************
+;*							*
+;*		DISK INTERRUPT HANDLER			*
+;*							*
+;*******************************************************
+xcode                   cseg    byte public 'CODE'
+;	FDC.  The current state is saved and dev_flagset is called.
+
+;------
+idisk:
+;------
+                        mov     cs:userax,ax                     ;save ax
+                        mov     cs:userss,ss                     ;save the stack segment
+                        mov     cs:usersp,sp                     ;and stack segment
+                        mov     ax,cs                            ;get code segment
+                        mov     ss,ax                            ;into stack segment
+                        mov     sp,offset usersavearea           ;point at the save area
+                        push    bx! push cx
+                        push    dx! push bp
+                        push    si! push di
+                        push    ds! push es
+
+                        mov     al,picocwseoi + diskchannel
+                        out     picocwport,al
+
+                        mov     ds,cs:sysdat
+                        sub     al,al                            ;* reset it
+                        xchg    al,xiosintexpect                 ;* did the XIOS ask for this int?
+                        or      al,al                            ;*
+                        jnz     idiskexpected                    ;* if no, skip the flagset...this
+;* might let some apps. successfully
+;* talk directly to the FDC.
+                        mov     ax,pcsegment                     ;* emulate DOS
+                        mov     DS,ax                            ;*
+                        or      byte ptr .3Eh,80h                ;* show that an interrupt happened
+                        jmps    idiskret                         ;*
+
+idiskexpected:                                                   ;*
+                        mov     dx,fdcflag
+                        call    flagset
+
+idiskret:                                                        ;*
+                        pop     es! pop ds
+                        pop     di! pop si
+                        pop     bp! pop dx
+                        pop     cx! pop bx
+                        mov     ss,cs:userss
+                        mov     sp,cs:usersp
+                        mov     ax,cs:userax
+                        jmpf    cs:dword ptr dispatcher

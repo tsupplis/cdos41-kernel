@@ -1,0 +1,1009 @@
+; Source: xbegin.lib (console)
+xcode                   cseg    byte public 'CODE'
+;********************************************************
+;*							*
+;*		KEYBOARD INPUT EQUATES			*
+;*							*
+;********************************************************
+
+;	IBM PC keyboard ports
+
+;	Some of the IBM PC key codes returned from keyboard.
+;	Other key codes are used as indices into the
+;	translation tables key_table, shift_table and control_table
+;	below.
+
+;	Keyboard interrupt handler bit masks for special function keys
+
+;********************************************************
+;*							*
+;*		KEYBOARD INTERRUPT HANDLER		*
+;*							*
+;********************************************************
+
+;	The following routine gets control after a keyboard interrupt.
+;	Interrupts are generated on the IBM PC when a key is depressed
+;	or released.
+
+;----------
+ikeyboard:
+;----------
+
+                        mov     cs:keyboardax,ax                 ;save AX,SS,SP
+                        mov     cs:keyboardss,ss
+                        mov     cs:keyboardsp,sp
+
+                        mov     ax,cs                            ;set up local stack
+                        mov     ss,ax                            ;and save all registers
+                        mov     sp,offset keyboardistack         ;keyboard interrupt stack
+
+                        push    bx ! push cx ! push dx ! push bp
+                        push    si	! push di ! push ds ! push es
+
+                        mov     ds,ax                            ;set up the data segment
+                        mov     es,ax                            ;and extra segment
+
+                        in      al,kbddata                       ;get the scan code
+                        mov     scancode,al                      ;save the scan code
+                        mov     natfunction,0ffh
+                        cmp     al,55
+                        jae     scanclassified
+                        mov     natfunction,0
+scanclassified:
+                        mov     pcscancode,al                    ;save for PC mode
+                        in      al,kbdcontrol                    ;get the current control port
+                        mov     ah,al                            ;save the current state
+                        or      al,080h                          ;reset the key board
+                        out     kbdcontrol,al                    ;send to control port
+                        mov     al,ah
+                        out     kbdcontrol,al                    ;set keyboard back to normal state
+
+;	get our screen base pointer and vs_mode just once
+
+                        mov     dl,topscreen                     ; top screen owns the keyboard
+                        call    pointvs                          ; bx -> console structure
+                        mov     keyvsbase,bx                     ; save the pointer locally
+                        mov     al,vsmode
+                        mov     keyvsmode,al                     ; save the mode for PC checking
+                        mov     al,scancode                      ; restore the scan code
+
+;	Test for CTRL, ALT already being down and DEL being current
+;	scan code.  If yes, call the ROM reset routine.
+
+                        cmp     al,83
+                        jnz     maskrelease                      ; skip if other than Del key
+                        mov     ah,downbits
+                        and     ah,0Fh                           ; look only at Shft/Ctrl/Alt
+                        cmp     ah,ctrlbit+altbit                ; if we have Ctrl/Alt/Del
+                        jnz     maskrelease
+                        jmp     reset                            ;   then we're gone baby
+
+maskrelease:                                                     ;parity is on when key is released
+                        and     al,07fh                          ;mask off the release bit
+                        cmp     al,83 ! jle validkey             ;test for non-existent key
+                        jmp     keyscandone
+
+;	Test for CTRL, SHIFT_RIGHT, SHIFT_LEFT, ALT, NUMBLOCK, CAPSLOCK
+;	keys.  The scan codes for these keys are in action_key_table.
+;	and are refered to as action keys in the comments below.
+;	The bit position in AH corresponds with what kind of key is
+;	found, see the section KEYBOARD PORT AND KEY EQUATES, above.
+;	The DOWN_BITS byte has bits on for action keys that are currently
+;	being held down by the operator.  The TOGGLE_BITS byte is similar
+;	but for keys that have toggle action, NUM LOCK, SCROLL LOCK,
+;	SHIFT
+
+validkey:
+                        mov     cx,6                             ;loop count for number of action keys
+                        mov     ah,01h                           ;first bit mask
+                        mov     bx,offset actionkeytable         ;point at table of action keys
+
+actionloop:
+                        cmp     al,[bx]                          ;is it this key
+                        jnz     actionloopnext                   ;no then try the next
+                        jmp     actionkey
+actionloopnext:
+                        shl     ah,1                             ;adjust bit mask
+                        inc     bx                               ;and point at next element
+                        loop    actionloop
+
+                        mov     al,scancode                      ;restore scan code
+                        or      al,al ! jns keymake              ;sign is on if key just released
+                        jmp     keyscandone                      ;ignore release condition on
+;non action type key
+;	first check for a ctrl/break
+keymake:
+; Compact-keyboard console shortcuts.  Emit the same switch events as
+; Ctrl-keypad, so PIN still controls ownership and switch restrictions.
+                        mov     ah,downbits
+                        and     ah,ctrlbit or altbit
+                        cmp     ah,ctrlbit or altbit
+                        jne     keytranslate
+                        cmp     al,1                             ; Ctrl-Alt-Esc
+                        je      keywakemanager
+                        cmp     al,11                            ; Ctrl-Alt-0 (top row)
+                        jne     keyconsoleshortcuts
+keywakemanager:
+                        mov     al,07dh                          ; native Ctrl-keypad-Plus event
+                        mov     keytype,0ffh
+                        jmp     maskkeycode
+keyconsoleshortcuts:
+                        cmp     al,15                            ; Ctrl-Alt-Tab: next foreground console
+                        je      keynextconsole
+                        cmp     al,2                             ; top-row 1 through 4, scan codes 2..5
+                        jb      keytranslate
+                        cmp     al,5
+                        ja      keytranslate
+                        sub     al,2                             ; consoles 0 through 3
+                        jmps    keyconsoleevent
+keynextconsole:
+                        mov     al,topscreen
+                        inc     al
+                        cmp     al,numvircons
+                        jb      keyconsoleevent
+                        xor     al,al                            ; wrap from console 3 to console 0
+keyconsoleevent:
+                        or      al,070h                          ; existing console-switch event encoding
+                        mov     keytype,0ffh
+                        jmp     maskkeycode
+keytranslate:
+                        cmp     al,70                            ; if not the break key scan code
+                        jnz     notctrlbreak                     ;   then continue on
+                        cmp     downbits,ctrlbit                 ; if not ctrl/break
+                        jnz     notctrlbreak                     ;   then continue on
+                        int     breakinterrupt                   ; if ctrl/break, do the user int
+; hope we come back...
+;	now we check for a console switch key
+notctrlbreak:
+                        mov     al,downbits                      ; see which actions keys are down
+                        cmp     al,switchbits                    ; and if they don't match switchers
+                        jnz     notswitch                        ;   then skip to normal key
+
+                        push    es ! push ds ! pop es            ; local es for scasb
+                        mov     di,offset switchscan             ; scan codes for switch keys
+                        mov     cx,numvircons
+                        mov     al,scancode                      ; restore the scan code
+                        cld
+                        repnz   scasb                            ; search the list
+                        pop     es                               ; restore extra seg
+                        jnz     notswitch                        ; skip if not a console switch
+
+                        mov     al,.switchvalue[di]              ; 0F0h - 0F3h
+                        mov     keytype,0FFh                     ; special key
+                        jmp     savekeycode                      ; skip the rest of this stuff
+
+;	now we fix up special PC Mode scan codes...
+notswitch:
+                        mov     al,scancode
+                        cmp     al,59                            ; if other than a
+                        jb      notpcfkey                        ;   function key,
+                        cmp     al,69                            ;   then skip this stuff
+                        jae     notpcfkey
+
+;	correct pc scan code for shft/ctrl/alt function keys
+                        test    keyvsmode,pcmodebit              ; if not in pc mode
+                        jz      nearscanok                       ;   then skip
+
+                        mov     al,downbits
+                        mov     ah,25                            ; shift scan increment
+                        test    al,shftleftbit or shftrightbit
+                        jnz     incscancode
+
+                        mov     ah,35                            ; ctrl scan increment
+                        test    al,ctrlbit
+                        jnz     incscancode
+
+                        mov     ah,45                            ; alt scan incremtent
+                        test    al,altbit
+                        jnz     incscancode
+
+                        mov     ah,0                             ; if none, leave it alone
+incscancode:
+                        add     pcscancode,ah                    ; bump fkey scan codes
+                        mov     al,0
+                        jmp     savekeycode
+
+notpcfkey:
+                        test    downbits,ctrlbit                 ; if ctrl key not down
+                        jz      testaltnum                       ;   then skip this stuff
+
+;	translate special control scan codes for pc mode
+
+                        push    es	! push ds ! pop es            ; local es for scan
+                        mov     di,offset xctrlkeys              ; list of keys to xlat
+                        mov     cx,xctrlcount                    ; number to check
+                        cld                                      ; scan code already in al
+                        repnz   scasb                            ; search the list
+                        pop     es                               ; restore es
+                        jnz     nearscanok                       ; if not in the list
+
+                        mov     al,.xctrlxlat[di]                ; get the translated value
+                        mov     pcscancode,al                    ;   and save it
+
+                        test    keyvsmode,pcmodebit              ; if this console is in pcmode
+                        jz      nearscanok                       ;   then zero AL and exit
+                        cmp     al,0FFh                          ; ignore keys 8,5,2 when pcmode and
+                        jz      ignorekey                        ;   the cntrl key is pressed
+                        xor     al,al
+                        jmp     savekeycode                      ; otherwise save the value
+ignorekey:
+                        jmp     keyscandone
+
+nearscanok:
+                        jmp     scancodeok
+testaltnum:
+
+; nat_alt_scan:
+                        cmp     al,047h
+                        jnc     natplainscan
+                        test    byte ptr downbits,08h
+                        jnz     nataltkey
+
+natplainscan:
+                        jmp     scancodeok
+
+nataltkey:
+                        cmp     al,0fh
+                        jnz     nataltmod
+                        jmp     keyscandone
+
+nataltmod:
+                        cmp     byte ptr downbits,08h
+                        jnz     nataltdead
+                        cmp     al,02h
+                        jc      nataltletter
+                        cmp     al,0dh
+                        ja      nataltletter
+                        add     byte ptr pcscancode,076h
+                        jmp     turnonmsb
+
+nataltletter:
+                        mov     bx,offset nationalplain
+                        xlat    bx
+                        cmp     al,061h
+                        jc      nataltdead
+                        cmp     al,07ah
+                        ja      nataltdead
+                        test    byte ptr keymode,02h
+                        jz      nataltencode
+                        push    es
+                        push    ds
+                        pop     es
+                        mov     di,offset keytable
+                        mov     cx,03bh
+                        cld
+                        repne   scasb
+                        sub     di,06fbfh
+                        mov     ax,di
+                        mov     pcscancode,al
+                        pop     es
+
+nataltencode:
+                        jmp     turnonmsb
+
+nataltdead:
+                        cmp     byte ptr keylayout,01h
+                        jnz     natscanoverride
+                        mov     cl,scancode
+                        test    byte ptr downbits,03h
+                        jz      natdeadtag
+                        or      cl,080h
+
+natdeadtag:
+                        or      cl,040h
+                        mov     di,offset natdeadkeys
+                        call    prfind
+                        cmp     di,0ffffh
+                        jz      natscanoverride
+                        mov     nataccent,di
+                        jmp     keyscandone
+
+; Alt scan overrides are counted pairs. Shift sets bit 7 of the lookup key.
+natscanoverride:
+                        mov     al,scancode
+                        test    byte ptr downbits,03h
+                        jz      natoverridefind
+                        or      al,080h
+
+natoverridefind:
+                        mov     cx,00h
+                        mov     cl,natoverride
+                        jcxz    scancodeok
+                        push    es
+                        push    ds
+                        pop     es
+                        mov     di,offset natoverride+1
+                        cld
+                        repne   scasb
+                        pop     es
+                        jnz     scancodeok
+                        sub     di,offset natoverride+2
+                        mov     al,natreplacement[di]
+                        mov     byte ptr natnoechomap,0ffh
+                        jmp     natdeliver
+
+scancodeok:
+                        mov     al,scancode
+                        mov     bx,activeplain                   ;translation table for single keys
+                        test    downbits,ctrlbit                 ;was control key already down ?
+                        jz      testforkeypad                    ;no, try numlock
+                        mov     bx,activectrl                    ;yes, point to control key table
+                        jmp     translate
+
+testforkeypad:
+                        cmp     imhere,2 ! je testforkeypad2     ;always return value to wmenu
+                        cmp     al,71 ! jb testforshift          ;test for keypad
+                        cmp     al,74 ! je testforkeypad2        ;minus key
+                        cmp     al,78 ! je testforkeypad2        ;plus key
+                        test    keyvsmode,pcmodebit              ;in pc mode the keypad
+                        jnz     pcmodekeypad                     ;  is handled differently
+testforkeypad2:
+                        test    togglebits,numlockbit            ;from keypad, numlock on ?
+                        jz      testforshift
+                        test    downbits,shftleftbit or shftrightbit
+                        jnz     translate                        ;use key_table if numlock,shifted
+                        mov     bx,activeshift
+                        jmps    translate                        ;use shift table if numlock
+pcmodekeypad:
+                        test    downbits,altbit
+                        jz      notaltkeypad                     ;altkey down?
+                        push    es! push ds! pop es              ;yes
+                        mov     di,offset keypadtbl
+                        mov     cx,10
+                        repne   scasb                            ;scan table to figure out key number
+                        pop     es
+                        jne     notaltkeypad                     ;didn't find code - exit
+                        sub     di,offset keypadtbl+1
+                        mov     al,10
+                        mul     altkeypadnum
+                        add     ax,di
+                        mov     altkeypadnum,al                  ;save modulo 256 result of mult
+                        jmp     keyscandone
+
+notaltkeypad:
+                        cmp     al,76 ! je testforkeypad2        ;if keypad 5 key skip
+                        test    togglebits,numlockbit            ;from keypad, numlock on?
+                        jz      testkeypadshift
+                        test    downbits,shftleftbit or shftrightbit
+                        jz      keypadshifted
+keypadnotshifted:
+                        xor     al,al                            ;zero the key_value returned
+                        jmp     savekeycode
+testkeypadshift:
+                        test    downbits,shftleftbit or shftrightbit
+                        jz      keypadnotshifted
+testforshift:
+                        test    downbits,shftleftbit or shftrightbit
+                        jz      translate                        ;no $ return key from key_table
+keypadshifted:
+                        mov     bx,activeshift                   ;yes $ get key from shift_table
+
+;* kludge to support shift-tab in a mode compatible with PCDOS plus what
+;* was previously done for 3.2.  Shift-table contents used to be 0ch.
+                        cmp     al,15                            ;* tab key
+                        jne     translate                        ;*
+                        test    keyvsmode,pcmodebit              ;* if not zero, pcmode
+                        jnz     translate                        ;*
+                        mov     al,0Ch                           ;* used to be formfeed
+                        jmps    tr1
+
+translate:
+                        xlat    bx                               ;look up the key
+tr1:
+                        cmp     al,0ffh
+                        je      skipaltchar
+                        cbw
+                        and     ah,natfunction
+                        mov     keytype,ah
+                        jnz     testforalt
+                        call    natdeadscan
+                        cmp     di,0ffffh
+                        je      keycompose
+                        jmp     keyscandone
+keycompose:
+                        call    natcompose
+                        test    togglebits,capslockbit
+                        jz      testforalt
+                        call    natcaps
+testforalt:
+                        cmp     natfunction,0
+                        jz      natdeliver
+                        test    downbits,altbit                  ;is alt key currently down ?
+                        jz      savekeycode                      ;no
+                        cmp     al,80h                           ;check for function key
+                        jb      turnonmsb                        ;skip if below F1
+                        cmp     al,89h
+                        ja      savekeycode                      ;pass on the keypad
+                        add     al,20                            ;fudge the alt-pfk code
+                        jmps    savekeycode
+turnonmsb:
+                        or      al,080h                          ;yes $ turn on msb for alt key
+                        test    keyvsmode,pcmodebit
+                        jz      natdeliver
+
+                        mov     ah,scancode
+                        xor     al,al
+                        cmp     ah,2  ! jb skipaltchar
+                        cmp     ah,14 ! jb natdeliver            ;check for alt and 1234567890-= keys
+                        cmp     ah,16 ! jb skipaltchar
+                        cmp     ah,26 ! jb natdeliver            ;check for alt and qwertyuiop keys
+                        cmp     ah,30 ! jb skipaltchar
+                        cmp     ah,39 ! jb natdeliver            ;check for alt and asdfghjkl keys
+                        cmp     ah,44 ! jb skipaltchar
+                        cmp     ah,51 ! jb natdeliver            ;check for alt and zxcvbnm keys
+skipaltchar:
+                        jmp     keyscandone
+
+;	console switch keys reenter the mainstream here
+
+savekeycode:
+                        cmp     natfunction,0
+                        jne     maskkeycode
+natdeliver:
+                        call    natinput
+                        jc      keyscandone
+                        jmp     savewithmsb
+maskkeycode:
+                        and     al,07fh                          ;mask off sign bit from table
+savewithmsb:
+                        mov     keyvalue,al                      ;save the character
+                        mov     dx,keyflag                       ;get the flag number
+                        cmp     dx,wwflag                        ;if keys to window manager
+                        jnz     setkeyflag                       ;  then inform status flag
+                        mov     wwstatflag,true
+
+setkeyflag:
+                        mov     bx,keyvsbase                     ;point to current vc
+                        mov     ah,scancode
+                        mov     al,downbits
+;
+                        cmp     ah,PCINSERTKEY                   ; update toggles
+                        jne     notpcinsertkey
+                        test    togglebits,numlockbit            ;skip if we are numlocked
+                        jnz     notpcinsertkey
+                        xor     vspcshifts,PCINSERTFLAG
+;	    jmps not_pc_scroll_key		;screws up too many short jmps
+notpcinsertkey:
+                        cmp     ah,PCSCROLLKEY
+                        jne     notpcscrollkey
+                        test    al,ctrlbit                       ;skip if CTRL-BREAK?
+                        jnz     notpcscrollkey
+                        xor     vspcshifts,PCSCROLLFLAG
+notpcscrollkey:
+
+                        call    flagset                          ; alert the system!
+
+keyscandone:
+                        xor     al,al
+                        xchg    al,natdeferred
+                        test    al,al
+                        jz      keyupdateshifts
+                        mov     keytype,0
+                        mov     pcscancode,0
+                        jmp     natdeliver
+keyupdateshifts:
+;save PC style shift status
+                        cmp     scancode,78 ! jb pcshiftupdate   ;  ignore update if local fn
+                        test    downbits,ctrlbit ! jnz nopcshifts
+pcshiftupdate:
+                        mov     ah,30h ! and ah,togglebits       ;build TOGGLE bits nibble
+                        shl     ah,1
+;
+                        mov     al,downbits ! and al,0fh         ;mask for ctrl/shift/alt
+                        or      al,ah
+;
+                        mov     bx,keyvsbase                     ;point to current PC shft byte
+                        mov     ah,90h ! and ah,vspcshifts       ;get insert and scroll bits
+                        or      al,ah ! mov vspcshifts,al        ;and update shift byte
+                        push    ds
+                        mov     bx,40h! mov ds,bx
+                        mov     byte ptr .17h,al                 ;store shift state in low mem
+                        pop     ds
+
+nopcshifts:
+                        mov     al,picocwnseoi
+                        out     picocwport,al                    ;ack the interrupt
+
+                        pop     es ! pop ds ! pop di ! pop si
+                        pop     bp ! pop dx ! pop cx ! pop bx
+
+                        mov     ax,cs:keyboardax                 ;restore the stack
+                        mov     ss,cs:keyboardss
+                        mov     sp,cs:keyboardsp
+                        jmpf    cs: dword ptr dispatcher         ;let dispatcher do iret
+
+; Reverse the national mapping before delivery. Carry discards unmapped high bytes.
+natinput:
+                        cmp     byte ptr keylayout,03h
+                        jc      natinputdone
+                        cmp     byte ptr natfunction,00h
+                        jnz     natinputdone
+                        mov     bx,offset prukto
+
+natinputloop:
+                        cmp     byte ptr [bx],00h
+                        jz      natinputmiss
+                        cmp     al,[bx]
+                        jz      natinputmatch
+                        inc     bx
+                        jmps    natinputloop
+
+natinputmatch:
+                        sub     bx,offset prukto
+                        mov     al,prukfrom[bx]
+
+natinputdone:
+                        test    al,al
+                        ret
+
+natinputmiss:
+                        test    al,al
+                        jns     natinputdone
+                        stc
+                        ret
+
+; Toggle ASCII directly; national case pairs occupy adjacent slot-6 bytes.
+natcaps:
+                        cmp     al,07ah
+                        ja      natcapspair
+                        cmp     al,061h
+                        jnc     nattoggleascii
+                        cmp     al,05ah
+                        ja      natcapspair
+                        cmp     al,041h
+                        jc      natcapspair
+
+nattoggleascii:
+                        xor     al,020h
+                        ret
+
+natcapspair:
+                        mov     cl,al
+                        mov     di,offset prnationalchars
+                        call    prfind
+                        cmp     di,0ffffh
+                        jz      natcapsdone
+                        xor     di,01h
+                        mov     al,prnationalchars[di]
+
+natcapsdone:
+                        ret
+
+; Record a pending layout-1 accent. DI = FFFFh when the key is ordinary.
+natdeadscan:
+                        mov     di,0ffffh
+                        test    byte ptr downbits,0ch
+                        jnz     natdeaddone
+                        cmp     byte ptr keylayout,01h
+                        jnz     natdeaddone
+                        mov     cl,scancode
+                        test    byte ptr downbits,03h
+                        jz      natdeadfind
+                        or      cl,080h
+
+natdeadfind:
+                        mov     di,offset natdeadkeys
+                        call    prfind
+                        cmp     di,0ffffh
+                        jz      natdeaddone
+                        mov     nataccent,di
+
+natdeaddone:
+                        ret
+
+; Compose with the pending accent, or defer the original key if composition fails.
+natcompose:
+                        mov     di,nataccent
+                        cmp     di,0ffffh
+                        jz      natcomposedone
+                        mov     cl,al
+                        shl     di,1
+                        mov     di,natbases[di]
+                        call    prfind
+                        cmp     di,0ffffh
+                        jz      nataccentmiss
+                        mov     bx,nataccent
+                        shl     bx,1
+                        mov     bx,natcomposites[bx]
+                        mov     al,[bx+di]
+                        jmps    natcomposedone
+
+nataccentmiss:
+                        cmp     al,020h
+                        jz      nataccentspace
+                        inc     byte ptr beepcounter
+
+nataccentspace:
+                        mov     di,nataccent
+                        test    di,di
+                        jz      natcomposedone
+                        cmp     al,020h
+                        jz      nataccentemit
+                        mov     natdeferred,al
+
+nataccentemit:
+                        mov     al,praccents[di]
+
+natcomposedone:
+                        mov     word ptr nataccent,0ffffh
+                        ret
+
+; Translate printable output for UK seven-bit. An overridden key suppresses one mapping.
+natscreen:
+                        push    bx
+                        cmp     byte ptr keylayout,03h
+                        jnz     natscreenpilcrow
+                        cmp     byte ptr natnoechomap,00h
+                        mov     byte ptr natnoechomap,00h
+                        jnz     natscreenpilcrow
+
+; nat_screen_find:
+                        mov     bx,offset prukfrom
+
+natscreenloop:
+                        cmp     byte ptr [bx],00h
+                        jz      natscreenpilcrow
+                        cmp     al,[bx]
+                        jz      natscreenmatch
+                        inc     bx
+                        jmps    natscreenloop
+
+natscreenmatch:
+                        sub     bx,offset prukfrom
+                        mov     al,prukto[bx]
+
+natscreenpilcrow:
+                        cmp     al,0ech
+                        jnz     natscreendone
+                        mov     al,015h
+
+natscreendone:
+                        pop     bx
+                        ret
+
+actionkey:
+;----------
+
+;	Scan code in AL indicates an action key.  AH has a bit on
+;	in the position corresponding to the action key type.
+;	Live action keys are those that must remain pressed down
+;	to have	an effect, i.e., CTRL, SHIFT, ALT.
+;	Toggle action keys are those that switch back and forth in
+;	function each time they are depressed, i.e., NUMLOCK, CAPSLOCK.
+
+;	entry:	AL = scan code, one of CTLR, SHIFT_LEFT, SHIFT_RIGHT,
+;			ALT, NUMLOCK, CAPSLOCK
+;		AH = bit set in position corresponding to value in AL
+;	exit:	None
+
+                        cmp     al,alt                           ;if live action: ALT,SHIFT,CTRL
+                        ja      toggleaction                     ;no $ its a toggle type key
+                        jne     notaltkey
+                        test    scancode,80H                     ;pressed or released ?
+                        jz      altkeydown                       ;no high bit $ turn it on
+                        not     ah                               ;high bit on $ turn it off
+                        and     downbits,ah                      ;clear the bit for this key
+                        mov     keytype,0
+                        mov     al,altkeypadnum
+                        mov     altkeypadnum,0
+                        push    es
+                        mov     bx,40H
+                        mov     es,bx                            ;store value in low memory
+                        mov     es:byte ptr .19H,al
+                        pop     es
+                        cmp     al,0                             ;anybody enter keypad with alt pressed
+                        jz      actionkeydone                    ;no?
+                        mov     pcscancode,0                     ;yes return value in al
+                        jmp     savewithmsb
+altkeydown:
+notaltkey:
+                        test    scancode,80H                     ;pressed or released ?
+                        jz      actionmake                       ;no high bit $ turn it on
+                        not     ah                               ;high bit on $ turn it off
+                        and     downbits,ah                      ;clear the bit for this key
+                        jmps    actionkeydone
+actionmake:
+                        or      downbits,ah                      ;set bit for this key
+                        jmps    actionkeydone
+
+toggleaction:
+                        test    scancode,80H                     ;pressed or released ?
+                        jnz     actionkeydone                    ;ignore release of toggle
+                        xor     togglebits,ah                    ;it is toggle: reverse state
+;jmps action_key_done
+
+actionkeydone:
+                        jmp     keyscandone                      ;acknowledge interrupt but
+;do not set the keyboard input flag
+
+;********************************************************
+;*							*
+;*		KEYBOARD INTERRUPT DATA AREA		*
+;*							*
+;********************************************************
+xdata                   dseg    para public 'CODE'
+                        org     ((offset $-offset datastart)+1) and 0fffeh
+
+                        dw      0CCCCH,0CCCCH,0CCCCH,0CCCCH
+                        dw      0CCCCH,0CCCCH,0CCCCH,0CCCCH
+                        dw      0CCCCH,0CCCCH,0CCCCH,0CCCCH
+                        dw      0CCCCH,0CCCCH,0CCCCH,0CCCCH
+
+                        dw      0CCCCH,0CCCCH,0CCCCH,0CCCCH
+                        dw      0CCCCH,0CCCCH,0CCCCH,0CCCCH
+                        dw      0CCCCH,0CCCCH,0CCCCH,0CCCCH
+                        dw      0CCCCH,0CCCCH,0CCCCH,0CCCCH
+
+                        dw      0CCCCH,0CCCCH,0CCCCH,0CCCCH
+                        dw      0CCCCH,0CCCCH,0CCCCH,0CCCCH
+                        dw      0CCCCH,0CCCCH,0CCCCH,0CCCCH
+                        dw      0CCCCH,0CCCCH,0CCCCH,0CCCCH
+keyboardistack          rs      0
+
+keyboardax              dw      0                                ;register save are for
+keyboardss              dw      0                                ;keyboard interrupt
+keyboardsp              dw      0                                ;handler
+
+key                     rw      0                                ;label for word load
+keyvalue                db      0                                ;from one of 3 tables below
+keytype                 db      0                                ;if 0 then value is ASCII data
+;if 0FFH then value is switch
+;screen value or function key
+keyflag                 dw      ciflag                           ;console in or window manager
+
+keyvsbase               dw      0                                ;base addr of top console struct
+keyvsmode               db      0                                ;local copy of top screen mode
+
+wwstatflag              db      0                                ;to help with window status
+
+scancode                db      0                                ;value returned from keyboard
+pcscancode              db      0                                ;adjusted scan code
+
+downbits                db      0                                ;bit vector of
+;action keys currently pressed
+togglebits              db      0                                ;bit vector of toggle action keys
+
+altkeypadnum            db      0                                ;cumulative value of alt keypad inputs
+
+;	this is a table of keypad scan codes ordered in ascending key value
+
+keypadtbl               db      82,79,80,81,75,76,77,71,72,73
+
+;	this table has been reordered to match the ROS bit pattern
+
+actionkeytable:                                                  ;search table for action keys
+                        db      shftright
+                        db      shftleft
+                        db      ctrl
+                        db      alt
+                        db      numlock
+                        db      capslock
+
+;	This is how we now define the virtual console switch keys
+;	this table may be accessed and modified using the general
+;	XIOS pointer function (fcn #14).  Best of luck to you.
+
+switchbits              db      ctrlbit                          ; which down bits define a vc switch
+; default = ctrl
+switchscan              db      79,80                            ; which scan codes define vc switch
+                        db      81,75                            ; default = keypad 1-4, hmmm...
+
+switchvalue             equ     offset $ - offset switchscan - 1
+
+                        db      0F0h,0F1h                        ; values for vc switch keys
+                        db      0F2h,0F3h
+
+;	This is a little table of special scan codes that must
+;	be translated for PC Mode when the Ctrl key is pressed.
+
+xctrlkeys               db      55,71,72,73,75                   ; scan codes to xlat
+                        db      76,77,79,80,81
+
+xctrlcount              equ     offset $ - offset xctrlkeys
+xctrlxlat               equ     xctrlcount - 1
+
+                        db      114,119,0FFH,132,115             ; values to return
+                        db      0FFH,116,117,0FFH,118
+
+;********************************************************
+;*							*
+;*		KEYBOARD TRANSLATION TABLES		*
+;*							*
+;********************************************************
+
+;	Three keyboard translation tables follow.  The IBM PC returns
+;	a "scan code" from the keyboard which is used as an index into
+;	the following tables.
+;	KEY_TABLE contains ASCII for keys that have no other keys held
+;	down simultaneously.  The SHIFT_TABLE is for keys depressed
+;	when the shift, capslocks, or numslock keys are also down
+;	The CTRL_TABLE is for keys depressed when the CTRL is down.
+
+;	0FFH in the translation table designates an illegal key code.
+;	The most significant bit is set for keys that are programmable
+;	or are fixed function keys, and also for the switch screen keys.
+
+keytable:
+;	translation		keyboard scan code
+;	-----------		------------------
+
+                        db      0ffH                             ;0 - doesn't exist
+                        db      esc                              ;1
+                        db      '1234567890-='                   ;2-13 (1st row)
+                        db      bs,ht                            ;14-15 (backspace, horizontal tab)
+                        db      'qwertyuiop[]'                   ;16-27 (2nd row)
+                        db      cr, 0ffh                         ;28-29 (carriage return)
+                        db      'asdfghjkl;''`'                  ;30-41 (3rd row)
+                        db      0ffh                             ;42 (left shift)
+                        db      '\zxcvbnm,./'                    ;43-53 (4th row)
+                        db      0ffh                             ;54 (right shift)
+                        db      '*'                              ;55
+                        db      0ffh                             ;56 (alt)
+                        db      ' '                              ;57 (space bar)
+                        db      0ffh                             ;58 (caps lock)
+
+;-function keys-
+;-programmable-
+                        db      80h,81h,82h,83h                  ;59-62 (fucntion keys f1,f2,f3,f4)
+                        db      84h,85h,86h,87h                  ;63-66 (function keys f5,f6,f7,f8)
+                        db      88h,89h                          ;67-68 (function keys f9,f10)
+
+                        db      0ffh                             ;69 (num lock)
+                        db      dc3                              ;70 (scroll lock)
+
+;- key pad -
+;-programmable-
+                        db      8ah                              ;71 (home)
+                        db      8bh                              ;72 (up arrow)
+                        db      8ch                              ;73 (Pg Up)
+                        db      '-'                              ;74
+                        db      8dh                              ;75 (left arrow)
+                        db      0ffh                             ;76
+                        db      8eh                              ;77 (right arror)
+                        db      '+'                              ;78
+                        db      8fh                              ;79 (end)
+                        db      90h                              ;80 (down arrow)
+                        db      91h                              ;81 (Pg Dn)
+                        db      92h                              ;82 (Ins)
+                        db      93h                              ;83 (Del)
+
+shifttable:
+;	translation		keyboard scan code
+;	-----------		------------------
+
+                        db      0ffH                             ;0 - doesn't exist
+                        db      esc                              ;1
+                        db      '!@#$%^&*()_+'                   ;2-13 (1st row)
+                        db      bs,NUL                           ;14-15 (backspace, back-tab)
+                        db      'QWERTYUIOP{}'                   ;16-27 (2nd row)
+                        db      cr                               ;28 (carriage return)
+                        db      0ffh                             ;29 (ctrl)
+                        db      'ASDFGHJKL:"~'                   ;30-41 (3rd row)
+                        db      0ffh                             ;42 (left shift)
+                        db      '|ZXCVBNM<>?'                    ;43-53 (4th row)
+                        db      0ffh                             ;54 (right shift)
+                        db      prsckey + 80h                    ;55 (Print Screen key)
+                        db      0ffh                             ;56 (Alt)
+                        db      ' '                              ;57 (space bar)
+                        db      0ffh                             ;58 (Caps Lock)
+
+;-function keys-
+;-return fixed strings-
+                        db      9Eh,9Fh,0A0h,0A1h                ;F1 - F4
+                        db      0A2h,0A3h,0A4h,0A5h              ;F5 - F8
+                        db      0A6h,0A7h                        ;F9 - F10
+                        db      0ffh                             ;69 (Num Lock)
+                        db      dc1                              ;70 (Scroll Lock - ^Q)
+
+;-key pad-
+                        db      '789-456+1230.'                  ;71-83 (ascii values on keys)
+
+controltable:
+;	translation		keyboard scan code
+;	-----------		------------------
+
+                        db      0ffh                             ;0 (no such key code)
+                        db      ESC                              ;1
+                        db      0ffh                             ;2
+                        db      NUL                              ;3 (ctrl @)
+                        db      0ffh,0ffh,0ffh                   ;4-6
+                        db      RDS                              ;7 (ctrl ^)
+                        db      0ffh,0ffh,0ffh,0ffh              ;8-11
+                        db      US                               ;12 (ctrl _)
+                        db      0ffh                             ;13
+                        db      DEL                              ;14 (left arrow)
+                        db      0ffh                             ;15
+                        db      DC1,ETB,ENQ,DC2                  ;16-19 (ctrl q,w,e,r)
+                        db      DC4,EM,NAK,HT                    ;20-23 (ctrl t,y,u,i)
+                        db      SHI,DLE,ESC,GS                   ;24-27 (ctrl o,p,[,])
+                        db      lf                               ;28 (ctrl cr=lf for word perf)
+                        db      0ffh                             ;29
+                        db      SOH,DC3,EOT,ACK                  ;30-33 (ctrl a,s,d,f)
+                        db      BEL,BS,LF,VT                     ;34-37 (ctrl g,h,j,k)
+                        db      FF                               ;38 (ctrl l)
+                        db      0ffh,0ffh,0ffh,0ffh              ;39-42
+                        db      FS,SUBB,CAN,ETX                  ;43-47 (ctrl \,z,x,c)
+                        db      SYN,STX,SO,CR                    ;47-50 (ctrl v,b,n,m)
+                        db      0ffh,0ffh,0ffh,0ffh              ;51-54
+                        db      DLE                              ;55 (^PrtSc = ^P)
+                        db      0ffh,' ',0ffh                    ;56-58
+
+;-function keys
+                        db      0A8H,0A9H,0AAH,0ABH              ;F1 - F4
+                        db      0ACH,0ADH,0AEH,0AFH              ;F5 - F8
+                        db      0B0H,0B1H                        ;F9 - F10
+                        db      0ffh                             ;69
+                        db      ETX                              ;70 break (^scroll lock = ctrl c)
+
+;	the keypad is no longer reserved for vc switches
+;	that function is now performed by the switch_scan table above
+
+                        db      '789-'                           ;7,8,9,-
+                        db      '456',wakekey + 80h              ;4,5,6,+
+                        db      '123'                            ;1,2,3
+                        db      '0',fullkey + 80h                ;0,.
+
+; National keyboard configuration. Index zero preserves the OEM US default.
+; DATA-relative slot directory consumed by the release N.CMD.
+nationaldirectory:
+                        dw      offset natlanguage,offset keymode,offset keylayout
+                        dw      offset nationalplain,offset nationalshift,offset nationalctrl
+                        dw      offset prnationalchars,offset prukfrom,offset prukto,offset natdeadkeys
+                        dw      offset prdevice0,offset prwheelaux,offset prwheelchars,offset prwheelsymbols
+                        dw      offset natdescription,offset prwheelaccents,offset proneparam,offset prtwoparams
+                        dw      offset natalternate,offset natoverride,offset natreplacement,0,0,0
+natlanguage             db      0
+natalternate            db      0
+natdescription          db      'English, U.K. / U.S.A (25/9/83)',13,10,'$',0
+                        rb      6
+natfunction             db      0
+natnoechomap            db      0
+natdeferred             db      0
+nataccent               dw      0ffffh
+natdeadkeys             rb      16
+natoverride             db      2,4,84h
+                        rb      13
+natreplacement          db      23h,23h
+                        rb      14
+accentbase0             db      041h,061h,04fh,06fh,055h,075h,065h,069h,079h,000h
+accentresult0           db      08eh,084h,099h,094h,09ah,081h,089h,08bh,098h
+accentbase1             db      061h,06fh,075h,065h,069h,000h
+accentresult1           db      083h,093h,096h,088h,08ch
+accentbase2             db      061h,06fh,075h,065h,069h,045h,000h
+accentresult2           db      0a0h,0a2h,0a3h,082h,0a1h,090h
+accentbase3             db      061h,06fh,075h,065h,069h,000h
+accentresult3           db      085h,095h,097h,08ah,08dh
+natbases                dw      offset accentbase0,offset accentbase1,offset accentbase2,offset accentbase3
+natcomposites           dw      offset accentresult0,offset accentresult1,offset accentresult2,offset accentresult3
+keylayout               db      0
+keymode                 db      0
+layoutmodes             db      0,6,1,7,3
+activeplain             dw      offset keytable
+activeshift             dw      offset shifttable
+activectrl              dw      offset controltable
+
+; Release UK national bank. N replaces scan codes 0 through 53 per map.
+nationalplain:
+                        db      0ffh,01bh,031h,032h,033h,034h,035h,036h,037h,038h,039h,030h ; scans 0-11
+                        db      02dh,03dh,008h,009h,071h,077h,065h,072h,074h,079h,075h,069h ; scans 12-23
+                        db      06fh,070h,05bh,05dh,00dh,0ffh,061h,073h,064h,066h,067h,068h ; scans 24-35
+                        db      06ah,06bh,06ch,03bh,027h,023h,0ffh,05ch,07ah,078h,063h,076h ; scans 36-47
+                        db      062h,06eh,06dh,02ch,02eh,02fh,0ffh,02ah,0ffh,020h,0ffh,080h ; scans 48-59
+                        db      081h,082h,083h,084h,085h,086h,087h,088h,089h,0ffh,013h,08ah ; scans 60-71
+                        db      08bh,08ch,02dh,08dh,0ffh,08eh,02bh,08fh,090h,091h,092h,093h ; scans 72-83
+nationalshift:
+                        db      0ffh,01bh,021h,022h,09ch,024h,025h,05eh,026h,02ah,028h,029h ; scans 0-11
+                        db      05fh,02bh,008h,000h,051h,057h,045h,052h,054h,059h,055h,049h ; scans 12-23
+                        db      04fh,050h,07bh,07dh,00dh,0ffh,041h,053h,044h,046h,047h,048h ; scans 24-35
+                        db      04ah,04bh,04ch,03ah,040h,07eh,0ffh,07ch,05ah,058h,043h,056h ; scans 36-47
+                        db      042h,04eh,04dh,03ch,03eh,03fh,0ffh,0fch,0ffh,020h,0ffh,09eh ; scans 48-59
+                        db      09fh,0a0h,0a1h,0a2h,0a3h,0a4h,0a5h,0a6h,0a7h,0ffh,003h,037h ; scans 60-71
+                        db      038h,039h,02dh,034h,035h,036h,02bh,031h,032h,033h,030h,02eh ; scans 72-83
+nationalctrl:
+                        db      0ffh,01bh,0ffh,000h,0ffh,0ffh,0ffh,01eh,0ffh,0ffh,0ffh,0ffh ; scans 0-11
+                        db      01fh,0ffh,07fh,0ffh,011h,017h,005h,012h,014h,019h,015h,009h ; scans 12-23
+                        db      00fh,010h,01bh,01dh,00ah,0ffh,001h,013h,004h,006h,007h,008h ; scans 24-35
+                        db      00ah,00bh,00ch,0ffh,000h,01fh,0ffh,05ch,01ah,018h,003h,016h ; scans 36-47
+                        db      002h,00eh,00dh,0ffh,0ffh,0ffh,0ffh,010h,0ffh,020h,0ffh,0a8h ; scans 48-59
+                        db      0a9h,0aah,0abh,0ach,0adh,0aeh,0afh,0b0h,0b1h,0ffh,003h,037h ; scans 60-71
+                        db      038h,039h,02dh,034h,035h,036h,0fdh,031h,032h,033h,030h,0feh ; scans 72-83

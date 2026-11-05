@@ -1,0 +1,573 @@
+; Source: xchar.lib (devices)
+xcode                   cseg    byte public 'CODE'
+;************************************************
+;*						*
+;*		LIST DEVICES			*
+;*						*
+;************************************************
+
+;	Character to list out device
+;	Entry:	CL = character
+;		DL = device
+;	Exit:	character sent
+
+; CDOS 4.11 national printer translation. CL = byte, DL = device (0..4).
+; State is private to each printer. Only pr_emit calls the physical driver.
+; Record: device, model, flags (word), handler (word), count (word),
+; last ESC R set, translated character and auxiliary byte.
+
+iolist:
+                        cmp     dl,5
+                        jnc     prreturn
+                        sub     bx,bx
+                        mov     bl,dl
+                        shl     bx,1
+                        mov     bx,prdevices[bx]
+                        jmp     word ptr 4[bx]
+
+prreturn:
+                        ret
+
+prbypass:
+                        mov     word ptr 4[bx],offset premit
+                        jmp     premit
+
+prdecode:
+                        cmp     byte ptr 1[bx],5
+                        jz      prbypass
+                        cmp     cl,01bh
+                        jz      prescape
+                        cmp     byte ptr keylayout,3
+                        jnz     prmodel
+                        call    pruk
+
+prmodel:
+                        cmp     byte ptr 1[bx],0
+                        jnz     prnotibm
+                        cmp     cl,0ech
+                        jnz     pribmemit
+                        mov     cl,0fh
+
+pribmemit:
+                        jmp     premit
+
+prnotibm:
+                        jmp     prtranslate
+
+prescape:
+                        call    prsuspend
+                        test    word ptr 2[bx],4
+                        jz      prtestone
+                        mov     di,offset prgraphcmds
+                        call    prfind
+                        cmp     di,0ffffh
+                        jz      prtestone
+                        mov     word ptr 4[bx],offset prcountlow
+                        jmps    premitescape
+
+prtestone:
+                        mov     di,offset proneparam
+                        call    prfind
+                        cmp     di,0ffffh
+                        jz      prtesttwo
+                        mov     word ptr 4[bx],offset prparameter
+                        mov     word ptr 6[bx],1
+                        jmps    premitescape
+
+prtesttwo:
+                        mov     di,offset prtwoparams
+                        call    prfind
+                        cmp     di,0ffffh
+                        jz      prendescape
+                        mov     word ptr 4[bx],offset prparameter
+                        mov     word ptr 6[bx],2
+                        jmps    premitescape
+
+prendescape:
+                        mov     word ptr 4[bx],offset prdecode
+
+premitescape:
+                        jmp     premit
+
+prcountlow:
+                        mov     ch,0
+                        mov     6[bx],cx
+                        call    prsuspend
+                        mov     7[bx],cl
+                        call    prsuspend
+
+prparameter:
+                        dec     word ptr 6[bx]
+                        jnz     premitparam
+                        mov     word ptr 4[bx],offset prdecode
+
+premitparam:
+                        jmp     premit
+
+prcharset:
+                        test    word ptr 2[bx],2
+                        jz      prsetdone
+                        cmp     8[bx],cl
+                        jz      prsetdone
+                        push    cx
+                        mov     cl,01bh
+                        call    premit
+                        mov     cl,052h
+                        call    premit
+                        pop     cx
+                        mov     8[bx],cl
+                        jmp     premit
+
+prsetdone:
+                        ret
+
+prtranslate:
+                        cmp     cl,080h
+                        jnc     prextended
+                        mov     9[bx],cl
+                        mov     byte ptr 10[bx],0
+                        jmp     prrender
+
+prextended:
+                        cmp     cl,0b0h
+                        jnc     prgraphic
+                        cmp     byte ptr 1[bx],4
+                        jnz     prdotmatrix
+                        sub     cl,080h
+                        mov     al,cl
+                        push    bx
+                        mov     bx,offset prwheelchars
+                        xlat    bx
+                        pop     bx
+                        mov     9[bx],al
+                        mov     al,cl
+                        push    bx
+                        mov     bx,offset prwheelaux
+                        xlat    bx
+                        pop     bx
+                        mov     10[bx],al
+                        jmps    prcheckaux
+
+prdotmatrix:
+                        sub     cl,080h
+                        mov     al,cl
+                        push    bx
+                        mov     bx,offset prdotchars
+                        xlat    bx
+                        pop     bx
+                        mov     9[bx],al
+                        mov     al,cl
+                        push    bx
+                        mov     bx,offset prdotaux
+                        xlat    bx
+                        pop     bx
+                        mov     10[bx],al
+                        jmps    prcheckaux
+
+prgraphic:
+                        mov     di,offset prsymbols
+                        call    prfind
+                        cmp     di,0ffffh
+                        jz      prunmapped
+                        cmp     byte ptr 1[bx],4
+                        jnz     prdotsymbol
+                        mov     al,prwheelsymbols[di]
+                        mov     9[bx],al
+                        mov     byte ptr 10[bx],0
+                        jmps    prrender
+
+prdotsymbol:
+                        mov     al,prdotsymbols[di]
+                        mov     9[bx],al
+                        mov     al,prsymbolaux[di]
+                        mov     10[bx],al
+                        jmps    prrender
+
+prunmapped:
+                        cmp     cl,0ffh
+                        jnz     prunknown
+                        mov     byte ptr 9[bx],020h
+                        mov     byte ptr 10[bx],0
+
+prcheckaux:
+                        cmp     byte ptr 10[bx],0ffh
+                        jnz     prrender
+
+prunknown:
+                        mov     cl,7
+                        call    premit
+                        mov     cl,03fh
+                        jmp     premit
+
+prrender:
+                        cmp     byte ptr 10[bx],9
+                        jnc     proverstrike
+                        mov     cl,10[bx]
+                        call    prcharset
+                        mov     cl,9[bx]
+                        jmp     premit
+
+proverstrike:
+                        sub     byte ptr 10[bx],9
+                        mov     cl,0
+                        call    prcharset
+                        mov     cl,9[bx]
+                        call    premit
+                        test    word ptr 2[bx],1
+                        jz      prrenderdone
+                        mov     cl,8
+                        call    premit
+                        test    word ptr 2[bx],2
+                        jnz     praccentset
+                        mov     al,10[bx]
+                        push    bx
+                        mov     bx,offset prwheelaccents
+                        xlat    bx
+                        pop     bx
+                        mov     cl,al
+                        call    premit
+                        jmps    prrenderdone
+
+praccentset:
+                        mov     al,10[bx]
+                        push    bx
+                        mov     bx,offset praccentsets
+                        xlat    bx
+                        pop     bx
+                        mov     cl,al
+                        call    prcharset
+                        mov     al,10[bx]
+                        push    bx
+                        mov     bx,offset praccents
+                        xlat    bx
+                        pop     bx
+                        mov     cl,al
+                        jmps    premit
+
+prrenderdone:
+                        ret
+
+prsuspend:
+; Save the return IP as the handler for the next input byte. Fall through
+; to send the current byte and return directly to the list caller.
+                        pop     word ptr 4[bx]
+
+premit:
+                        push    bx
+                        mov     dl,[bx]
+                        call    physicallist
+                        pop     bx
+                        ret
+
+pruk:
+                        push    bx
+                        cmp     byte ptr keylayout,3
+                        jnz     prukdone
+                        mov     bx,offset prukfrom
+
+prukscan:
+                        cmp     byte ptr [bx],0
+                        jz      prukdone
+                        cmp     cl,[bx]
+                        jz      prukmatch
+                        inc     bx
+                        jmps    prukscan
+
+prukmatch:
+                        sub     bx,offset prukfrom
+                        mov     cl,prukto[bx]
+
+prukdone:
+                        pop     bx
+                        ret
+
+prfind:
+                        push    ax
+                        mov     ax,di
+
+prscan:
+                        cmp     byte ptr [di],0
+                        jz      prabsent
+                        cmp     cl,[di]
+                        jz      prfound
+                        inc     di
+                        jmps    prscan
+
+prabsent:
+                        mov     di,0ffffh
+                        jmps    prfinddone
+
+prfound:
+                        sub     di,ax
+
+prfinddone:
+                        pop     ax
+                        ret
+
+; Five devices initially use model 5 (transparent output).
+prdevices               dw      offset prdevice0,offset prdevice1,offset prdevice2,offset prdevice3,offset prdevice4
+prdevice0               db      0,5
+                        dw      0,offset prdecode,0
+                        db      0ffh,0,0
+prdevice1               db      1,5
+                        dw      0,offset prdecode,0
+                        db      0ffh,0,0
+prdevice2               db      2,5
+                        dw      0,offset prdecode,0
+                        db      0ffh,0,0
+prdevice3               db      3,5
+                        dw      0,offset prdecode,0
+                        db      0ffh,0,0
+prdevice4               db      4,5
+                        dw      0,offset prdecode,0
+                        db      0ffh,0,0
+
+prgraphcmds             db      04bh,04ch,000h,000h,000h,000h,000h
+
+praccentsets            db      001h,000h,000h,000h
+
+praccents               db      07eh,05eh,027h,060h
+
+prdotaux                db      001h,002h,001h,00ah,002h,001h,004h,001h,00ah,009h,001h,009h
+                        db      00ah,006h,002h,004h,00bh,004h,004h,00ah,002h,006h,00ah,001h
+                        db      009h,002h,002h,000h,003h,008h,007h,000h,00bh,00bh,00bh,00bh
+                        db      007h,007h,000h,000h,007h,0ffh,0ffh,0ffh,0ffh,007h,000h,000h
+
+prdotchars              db      05ch,07dh,07bh,061h,07bh,040h,07dh,05ch,065h,065h,07dh,069h
+                        db      069h,07eh,05bh,05dh,045h,07bh,05bh,06fh,07ch,07ch,075h,07ch
+                        db      079h,05ch,05dh,063h,023h,05ch,023h,066h,061h,069h,06fh,075h
+                        db      07ch,05ch,061h,06fh,05dh,007h,007h,007h,007h,05bh,027h,060h
+
+prsymbols               db      0ech,0e1h,0f8h,0e6h,0edh,000h
+
+prwheelsymbols          db      007h,007h,007h,007h,007h,000h
+
+prdotsymbols            db      040h,07eh,05bh,007h,07ch,000h
+
+prsymbolaux             db      002h,002h,001h,0ffh,004h,000h
+
+prwheelaux              db      000h,009h,00bh,00ah,009h,00ch,000h,000h,00ah,009h,00ch,009h
+                        db      00ah,00ch,009h,000h,00bh,000h,000h,00ah,009h,00bh,00ah,00ch
+                        db      009h,009h,009h,000h,000h,000h,000h,000h,00bh,00bh,00bh,00bh
+                        db      000h,000h,000h,000h,000h,0ffh,0ffh,0ffh,0ffh,000h,000h,000h
+
+prwheelchars            db      043h,075h,065h,061h,061h,065h,061h,063h,065h,065h,065h,069h
+                        db      069h,069h,041h,041h,045h,061h,041h,06fh,06fh,06fh,075h,075h
+                        db      079h,04fh,055h,063h,023h,059h,050h,066h,061h,069h,06fh,075h
+                        db      04eh,06eh,061h,06fh,03fh,007h,007h,007h,007h,021h,022h,022h
+
+prwheelaccents          db      020h,020h,027h,020h,000h,000h,000h,000h
+
+proneparam              db      01eh,01fh,000h,000h,000h,000h,000h,000h,000h
+
+prtwoparams             db      000h,000h,000h,000h,000h,000h,000h,000h,000h
+
+; Slot 6 follows the escape lists. FX overstrike also indexes this data.
+prnationalchars         db      000h,08eh,094h,099h,081h,09ah,000h,000h,000h,000h,000h,000h,000h,000h,000h,000h
+
+prukfrom                db      023h,000h,05bh,05ch,05dh,07bh,07ch,07dh,000h,000h,000h,000h
+                        db      000h,000h,000h,000h
+
+prukto                  db      09ch,000h,08eh,099h,09ah,084h,094h,081h,000h,000h,000h,000h
+                        db      000h,000h,000h,000h
+
+physicallist:
+                        mov     bl,dl                            ; get device number
+                        mov     bh,0
+                        add     bx,bx                            ; bx = word pointer
+                        jmp     ds:listout[bx]                   ; branch out
+
+;	This table is set up in Init depending on available equipment
+
+listout                 dw      nullout                          ; printer 0
+                        dw      nullout                          ; printer 1
+                        dw      nullout                          ; printer 2
+                        dw      serialout                        ; printer 3
+                        dw      serialout                        ; printer 4
+
+;	Character to parallel printer
+
+parallelout:
+                        push    cx ! push	dx                     ; save the character and device
+                        call    poll                             ; wait for device to be ready
+                        pop     dx ! pop cx                      ; device and character
+
+                        mov     ax,parstatword[bx]               ; what was the status?
+                        cmp     al,98h                           ; ready/select
+                        jz      paroutyes                        ; skip if it's a go
+                        xor     ah,al                            ; if status = ignore code
+                        and     ah,7Fh                           ;   except for busy bit
+                        jnz     paroutfault                      ;   then just quit
+                        ret
+
+;	printer fault requires a status line error message
+
+paroutfault:
+                        push    bx ! push cx ! push dx
+                        mov     si,offset parnopaper             ; out of paper message
+                        cmp     al,20h                           ; -ready/paper/error
+                        jz      parouterror
+                        mov     si,offset paroffline             ; not on-line message
+parouterror:
+                        mov     di,offset parsubmsg
+                        mov     cx,parsublen                     ; length of sub message
+                        push    es
+                        push    ds ! pop es
+                        rep     movsb                            ; save the sub message
+                        pop     es
+
+                        mov     si,offset parerrormsg
+                        mov     al,dl                            ; get printer number
+                        or      al,'0'                           ; convert to ascii
+                        mov     .8[si],al                        ; set printer number
+                        mov     di,offset parerrorresp
+                        call    slerrorout                       ; get response
+                        pop     dx ! pop cx ! pop bx
+
+                        cmp     al,'R'                           ; if retry
+                        jz      parallelout                      ;   then go again
+                        mov     al,parstatcode[bx]               ; if ignore, then
+                        mov     parignorecode[bx],al             ;   save for future ignores
+                        ret                                      ; and just return
+
+paroutyes:
+                        mov     parignorecode[bx],1              ; reset the ignore status
+                        mov     al,cl                            ; AL = character
+                        mov     dx,ds:listdata[bx]               ; get the port for this device
+
+                        out     dx,al                            ; send character
+                        inc     dx ! inc dx                      ; reset it
+                        mov     al,0dh                           ; printer strobe on
+                        out     dx,al
+                        mov     al,0ch                           ; printer strobe off
+                        out     dx,al
+                        ret
+
+;	Parallel printer status line error data
+
+parerrormsg             db      'Printer n     '
+parsubmsg               db      'Out of Paper     '              ; for instance
+                        db      'Retry, Ignore?   '
+                        db      '                 '
+                        db      '               '
+
+parnopaper              db      'Out of Paper'
+paroffline              db      'Not On-Line '
+parsublen               equ     offset $ - offset paroffline
+
+parerrorresp            db      2,'RI'
+
+;	Serial printer output routine uses auxiliary output
+;	entry:	bx = device# * 2
+;		cl = char
+
+serialout:
+                        mov     dx,ds:listdata[bx]               ; get serial port number
+                        jmp     ioauxout
+
+;	This is for nonexistent printer numbers
+
+nullout:
+                        ret
+
+;	List data table   This is the port number for parallel printers
+;	and the serial port number for serial printers.
+
+listdata                dw      03BCh                            ; BW card parallel port
+                        dw      0378H                            ; 0378h parallel port card as shipped
+                        dw      0278h                            ; 0278h parallel port card option
+                        dw      0                                ; serial port number 0
+                        dw      1                                ; serial port number 1
+
+;	Parallel port status code and status to ignore for 3 printers
+
+parstatcode             db      0
+parignorecode           db      1
+                        db      0,1,0,1
+parstatword             equ     word ptr parstatcode
+
+;	List status entry point
+;	entry:	DL =	device
+;	exit:	AX =	0 if not ready
+;			0FFFFh if ready
+;		BX =	device# * 2
+
+iolistst:
+                        mov     bl,dl                            ; get device number
+                        mov     bh,0
+                        add     bx,bx                            ; bx = word pointer
+                        jmp     ds:liststat[bx]                  ; branch out
+
+;	This table is set up in Init depending on available equipment
+
+liststat                dw      nullstat                         ; printer 0
+                        dw      nullstat                         ; printer 1
+                        dw      nullstat                         ; printer 2
+                        dw      serialstat                       ; printer 3
+                        dw      serialstat                       ; printer 4
+
+;	Get status from parallel printer
+;	Called from io_listst and from io_poll
+;	Entry:	BX =	device# * 2
+;		DL =	device#
+;	Exit:	AX =	0 if not ready
+;			0ffffh if ready
+;		BX =	device# * 2
+
+parallelstat:
+                        push    dx                               ; save device #
+                        mov     dx,ds:listdata[bx]               ; port for parallel printer
+                        inc     dx
+                        in      al,dx                            ; DX=status register, get status
+                        pop     dx                               ; restore device number
+
+                        and     al,0B8h                          ; mask ready/paper/select/error
+                        mov     ds:parstatcode[bx],al            ; save the status port value
+                        mov     ah,al
+                        xor     ah,8
+                        cmp     al,18h                           ; if -ready/select
+                        mov     al,0                             ;   then set al to zero and
+                        jz      parstatdone                      ;   continue with polling
+                        dec     al                               ; else ready => al=ff
+parstatdone:
+                        ret
+
+;	Serial status uses auxout status routine
+;	exit:	ax = 90FFh  =>  ready
+
+serialstat:
+                        mov     dx,ds:listdata[bx]               ; get serial port number
+                        call    ioauxoutstat                     ; al = 0FFh if room in buffer
+                        mov     ah,90h                           ; fakes a ROS code
+                        ret
+
+;	Null status has been changed to not true for PC Mode
+;	exit:	ax = 00h  => not ready
+
+nullstat:
+                        sub     ax,ax                            ; not ready
+                        ret
+
+; Source: xchar.lib (devices)
+xdata                   dseg    para public 'CODE'
+;********************************************************
+;*							*
+;*	LIST AND AUXILIARY  CONTROL BLOCK TABLE		*
+;*							*
+;********************************************************
+
+lcbtab:
+lcb0                    dw      0,0,0,0
+                        db      0FFh,0FFh                        ;mimic, msource
+lcb1                    dw      0,0,0,0
+                        db      0FFh,0FFh
+lcb2                    dw      0,0,0,0
+                        db      0FFh,0FFh
+
+acbtab:                                                          ; the last 2 lcb's do double duty
+lcb3                    rb      0                                ;   as the first two aux cb's.
+acb0                    dw      0,0,0,0                          ; this is because printer 3 and 4
+                        db      0FFh,0FFh                        ;   use the same hardware as aux
+lcb4                    rb      0                                ;   port 0 and 1.
+acb1                    dw      0,0,0,0                          ; so this little trick prevents them
+                        db      0FFh,0FFh                        ;   from crashing into each other.

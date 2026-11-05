@@ -1,0 +1,17 @@
+; Core XIOS module: assemble this file to one object.
+xcode                   cseg    byte public 'CODE'
+xdata                   dseg    para public 'CODE'
+xios                    group   xcode,xdata
+xdata                   dseg    para public 'CODE'
+datastart               rb      0
+                        include consoles.inc
+                        include shared.inc
+
+                        include coreif.inc
+
+                        include xsystem.lib
+                        include xservice.lib
+                        include xrtc.lib
+                        include xinit.lib
+
+                        end

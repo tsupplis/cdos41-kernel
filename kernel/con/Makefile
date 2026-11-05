@@ -28,6 +28,7 @@ LOCAL_INCLUDES=$(wildcard *.def *.lib *.fmt *.cod *.sup *.rtm *.cio *.mem *.bdo 
 	$(CMDINFO) $@
 # Remove generated outputs only; preserve sources and reference files.
 clean:
+	rm -rf .xios
 	rm -f *.obj *.h86 *.hex *.lst *.sym *.log *.con *.rsp *.cmd *.loc *.lnk *.mp? *.map
 
 bdos.con: pcbdos.obj black.obj Makefile
@@ -35,12 +36,13 @@ bdos.con: pcbdos.obj black.obj Makefile
 	@! grep -iE 'undefined|syntax error|unable' bdos-link.log
 	$(CMDINFO) $@
 
-xios.con: squid.h86 Makefile
-	$(GENCMD) $< 8080
-	mv squid.cmd $@
+# Three objects form one XIOS component in one loaded segment.
+XIOS_SOURCES=$(wildcard xios/*.a86 xios/*.inc xios/*.lib xios/*.json)
+xios.con: $(XIOS_SOURCES) consoles.def ../../tools/build_xios.py Makefile
+	python3 ../../tools/build_xios.py xios
 	$(CMDINFO) $@
 
-check-cursor: xios.con squid.h86
+check-cursor: xios.con
 	python3 ../../tools/cursor_check.py
 
 # Validate the structure of each rebuilt command/component.
@@ -48,5 +50,5 @@ check: all
 	@set -e; for f in sup.con rtm.con cio.con mem.con sysdat.con bdos.con xios.con; do cmdinfo $$f; done
 
 # Exercise actual assembled RTC code with synthetic INT 1Ah services.
-check-rtc: xios.con squid.h86
+check-rtc: xios.con
 	python3 ../../tools/rtc_check.py

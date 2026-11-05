@@ -1,0 +1,18 @@
+; Devices XIOS module: assemble this file to one object.
+xcode                   cseg    byte public 'CODE'
+xdata                   dseg    para public 'CODE'
+xios                    group   xcode,xdata
+xdata                   dseg    para public 'CODE'
+datastart               rb      0
+                        include consoles.inc
+                        include shared.inc
+
+                        include devif.inc
+
+                        include xdiskirq.lib
+                        include xdevice.lib
+                        include xaux.lib
+                        include xfloppy.lib
+                        include xhard.lib
+
+                        end

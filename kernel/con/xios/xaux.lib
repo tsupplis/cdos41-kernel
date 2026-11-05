@@ -1,0 +1,781 @@
+; Source: xaux.lib (devices)
+xcode                   cseg    byte public 'CODE'
+                        eject                                    ; Feb 13, 1985
+;						;  save ptrs around flagset
+;						; 3 APR 85
+;						;  always reset PIC in ISR
+;						; 17 APR 85
+;						;  loop in ISR until IIR free
+;						;  and fix BX/DI bug
+;		AUXILIARY I/O
+;		-------------
+
+;********************************************************
+;*							*
+;*	    AUXILIARY INPUT/OUTPUT ROUTINES		*
+;*							*
+;********************************************************
+
+;	Auxiliary input/output constant equates
+;	These internal program values are mostly hardware independent
+
+;	Each auxiliary port has associated with it a data block which
+;	contains information pertinent to the operation of the aux
+;	routines themselves and their associated interrupt routines.
+
+;	This block is outlined below:
+
+;           +----------+----------+
+;      bx+0 |    aux_buf_count    |   Number of characters in the buffer
+;           +----------+----------+
+;        +2 |     aux_in_ptr      |   Points to next available cell
+;           +----------+----------+
+;        +4 |     aux_out_ptr     |   Points to next valid character
+;           +----------+----------+
+;        +6 |    aux_buf_base     |   Starting address of this buffer
+;           +----------+----------+
+;        +8 |     aux_buf_top     |   Last usable address of this buffer
+;           +----------+----------+
+;       +10 |    aux_port_addr    |   Hardware address of this port
+;           +----------+----------+
+;       +12 | aux_flag | aux_wait |   Flag number and wait semaphore
+;           +----------+----------+
+;       +14 | aux_prot | aux_xchr |   Protocol type and xon/xoff char
+;           +----------+----------+
+
+;	Protocol constants
+
+;	Now the hardware specific equates
+;	These have to do with the I/O port and interrupt management,
+;	and are, for the most part, specific to the IBM PC
+
+;	async port address offsets from base address
+
+;	async port bit patterns
+
+;	8259 programmable interrupt ports and patterns
+;
+
+;   The following is needed to correct a bug in the 80286 chip
+;   (A and B series) dealing with the popf instruction.
+
+;	In case you ever want to disable this fix, this should do it
+;
+;CodeMacro	popf286
+;	popf			; this is simple
+;EndM
+
+;********************************************************
+;*							*
+;*	    AUXILIARY IN/OUT/STATUS ENTRIES		*
+;*							*
+;********************************************************
+xcode                   cseg    byte public 'CODE'
+iret286:
+                        nop                                      ; this is for an assembler bug
+                        iret                                     ; this restores the flags
+
+;	Function 5:  Auxiliary Input
+;	entry:	dl = auxiliary device number
+;	exit:	al = character received from port
+
+ioauxin:
+                        mov     bx,offset auxinvector
+                        jmps    auxbranch                        ; branch to aux routine
+
+;	Function 6:  Auxiliary Output
+;	entry:	dl = auxiliary device number
+;		cl = character to send to port
+
+ioauxout:
+                        mov     bx,offset auxoutvector
+                        jmps    auxbranch                        ; branch to aux routine
+
+;	Function 37:  Auxiliary Input Status
+;	entry:	dl = auxiliary device number
+;	exit:	al = 0FFh if character is ready
+;		al = 00h if character is not ready
+
+ioauxinstat:
+                        mov     bx,offset auxinstatvector
+                        jmps    auxbranch                        ; branch to aux routine
+
+;	Function 38:  Auxiliary Output Status
+;	entry:	dl = auxiliary device number
+;	exit:	al = 0FFh if port is ready
+;		al = 00h if port is not ready
+
+ioauxoutstat:
+                        mov     bx,offset auxoutstatvector
+;	jmps	aux_branch		; branch to aux routine
+
+;	io_aux calls branch the their actual routines here
+
+auxbranch:
+                        cmp     dl,numauxports                   ; if dl is an illegal port
+                        jae     auxnull                          ;   then just return
+
+                        mov     dh,0
+                        add     bx,dx                            ; port number word index
+                        add     bx,dx                            ; bx -> vector
+                        jmp     word ptr [bx]                    ; branch away...
+
+;	These vectors may be patched at init to reflect hardware
+
+auxinvector:
+                        dw      auxin                            ; port 0 input
+                        dw      auxin                            ; port 1 input
+
+auxoutvector:
+                        dw      auxout                           ; port 0 output
+                        dw      auxout                           ; port 1 output
+
+auxinstatvector:
+                        dw      auxinstat                        ; port 0 input status
+                        dw      auxinstat                        ; port 1 input status
+
+auxoutstatvector:
+                        dw      auxoutstat                       ; port 0 output status
+                        dw      auxoutstat                       ; port 1 output status
+
+;********************************************************
+;*							*
+;*	   SERIAL CONSOLE INPUT/OUTPUT ROUTINES		*
+;*							*
+;********************************************************
+
+;	get console input from a serial port
+;	entry:	dl = serial port number
+
+coninserial:
+                        mov     bl,dl
+                        mov     bh,0
+                        shl     bx,1                             ; bx = port word index
+                        jmp     ds:serconinvec[bx]               ; branch to routine
+
+;	these vectors may be changed to aux_in calls in INIT
+
+serconinvec             dw      serconin0
+                        dw      serconin1
+
+serconin0:
+                        mov     dx,sc0flag                       ; unused serial consoles
+                        jmps    serconinhang                     ;   simply hang forever
+serconin1:
+                        mov     dx,sc1flag                       ; same for port 1
+serconinhang:
+                        call    flagwait                         ; goodbye forever
+                        jmps    serconinhang                     ; in case someone gets wise
+
+;	put console output to a serial port
+;	entry:	dl = serial port number
+
+conoutserial:
+                        mov     bl,dl
+                        mov     bh,0
+                        shl     bx,1                             ; bx = port word index
+                        jmp     ds:serconoutvec[bx]              ; branch to routine
+
+;	these vectors may be changed to aux_out calls in INIT
+
+serconoutvec            dw      serconout0
+                        dw      serconout1
+
+serconout0:
+serconout1:
+                        ret                                      ; just a dummy return
+
+;********************************************************
+;*							*
+;*	    AUXILIARY INPUT/OUTPUT/STATUS CODE		*
+;*							*
+;********************************************************
+
+;	this is a dummy aux routine for non-existent ports
+
+auxnull:
+                        sub     ax,ax                            ; ax = 0
+                        ret
+
+;	Auxiliary input for live ports begins here
+;	entry:	dl = valid port number
+;	exit:	al = received character
+
+auxin:
+                        call    pointaux                         ; bx -> auxin block
+
+auxinretry:
+                        call    auxinstat0                       ; if the buffer is has something
+                        test    al,al                            ;   then go and grab a character
+                        jnz     auxingo
+; if the buffer is empty
+                        call    auxflagwait                      ;   then do a flag wait
+                        jmps    auxinretry                       ; double check after waiting
+
+auxingo:
+                        call    getfromauxbuf                    ; get one character
+                        ret                                      ;   and send it back
+
+;	Auxiliary output for live ports begins here
+;	entry:	dl = valid port number
+;		cl = character
+
+auxout:
+                        call    pointaux
+                        xchg    bx,di                            ; bx -> auxout block
+
+auxoutretry:
+                        call    auxoutstat0                      ; if there is room in the buffer
+                        test    al,al                            ;   then put another character in
+                        jnz     auxoutgo
+
+                        call    auxflagwait                      ; if no room, do a flag wait
+                        jmps    auxoutretry                      ; double check after waiting
+
+auxoutgo:
+                        call    puttoauxbuf                      ; put one character
+                        call    iauxtransready                   ; if transmit buffer is empty,
+                        jz      auxoutdone                       ;   then assume that the
+;   interrupts aren't rolling,
+                        call    auxkickoff                       ;   so fake an interrupt
+auxoutdone:
+                        ret
+
+;	Auxiliary input status for live ports
+;	entry:	dl = valid port number
+;	exit:	al = 0FFh if char ready, 00h if not
+
+auxinstat:
+                        call    pointaux                         ; bx -> auxin block
+
+auxinstat0:
+                        cmp     auxbufcount[bx],afew             ; if the buffer has a few chars
+                        jae     auxinstattrue                    ;   then return true
+; if it is almost empty
+                        call    auxproton                        ;   make sure that protocol is on
+
+                        cmp     auxbufcount[bx],0                ; if any characters at all
+                        jnz     auxinstattrue                    ;   then return true
+
+                        mov     al,00h                           ; if buffer is empty, return false
+                        ret
+
+auxinstattrue:
+                        mov     al,0FFh                          ; a character is available
+                        ret
+
+;	Auxiliary output status for live ports
+;	entry:	dl = valid port number
+;	exit:	al = 0FFh if char ready, 00h if not
+
+auxoutstat:
+                        call    pointaux
+                        xchg    bx,di                            ; bx -> auxout block
+
+auxoutstat0:
+                        mov     al,0FFh                          ; assume buffer not full
+                        cmp     auxbufcount[bx],auxoutbufsize
+                        jb      auxoutstatdone                   ; if there's room, return true
+
+                        mov     al,00h                           ; if no room, return false
+auxoutstatdone:
+                        ret
+
+;	Do a flag wait on an empty input buffer or full output buffer
+;	entry:	bx -> aux_block for this port function
+;	exit:	buffer is ready to go
+
+auxflagwait:
+                        push    bx ! push cx ! push dx           ; save pointer, char and port
+                        mov     auxwait[bx],0FFh                 ; tell int routine we're waiting
+                        mov     dl,auxflag[bx]                   ; get our flag number
+                        call    flagwait                         ;   and wait right here
+                        pop     dx ! pop cx ! pop bx
+                        ret                                      ; now it's ready
+
+;	Point to the input and ouput blocks for this aux port
+;	entry:	dl = valid port number
+;	exit:	bx -> aux input block
+;		di -> aux output block
+
+pointaux:
+                        mov     bl,dl                            ; bl = port number
+                        mov     bh,0                             ; bx = port number
+                        shl     bx,1                             ; bx = port word index
+                        mov     di,auxoutblkptr[bx]              ; di -> auxout block
+                        mov     bx,auxinblkptr[bx]               ; bx -> auxin block
+                        ret
+
+;	Make sure that receive protocol is on
+;	entry:	bx -> aux in block
+;		di -> aux out block
+
+auxproton:
+                        pushf                                    ; save current i flag
+                        cli                                      ;; this is a critical section
+                        test    auxprot[bx],offbit               ;; if rec prot is off
+                        jnz     auxprotdoon                      ;;   then turn it on
+                        popf286 iret286
+                        ret                                      ;   just get out
+
+auxprotdoon:
+                        and     auxprot[bx],not offbit           ;;   remember for next time
+                        popf286 iret286                          ; critical section done
+
+                        test    auxprot[bx],dtrdsr + rtscts
+                        jz      auxprotonx                       ; skip if no hard prot
+
+                        mov     dx,auxportmctrl                  ; modem control register
+                        mov     al,ien + dtrbit + rtsbit
+                        call    auxportout                       ; enable everything
+
+auxprotonx:
+                        test    auxprot[bx],xonxoff              ; if no soft protocol
+                        jz      auxprotondone                    ;   then finished
+
+                        mov     auxxchr[di],xon                  ; give transmit the message
+                        call    auxkickoff                       ; make sure he hears it
+
+auxprotondone:
+                        sti                                      ; critical section done
+                        ret
+
+;	For the first character into the output buffer, and to insure
+;	sending an xon protocol character, we now fake an interrupt.
+;	entry:	bx -> aux block
+
+auxkickoff:
+                        cmp     auxportaddr[bx],auxport0
+                        jz      auxkickoffp0                     ; if port 0, fake its interrupt
+                        cmp     auxportaddr[bx],auxport1
+                        jz      auxkickoffp1                     ; if port 1, fake its interrupt
+                        ret                                      ; if neither, something's wrong
+
+auxkickoffp0:
+                        int     aux0interrupt                    ; this does it
+                        ret
+
+auxkickoffp1:
+                        int     aux1interrupt                    ; or this does
+                        ret
+
+;	These two routines have sole access to the buffer pointers.
+;	They are also the only ones which change aux_buf_count.
+
+;	Read one character from the appropriate aux buffer
+;	entry:	bx -> aux block for this port
+;	exit:	al = character
+
+getfromauxbuf:
+                        pushf                                    ; save current i state
+                        cli                                      ;; critical section
+                        mov     si,auxoutptr[bx]                 ;; get our output pointer
+                        lodsb                                    ;; grab the character
+                        cmp     si,auxbuftop[bx]                 ;; if no pointer overflow
+                        jbe     getauxupdate                     ;;   just update pointer
+                        mov     si,auxbufbase[bx]                ;; else reset the pointer
+getauxupdate:
+                        mov     auxoutptr[bx],si                 ;; pointer is updated
+                        dec     auxbufcount[bx]                  ;; and count is correct
+                        popf286 iret286                          ; pointers match count
+                        ret                                      ; so, we're done
+
+;	Write one character to the appropriate aux buffer
+;	entry:	bx -> aux block for this port
+;		cl = character
+
+puttoauxbuf:
+                        pushf                                    ; save current i state
+                        cli                                      ;; critical section
+                        mov     si,auxinptr[bx]                  ;; get our input pointer
+                        mov     [si],cl                          ;; store the character
+                        inc     si                               ;;   and bump the pointer
+                        cmp     si,auxbuftop[bx]                 ;; if no pointer overflow
+                        jbe     putauxupdate                     ;;   just update pointer
+                        mov     si,auxbufbase[bx]                ;; else reset the pointer
+putauxupdate:
+                        mov     auxinptr[bx],si                  ;; pointer is updated
+                        inc     auxbufcount[bx]                  ;; and count is correct
+                        popf286 iret286                          ; pointers match count
+                        ret                                      ; so, we're done
+
+;********************************************************
+;*							*
+;*	    AUXILIARY IN / OUT   DATA AREA		*
+;*							*
+;********************************************************
+xdata                   dseg    para public 'CODE'
+                        org     ((offset $-offset datastart)+1) and 0fffeh ; word aligned
+
+;	Auxiliary input/output data blocks
+
+auxblkin0               dw      0, auxbufin0                     ; count, in_ptr
+                        dw      auxbufin0, auxbufin0             ; out_ptr, base addr
+                        dw      auxtopin0, auxport0              ; top addr, port num
+                        db      auxflagin0, 0                    ; flag num, wait
+                        db      protrinit, 0                     ; protocol, x char
+
+auxblkin1               dw      0, auxbufin1                     ; count, in_ptr
+                        dw      auxbufin1, auxbufin1             ; out_ptr, base addr
+                        dw      auxtopin1, auxport1              ; top addr, port num
+                        db      auxflagin1, 0                    ; flag num, wait
+                        db      protrinit, 0                     ; protocol, x char
+
+auxblkout0              dw      0, auxbufout0                    ; count, in_ptr
+                        dw      auxbufout0,auxbufout0            ; out_ptr, base addr
+                        dw      auxtopout0, auxport0             ; top addr, port num
+                        db      auxflagout0, 0                   ; flag num, wait
+                        db      prottinit, 0                     ; protocol, x char
+
+auxblkout1              dw      0, auxbufout1                    ; count, in_ptr
+                        dw      auxbufout1,auxbufout1            ; out_ptr, base addr
+                        dw      auxtopout1, auxport1             ; top addr, port num
+                        db      auxflagout1, 0                   ; flag num, wait
+                        db      prottinit, 0                     ; protocol, x char
+
+;	These pointers are used by point_aux to find the right aux block
+
+auxinblkptr             dw      auxblkin0, auxblkin1
+auxoutblkptr            dw      auxblkout0, auxblkout1
+
+;	Auxiliary input/output circular character buffers
+;	Input buffers now use the code space from INIT
+;	The smaller output buffers are local
+
+auxbufout0              rb      auxoutbufsize                    ; port 0 transmit buffer
+auxtopout0              equ     offset $ - 1
+auxbufout1              rb      auxoutbufsize                    ; port 1 transmit buffer
+auxtopout1              equ     offset $ - 1
+
+;********************************************************
+;*							*
+;*	    AUXILIARY INTERRUPT DATA AREA		*
+;*							*
+;********************************************************
+
+saveds0                 rw      1                                ; for interrupt context save
+saveax0                 rw      1                                ;   for port 0
+savess0                 rw      1
+savesp0                 rw      1
+
+saveds1                 rw      1                                ; for interrupt context save
+saveax1                 rw      1                                ;   for port 1
+savess1                 rw      1
+savesp1                 rw      1
+
+                        rb      auxstacksize                     ; local interrupt stack
+auxstack0               equ     offset $
+
+                        rb      auxstacksize                     ; local interrupt stack
+auxstack1               equ     offset $
+
+inthandlertable         rw      0                                ;* for the checker at the bottom
+;* of the ISR...indexed by IIR
+
+                        dw      offset  iauxmodack               ;* 000 ACK modem status, then to top
+                        dw      offset	iauxexit                  ;* 001 no int
+                        dw      offset	iauxretry                 ;* 010 xmit rdy...to the top
+                        dw      offset	iauxexit                  ;* 011 null entry
+                        dw      offset 	iauxretry                ;* 100 recv rdy...to the top
+                        dw      offset	iauxexit                  ;* 101 null entry
+                        dw      offset	iauxexit                  ;* 110 error, null here
+                        dw      offset	iauxexit                  ;* 111 null entry
+
+;********************************************************
+;*							*
+;*	    AUXILIARY INTERRUPT ENTRY POINTS		*
+;*							*
+;********************************************************
+xcode                   cseg    byte public 'CODE'
+iaux0:
+                        mov     cs:saveds0,ds                    ; save our context
+                        mov     cs:saveax0,ax
+                        mov     ax,cs                            ; get a local data segment
+                        mov     ds,ax
+                        mov     savess0,ss                       ; and switch stacks
+                        mov     savesp0,sp
+                        mov     ss,ax
+                        mov     sp,auxstack0                     ; to our local stack
+
+                        mov     ax,0                             ; pass our port number
+                        call    iauxshared                       ;   to the shared code
+
+                        mov     ss,savess0                       ; restore the stack
+                        mov     sp,savesp0
+                        mov     ax,saveax0                       ; and other registers
+                        mov     ds,saveds0
+                        iret                                     ; do not dispatch!
+
+;	Auxiliary interrupt entry for port 1
+
+iaux1:
+                        mov     cs:saveds1,ds                    ; save our context
+                        mov     cs:saveax1,ax
+                        mov     ax,cs                            ; get a local data segment
+                        mov     ds,ax
+                        mov     savess1,ss                       ; and switch stacks
+                        mov     savesp1,sp
+                        mov     ss,ax
+                        mov     sp,auxstack1                     ; to our local stack
+
+                        mov     ax,1                             ; pass our port number
+                        call    iauxshared                       ;   to the shared code
+
+                        mov     ss,savess1                       ; restore the stack
+                        mov     sp,savesp1
+                        mov     ax,saveax1                       ; and other registers
+                        mov     ds,saveds1
+                        iret                                     ; do not dispatch!
+
+;	Shared auxiliary interrupt code
+
+iauxshared:
+                        push    bx ! push cx ! push dx ! push bp
+                        push    si ! push di ! push es
+
+                        cld                                      ; throughout interrupt
+                        mov     dx,ax                            ; dx = aux port number
+                        call    pointaux                         ; bx -> aux in, di -> aux out
+
+                        mov     al,nseoi                         ; reset the pic
+                        out     picack,al
+
+iauxretry:
+
+;********************************************************
+;*							*
+;*	    AUXILIARY RECEIVE INTERRUPT HANDLER		*
+;*							*
+;********************************************************
+
+; i_aux_receive:
+                        mov     dx,auxportstatus                 ; just to double check
+                        call    auxportin                        ;   we look at line status
+                        test    al,dr                            ; if not data ready
+                        jz      iauxtransmit                     ;   then check xmit message
+
+                        mov     dx,auxportdata
+                        call    auxportin                        ; fetch the data char
+                        test    auxprot[di],xonxoff              ; check to see if this is
+                        jz      iauxrecchar                      ;   an xon/xoff character
+                        cmp     al,xon                           ;   for the transmit side
+                        jz      iauxrecx                         ; if it is, get out of here
+                        cmp     al,xoff
+                        jz      iauxrecx
+
+iauxrecchar:                                                     ; a valid data char rec'd
+                        cmp     auxbufcount[bx],auxinbufsize
+                        jae     iauxtoofull                      ; if buffer full, drop the char
+
+                        mov     cl,al                            ; cl = received character
+                        call    puttoauxbuf                      ; if any room, add to buffer
+                        cmp     auxbufcount[bx],auxinbufsize - afew
+                        jb      iauxrecwait                      ; if a bit of room, don't stop
+
+iauxtoofull:
+                        call    iauxprotoff                      ; else, try to stop the stream
+
+iauxrecwait:
+                        call    iauxflagset                      ; set flag if io_auxin waiting
+                        jmps    iauxtransmit                     ; check for xmit message
+
+iauxrecx:
+                        mov     auxxchr[bx],al                   ; save xon/xoff for transmit
+;	jmps	i_aux_transmit		;   and carry on
+
+;********************************************************
+;*							*
+;*	    AUXILIARY TRANSMIT INTERRUPT HANDLER	*
+;*							*
+;********************************************************
+
+;	In case a character was received just before transmit is to
+;	be checked, we always check for a pending transmit message.
+
+iauxtransmit:
+                        xchg    bx,di                            ; get our pointer to bx
+                        mov     dx,auxportintid                  ; we do this to clear a trans int
+                        call    auxportin                        ;   in event of simultaneous rec int
+
+                        call    iauxtransready                   ; check tbe
+                        jz      iauxbottom                       ;   and exit if not ready
+
+                        cmp     auxxchr[bx],0                    ; if there is an xon/xoff
+                        jz      iauxtranchar                     ;   to send, it has top priority
+
+                        mov     al,0                             ; to erase the xon/xoff request
+                        xchg    al,auxxchr[bx]
+                        jmps    iauxtransend                     ; send the xon/xoff char
+
+iauxtranchar:
+                        call    iauxtransprot                    ; if protocol blocks transmission
+                        jz      iauxbottom                       ;   then skip the output
+
+                        cmp     auxbufcount[bx],0                ; if transmit message is empty
+                        jz      iauxtranwait                     ;   see if auxout is waiting
+
+                        call    getfromauxbuf                    ; get one character
+iauxtransend:
+                        mov     dx,auxportdata
+                        call    auxportout                       ; send char
+                        xchg    bx,di                            ; restore to receive pointers
+                        jmp     iauxretry                        ;   and check simultaneous receive
+
+iauxtranwait:
+                        cmp     auxbufcount[bx],auxoutbufsize - afew
+                        ja      iauxbottom                       ; if too full, skip
+
+                        call    iauxflagset                      ; if room, try to wake auxout
+
+iauxbottom:
+;* Here we must insure that there are no more 8250 ints left to service.  There
+;* was a problem in the previous code in that in some cases we were iretting
+;* when an int was still pending.  In that case, the PIC (edge-triggered) will
+;* never see the 8250 line go up, because it's still high.  Specifically, if
+;* a modem status int. is being serviced, and while in the ISR, a XMIT EMPTY
+;* condition occurs, we may never see it and iret.
+
+;* Entry:  BX=auxout, DI=auxin
+
+                        xchg    bx,di                            ; point BX to auxin
+                        mov     dx,auxportintid                  ; int identification reg
+                        call    auxportin                        ; read our port
+                        and     al,07h                           ; 3 lsb's only
+                        sub     ah,ah
+                        shl     ax,1                             ;* word table
+                        mov     si,ax                            ;* to an index reg.
+                        jmp     inthandlertable[si]
+
+iauxexit:
+                        pop     es ! pop di ! pop si
+                        pop     bp ! pop dx ! pop cx ! pop bx
+                        ret                                      ; to interrupt entries
+
+;********************************************************
+;*							*
+;*	    AUXILIARY INTERRUPT SUBROUTINES		*
+;*							*
+;********************************************************
+
+;	check for transmit buffer empty.  zf set if not
+;	entry:	bx -> aux out block
+
+iauxtransready:
+                        mov     dx,auxportstatus                 ; if message pending, see if
+                        call    auxportin                        ;   the port is ready
+                        test    al,tbe                           ; if not ready, then check
+                        ret
+
+;	When receive buffer fills, try to turn protocol off
+;	entry:	bx -> aux in block
+;		di -> aux out block
+
+iauxprotoff:
+                        or      auxprot[bx],offbit               ; remember that we're off
+
+                        mov     ah,auxprot[bx]                   ; get a copy of our protocol
+                        test    ah,dtrdsr + rtscts
+                        jz      iauxprotoffx                     ; skip if no hard protocol
+
+                        mov     al,ien + dtrbit + rtsbit
+                        test    ah,dtrdsr                        ; if not dtr_dsr handshake
+                        jz      iauxprotoffr                     ;   then try rts_cts
+                        and     al,not dtrbit                    ; if dtr_dsr, turn dtr off
+iauxprotoffr:
+                        test    ah,rtscts                        ; if not rts_cts handshake
+                        jz      iauxprotoffh                     ;   then send hard line code
+                        and     al,not rtsbit                    ; if rts_cts, turn rts off
+iauxprotoffh:
+                        mov     dx,auxportmctrl
+                        call    auxportout                       ; send the bits to modem ctrl
+
+iauxprotoffx:
+                        test    ah,xonxoff                       ; if no soft protocol
+                        jz      iauxprotoffz                     ;   then we're done
+                        mov     auxxchr[di],xoff                 ; if xon_xoff, tell transmit half
+
+iauxprotoffz:
+                        ret                                      ; that's it
+
+iauxmodack:
+;*	This routine acknowledges a modem status interrupt to the 8250.
+;*	It is jumped to only from the IIR check at i_aux_bottom if a modem
+;*	status int has come in while the ISR is running, and after the status
+;*	reg. has already been read.  The point here is to make sure all ints
+;*	are removed from the UART before iretting.
+;*	Entry:  BX = auxin, DI = auxout
+
+                        mov     dx,auxportmstat                  ;* to clear the int
+                        call    auxportin
+                        jmp     iauxretry                        ;* to deal with it if need be
+
+;	check for transmit protocol ready.  zf set if not
+;	entry:	bx -> aux out block
+;		di -> aux in block
+
+iauxtransprot:
+                        mov     dx,auxportmstat                  ; get the status bits
+                        call    auxportin                        ; also clears protocol ints
+
+                        mov     ah,auxprot[bx]                   ; which protocol to use
+                        test    ah,ah                            ; if zero
+                        jz      itransprotok                     ;   then skip the works
+
+                        test    ah,dtrdsr
+                        jz      itransprot1                      ; if dsr/dtr protocol
+                        test    al,dsrbit                        ;   see if dsr is on
+                        jz      itransprotdone                   ; if not, it's no good
+
+itransprot1:
+                        test    ah,rtscts
+                        jz      itransprot2                      ; if rts/cts protocol
+                        test    al,ctsbit                        ;   see if cts is on
+                        jz      itransprotdone                   ; if not, forget it
+
+itransprot2:
+                        test    ah,xonxoff
+                        jz      itransprotok                     ; if xon/xoff protocol
+                        cmp     auxxchr[di],xoff                 ;   see if we've got an xoff
+                        jz      itransprotdone                   ; if so, go back
+
+itransprotok:
+                        or      al,0FFh                          ; clear the zero flag
+itransprotdone:
+                        ret                                      ; with zf
+
+;	If the associated auxin or auxout routine is waiting
+;	then set the flag
+;	entry:	bx -> aux block
+
+iauxflagset:
+                        mov     al,0
+                        xchg    al,auxwait[bx]                   ; test and set wait flag
+                        test    al,al                            ; if io_aux_in isn't waiting
+                        jz      iauxflagdone                     ;   then we're done
+
+                        push    bx ! push di                     ; save aux block pointers
+                        mov     dl,auxflag[bx]                   ; if it is waiting
+                        call    flagset                          ;   then set the flag
+                        pop     di ! pop bx
+iauxflagdone:
+                        ret
+
+;	Auxiliary port input
+;	entry:	bx -> aux block
+;		dx = port offset address
+;	exit:	al = character read
+
+auxportin:
+                        add     dx,auxportaddr[bx]               ; add in port base address
+                        in      al,dx                            ; read the port
+                        ret                                      ;   and return
+
+;	Auxiliary port output
+;	entry:	bx -> aux block
+;		dx = port offset address
+;		al = character to output
+
+auxportout:
+                        add     dx,auxportaddr[bx]               ; add in port base address
+                        out     dx,al                            ; write to the port
+                        ret                                      ;   and return

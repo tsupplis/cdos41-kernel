@@ -1,0 +1,117 @@
+; Source: xchar.lib (core)
+xcode                   cseg    byte public 'CODE'
+;************************************************
+;*						*
+;*		POLL ROUTINES			*
+;*						*
+;************************************************
+
+;	Check device for ready status, call dev_poll if not ready
+
+poll:                                                            ;poll device
+;----
+;	Entry:	DL =	device number
+;	Exit:		device ready
+;		BX =	device# * 2
+
+                        call    iopoll                           ;check hardware first
+                        test    al,al                            ;AL=0 if not ready
+                        jnz     polldone                         ;BX=device# * 2 set by io_poll
+
+                        push    bx                               ;save device# * 2
+                        mov     cl,devpoll                       ;give up the CPU resource
+                        call    supif
+                        pop     bx                               ;device# * 2
+polldone:
+                        ret
+
+;	io_poll is called from the dispatcher after a process makes
+;	a dev_poll call to the O.S.  During system dispatches, a
+;	a call to io_poll is made for each polling process.
+;	Entry:	DL =	device #
+;	Exit:	AX =	0 if not ready, 0FFFFH if ready
+;		BX =	device# * 2
+
+iopoll:
+                        xor     bx,bx
+                        mov     bl,dl
+                        shl     bx,1
+                        jmp     polltable[bx]
+
+polltable               dw      parallelstat                     ;each of these must
+                        dw      parallelstat                     ;preserve BX and DX
+                        dw      parallelstat
+
+; Source: xchar.lib (core)
+xcode                   cseg    byte public 'CODE'
+;	a general xios information pointer return function
+;	entry:	cx = which pointer
+;		0 => equipment data
+;		1 => setup data
+;		2 => vc switch definition
+;		3 => aux protocol byte pointers
+;		4 => color monitor scroll mode
+;		5 => aux int offset 0
+;		6 => aux int offset 1
+
+iopointer:
+                        sub     ax,ax                            ; return zero if bad
+                        cmp     cx,ptrlistsize
+                        jae     iopointerdone                    ; skip if cx is too big
+
+                        mov     bx,cx
+                        add     bx,bx                            ; word index
+                        mov     ax,ptrlist[bx]                   ; here's the return value
+iopointerdone:
+                        ret
+xdata                   dseg    para public 'CODE'
+                        org     ((offset $-offset datastart)+1) and 0fffeh
+;*						*
+;*		PUBLIC DATA BLOCKS		*
+;*						*
+;************************************************
+
+ptrlist                 dw      equipdata
+                        dw      setupdata
+                        dw      switchbits                       ; defines a vc switch
+                        dw      auxprotblk                       ; pointers to aux protocol
+                        dw      scrollmode                       ; how a color mon scrolls
+                        dw      iaux0                            ; aux int vector port 0
+                        dw      iaux1                            ; aux int vector port 1
+
+ptrlistsize             equ     (offset $ - offset ptrlist)/2
+
+;	Equipment configuration data block
+
+equipdata               rb      0
+numflop                 dw      0                                ; number of floppy disks	1-4
+numhard                 dw      0                                ; number of hard disks		0-2
+numprint                dw      0                                ; number of parallel printers	0-3
+numport                 dw      0                                ; number of serial ports	0-2
+nummono                 dw      0                                ; number of monochrome crts	0-1
+numcolor                dw      0                                ; number of color crts		0-1
+numndp                  dw      0                                ; number of 8087's		0-1
+nummmkb                 dw      0                                ; main memory in Kilobytes    256-640
+nummdkb                 dw      0                                ; memory disk in Kilobytes      0-384
+numflopdes              dw      0                                ; number of floppy designators	2-4
+
+;	Setup data block
+
+setupdata               rb      0
+diskintoff              rw      1                                ; save the disk interrupt vector
+diskintseg              rw      1                                ;   for dskmaint (and old setup)
+                        dw      pfktbl0
+                        dw      pfktbl1
+                        dw      pfktbl2
+                        dw      pfktbl3
+lomemtop                dw      0                                ; main mem seg ceiling    4000-A000
+himemstart              dw      0                                ; high mem seg beginning  C000-E000
+himemtop                dw      0                                ; high mem seg ceiling    D000-F000
+
+;	Pointers to Auxiliary input/output protocol bytes
+
+auxprotblk              rb      0
+                        dw      auxblkin0 + auxprot
+                        dw      auxblkin1 + auxprot
+                        dw      auxblkout0 + auxprot
+                        dw      auxblkout1 + auxprot

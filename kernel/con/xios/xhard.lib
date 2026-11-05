@@ -1,0 +1,1311 @@
+; Source: xhard.lib (devices)
+xdata                   dseg    para public 'CODE'
+                        eject                                    ; Mar 15, 1985
+; DOS media AT multi-sector bug fix
+
+;****************************************************************
+;*								*
+;*		HARD DISK DATA STRUCTURES			*
+;*								*
+;****************************************************************
+
+;	GLOBAL CONSTANTS
+
+;	XT HARD DISK DATA STRUCTURE DEFINITIONS
+
+;	This IOPB is used to communicate with the ROS access routine "hd_rom"
+;	Note:some parameters are not EXACTLY as defined by IBM.
+;IBM_iopb STRUCT
+;IBM_iopb ENDS
+
+;	definition of IBM XT hard disk partition table record
+;XT_PT_record STRUCT
+;XT_PT_record ENDS
+
+;	definition of the overall IBM XT hard disk partition sector
+;XTLBL_table STRUCT
+;XTLBL_table ENDS
+
+;	This defines the CP/M label for a volume
+;HDLB_label STRUCT
+;HDLB_label ENDS
+
+;	this defines a table entry in the XIOS hard disk information table.
+;	it stores current status and limit information for the physical disk
+;HDINF_vector	STRUCT
+;HDINF_vector ENDS
+
+                        eject
+
+;****************************************************************
+;*								*
+;*		HARD DISK DRIVER ROUTINES			*
+;*								*
+;****************************************************************
+
+;	These routines hook into M.P. Vano's drivers for CCP/M-86
+;	version 1.0.  Every attempt has been made to mess with
+;	his code as little as possible.  Some changes were made
+;	for different sector sizes and different dph's, but most
+;	of it is in the form envisioned by its creator.
+xcode                   cseg    byte public 'CODE'
+selecthd:
+                        mov     auxdrive,cl                      ; get the cp/m drive code
+                        call    auxdrivefix                      ;   and convert to IBM code
+                        mov     auxcode,dl                       ; and which select
+                        mov     ax,0                             ; select function code
+                        call    hddriver                         ; login and select
+
+                        test    ax,ax                            ; if bad select
+                        jz      selhd1                           ;   then skip sector count
+
+                        mov     si,.8[bx]                        ; get dpb pointer
+                        mov     ax,[si]                          ; get sectors per track
+                        mov     maxsector,ax                     ; and save for mcnt
+                        mov     ax,bx                            ; restore dph
+selhd1:
+                        ret
+
+;	Hard disk read routine
+
+readhd:
+                        mov     auxfunc,2                        ; read function code
+                        jmps    readwritehd                      ; jump to shared code
+
+;	Write to hard disk
+
+writehd:
+                        mov     auxfunc,4                        ; write function code
+;	jmps	read_write_hd	; fall through
+
+;	shared code for read and write to cpm hard disk partition
+;	exit:	ax = 0 for success
+;		ax > 0 on errors
+
+readwritehd:                                                     ; shared code
+                        call    auxparamset                      ; set up param block
+                        call    auxdrivefix                      ; convert the drive code
+rwhdloop:
+                        mov     ax,auxfunc                       ; restore function code
+                        call    hddriver
+                        test    al,al                            ; check for errors
+                        jnz     rwhddone                         ; skip if bad
+
+                        mov     al,blockmcnt                     ; save the return code in ax here
+                        sub     auxcode,al                       ; if we did all sectors
+                        jbe     rwhdgood                         ;   then we're done
+
+                        cbw
+                        add     ax,auxsector                     ; increment the current sector
+                        cmp     ax,maxsector                     ;   and track if necessary) for
+                        jb      rwhdnext                         ;   multi-sector operations
+
+                        inc     auxtrack
+                        sub     ax,maxsector                     ; correct the sector
+rwhdnext:
+                        mov     auxsector,ax                     ; new starting sector
+                        mov     al,sectorsize/16
+                        mul     blockmcnt
+                        add     auxdmas,ax                       ; add to seg to avoid overflow
+                        jmps    rwhdloop
+
+rwhdgood:
+                        sub     ax,ax                            ; return ax = 0 for success
+rwhddone:
+                        ret
+
+;	This routine sets up the "aux" parameter block
+;	It is shared by the FIDDS driver
+
+auxparamset:
+                        mov     al,drive
+                        mov     auxdrive,al
+                        mov     al,mcnt
+                        mov     auxcode,al                       ; use code for select
+                        mov     ax,track
+                        mov     auxtrack,ax
+                        mov     ax,sector
+                        mov     auxsector,ax
+                        mov     ax,dmaseg
+                        mov     auxdmas,ax
+                        mov     ax,dmaoff
+                        mov     auxdmao,ax                       ; save the works
+                        ret
+
+;	This routine converts the CP/M drive code to the IBM hard disk
+;	code number:  IBM = CP/M - (max(num_flop,2)) - num_hard
+
+auxdrivefix:
+                        mov     al,byte ptr numflopdes
+                        add     al,byte ptr numhard
+                        sub     auxdrive,al                      ; save the hardware code
+                        ret
+
+                        eject
+
+;		XTCODE.LIB: XT INTERIM XIOS HARD DRIVER CODE MODULE
+
+;	written for DRI by 	M.P. Vano
+;				Vano Associates, Inc.
+;				24 May 1983
+
+;
+;	This driver uses the XT ROM BIOS and so cannot relinquish the CPU
+;	during disk IO operations.  This was done at the request of DRI to
+;	ensure compatibility with the ever-mysterious future plans of IBM.
+
+;	NOTE that although many data structures and routines of a highly
+;	general nature are used by this module, the behaviour of this driver
+;	is not defined except within the frame of reference of the existing
+;	4 disk drives set by drive parameters in the XT ROS tables.  In
+;	particular, the use of REMAP blocks of a size other than 2k will not
+;	succeed unless the XIOS is re-assembled for a different buffer size.
+;	In addition, binary multiples only are assumed for the ratio of
+;	CP/M to physical sector sizes supported.
+;****************************************************************************
+
+;	Hard disk IO calls get vectored here from AUX DISK handler. The entry
+;	conditions are similar to an ATTACH-A-MATIC except that the aux drive
+;	parameter pointer is NOT setup.
+
+;	The GLOBAL XIOS variables AUX_CODE, AUX_TRACK, AUX_DRIVE,AUX_SECTOR
+;	AUX_LONGWORD must be directly accessed to specify the operation.
+;	AX has the function to execute as per attach-a-matic usage.
+
+;	CALLS:	hd_seldsk,hd_read,hd_write
+hddriver:
+                        mov     hdfunction,ax                    ;save for debug use
+                        push    es ! push ds
+                        mov     hduda,es
+                        mov     bx,ax                            ;save fnc code  for jump
+                        mov     ax,HDINFSIZE                     ;usually correct
+                        mov     cl,AUXDRIVE ! and cl,1           ;keep in index range
+                        mul     cl                               ;si--> info vector[AUX_DRIVE]
+                        mov     si,offset hddiskinfo
+                        add     si,ax
+
+;	stack switch has been deleted here
+
+                        call    hdfntable[bx]                    ;do case(fn)
+
+                        pop     ds ! pop es
+                        ret
+
+; 	function #	    0         2        4
+hdfntable               dw      hdseldsk, hdread, hdwrite
+
+;	if (!logged_in(info_ptr)) return 0 else return &(dph_array[vol])
+;	At entry, SI--> info array ptr for that drive and
+;	    external globals AUX_DRIVE and AUX_CODE
+;	Since AUX_DRIVE is always valid when called, SI's HDINF pointer
+;	  may be trusted.
+
+;	CALLS:	hd_seldsk
+hdseldsk:
+                        call    hdlogin                          ;if (!hd_login(info_ptr) return 0)
+                        or      al,al
+                        mov     ax,0
+                        jz      hdseldskret
+                        mov     al,AUXDRIVE                      ;else ret &dph_array[DPH_SIZE][,vol]
+                        mov     ah,dphsize
+                        mul     ah
+                        add     ax,offset hddph0
+hdseldskret:
+                        mov     bx,ax
+                        ret
+
+;	checks if current hard disk is logged in properly.  If it is,
+;	it returns true.  otherwise it tries to log it in and if it can't
+;	it returns false.  The same happens for out of range requests.
+;	NOTE that this routine is called from INIT also.  It takes as input
+;	the global AUX_DRIVE and the HDINF pointer for that drive in SI.
+
+;	CALLS:	hd_get_partition,hd_read_label,hd_patch_dpb
+hdlogin:
+                        test    HDINFexists[si],0ffh             ;is the hardware there?
+                        jz      hdloginerr                       ;if not, don't go any farther
+                        test    HDINFlogged[si],1                ;has it ever been logged-in?
+                        jz      hdlogitin                        ; if not, go try to do it
+                        test    HDINFfixed[si],1                 ;else don't not be too hasty..
+                        jnz     hdloginok                        ; labels on fixed can't change
+                        test    AUXCODE,1                        ;even a removable only needs
+                        jnz     hdloginok                        ;re-login on first access
+
+hdlogitin:                                                       ;really needs to be logged in
+                        mov     HDINFlogged[si],0                ;mark it unlogged
+                        call    hdgetpartition                   ;read IBM's master table
+                        or      al,al
+                        jnz     hdloginerr                       ;can't read table or no cp/m
+                        call    hdreadlabel                      ;else go look for XIOS label
+                        or      al,al                            ;can't read or doesn't exist
+                        jnz     hdloginerr
+                        call    hdpatchdpb                       ;fix up dpbs for ver 2
+hdloginok:
+                        mov     al,0ffh ! ret                    ;else tell caller we found it
+hdloginerr:
+                        xor     al,al ! ret                      ;return false if we fail
+
+;	read partition table into label area and find partition if one exists
+;	uses cp/m label buffer as temporary bufer
+;	returns 0 in al if succeeds, else nz
+;	CALLS:	hd_rom
+hdgetpartition:
+                        mov     bx,offset hdrdpartitioniopb      ;setup iopb
+                        mov     al,AUXDRIVE                      ;setup fields that vary
+                        mov     IBMlun[bx],al
+                        mov     IBMcylinder[bx],0
+                        mov     IBMsector[bx],1                  ;always has label
+                        mov     ax,HDINFlabelofs[si]             ;get the correct buffer
+                        mov     IBMxferofs[bx],ax
+                        mov     IBMxferseg[bx],ds
+                        call    hdrom                            ;read partition table
+                        or      al,al
+                        jnz     hdgetpartitionret                ;oops, disk error.
+
+                        push    si
+                        mov     si,HDINFlabelofs[si]             ;inspect table
+                        cmp     XTLBLid[si],IBMSYSID             ;is it there at all?
+                        jnz     hdbadpartition
+                        lea     si,XTLBLpart1[si]                ;scan for cp/m
+                        mov     cx,4
+hdpartitionhunt:
+                        cmp     XTPTsystem[si],HDSYSID           ; is it our magic code?
+                        je      hdpartitionfound
+                        add     si,XTPTRECSIZE                   ;else keep on looking
+                        loop    hdpartitionhunt
+                        jmps    hdbadpartition                   ;else return the bad news
+
+hdpartitionfound:                                                ;setup same iopb for lbl read
+                        mov     al,XTPTbootfl[si]                ;save the boot flag so that
+                        mov     hdbootflag,al                    ;  init can choose sysdisk
+                        mov     al,XTPTstartcylinder[si]         ;adjust the disk address
+                        mov     ah,XTPTstartsector[si]           ;fix up cylinder address
+                        rol     ah,1 ! rol ah,1 ! and ah,3
+                        mov     IBMcylinder[bx],ax
+                        mov     hdpstartcyl,ax                   ;save to check later
+                        mov     IBMsector[bx],4                  ;cp/m label is always here
+
+                        mov     al,XTPTendcylinder[si]
+                        mov     ah,XTPTendsector[si]
+                        rol     ah,1 ! rol ah,1 ! and ah,3
+                        mov     hdpendcyl,ax                     ;save to check later
+                        test    XTPTstarthead[si],0ffh           ;should start at head 0
+                        jnz     hdbadpartition                   ;else exit with error
+                        mov     al,XTPTstartsector[si]           ;only 1 or 2 are legal
+                        dec     al
+                        and     al,not 0c1h                      ;ignore irrelevant bits
+                        jnz     hdbadpartition
+                        pop     si                               ;else it must be ok
+                        xor     al,al
+                        jmps    hdgetpartitionret                ;so exit with success code
+
+hdbadpartition:
+                        pop     si
+                        mov     al,0ffh
+hdgetpartitionret:
+                        ret
+
+;	reads cpm label into label area and checks for integrity
+;	iopb has already been set up by hd_get_partition
+;	returns 0 in al if succeeds, else nz.,
+;	CALLS:	hd_rom,hd_check_label
+hdreadlabel:
+                        mov     bx,offset hdrdpartitioniopb      ;setup iopb
+                        call    hdrom                            ;try to read label
+                        or      al,al                            ;disk error?
+                        jnz     hdreadlabelret                   ;(probably MICROSOFT sabotage)
+
+                        call    hdchecklabel                     ;check label's integrity
+                        or      al,al
+                        jnz     hdreadlabelret                   ;label or programmer's strange
+
+                        mov     di,HDINFlabelofs[si]             ;update HDINF
+                        mov     al,0ffh                          ;assume fixed disk
+                        cmp     HDLBcpmcks[di],8000h             ;fixed?
+                        je      hdreadlabel1                     ;yep, go ahead
+                        not     al                               ;can't win them all
+hdreadlabel1:
+                        mov     HDINFfixed[si],al                ;set fixed flag as needed
+                        mov     HDINFlogged[si],0ffh             ;I pronounce thee "logged"
+                        xor     al,al
+hdreadlabelret:
+                        ret
+
+;	verifies integrity of cp/m label block of disk si--> HDLB pointer of
+;	returns 0 if succeeds, else nz value in ax
+;	CALLS:	NOTHING
+hdchecklabel:
+                        push    si ! mov si,HDINFlabelofs[si]    ;get pointer to label
+
+                        push    si                               ;checksum it first
+                        mov     cx,HDLABELSIZE/2
+                        xor     bx,bx                            ;clear checksum accum.
+hdcheckcks:
+                        lodsw
+                        add     bx,ax
+                        loop    hdcheckcks                       ;verify its checksum
+                        pop     si
+                        jnz     hdcheckerror                     ;exit if bad checksum
+
+                        push    si !  push es
+                        push    ds ! pop es
+                        mov     cx,length (hdidstring)           ;check the id string
+                        lea     si,HDLBid[si]
+                        mov     di,offset hdidstring
+                        repe    cmpsb
+                        pop     es ! pop si
+                        mov     ax,0 ! je hdcheckexit            ;exit here if id matches
+hdcheckerror:                                                    ;else error
+                        mov     ax,-1
+hdcheckexit:
+                        pop     si
+                        ret
+
+;	correct the hard disk dpb's for concurrent version 3.2
+;	this changes physical sector size from 128 to 512 bytes
+;	spt = old spt / 4;  psh = 2;  prm = 3
+
+hdpatchdpb:
+                        push    si                               ; save info ptr just in case
+                        mov     si,HDINFlabelofs[si]             ; point to label (and dpb's)
+                        mov     cl,2                             ; for divide by 4
+                        shr     HDLBcpmspt[si],cl                ; for larger physical sectors
+                        mov     HDLBcpmpsh[si],2                 ; physical sector shift
+                        mov     HDLBcpmprm[si],3                 ; physical sector mask
+                        mov     HDLBmapspb[si],4                 ; 512 * 4 = 2k block
+                        pop     si
+                        ret
+
+;	hard disk physical read
+
+hdread:
+                        mov     bx,offset hdrdiopb               ; read parameters
+                        call    hdxlaterequest                   ; do block remap
+                        call    hddmacheck                       ; check for overflow
+                        jc      hdread1                          ; if no problem then
+                        jmp     hddmaio                          ;   read right to dma
+hdread1:
+                        call    hdlocalio                        ; if dma boundary error
+                        or      al,al                            ;   read to local first
+                        jnz     hdread2                          ; done if error
+
+                        push    es                               ; if read is good
+                        push    si                               ;   then move to dma
+                        mov     cx,blockbytecnt                  ; covers multi-sector ops
+                        mov     si,offset hdlocalbuf
+                        les     di,AUXLONGWORD
+                        rep     movsb
+                        pop     si
+                        pop     es
+hdread2:
+                        ret
+
+;	hard disk physical write
+
+hdwrite:
+                        mov     bx,offset hdwriopb               ; go load iopb and do it
+                        call    hdxlaterequest                   ; do block remap
+                        call    hddmacheck                       ; check for boundary error
+                        jnc     hdwrite1                         ; skip if dma ok
+
+                        push    ds ! push es ! push si           ; if boundary trouble then
+                        mov     di,offset hdlocalbuf             ;   move data to local buffer
+                        push    ds ! pop es                      ; local destination
+                        mov     cx,blockbytecnt                  ; covers multi-sector ops
+                        lds     si,AUXLONGWORD
+                        rep     movsb
+                        pop     si ! pop es ! pop ds
+
+                        call    hdlocalio                        ; write from local buffer
+                        jmps    hdwrite2                         ; skip to error check
+hdwrite1:
+                        call    hddmaio
+hdwrite2:
+                        or      al,al
+                        jnz     hdwriteexit                      ; exit here if failed
+
+                        cmp     forcewriteverify,0
+                        jne     hdforceverify
+                        push    si
+                        mov     si,HDINFlabelofs[si]
+                        test    HDLBcpmoptions[si],1
+                        pop     si
+                        jz      hdwriteexit                      ;no, just exit (al still valid)
+
+hdforceverify:
+                        mov     bx,offset hdvfyiopb              ;else run verify cycle
+                        mov     IBMfn[bx],2                      ;IBM read opcode
+                        call    hdlocalio
+                        or      al,al                            ;did read-after-write  fail?
+                        jnz     hdwriteexit                      ;yes, no point in comparing
+
+                        mov     IBMfn[bx],4                      ;fake verify opcode for msgs
+                        push    es ! push si                     ;else compare buffers
+                        les     di,AUXLONGWORD                   ;dma segment:offset
+                        mov     si,offset hdlocalbuf
+                        mov     cx,blockbytecnt                  ; covers multi-sector ops
+                        repe    cmpsb
+                        pop     si ! pop es
+                        mov     al,0                             ;assume success
+                        je      hdwriteexit                      ;if matched, exit
+                        mov     IBMerrcode[bx],HDVFYERR          ;else fake a physical error
+                        call    hderrorhandler                   ;and see what operator wants
+                        cmp     al,'R'                           ;retry?
+                        je      hdwrite                          ;yep, go back to the top
+hdwriteexit:
+                        ret
+
+;	translate global AUX_TRACK,AUX_SECTOR and hd_disk into remapped units
+;	and finds alternate block if that block is in remap table
+;	(updates global variables hd_req_block, hd_req_sec)
+;	entry:	bx -> iopb	(used by at_multi check)
+hdxlaterequest:
+                        push    si
+                        mov     si,HDINFlabelofs[si]             ; get label for this disk
+
+                        mov     ax,AUXTRACK                      ; ax=CPM_TRACK-cpm_offset
+                        sub     ax,HDLBcpmoff[si]
+                        mul     HDLBcpmspt[si]                   ;    * cpm_spt
+                        add     ax,AUXSECTOR                     ;    + CPM_SECTOR
+                        adc     dx,0                             ; conceivably > 32 meg
+                        mov     cx,HDLBmapspb[si]
+                        div     cx                               ; ax=logical block
+                        mov     hdreqsec,dx                      ; dx=block subsector
+                        sub     cx,dx                            ; cx=max multi sector count
+
+;	This bit is to get around a bug in the AT's disk code which
+;	bombs when it is interrupted during a multi-sector transfer
+
+                        call    atmulticount                     ; cl = maximum allowable
+                        cmp     cl,auxcode                       ; if it's less than mcnt
+                        jbe     hdxlatsector                     ;   then keep it
+                        mov     cl,auxcode                       ; else, use mcnt
+
+hdxlatsector:
+                        mov     blockmcnt,cl                     ; num of sectors in this block
+
+                        mov     ch,cl                            ; for future reference, we
+                        mov     cl,0                             ;   now calculate the number
+                        shl     cx,1                             ;   of bytes involved in the
+                        mov     blockbytecnt,cx                  ;   read/write operation
+
+                        mov     cx,HDLBmapcnt[si]                ; see if that block is in tbl
+                        jcxz    hdnoremap                        ; (skip if table is empty)
+
+                        push    es ! push ds ! pop es            ; local es for scan
+                        lea     di,HDLBmaptable[si]              ; list of rmapped blocks
+                        repne   scasw
+                        pop     es
+                        jne     hdnoremap                        ; no, leave block number alone
+
+                        inc     cx ! sub cx,HDLBmapcnt[si]       ; else calculate replacement
+                        mov     ax,HDLBmapspareend[si]
+                        add     ax,cx
+hdnoremap:
+                        mov     hdreqblock,ax                    ; update parameter and exit
+                        pop     si
+                        ret
+
+;	Set multi sector count for PC XT or AT
+;	entry:	bx -> iopb
+;		cl = multi count
+;	exit:	cl = max allowble multi sector count
+
+atmulticount:
+                        cmp     pcat,0FFh ! jnz atmultidone      ; if not an AT, then multi ok
+                        cmp     IBMfn[bx],2 ! jnz atmultidone    ; if not read, then multi ok
+                        mov     cl,1                             ; if reading on an AT, then
+atmultidone:                                                     ;    allow only one sector
+                        ret
+
+;	check dma addresses for boundary errors.  set carry if bad
+hddmacheck:
+                        mov     ax,AUXDMAS                       ; get segment
+                        mov     cl,4                             ; convert to offset
+                        shl     ax,cl                            ;   ignoring ms nibble
+                        add     ax,AUXDMAO                       ; add in segment
+                        add     ax,blockbytecnt                  ; set carry on overflow
+                        ret
+
+;	entry point for read or write.  transfers to and from dma buffers
+hddmaio:
+                        mov     ax,AUXDMAO
+                        mov     IBMxferofs[bx],ax                ; save offset
+                        mov     ax,AUXDMAS
+                        mov     IBMxferseg[bx],ax                ; save segment
+                        jmps    hdio
+
+;	entry point for local read or write
+hdlocalio:
+                        mov     IBMxferofs[bx],offset hdlocalbuf
+                        mov     IBMxferseg[bx],ds                ; local segment
+;	jmps	hd_io				; fall through
+
+;	fills in the volume,head and cyl fields in passed IBM_IOPB from
+;	current request using CURRENT HDINF pointer and executes rom operation
+;	CALLS:	hd_rom
+hdio:
+                        push    si
+                        mov     si,HDINFlabelofs[si]
+                        mov     al,AUXDRIVE
+                        mov     IBMlun[bx],al
+                        mov     ax,hdreqblock                    ;back to IBM format
+
+                        mul     HDLBmapspb[si]                   ;ibm_block=(block * remap_spb)
+                        add     ax,hdreqsec                      ;add in block subsector
+
+                        mov     ch,0                             ;for full divide
+                        mov     cl,HDLBibmspt[si]                ;ibm_rel_track=ibm_block/ibm_spt
+                        div     cx                               ;CAUTION!! 16 bit result
+
+                        inc     dl                               ;save remainder as ibm sector
+                        mov     IBMsector[bx],dl                 ; (except they start with 1)
+
+                        add     ax,HDLBcpmoff[si]                ;add cpm offset to ibm_rel_track
+                        mov     cl,HDLBnheads[si]                ;ibm_cyl= ibm_track/nheads
+                        xor     dx,dx ! div cx                   ;CAUTION!! 16 bit result
+                        mov     IBMcylinder[bx],ax
+                        mov     IBMhead[bx],dl                   ;ibm_head=ibm_track % nheads
+
+                        mov     al,blockmcnt                     ;multi-sectors in this block
+                        mov     IBMcount[bx],al                  ;that's how many to do
+                        pop     si
+;	jmps	hd_rom			;fall through
+
+;	provides easy access to HDISK ROM
+;	call with ds:bx--> IBM_iopb structure as defined elsewhere
+;	returns zero set if succeeds, else non-zero
+;	CALLS:	hd_error_handler
+hdrom:
+                        push    es ! push si                     ;save uda and HDINF_ptr then execute
+                        mov     cx,3                             ;set auto retry count
+
+hdromretry:                                                      ;inner retry loop
+                        push    cx ! push bx                     ;save retry counter & IOPB
+                        mov     ah,IBMfn[bx]
+                        mov     al,IBMcount[bx]                  ;load up registers for ROM call
+                        mov     dh,IBMhead[bx]
+                        mov     dl,IBMlun[bx]
+                        or      dl,80h                           ;Next ANSI hard disk command standard!
+                        mov     cx,IBMcylinder[bx]               ;  SCRewed-Up Microcomputer
+                        xchg    ch,cl                            ;  Parameter Interface - SCRUMPI ?
+                        ror     cl,1 ! ror cl,1                  ;  (SERIOUSLY now, why would anyone
+                        and     cl,0c0h                          ;  do something this way?)
+                        or      cl,IBMsector[bx]
+                        les     bx,IBMXFERPTR[bx]
+
+                        pushf   ! callf HDROMENTRY               ;fake an SWI call to ROM
+
+                        pop     bx ! pop cx                      ;restore IOPB ptr and retry counter
+                        mov     IBMerrcode[bx],ah                ;save error return
+                        mov     al,0 ! jnc hdrom1                ;and exit if no error
+
+                        push    cx ! push bx !                   ;reset drive on any error ??
+                        mov     ah,0dh                           ;registers are still ok
+                        pushf   ! callf HDROMENTRY
+                        pop     bx ! pop cx
+                        loop    hdromretry                       ;then try automatic retries first
+
+                        mov     al,IBMerrcode[bx]                ;else get error code back and exit
+hdrom1:
+                        pop     si ! pop es
+                        or      al,al ! jz hdromdone             ;return if no error
+                        test    hdinitflag,1                     ;if during MPM initialization,
+                        jz      hdromdone                        ;  return error immediately
+
+                        push    bx ! push si
+                        call    hderrorhandler                   ;else report it to operator
+                        pop     si ! pop bx
+                        cmp     al,'R' ! jz hdrom                ;does he wish to try again?
+
+hdromdone:
+                        ret                                      ;else return to caller
+
+;	dummy ROM BIOS SWI used by hard disk ROM (always succeeds)
+;	CALLS:	NOTHING
+hddummyint:
+                        sti     ! xor ax,ax  ! retf 2
+
+;	Display hard disk error and gets operator's response.
+;	entry:	al = error code
+;	exit:	al = 00h for ignore
+;		     FFh for accept
+;		     'R' for retry
+
+hderrorhandler:
+                        mov     diskerror,al                     ; save for sub message
+                        jmp     dodiskerror                      ; in the floppy code
+
+                        eject
+
+;********************************************************
+;*							*
+;*	  FIELD INSTALLABLE DEVICE DRIVER HOOKS		*
+;*							*
+;********************************************************
+
+;	FIDDS has been completely disabled because it gave us some
+;	problems when pc-mode BASIC hammered the interrupt vectors
+
+selfid:
+;	mov	aux_drive,cl	; save drive number
+;	mov	aux_code,dl	;   and select code
+;	sub	ax,ax		; ax = 0 for select
+;	jmps	fidds_go	; interrupt away
+
+readfid:
+;	call	aux_param_set	; drive, track, sect, etc.
+;	mov	ax,2		; ax = 2 for read
+;	jmps	fidds_go	; interrupt away
+
+writefid:
+;	call	aux_param_set	; same as for read
+;	mov	ax,4		; ax = 4 for write
+;	jmps	fidds_go	; interrupt away
+
+;	FIDDS take off point
+
+; fidds_go:
+;	call	aux_drive_fix	; get past floppies and DOS
+;	mov	ax,num_hard	; get past cp/m partitions too
+;	sub	aux_drive,al	; zero base the drive code
+;	mov	dx,ds		; dx:bx -> param block
+;	mov	bx,offset aux_drive
+;	int	fidds_interrupt
+
+                        sub     ax,ax                            ; null return
+                        ret
+
+;	Dummy FIDDS interrupt routine for non-disks
+
+idummyfidds:
+;	sub	ax,ax		; zero for no select
+;	iret
+
+;	Interrupt to return the lowest numbered unused system
+;	flag to FIDDS, to be used for a flagwait to eternity.
+
+ifiddsflag:
+                        mov     al,cs:topflag                    ; get the next available
+                        test    al,al                            ; if it's zero,
+                        jz      ifflagdone                       ;   then forget it
+
+                        inc     al                               ; increment to the next
+                        cmp     al,cs:nflags                     ; if we've gone too far
+                        jb      ifflagok                         ;   then reset to zero
+                        mov     al,0
+ifflagok:
+                        mov     cs:topflag,al                    ; for next time
+ifflagdone:
+                        iret
+
+; since FIDDS is not currently being supported, we'll just set the top
+; flag to zero, and any existing FIDDS driver will think that there
+; is no room for itself.  Here is how it used to be:
+;top_flag	db	last_flag	; used by i_fidds_flag
+topflag                 db      0                                ; and here is how it is
+
+                        eject
+xdata                   dseg    para public 'CODE'
+;	this block of data is shared by the
+;	XT hard disk driver and the FIDDS hooks
+
+auxdrive                rb      1                                ; corrected drive code
+auxcode                 rb      1                                ; select / rw multi-count
+auxtrack                rw      1
+auxsector               rw      1
+auxdmao                 rw      1
+auxdmas                 rw      1
+auxlongword             equ     dword ptr auxdmao
+
+auxfunc                 rw      1                                ; hd function code
+maxsector               rw      1                                ; mcnt loop limit
+blockbytecnt            rw      1                                ; multi-sector byte counter
+blockmcnt               rb      1                                ; multi-sectors in this block
+
+;	general information variables
+hdndisks                db      0                                ;amount of IRON found only!
+hduda                   dw      0                                ;stores UDA at entry to hd routines
+hdinitflag              db      0                                ;set at end of initialization
+hdpstartcyl             dw      0                                ;used to cross-check labels
+hdpendcyl               dw      0                                ;  for consistency with each other
+hdfunction              dw      0                                ;used fo debug trace info only
+hdbootflag              db      0                                ;temporarily save partition bootfl
+hddossysid              db      0                                ;temporarily save system id code
+
+;  desired block buffer contents
+; hd_req_vol is global AUX_DRIVE
+hdreqblock              dw      0                                ;requested BLOCK / physical sector
+hdreqsec                dw      0                                ;requested sector within block
+
+;	tables of pertinent information about each possible disk
+;	each contains an entry defined by data structure HDINF_vector
+hddiskinfo:
+hdinfo0                 db      0,0,0,0,0
+                        dw      0,0,offset hdlabel0
+                        db      0                                ; new pc logged byte!
+hdinfo1                 db      0,0,0,0,0
+                        dw      0,0,offset hdlabel1
+                        db      0                                ; new pc logged byte!
+
+;	iopbs used to do ROM BIOS IO
+;	CAUTION: these are only templates, it is the user's responsibility
+;	to make sure they are FULLY filled in with meaningful information
+hdwriopb                db      3,0,0,0                          ;fn,err,lun,head
+                        dw      0                                ;cylinder
+                        db      0,1                              ;sector,count
+                        dw      0,0                              ;xfer offset,seg
+
+hdrdiopb                db      2,0,0,0                          ;fn,err,lun,head
+                        dw      0                                ;cylinder
+                        db      0,1                              ;sector,count
+                        dw      0,0                              ;xfer offset,seg
+
+hdvfyiopb               db      2,0,0,0                          ;fn,err,lun,head
+                        dw      0                                ;cylinder
+                        db      0,1                              ;sector,count
+                        dw      0,0                              ;xfer offset,seg
+
+hdrdpartitioniopb       db      2,0,0,0                          ;fn,err,lun,head
+                        dw      0                                ;cylinder
+                        db      0,1                              ;sector,count
+                        dw      0,0                              ;xfer offset,seg
+
+;	string used to verify label authenticity
+hdidstring              db      '(C) 1983 DIGITAL RESEARCH, INC.'
+
+;	pointer to ROS interrupt entry for xt hard disk
+hdromofs                rw      1
+hdromseg                rw      1
+HDROMENTRY              equ     dword ptr hdromofs
+
+                        org     ((offset $-offset datastart)+1) and 0fffeh ;word align it
+
+;	allocation vectors, etc. for XT hard disks
+;	init now does hash table allocation
+
+hddph0                  dw      0,0,0,0,HDDPBINIT
+                        dw      0,0ffffh,0ffffh,0ffffh,0
+hddph1                  dw      0,0,0,0,HDDPBINIT
+                        dw      0,0ffffh,0ffffh,0ffffh,0
+
+;	this is a dummy dpb which is used by genccpm for
+;	dph allocation, and check vector
+
+HDDPBINIT               dw      hdspt                            ; spt
+                        db      05h                              ; bsh  4k blocks
+                        db      1Fh                              ; blm      "
+                        db      01h                              ; exm
+                        dw      0FFFh                            ; dsm  16 meg maximum
+; or 32 meg @ 8k blocks
+                        dw      07FFh                            ; drm
+                        dw      0FFFFh                           ; al0 and al1
+                        dw      8000h                            ; cks  fixed disk
+                        dw      01h                              ; off
+                        db      02h                              ; psh
+                        db      03h                              ; prm
+
+                        org     ((offset $-offset datastart)+15) and 0fff0h ;align them
+;	leave space for both label structures
+hdlabel0                rb      512
+hdlabel1                rb      512
+
+HDDPB0                  equ     byte ptr hdlabel0 + offset HDLBcpmdpb
+HDDPB1                  equ     byte ptr hdlabel1 + offset HDLBcpmdpb
+
+                        org     ((offset $-offset datastart)+1) and 0fffeh ;word align them
+
+;	The XT hard disk now shares its buffer with the floppies
+
+;	Sector buffer used by read/write routines when requested
+;	multi sector I/O operation crosses a 64K page boundary.
+;	Also used to read floppy size code from track 0 sector 0.
+
+hdlocalbuf              rb      0
+localbuffer             rb      bytespersector - 1
+floppytype              rb      1
+fatid                   rw      1                                ; for PC Mode fat word
+restofbuf               rb      blocksize - bytespersector - 2
+
+;************************************************
+;*						*
+;*	  PC MODE HARD DISK DRIVERS		*
+;*						*
+;************************************************
+
+;	This was previously a seperate module name PCHARD.LIB
+
+;	PC DOS hard disk driver entries for squid 9-Dec-83 M.P.Vano
+xcode                   cseg    byte public 'CODE'
+;	logs in volume if first time select and if login succeeds, returns
+;	DPH pointer in the usual fashion.
+pcselecthd:
+                        call    pcpointhdinf                     ;fix cl and si-->HDINF
+                        test    HDINFexists[si],0ffh ! jz pcloginerr ;see if drive exists
+                        test    HDINFpclogged[si],1 ! jz pchdlogitin ;if never logged in
+                        test    dl,1 ! jnz pchdgetdph            ;if not first time
+pchdlogitin:
+                        push    cx ! call pchdlogin ! pop cx
+                        or      al,al ! jnz pcloginerr
+                        mov     HDINFpclogged[si],1              ;show as logged in
+pchdgetdph:
+                        mov     ax,PCHDDPHSIZE ! sub ch,ch ! mul cx
+                        add     ax,offset pchddphs
+                        jmps    pcloginret
+pcloginerr:
+                        mov     HDINFpclogged[si],0              ;mark not logged
+                        sub     ax,ax                            ;0 ret if select err
+pcloginret:
+                        mov     bx,ax
+                        ret
+
+;	PC DOS mode hard disk read routine
+pcreadhd:
+                        mov     al,2 ! jmps pcreadwritehd        ; ROS read function
+
+;	PC DOS mode hard disk write routine
+pcwritehd:
+                        mov     al,3 ! jmps pcreadwritehd        ; ROS write function
+
+pcreadwritehd:                                                   ; common code
+                        mov     bx,offset pchdrwiopb
+                        mov     IBMfn[bx],al                     ;set function in IOPB
+
+                        mov     cl,drive                         ;set drive
+                        call    pcpointhdinf                     ;SI--> drive info
+                        mov     ax,PCHDDPHSIZE ! sub ch,ch ! mul cx
+                        mov     di,(offset pchddphs)+dphsize ! add di,ax ;DI--> label
+
+                        mov     IBMlun[bx],cl                    ; PHYS. unit to IOPB
+
+                        mov     ax,track                         ;setup disk address
+                        mov     dx,sector
+                        mov     cl,XTPTstartsector[di]           ;get sector/cyl offs
+                        and     cl,03fh                          ;UNPACK IBM SECTOR off
+                        add     dl,cl                            ;add to our sector #
+                        cmp     dl,HDINFspt[si]
+                        jbe     pchdxlate1                       ;check for track carry
+                        sub     dl,HDINFspt[si]                  ;if found deal with it
+                        inc     ax
+pchdxlate1:
+                        mov     IBMsector[bx],dl                 ;PHYS. sector to IOPB
+                        add     al,XTPTstarthead[di] ! adc ah,0  ;in case we're uneven
+                        sub     ch,ch ! mov cl,HDINFheads[si]    ;divide by # of heads
+                        cwd     ! div cx                         ;track to CYL and HEAD
+                        mov     cl,XTPTstartcylinder[di]         ;get cylinder offset
+                        mov     ch,XTPTstartsector[di]
+                        rol     ch,1 ! rol ch,1 ! and ch,3       ;unpack top two bits
+                        add     ax,cx                            ;add offset to cyl #
+                        mov     IBMcylinder[bx],ax ! mov IBMhead[bx],dl
+
+                        mov     ax,dmaseg                        ;set data xfer address
+                        mov     IBMxferseg[bx],ax
+                        mov     ax,dmaoff
+                        mov     IBMxferofs[bx],ax
+
+;	This bit is to get around a bug in the AT's disk code which
+;	bombs when it is interrupted during a multi-sector read op.
+
+                        mov     cl,mcnt                          ;get number of sectors
+                        mov     pcrwcount,cl                     ;save for our count
+                        call    atmulticount                     ;return max for AT
+                        mov     mcnt,cl                          ;  and set for pc_op
+
+pcrwhdagain:
+
+                        call    pchdoperation                    ;and inc sector, dma
+
+                        mov     ah,IBMerrcode[bx]                ;pick up extended err
+                        or      al,al ! jnz pcrwhderror          ;if error, exit
+
+                        mov     al,mcnt ! sub pcrwcount,al       ;count down our count
+                        jnz     pcrwhdagain                      ;  and repeat till 0
+                        xor     ax,ax ! ret                      ;return success
+
+pcrwhderror:
+                        mov     al,1 ! ret
+
+;	return SI pointing to HDINF vector for cpm volume # in CL
+pcpointhdinf:
+                        sub     cl,byte ptr numflopdes           ;hard disks start after floppy names
+                        mov     ax,HDINFSIZE ! mul cl            ;point to that drive's physical info
+                        mov     si,offset hddiskinfo
+                        add     si,ax
+                        ret
+
+;	finds dos partition and builds dpb for it
+
+;	uses existing local buffer to hold label sectors as needed.
+
+;	ENTRY:	CL = PHYSICAL DRIVE # 0 based
+;		SI-->HDINF data structure for drive
+;	EXIT:	AL=0 if success, else NZ
+;		updates HDINF and PC Label
+pchdlogin:
+                        push    cx
+                        mov     bx,offset pcparttableiopb
+                        mov     IBMxferofs[bx],offset localbuffer ;read partition table
+                        mov     IBMxferseg[bx],ds
+                        mov     IBMlun[bx],cl
+                        mov     IBMsector[bx],1                  ;sector 1
+                        mov     IBMcylinder[bx],0                ;cylinder 0
+                        mov     IBMhead[bx],0                    ;head 0
+                        push    bx ! call hdrom ! pop bx
+                        or      al,al ! jz pchdlogin1
+                        jmp     pchdloginexit                    ;can't read it, quit
+pchdlogin1:
+                        mov     bx,offset localbuffer
+                        cmp     XTLBLid[bx],IBMSYSID             ;does it have IBM signature?
+                        je      pchdlogin2
+                        jmp     pchdloginfail
+pchdlogin2:
+                        lea     di,XTLBLpart1[bx]                ;setup to scan PT for dos
+                        mov     cx,4
+pchddoshunt:
+                        mov     al,XTPTsystem[di]                ;fetch sys id
+                        cmp     al,HDDOSID1 ! je pchddosfound    ;skip if type 1
+                        cmp     al,HDDOSID4 ! je pchddosfound    ;skip if type 4
+                        add     di,XTPTRECSIZE                   ;else try next entry
+                        loop    pchddoshunt
+                        jmp     pchdloginfail                    ;nope, not there
+
+pchddosfound:
+                        mov     hddossysid,al                    ;save for extflag
+                        mov     al,XTPTbootfl[di]                ;save boot flag so
+                        mov     hdbootflag,al                    ;init can pick sysdisk
+                        pop     ax ! push ax                     ;recover drive code
+                        mov     ah,PCHDDPHSIZE ! mul ah          ;point to label save
+                        add     ax,(offset pchddphs + dphsize)   ;ax--> label save area
+
+                        push    si ! push ax ! push es
+                        mov     si,di ! mov di,ax
+                        mov     ax,ds ! mov es,ax
+                        mov     cx,XTPTRECSIZE ! cld
+                        rep     movsb                            ;save partition entry
+                        pop     es ! pop di ! pop si             ;di--> head of record
+
+                        mov     bx,offset pcparttableiopb        ;make boot record IOPB
+                        mov     ah,XTPTstartsector[di]
+                        mov     al,ah ! and al,3fh
+                        mov     IBMsector[bx],al
+                        mov     al,XTPTstarthead[di]             ;the starting head may
+                        mov     IBMhead[bx],al                   ;  not equal zero
+                        mov     al,XTPTstartcylinder[di]
+                        rol     ah,1 ! rol ah,1 ! and ah,3
+                        mov     IBMcylinder[bx],ax
+                        push    bx ! call hdrom ! pop bx         ;read boot record
+                        or      al,al ! jnz pchdloginfail
+                        cmp     word ptr localbuffer+510,IBMSYSID ;check for signature
+                        jne     pchdloginfail                    ;abort if not found
+
+                        mov     al,IBMlun[bx] ! sub ah,ah
+                        mov     cx,PCHDDPBSIZE ! mul cx          ;point to the dpb
+                        add     ax,offset pchddpbs
+
+                        mov     bx,di ! sub bx,dphsize           ;plug it into dph
+                        mov     word ptr 8[bx],ax
+                        mov     bx,ax                            ;then point bx -> dpb
+
+                        mov     PCDPBextflag[bx],extflag1        ;assume 1.5 bytes per
+                        cmp     hddossysid,HDDOSID4 ! jnz pchdbuild ;if its a 2 byte per
+                        mov     PCDPBextflag[bx],extflag2        ;  entry fat, flag it
+
+pchdbuild:
+                        mov     di,offset localbuffer            ;di -> boot record
+                        mov     al,PCBRnfats[di] ! sub ah,ah     ;build the dpb
+                        mov     PCDPBnfat[bx],ax
+
+                        mov     ax,PCBRfatsec[di]
+                        mov     PCDPBfatrec[bx],ax
+
+                        call    pchdclustercount                 ;calculate # of clstrs
+
+                        mov     ax,PCBRreserved[di]
+                        mov     PCDPBfatadd[bx],ax
+                        mov     PCDPBspt[bx],hdspt
+                        mov     ax,PCBRdirmax[di] ! dec ax
+                        mov     PCDPBdirsiz[bx],ax
+                        mov     PCDPBcksiz[bx],8000h             ;fixed disk only
+
+                        call    pchddpbfix                       ;patch up for show
+
+                        sub     ax,ax ! jmps pchdloginexit
+pchdloginfail:
+                        mov     ax,-1
+pchdloginexit:
+                        pop     cx
+                        ret
+
+;	calculate number of clusters
+
+pchdclustercount:
+                        push    cx                               ;calculate # of clstrs
+                        mov     ax,PCBRfatsec[di]                ;assume < 256
+                        mul     PCBRnfats[di]                    ;ax = sectors of fats
+                        push    ax
+                        mov     ax,PCBRdirmax[di]                ;number of dir entries
+                        add     ax,0Fh                           ;to force a round up
+                        mov     cl,4 ! shr ax,cl                 ;ax = sectors of dir
+                        push    ax
+                        mov     ax,PCBRtotsec[di]                ;including everything
+                        sub     ax,PCBRreserved[di]              ;minus boot
+                        pop     cx
+                        sub     ax,cx                            ;minus directory
+                        pop     cx
+                        sub     ax,cx                            ;minus fats
+
+                        mov     cl,PCBRallocsiz[di] ! mov ch,0   ;sectors per alloc
+                        sub     dx,dx ! div cx
+                        inc     ax ! inc ax                      ;plus 2 rsvd clusters
+                        mov     PCDPBnclstrs[bx],ax              ;set num of clusters
+
+                        mov     ax,PCBRsecsiz[di]
+                        mul     cx
+                        mov     PCDPBclsize[bx],ax               ;and clustersize
+                        pop     cx
+                        ret
+
+;	fix up the pc partitions dpb for show dsk:
+
+pchddpbfix:
+                        push    si                               ;save for indexing
+                        mov     ax,PCDPBclsize[bx]
+                        dec     ax                               ;align msb
+                        mov     cx,6                             ;to shift out > 1024
+pdhdfixloop:
+                        shl     ax,1                             ;march the msb out
+                        jc      pchdfixit                        ;skip when out
+                        loop    pdhdfixloop                      ;fall through if < 1024
+pchdfixit:
+                        mov     si,cx
+                        shl     si,1                             ;block size index
+
+                        mov     cx,ds:pcblksize[si]              ;get the block size
+                        mov     ax,PCDPBnclstrs[bx]
+                        mul     PCDPBclsize[bx]
+                        div     cx                               ;number of allocation blocks
+                        dec     ax                               ;calculated dsm
+
+                        cmp     cx,1024                          ;if the block size is 1k and
+                        jne     pchdfixok                        ;  we've more than 255 blocks,
+                        cmp     ax,255                           ;  then pretend that we've got
+                        jbe     pchdfixok                        ;  2k blocks
+
+                        inc     si ! inc si                      ;move our index to 2k
+                        shr     ax,1                             ;  and correct dsm
+pchdfixok:
+                        mov     PCDPBdsm[bx],ax                  ;fill in DSM value
+
+                        mov     ax,ds:pcbshblm[si]               ;fetch both
+                        mov     PCDPBbsh[bx],al                  ;block shift
+                        mov     PCDPBblm[bx],ah                  ;block mask
+                        pop     si                               ;restore index
+                        ret
+
+pcblksize               dw      0400h,0800h,1000h,2000h,4000h,4000h,4000h
+pcbshblm                dw      0703h,0F04h,1F05h,3F06h,7F07h,7F07h,7F07h
+
+;	perform IO operation described by IOPB (perhaps as several operations)
+;	dealing transparently with all dma boundary crossing problems.
+
+;	Note: 	this routine is required to deal with the proprietary IBM
+;		DMA page register technique (patent pending) used in the PC.
+
+;	ENTRY 	BX--> IOPB
+;		DI--> PC_LBL
+;		SI--> HDINF
+;	EXIT:	AL=0 if succeeds, else NZ
+pchdoperation:
+                        mov     dl,mcnt                          ;keep # still to xfer in dl
+
+                        push    bx
+                        mov     ax,IBMxferseg[bx]
+                        mov     bx,IBMxferofs[bx]
+                        call    compdma                          ;calculate 20 bit xfer address
+                        pop     bx
+                        neg     ax                               ;ax= # of bytes left in page
+
+                        push    dx                               ;save count
+                        sub     dx,dx ! div C512                 ; # of xfers left in page
+                        pop     dx                               ;restore it count
+                        or      ax,ax ! jz pchdmidxfer           ;if 0 start with buffered xfer
+                        cmp     al,dl ! jnc pchdlastxfer         ;if all fit, skip buffr'd xfer
+                        mov     IBMcount[bx],al                  ;else transfer as many as fit
+                        call    pchddoit
+                        or      al,al ! jnz pchdoperr            ;break if error
+                        sub     dl,IBMcount[bx]                  ;how many are still left?
+                        jz      pchdopok                         ; - NONE, exit
+
+pchdmidxfer:
+                        cmp     IBMfn[bx],2 ! je pchdmidxfer1
+                        call    pchdtobuffer                     ;if write, move data to buff
+pchdmidxfer1:
+                        push    IBMxferseg[bx]                   ;save xfer address
+                        push    IBMxferofs[bx]
+
+                        mov     IBMxferseg[bx],ds                ;setup local transfer
+                        mov     IBMxferofs[bx],offset localbuffer
+                        mov     IBMcount[bx],1
+                        call    pchddoit
+
+                        pop     IBMxferofs[bx]                   ;restore transfer ptrs
+                        pop     IBMxferseg[bx]
+                        or      al,al ! jnz pchdoperr            ;break if there was an error
+
+                        cmp     IBMfn[bx],3 ! je pchdmidxfer2
+                        call    pchdfrombuffer
+pchdmidxfer2:
+                        add     IBMxferofs[bx],512
+                        dec     dl ! jz pchdopok                 ;dec mcnt and exit if done
+
+pchdlastxfer:
+                        mov     IBMcount[bx],dl                  ;do one last long direct xfer
+                        call    pchddoit ! or al,al ! jz pchdopok
+pchdoperr:
+                        mov     al,0ffh
+                        jmps    pchdopexit
+pchdopok:
+                        xor     ax,ax
+pchdopexit:
+                        ret
+
+;	moves 512 bytes from local buffer to user buffer
+pchdfrombuffer:
+                        push    si ! push di ! push ds ! push es
+                        mov     si,offset localbuffer
+                        les     di,IBMXFERPTR[bx]
+pchdmove1:
+                        cld     ! mov cx,256
+                        rep     movsw
+                        pop     es ! pop ds ! pop di ! pop si
+                        ret
+
+;	moves 512 bytes form user buffer to local buffer
+pchdtobuffer:
+                        push    si ! push di ! push ds ! push es
+                        push    ds ! pop es
+                        mov     di,offset localbuffer
+                        lds     si,IBMXFERPTR[bx]
+                        jmps    pchdmove1
+
+;	does transfer and increments IOPB xfer pointer as needed
+pchddoit:
+                        push    bx ! push cx ! push dx
+                        call    hdrom
+                        pop     dx ! pop cx ! pop bx
+                        or      al,al ! jnz pchddoitdone
+                        push    dx
+                        mov     al,IBMcount[bx]
+                        add     IBMsector[bx],al
+                        sub     ah,ah ! mul C512
+                        add     IBMxferofs[bx],ax
+hddoitagain:
+                        mov     al,HDINFspt[si]
+                        cmp     IBMsector[bx],al ! jbe pchddoit1
+                        sub     IBMsector[bx],al
+                        inc     IBMhead[bx]
+                        mov     al,HDINFheads[si]
+                        cmp     IBMhead[bx],al ! jb hddoitagain
+                        sub     IBMhead[bx],al
+                        inc     IBMcylinder[bx]
+                        jmps    hddoitagain
+pchddoit1:
+                        pop     dx
+                        sub     ax,ax
+pchddoitdone:
+                        ret
+
+                        eject
+xdata                   dseg    para public 'CODE'
+C512                    dw      512                              ;constant for word division
+
+pcrwcount               rb      1                                ;for at multi count down
+                        rb      1                                ;pad
+
+;	This is the data structure template for a PCDOS "BOOT RECORD"
+;	This structure is normally found in block 0 of a DOS partition
+;	and is analagous to a DPB label giving the BIOS information
+;	which it can pass to the DOS at initialization about the drives
+;	supported.  Note that this structure is NEW in PC DOS 2.0 and no
+;	comparable structure exists in DOS 1.0 and 1.1.
+
+;PC_boot_rec	struct
+;PC_boot_rec ENDS
+
+;	dphs for the pc mode hard disk volumes
+;	init now does all hash table allocation
+pchddphs:
+pchdfirstdph:
+                        dw      0,0,0,0,offset pchddummydpb      ;dpb ptr fixed up at login
+                        dw      0,-1,-1,-1,0
+
+                        rb      XTPTRECSIZE                      ;keep that disk's partition table record here
+
+PCHDDPHSIZE             equ     (offset $)-(offset pchddphs)
+
+pchdseconddph:
+                        dw      0,0,0,0,offset pchddummydpb      ;dpb ptr fixed up at login
+                        dw      0,-1,-1,-1,0
+
+                        rb      XTPTRECSIZE                      ;keep that disk's partition table record here
+
+;	EXTENDED DPBS FOR PC DOS HARD DISK PARTITIONS
+;	Note that some values in these are setup at login time for the volume
+pchddpbs:
+pchdfirstdpb:
+                        dw      extflag1                         ;extended DPB flag
+                        dw      2                                ; inserted at login:	NFATS
+                        dw      2                                ;			NFATRECS
+                        dw      4088                             ;			NCLSTRS
+                        dw      1                                ;			CLSIZE
+                        dw      1                                ;			FATADD
+
+pchddummydpb:
+                        dw      hdspt                            ;			sectors per track
+                        db      05h                              ; not used:		CP/M block shift
+                        db      1fh                              ; 			CP/M block mask
+                        db      0                                ; 			CP/M extnt mask
+                        dw      1                                ; 			CP/M disk size
+                        dw      05ffh                            ;inserted at login:	ROOT DIRECTORY SIZE
+                        db      0ffh                             ; not used:		CP/M alloc0
+                        db      0ffh                             ; 			CP/M alloc1
+                        dw      8000h                            ;check size
+                        dw      0                                ;offset		   <used as usual?>
+                        db      2                                ;phys sec shift	   <used as usual?>
+                        db      3                                ;phys sec mask	   <used as usual?>
+
+PCHDDPBSIZE             equ     (offset $) - (offset pchdfirstdpb)
+
+pchdseconddpb:
+                        dw      extflag1                         ;extended DPB flag
+                        dw      2                                ; inserted at login:	NFATS
+                        dw      2                                ;			NFATRECS
+                        dw      4088                             ;			NCLSTRS
+                        dw      1                                ;			CLSIZE
+                        dw      1                                ;			FATADD
+
+                        dw      hdspt                            ;			sectors per track
+                        db      0                                ; not used:		CP/M block shift
+                        db      0                                ; 			CP/M block mask
+                        db      0                                ; 			CP/M extnt mask
+                        dw      0                                ; 			CP/M disk size
+                        dw      1023                             ;inserted at login:	ROOT DIRECTORY SIZE
+                        db      0                                ; not used:		CP/M alloc0
+                        db      0                                ; 			CP/M alloc1
+                        dw      8000h                            ;check size
+                        dw      0                                ;offset		   <used as usual?>
+                        db      2                                ;phys sec shift	   <used as usual?>
+                        db      3                                ;phys sec mask	   <used as usual?>
+
+pchdrwiopb:
+                        db      0,0,0,0                          ;fn,err,lun,head
+                        dw      0                                ;cyl
+                        db      0,1                              ;sector, count
+                        dw      0,0                              ;xfer offset/seg
+
+pcparttableiopb:
+                        db      2,0,0,0                          ;fn,err,lun,head
+                        dw      0                                ;cyl
+                        db      0,1                              ;sector, count
+                        dw      offset localbuffer
+                        dw      0                                ;must be preset to ds

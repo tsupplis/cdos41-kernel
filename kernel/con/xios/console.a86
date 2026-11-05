@@ -1,0 +1,18 @@
+; Console XIOS module: assemble this file to one object.
+xcode                   cseg    byte public 'CODE'
+xdata                   dseg    para public 'CODE'
+xios                    group   xcode,xdata
+xdata                   dseg    para public 'CODE'
+datastart               rb      0
+                        include consoles.inc
+                        include shared.inc
+
+                        include consif.inc
+
+                        include xkey.lib
+                        include xinput.lib
+                        include xcon1.lib
+                        include xcon2.lib
+                        include egvideo.lib
+
+                        end
