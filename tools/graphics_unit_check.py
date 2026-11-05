@@ -8,7 +8,7 @@ from pathlib import Path
 import re,subprocess,tempfile
 ROOT=Path(__file__).resolve().parent.parent
 CON=ROOT/'kernel/con'
-CDOS=(CON/'squid.a86').exists()
+CDOS=(ROOT/'media/cdos86.cfg').exists()
 symbols=dict((n,int(v,16)) for v,n in re.findall(r'\b([0-9A-F]{4})\s+([A-Z][A-Z0-9]*)',(CON/('squid.sym' if CDOS else 'xios.sym')).read_text()))
 b=(CON/'xios.con').read_bytes();BASE=b[128:128+int.from_bytes(b[1:3],'little')*16]
 S=lambda n:symbols[n.replace('_','').upper()]
