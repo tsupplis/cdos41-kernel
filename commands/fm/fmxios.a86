@@ -132,4 +132,33 @@ fm_lock_done:
         pop es
         pop bp
         ret
+; Snapshot DMA offset/segment, console mode and multisector count.
+; Exact CDOS4.1 caller guard is in fm_term_open; no kernel writes.
+        public FMTSTATE
+FMTSTATE:
+        push bp
+        mov bp,sp
+        push si
+        push di
+        push es
+        mov cl,156
+        int 0e0h
+        mov di,4[bp]
+        mov ax,es:22h[bx]
+        mov 4[di],ax
+        mov ax,es:10h[bx]
+        mov es,ax
+        xor bx,bx
+        mov ax,es:2[bx]
+        mov [di],ax
+        mov ax,es:4[bx]
+        mov 2[di],ax
+        xor ax,ax
+        mov al,es:17[bx]
+        mov 6[di],ax
+        pop es
+        pop di
+        pop si
+        pop bp
+        ret
         end

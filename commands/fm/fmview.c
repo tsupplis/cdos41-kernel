@@ -30,7 +30,14 @@ static int launch_console_error;
 static struct fm_book bookmarks[2];
 static char book_message[80];
 static char current_directory[]=".           ";
-int printf();
+int FMLOC();
+char *strcpy();
+static int message(s)
+char *s;
+{
+    while(*s) {if(*s=='\n') __BDOS(2,13);__BDOS(2,*s++);}
+    return 0;
+}
 static struct fm_file files[256];
 static char *names[256];
 static char usernames[16][13],drivenames[16][13];
@@ -59,6 +66,7 @@ static int backup_menu;
 static struct fm_navigation backup_navigation;
 static char *backup_labels[]={"Help","Files to A:","Dir to A:",
     "Files to B:","Dir to B:","Restore"};
+static int help_action();
 static int copy_destination();
 static int picker_cancel();
 static int normal, menuattr, promptattr, keyattr, limited;
@@ -200,7 +208,7 @@ char *raw,*out;
     static int months[]={31,28,31,30,31,30,31,31,30,31,30,31};
     for(i=0;i<26;++i) out[i]=' ';out[26]=0;
     if(fat) {
-        bytes=detail_word(raw+30)>=32768U ? 100000000L : (long)detail_word(raw+28) |
+        bytes=detail_word(raw+30)>=(unsigned)32768 ? 100000000L : (long)detail_word(raw+28) |
               ((long)detail_word(raw+30)<<16);
         detail_decimal(out,8,bytes);
         date=detail_word(raw+24);time=detail_word(raw+22);
@@ -282,20 +290,69 @@ static int details_action()
     return 1;
 }
 
-/* CODE 8EDB/9752: case-insensitive typed filename prefix selection.
- * Delete edits an active search (CODE91DD), otherwise it unmarks as before.
- * Search operates on sorted display identities and never changes the subset.
+/* CODE8EDB/9752 typed prefixes; CODE93D9..962E '*' substring marking.
+ * The leading '*' becomes internal1F in the original matcher. A bare '*'
+ * matches every displayed name. Matching is literal and case insensitive.
  */
-static char search_prefix[13];
-static int search_length;
+static char search_prefix[14];
+static int search_length,search_mode;
+static int search_contains(name)
+char *name;
+{
+    int start,j,ch;
+    for(start=0;start<=12-(search_length-1);++start) {
+        for(j=1;j<search_length;++j) {
+            ch=name[start+j-1]&127;
+            if(ch>='a' && ch<='z') ch-=32;
+            if(ch!=search_prefix[j]) break;
+        }
+        if(j==search_length) return 1;
+    }
+    return 0;
+}
 static int search_key(key)
 int key;
 {
     int i,j,ch,selected,oldlength;
+    if(search_mode) {
+        if(key==3 || key==24 || key==27) {
+            search_mode=search_length=0;search_prefix[0]=0;return 1;
+        }
+        if(key==13 || key==44) {
+            selected=browser.navigation.selected;
+            for(i=0;i<browser.navigation.count;++i)
+                if(search_contains(names[i]) && !marks.value[i]) {
+                    fm_marks_key(&marks,i+1,browser.navigation.count,44);
+                    selected=i+1;
+                }
+            search_mode=search_length=0;search_prefix[0]=0;
+            fm_browser_key(&browser,1);
+            while(browser.navigation.selected<selected) fm_browser_key(&browser,12);
+            return 1;
+        }
+        if(key==8 || key==127) {
+            if(search_length>1) search_prefix[--search_length]=0;
+            else {search_mode=search_length=0;search_prefix[0]=0;}
+        } else if(key>=32 && key<=126 && search_length<13) {
+            if(key>='a' && key<='z') key-=32;
+            search_prefix[search_length++]=key;search_prefix[search_length]=0;
+        }
+        if(search_mode) notice=search_prefix;
+        return 1;
+    }
+    if(key=='*') {
+        if(!search_length) {
+            search_mode=1;search_length=1;
+            search_prefix[0]='*';search_prefix[1]=0;notice=search_prefix;
+        }
+        return 1;
+    }
     if(key==127 && search_length) {
         search_prefix[--search_length]=0;return 1;
     }
-    if(key==24) {search_length=0;search_prefix[0]=0;return 1;}
+    if(key==24) {
+        search_length=0;search_prefix[0]=0;fm_marks_clear(&marks);return 1;
+    }
     if(key<33 || key>126 || key==',' || key=='?') {
         search_length=0;search_prefix[0]=0;return -1;
     }
@@ -309,10 +366,7 @@ int key;
             if(ch!=search_prefix[j]) break;
         }
         if(j==search_length) {
-            selected=i+1;
-            /* Navigate through the existing paging core; no independent
-             * scroll calculation can split a column or lose a mark. */
-            fm_browser_key(&browser,1);
+            selected=i+1;fm_browser_key(&browser,1);
             while(browser.navigation.selected<selected) fm_browser_key(&browser,12);
             return 1;
         }
@@ -932,6 +986,7 @@ int key;
     if(entry==5) {
         copy_menu=0;copy_choosing=1;return drive_view();
     }
+    if(entry==0) return help_action();
     notice="This destination is not yet implemented";
     return 1;
 }
@@ -941,13 +996,12 @@ static int run_invoke(command)
 char *command;
 {
     int result;
+    fm_term_cursor(1);
     if(!fm_term_close(&console)) {launch_console_error=1;return 0;}
-    __BDOS(6,27);__BDOS(6,'e');
-    __BDOS(6,27);__BDOS(6,'E');
     result=fm_spawn(command,dma);
     __BDOS(45,255);
     if(!fm_term_open(&canvas,&console)) {launch_console_error=1;return 0;}
-    __BDOS(6,27);__BDOS(6,'f');
+    fm_term_cursor(0);
     if(!result) notice=fm_spawn_error();
     return result;
 }
@@ -1021,7 +1075,7 @@ int key;
     else {fm_navigate(&backup_navigation,key);return 1;}
     if(!entry) {
         launch_console_error=0;
-        run_invoke("HELP.CMD BACKREST");
+        run_invoke("HELP.CMD BACK");
         return !launch_console_error;
     }
     dest=entry<=2 ? 1 : 2;whole=entry==2 || entry==4;
@@ -1088,6 +1142,28 @@ static int system_copy_action()
     result=fm_copy_batch(&browser,files,count,&marks,drive,destination,dma,&ops);
     return copy_status(result,destination,0);
 }
+static int help_action()
+{
+    char command[128],*topic;
+    int i,n,result;
+    topic=backup_menu ? "BACK" : copy_menu ? "*COPY" :
+          focus.active ? fm_menu_items[fm_focus_index(&focus)].command : "*";
+    strcpy(command,"HELP.CMD ");n=9;
+    if(*topic=='*') {
+        strcpy(command+n,"FILEMANAGER ");n+=12;++topic;
+    }
+    for(i=0;topic[i] && n<127;++i)command[n++]=topic[i];
+    command[n]=0;launch_console_error=0;
+    result=run_invoke(command);
+    return !launch_console_error;
+}
+static int quick_drive(target)
+int target;
+{
+    if(!select_drive(target)) {notice="Bad drive";return 1;}
+    drive=target;fat=fatmedia();directories=drives=focus.active=0;
+    fm_marks_clear(&marks);return refresh();
+}
 static int print_notice(name)
 char *name;
 {
@@ -1132,21 +1208,21 @@ int argc;
 char **argv;
 {
     int i,j,result,key,action,original_user,original_drive;
-    if(argc!=1) { printf("USAGE: FMVIEW\n"); return 1; }
+    /* Original FM ignores extra command-tail arguments. */
     /* Return BDOS file errors to this process instead of aborting the UI. */
     __BDOS(45,255);
     drive=(__BDOS(25,0)&255)+1;user=__BDOS(32,255)&255;original_user=user;original_drive=drive;
     for(i=0;i<16;++i) for(j=0;j<11;++j) masks[i][j]='?';
     fm_config_defaults(&config);
     if(fm_config_load(&config,dma)<0) {
-        printf("FMVIEW: configuration read failed\n");return 1;
+        message("FMVIEW: configuration read failed\n");return 1;
     }
     for(i=2;i<8;++i) if((config.value[i]&255)>15) break;
     if(i<8 || (config.value[14]&255)>15 || (config.value[15]&255)>15) {
-        printf("FMVIEW: invalid configuration colour\n");return 1;
+        message("FMVIEW: invalid configuration colour\n");return 1;
     }
     if(!fm_layout_calculate(&layout,&config,24,80,0)) {
-        printf("FMVIEW: invalid configuration geometry\n");return 1;
+        message("FMVIEW: invalid configuration geometry\n");return 1;
     }
     fat=fatmedia();
     normal=fm_attribute(config.value[2],config.value[3],0);
@@ -1155,11 +1231,11 @@ char **argv;
     keyattr=fm_attribute(config.value[14],config.value[15],0);
     menu_selected=fm_attribute(config.value[4],config.value[5],1);
     fm_focus_open(&focus,layout.menu.height>2 ? layout.menu.height-2 : 1);
-    if(!refresh()) { printf("FMVIEW: directory search failed\n");return 1; }
+    if(!refresh()) { message("FMVIEW: directory search failed\n");return 1; }
     if(!fm_term_open(&canvas,&console)) {
-        printf("FMVIEW: CDOS 4.1 PC window console required\n");return 1;
+        message("FMVIEW: CDOS 4.1 console and valid TERM.DAT required\n");return 1;
     }
-    __BDOS(6,27);__BDOS(6,'f');
+    fm_term_cursor(0);
     if(!repaint()) result=-1;
     else {
         do {
@@ -1168,10 +1244,11 @@ char **argv;
             else if(key<0) result=-1;
             else {
                 notice=0;
-                if(focus.active || directories || drives || input.active || copy_menu || key>=128) {
+                if(!search_mode && (focus.active || directories || drives || input.active || copy_menu || key>=128)) {
                     search_length=0;search_prefix[0]=0;
                 }
-                if(backup_menu) result=backup_key(key) ? 1 : -1;
+                if(search_mode) result=search_key(key);
+                else if(backup_menu) result=backup_key(key) ? 1 : -1;
                 else if(copy_menu) result=copy_key(key) ? 1 : -1;
                 else if(copy_user_choosing && key==27) {
                     copy_user_choosing=0;result=picker_cancel() ? 1 : -1;
@@ -1182,6 +1259,13 @@ char **argv;
                 else if(copy_choosing && key==13) result=drive_select() ? 1 : -1;
                 else if(copy_choosing) result=fm_browser_key(&browser,key)>0 ? 1 : 0;
                 else if(input.active) result=subset_key(key) ? 1 : -1;
+                else if(key==0xbb || key==0xe1 || key=='?') result=help_action() ? 1 : -1;
+                else if(key==0xe2) result=type_action() ? 1 : -1;
+                else if(key==0xe3) result=details_action() ? 1 : -1;
+                else if(key==0xe4) result=copy_action() ? 1 : -1;
+                else if(key>=0xe5 && key<=0xe8) result=quick_drive(key<0xe7?key-0xe2:key-0xe6) ? 1 : -1;
+                else if(key==0xe9) result=drive_view() ? 1 : -1;
+                else if(key==0xc0 && !directories && !drives) result=external_action(10) ? 1 : -1;
                 else if(directories && !drives && (key==0xbf || key==0xc0 || key==0xc3))
                     result=directory_manage(key==0xbf?1:key==0xc0?2:0) ? 1 : -1;
                 else if(directories && !drives && key==0xbc)
@@ -1236,11 +1320,26 @@ char **argv;
             }
         } while(result>=0 && result!=2);
     }
+    fm_term_cursor(1);
     fm_term_close(&console);
     __BDOS(14,original_drive-1);
     __BDOS(32,original_user);
-    __BDOS(6,27);__BDOS(6,'e');
-    __BDOS(6,27);__BDOS(6,'E');
-    printf("FMVIEW: %s\n",result<0 ? "console error" : "closed");
+
+    message(result<0 ? "FMVIEW: console error\n" : "FMVIEW: closed\n");
     return result<0;
+}
+
+/* Same DR C startup boundary as WINDOW. FM has no command arguments or
+ * stdio streams; avoid pulling in the general argv/redirection runtime. */
+_main(tail,length)
+char *tail;
+int length;
+{
+    int i,argc,result;
+    argc=1;
+    for(i=0;i<length;++i) if(tail[i]!=' ' && tail[i]!='\t') {argc=2;break;}
+    result=main(argc,0);
+    BDOS(108,result);
+    BDOS(0,0);
+    return result;
 }

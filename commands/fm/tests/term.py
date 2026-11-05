@@ -29,6 +29,7 @@ int XCALL(int function,int bx,int cx,int dx) {
 int FARBYTE(int seg,int off) { assert(seg==0x1000);if(off==0x233)return expansion;assert(off==0x101);return count; }
 int FARWORD(int seg,int off) {
     assert(seg==0x1000);
+    if(off==0x218)return 0xb800;
     if(off==0x216) return image;
     if(off==0x204) return 0x174f;
     assert(off==0x202);return 0;
@@ -40,6 +41,8 @@ int FMLOCK(int seg,int off,int mode) {
     assert(seg==0x1000 && off==0x200);
     assert(locked==mode);locked=!mode;return 1;
 }
+int FMTSTATE(){assert(0);return 0;}
+int DATASEG(){return 0;}
 int fm_native_key(void) { assert(!locked);return -1; }
 int main(void) {
     struct fm_canvas canvas;

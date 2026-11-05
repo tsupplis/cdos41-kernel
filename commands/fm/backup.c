@@ -242,7 +242,7 @@ char *dma;int (*invoke)();
     if((BDOS(14,physical-1)&255)==255)goto done;
     BDOS(32,0);BDOS(26,dma);
     strcpy(command,restore ? "REST.CMD CTL=A" : "BACK.CMD CTL=A");
-    command[12]='A'+physical-1;
+    command[13]='A'+physical-1;
     backup_io_error="Backup or Restore command failed";
     result=(*invoke)(command)?1:0;
 done:

@@ -7,6 +7,7 @@ source=r"""
 #include <string.h>
 int __BDOS();
 int sprintf();
+int FMLOC();
 #define main fmview_main
 #include "fmview.c"
 int fm_native_directory(){return 0;}
@@ -16,6 +17,16 @@ static int captures,clones,same_location,location_error,copy_calls,batch_calls,l
 int __BDOS(fn,arg)
 int fn,arg;
 {if(fn==14)native_drive=arg+1;return fn==25 ? native_drive-1 : 0;}
+int FMLOC(d,out)int d,*out;{out[0]=d<14?d:3;out[1]=9;out[2]=0;out[3]=d>=14;return 1;}
+int BDOS(){return 255;}
+int FMSYSDISK(){return 16;}
+int fm_fat_root_protected(){return 14;}
+int fm_copy_swapped(){return 1;}
+int fm_copy_swap_ready(){return 1;}
+int fm_native_permanent(){return 1;}
+int fm_backup_run(){return 1;}
+char *fm_backup_io_error(){return "backup error";}
+int fm_set_attributes(){return 1;}
 int fm_view_files(){return 1;}
 int fm_print_files(){return 1;}
 int fm_rename_file(){return 1;}

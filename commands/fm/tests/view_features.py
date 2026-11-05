@@ -5,10 +5,11 @@ stage=Path(__file__).resolve().parent
 repo=Path(sys.argv[1]) if len(sys.argv)>1 else Path('/Users/thierry/Projects/CPM86/cdos41-kernel/commands/fm')
 # Exercise production editor as well as feature callbacks, with only native I/O mocked.
 s=repo.joinpath('fmview.c').read_text()
-editor=s[s.index('static int text_ask('):s.index('static int name_ask(')]
+start=s.index('static int text_ask(')
+editor=s[start:s.index('\n}',start)+2]
 if 'static int command_action()' in s:
     command=s[s.index('static int command_action()'):s.index('static int run_report(')]
-    details_code=s[s.index('static char detail_lines'):s.index('/* CODE 8EDB')]
+    details_code=s[s.index('static char detail_lines'):s.index('/* CODE8EDB')]
     search=s[s.index('static char search_prefix'):s.index('static int repaint()')]
 else:
     command=stage.joinpath('features.c').read_text()
@@ -25,9 +26,12 @@ struct {int value[16];} config;
 struct {int active;} focus;
 struct {char name[13],raw[32];} files[256];
 char *names[256],*notice,dma[128];
+struct {int count;char value[256];} marks;
+int fm_marks_clear(){memset(&marks,0,sizeof marks);return 1;}
+int fm_marks_key(void *m,int selected,int total,int key){assert(selected>0&&selected<=total&&key==44);if(!marks.value[selected-1]){marks.value[selected-1]=1;++marks.count;}return 1;}
 int details,directories,drives,drive=2,fat,count,normal,promptattr,console,launch_console_error;
 int keys[200],keycount,keypos,spawncalls,refreshcalls,spawnresult=1,refreshresult=1,termerror;
-int b35,b102,rc35,rc102,querydrive;unsigned long records;
+int b35,b102,rc35,rc102,querydrive;long records;
 unsigned stampdays;int stamphour,stampminute,stampoffset=28;
 char command_seen[128],heading_seen[80];
 int text(int r,int c,char *s,int w,int a){if(c==0){strncpy(heading_seen,s,79);}return 1;}
@@ -61,6 +65,8 @@ date=((2024-1980)<<9)|(2<<5)|29;time=(13<<11)|(5<<5);
 raw[24]=date;raw[25]=date>>8;raw[22]=time;raw[23]=time>>8;memcpy(before,raw,32);
 detail_line(raw,out);assert(!memcmp(out,"   70196",8));assert(!strcmp(out+10," 2-29-2024 1:05p"));
 assert(!memcmp(raw,before,32));assert(!b35&&!b102);
+raw[31]=(char)0x80;detail_line(raw,out);assert(!memcmp(out,"********",8));raw[31]=0;
+assert(sizeof(detail_lines)==48*27);
 raw[24]=raw[25]=0;detail_line(raw,out);for(i=8;i<26;++i)assert(out[i]==' ');
 fat=0;records=130;raw[13]=3;stampdays=1;stamphour=0x00;stampminute=0x09;
 detail_line(raw,out);assert(!memcmp(out,"   16515",8));assert(!strcmp(out+10," 1-01-197812:09a"));
@@ -75,6 +81,17 @@ assert(search_key('e')==1);assert(search_key('t')==1);assert(search_key('t')==1&
 assert(search_key('z')==1&&search_length==4&&browser.navigation.selected==3);
 assert(search_key(127)==1&&search_length==3);assert(search_key(24)==1&&!search_length);
 assert(search_key(127)==-1);assert(search_key(',')==-1);
+assert(search_key('*')==1&&search_mode);assert(search_key('t')==1);assert(search_key('x')==1);assert(search_key('t')==1);
+assert(search_key(',')==1&&!search_mode&&marks.count==2&&marks.value[1]&&marks.value[2]);
+assert(browser.navigation.selected==3);
+assert(search_key('*')==1);assert(search_key(13)==1&&marks.count==3);
+assert(browser.navigation.selected==1); /* only newly marked ALPHA moves cursor */
+assert(search_key(24)==1&&marks.count==0);
+assert(search_key('*')==1);assert(search_key('z')==1);assert(search_key(13)==1&&!marks.count);
+assert(search_key('*')==1);assert(search_key('b')==1);assert(search_key(8)==1&&search_length==1);
+assert(search_key(3)==1&&!search_mode&&!marks.count);
+assert(search_key('*')==1);assert(search_key(24)==1&&!search_mode&&!marks.count);
+assert(search_key('*')==1);assert(search_key(27)==1&&!search_mode&&!marks.count);
 layout.files.width=55;details=0;browser.navigation.selected=7;assert(details_action());
 assert(details&&browser.navigation.selected==7);assert(details_action());assert(!details);
 layout.files.width=30;assert(details_action());assert(!details);

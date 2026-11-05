@@ -40,7 +40,7 @@ def assemble(name,source):
  output+=run('pcdev_linkcmd',name+'='+name+'[data[origin[0],max[0]]]')
  assert not re.search(rb'undefined|unresolved|fatal',output,re.I),output
  assert (F/(name+'.cmd')).is_file() and (F/(name+'.cmd')).stat().st_size>128
-for name,marker in [('atest','ZCMD    OK '),('zbseed','ZBAT    OK ')]:
+for name,marker in [('atest','ZCMD    OK '),('zbseed','ZBAT    OK '),('zfcmd','ZF10    OK ')]:
  assemble(name,child.replace('MARKERNAME',marker))
 # The mock editor preserves its complete native command-tail record as proof
 # of execution and argument delivery; it never opens the selected source file.
@@ -88,7 +88,7 @@ bad=bytearray(header);struct.pack_into('<H',bad,4,65535)
 (F/'ETYPE.TXT').write_bytes(b'Not executable\r\n\x1a')
 run('mformat','-C','-i','data.img','-t','40','-h','2','-n','8','-c','2','::')
 expected={}
-for file in [R/'commands/fm/fmview.cmd',F/'atest.cmd',F/'zbseed.cmd',F/'dredix.cmd',F/'function.cmd',F/'setport.cmd',F/'setup.cmd',F/'hdmaint.cmd',F/'BTEST.BAT',F/'CCOM.COM',F/'CEXE.EXE',F/'DBAD.EXE',F/'DDET.COM',F/'ETYPE.TXT']:
+for file in [R/'commands/fm/fmview.cmd',F/'atest.cmd',F/'zbseed.cmd',F/'zfcmd.cmd',F/'dredix.cmd',F/'function.cmd',F/'setport.cmd',F/'setup.cmd',F/'hdmaint.cmd',F/'BTEST.BAT',F/'CCOM.COM',F/'CEXE.EXE',F/'DBAD.EXE',F/'DDET.COM',F/'ETYPE.TXT']:
  expected[file.name.upper()]=file.read_bytes();run('mcopy','-i','data.img',str(file),'::')
 cfg=(R/'media/cdos86.cfg').read_text().replace('driver = "sdl"','driver = "null"').replace('driver      = "sdl:lowpass=5000"','driver      = "null"').replace('cdostools.img','data.img')
 cfg=re.sub(r'(?m)^path\s*=\s*"([^"\n]+)"',lambda m:'path = "'+str((R/'media'/m[1]).resolve())+'"',cfg);(F/'cdos86.cfg').write_text(cfg)
@@ -106,6 +106,13 @@ ready={
  'boot_invalid':['Hard disk partition type? (DOS or CP/M)'],
  'boot_empty':['FMVIEW.CMD'], 'boot_cancel':['FMVIEW.CMD'],
  'boot_return':['FMVIEW.CMD','ZHD.ARG'], 'navigate':['ATEST.CMD','BTEST.BAT'],
+ 'command_prompt':['B>'], 'command_cancel':['FMVIEW.CMD'],
+ 'command_return':['FMVIEW.CMD','ZF10.OK'],
+ 'details_on':['ATEST.CMD','Size/Date OFF'], 'details_off':['ATEST.CMD','Size/Date ON'],
+ 'prefix_selected':['Bad file type, only .CMD, .COM, .EXE, or .BAT files'],
+ 'substring_multiple':['Please select one file'], 'substring_cleared':['FMVIEW.CMD','ZCMD.OK'],
+ 'mkdir_prompt':['Enter a new directory name:'], 'mkdir_return':['FMVIEW.CMD'],
+ 'directory_present':['KEEPTEST','TMPTEST'], 'directory_removed':['KEEPTEST'],
  'exit':['FMVIEW: closed','B>']}
 launch_errors=['DOS COM/EXE launch is not supported','console error','Cannot launch',
                'Unable to launch','Program not found','Command not found']
@@ -145,6 +152,22 @@ with PCE(F,timeout=180) as vm:
  boot();keys('Esc');snap('boot_cancel')
  boot();command('other');snap('boot_invalid');command('dos')
  snap('boot_return')
+ # Leave the Setup submenu so subsequent menu indices address File.
+ keys('Tab','Esc','Esc')
+ keys('F10');snap('command_prompt');keys('Esc');snap('command_cancel')
+ keys('F10');command('zfcmd.cmd');snap('command_return')
+ keys('Home');keys('Tab','Home',*(['Down']*15),'Return');snap('details_on')
+ keys('Tab','Home',*(['Down']*15),'Return');snap('details_off')
+ # Prefix selection must reach the text file rather than execute cursor fallback.
+ keys('Home','e','t','y','p','e');keys('F5');snap('prefix_selected');keys('Home')
+ # '*' substring selection adds both ETYPE.TXT and any other TXT fixture;
+ # bare '*' is an unambiguous multi-selection proof using the existing Run guard.
+ keys('+Shift 8 -Shift','Return','F5');snap('substring_multiple')
+ keys('+Ctrl x -Ctrl','Home');keys('F5');snap('substring_cleared')
+ keys('F9','F5');snap('mkdir_prompt');command('KEEPTEST');snap('mkdir_return')
+ keys('F9','F5');command('TMPTEST');snap('mkdir_return')
+ keys('F9');snap('directory_present');keys('End','F6')
+ keys('F9');snap('directory_removed');keys('Esc')
  keys('F9','Esc');snap('navigate');keys('Esc');snap('exit')
 screens={};vga={}
 for name in labels:
@@ -167,8 +190,19 @@ assert 'Hard disk partition type? (DOS or CP/M)' in screens['boot_invalid']
 assert 'ZHD.ARG' in screens['boot_return']
 assert 'ATEST.CMD' in screens['navigate'] and 'BTEST.BAT' in screens['navigate']
 assert 'FMVIEW: closed' in screens['exit'] and 'B>' in screens['exit']
+assert 'Please select one file' in screens['substring_multiple']
+assert 'ZCMD.OK' in screens['substring_cleared']
+assert 'ZF10.OK' in screens['command_return']
+assert 'Size/Date OFF' in screens['details_on'] and 'Size/Date ON' in screens['details_off']
+size_line=next(line for line in screens['details_on'].splitlines() if 'ATEST.CMD' in line)
+assert str(len(expected['ATEST.CMD'])) in size_line,size_line
+assert 'TMPTEST' in screens['directory_present'] and 'TMPTEST' not in screens['directory_removed']
+assert 'KEEPTEST' in screens['directory_removed']
+assert 'Bad file type' in screens['prefix_selected']
 for name,data in expected.items():assert run('mtype','-i','data.img','::'+name)==data,name
 listing=run('mdir','-b','-i','data.img','::').decode().upper()
+assert 'KEEPTEST' in listing and 'TMPTEST' not in listing
+assert run('mtype','-i','data.img','::ZF10.OK')==b''
 assert all(name in listing for name in ['ZCMD.OK','ZBAT.OK','ZCOM.OK','ZEXE.OK','ZDET.OK','ZEDIT.ARG'])
 for name in ['ZCMD.OK','ZBAT.OK','ZCOM.OK','ZEXE.OK','ZDET.OK']:assert run('mtype','-i','data.img','::'+name)==b''
 captured=run('mtype','-i','data.img','::ZEDIT.ARG')
@@ -180,5 +214,5 @@ for name,want in [('ZFUNC.ARG',b''),('ZSETUP.ARG',b'/PARAM'),('ZHD.ARG',b'[F5,F6
  assert len(captured)==128
  argument=captured[1:1+captured[0]].strip().upper()
  assert argument==want,(name,argument)
-print('PASS: Run native/DOS/BAT markers, alternating loader cleanup, detached-child completion, malformed EXE refusal, external Edit/chain/boot arguments, unchanged source files and clean exit')
+print('PASS: Run native/DOS/BAT markers, alternating loader cleanup, detached-child completion, malformed EXE refusal, external Edit/chain/boot arguments, F10, Size/Date, prefix selection, directory create/remove, unchanged source files and clean exit')
 print('PCE: %.2fs, %d short polls, %d cycles' % (vm.elapsed,vm.polls,vm.cycles))

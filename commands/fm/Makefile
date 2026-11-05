@@ -2,6 +2,8 @@
 # all builds core checks and experimental FMVIEW, not a replacement FM.CMD.
 RASM86=pcdev_rasm86
 DRC86=drccpm_cc
+# Share register-save sequences to keep the native small-model code below64K.
+CFLAGS=-x
 DRCLINK86=drccpm_link
 CMDINFO=cmdinfo
 PYTHON=python3
@@ -27,7 +29,7 @@ fmview.cmd: fmview.obj $(filter-out fmcheck.obj,$(OBJECTS)) fmview.inp Makefile
 	$(CMDINFO) $@
 
 %.obj: %.c fm.h menu.h screen.h layout.h frame.h keys.h navigate.h dirlist.h scan.h browse.h conio.h event.h term.h focus.h select.h marks.h type.h typeio.h viewer.h prtext.h printjob.h renjob.h renio.h deljob.h delio.h copyjob.h copyio.h copynam.h book.h fatdest.h Makefile
-	@$(DRC86) -o$@ $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
+	@$(DRC86) $(CFLAGS) -o$@ $< > $*.log 2>&1; result=$$?; cat $*.log; test $$result -eq 0
 	@! grep -qiE '(^|[[:space:]:])error([[:space:]:]|[0-9]|$$)|[1-9][0-9]* error\(s\) detected|fatal' $*.log
 	@test -s $@
 
@@ -74,6 +76,8 @@ check-c: all
 	$(PYTHON) -B tests/fatpath.py
 	$(PYTHON) -B tests/swap.py
 	$(PYTHON) -B tests/attributes.py
+	$(PYTHON) -B tests/directory_ops.py
+	$(PYTHON) -B tests/view_features.py
 	$(PYTHON) -B tests/layout.py
 	$(PYTHON) -B tests/frame.py
 	$(PYTHON) -B tests/keys.py
@@ -84,6 +88,7 @@ check-c: all
 	$(PYTHON) -B tests/browse.py
 	$(PYTHON) -B tests/conio.py
 	$(PYTHON) -B tests/term.py
+	$(PYTHON) -B tests/serial.py
 	$(PYTHON) -B tests/native.py
 
 check: check-ref check-c
