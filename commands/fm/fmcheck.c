@@ -2,9 +2,8 @@
 #include "fm.h"
 #include "menu.h"
 #include "screen.h"
-#include "layout.h"
+#include "browse.h"
 #include "keys.h"
-#include "navigate.h"
 #include "dirlist.h"
 #include "scan.h"
 #ifdef HOST_TEST
@@ -38,6 +37,7 @@ main()
     struct fm_screen screen;
     struct fm_layout layout;
     struct fm_navigation navigation;
+    struct fm_browser browser;
     static int file_row[]={0,0,0,3,0};
     static int file_col[]={0,0,20,0,0};
     static int file_width[]={60,80,60,80,80};
@@ -88,6 +88,11 @@ main()
     names[0]="Z.CMD       "; names[1]="A.TXT       "; names[2]="A.CMD       ";
     verify(fm_directory_sort(names,3) && names[0][2]=='C' &&
         names[1][2]=='T' && names[2][0]=='Z',"directory name ordering");
+    layout.files.row=0; layout.files.column=0;
+    layout.files.width=30; layout.files.height=4;
+    verify(fm_browser_open(&browser,names,3,&layout.files,14,7,112) &&
+        fm_browser_key(&browser,0xcd)==1 && browser.navigation.selected==2,
+        "browser key integration");
     screen.rows=24; screen.columns=80; screen.write=capture;
     verify(fm_screen_position(&screen,23,79) && screen_length==4 &&
         screen_bytes[0]==27 && screen_bytes[1]=='Y' &&

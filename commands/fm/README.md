@@ -11,7 +11,7 @@ user testing of layout, configuration, keys and file operations.
 | ASM86 reconstruction | Not yet implemented; the listing is not assembler source |
 | Configuration parser | First C module; native and host regression target |
 | Menu metadata | 28 entries recovered; labels, commands and selection bounds checked |
-| UI cores | Layout, frames, colours, key translation and navigation tested separately; native integration pending |
+| UI cores | Read-only pane composes names, key translation, navigation and rendering; live terminal integration pending |
 | Directory display | Formatting, sorting and bounded BDOS search tested; interactive integration pending |
 | Operations, launch | Not implemented |
 | Distribution replacement | Not enabled |
@@ -59,6 +59,7 @@ is not assembly equivalence, code comprehension or functional parity.
 | `scan.c` | Bounded read-only search with injected BDOS operations |
 | `actions.c` (planned) | Copy, rename, delete, type and print |
 | `launch.c` (planned) | External tools, command shell, return to FM |
+| `browse.c` (started) | Read-only pane, selection highlight and repaint |
 | `native.c` (started) | Native BDOS search callbacks; console backend pending |
 | `fm.c` (planned) | Application state and event loop |
 
@@ -245,6 +246,19 @@ and integration into the browser remain pending.
 The native callback table is assigned at runtime: DR C 1.11 produced incorrect
 code-address relocations for its static aggregate initializer. The native test
 covers this compiler constraint.
+
+## Read-only browser integration
+
+`browse.c` connects sorted display-name pointers, normalized keys, viewport
+movement and cell rendering. It repaints the pane before drawing names, so
+short or empty lists cannot leave stale entries. Selection is highlighted;
+output failures propagate to the caller. Integration tests exercise movement,
+scrolling, repaint, clipping and empty lists; DR C tests exercise key dispatch.
+
+Column spacing is supplied explicitly. The integration fixture uses 14 cells;
+this is not yet a claim that every original FM grid mode has been recovered.
+Native keyboard acquisition, console locking, menu focus and directory changes
+remain to be connected before an interactive FM executable can be offered.
 
 ## Host preview
 
