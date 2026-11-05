@@ -12,7 +12,6 @@ topics = {
 removed = {
     "ABORT",
     "CONFIG",
-    "DFORM",
     "DOS8087",
     "DOSMEM",
     "DOSUSPND",

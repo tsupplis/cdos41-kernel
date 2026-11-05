@@ -1,6 +1,6 @@
-/* Experimental read-only FM browser. Not the distributed FM replacement.
+/* Experimental FM reconstruction. Not the distributed FM replacement.
  * Current drive, FAT directories and CP/M users; Escape exits/backtracks.
- * Only directory/setup selection is active. No copy, rename, delete or launch.
+ * Rename is enabled; copy, delete and external launching remain disabled.
  */
 #include "fm.h"
 #include "event.h"
@@ -8,10 +8,20 @@
 #include "menu.h"
 #include "term.h"
 #include "focus.h"
+#include "select.h"
+#include "marks.h"
+#include "viewer.h"
+#include "printjob.h"
+#include "renjob.h"
+#include "renio.h"
 int printf();
 static struct fm_file files[256];
 static char *names[256];
-static char usernames[16][13];
+static char usernames[16][13],drivenames[16][13];
+static int drive_numbers[16],drive_count,drives;
+static char masks[16][11];
+static struct fm_input input;
+static struct fm_marks marks;
 static int drive,user,fat,count,directories,saved_selection,saved_offset;
 static char *notice;
 static char dma[128], fcb[36];
@@ -59,14 +69,29 @@ static int decoration()
     }
     text(layout.prompt.row,layout.prompt.column,
          notice ? notice : focus.active ? fm_menu_items[fm_focus_index(&focus)].description :
+         drives ? "Drives: Enter selects; Escape returns" :
          directories ? "Directories: Enter selects; Escape returns" :
          "FMVIEW: Tab menu; F9 directories; arrows move; Escape exits",
          layout.prompt.width,promptattr);
     if(layout.prompt.row+layout.prompt.height<24)
-        text(23,0,"Read-only prototype: copy, rename, delete and launch are disabled",80,keyattr);
-    if(limited) text(layout.prompt.row,layout.prompt.column,
+        text(23,0,"Prototype: copy, delete and launch are disabled",80,keyattr);
+    if(input.active) {
+        text(layout.prompt.row,layout.prompt.column,"Subset: ",8,promptattr);
+        text(layout.prompt.row,layout.prompt.column+8,input.text,
+             layout.prompt.width>8 ? layout.prompt.width-8 : 0,promptattr);
+    }
+    if(limited && !input.active) text(layout.prompt.row,layout.prompt.column,
          "Directory list truncated at 256 entries",layout.prompt.width,promptattr);
     return fm_console_end(&console);
+}
+static int repaint()
+{
+    int ok;
+    if(!decoration() || !fm_console_begin(&console)) return 0;
+    ok=fm_browser_draw(&browser,&canvas);
+    if(ok && !directories && !drives) ok=fm_marks_draw(&marks,&browser,&canvas);
+    if(!fm_console_end(&console)) ok=0;
+    return ok;
 }
 static int fatmedia()
 {
@@ -78,12 +103,17 @@ static int fatmedia()
     __BDOS(26,dma); __BDOS(17,fcb);
     return (dma[0]&255)==32 && (dma[15]&255)==128;
 }
-/* Retain separate sorted lists, as the original does. The first directory
- * view is deliberately limited to the current drive, not drive selection.
- */
+/* Rebuild the current view. Picker navigation preserves file marks; only
+ * accepting a new directory, drive or subset clears them. */
 static int refresh()
 {
     int i,j,result,total;
+    if(drives) {
+        for(i=0;i<drive_count;++i) names[i]=drivenames[i];
+        total=drive_count;limited=0;
+        return fm_browser_open(&browser,names,total,&layout.files,14,normal,
+                        fm_attribute(config.value[2],config.value[3],1));
+    }
     result=fm_native_scan(drive,user,fat,files,256,&count,dma);
     if(result<0) return 0;
     limited=result==0;total=0;
@@ -97,7 +127,9 @@ static int refresh()
         }
     } else {
         for(i=0;i<count;++i)
-            if(files[i].directory==directories) names[total++]=files[i].name;
+            if(files[i].directory==directories &&
+               (directories || fm_subset_match(masks[drive-1],files[i].raw)))
+                names[total++]=files[i].name;
         fm_directory_sort(names,total);
     }
     return fm_browser_open(&browser,names,total,&layout.files,14,normal,
@@ -105,11 +137,11 @@ static int refresh()
 }
 static int directory_view()
 {
-    if(!directories) {
+    if(!directories && !drives) {
         saved_selection=browser.navigation.selected;
         saved_offset=browser.navigation.offset;
     }
-    directories=1;focus.active=0;notice=0;
+    directories=1;drives=0;focus.active=0;notice=0;
     return refresh();
 }
 static int directory_select()
@@ -127,15 +159,189 @@ static int directory_select()
         __BDOS(32,user);
     }
     directories=0;notice=0;
+    fm_marks_clear(&marks);
     return refresh();
+}
+static int drive_view()
+{
+    unsigned available;
+    int i,j;
+    available=fm_native_drives();drive_count=0;
+    for(i=0;i<16;++i) if(available&((unsigned)1<<i)) {
+        drive_numbers[drive_count]=i+1;
+        for(j=0;j<12;++j) drivenames[drive_count][j]=' ';
+        drivenames[drive_count][0]='A'+i;drivenames[drive_count][1]=':';
+        drivenames[drive_count][12]=0;++drive_count;
+    }
+    if(!drive_count) {notice="No configured drives found";return 1;}
+    if(!directories && !drives) {
+        saved_selection=browser.navigation.selected;
+        saved_offset=browser.navigation.offset;
+    }
+    drives=1;directories=0;focus.active=0;return refresh();
+}
+static int drive_select()
+{
+    int next;
+    if(!browser.navigation.selected) return 1;
+    next=drive_numbers[browser.navigation.selected-1];
+    if(!fm_native_drive(next)) {notice="Cannot select drive";return 1;}
+    drive=next;fat=fatmedia();drives=directories=0;
+    fm_marks_clear(&marks);
+    return refresh();
+}
+/* Picker-to-picker transitions retain the original file view checkpoint. */
+static int picker_cancel()
+{
+    directories=drives=0;
+    if(!refresh()) return 0;
+    if(saved_selection>=1 && saved_selection<=browser.navigation.count) {
+        browser.navigation.selected=saved_selection;
+        browser.navigation.offset=saved_offset;
+    }
+    return 1;
+}
+static int subset_key(key)
+int key;
+{
+    int action;
+    action=fm_input_key(&input,key);
+    if(action==2) {
+        if(!fm_native_subset(input.text,masks[drive-1])) {
+            notice="Include ? or *, 12 characters max.";
+            input.active=0;return 1;
+        }
+        input.active=0;focus.active=0;directories=drives=0;
+        fm_marks_clear(&marks);
+        return refresh();
+    }
+    return 1;
+}
+/* Keep failed/skipped file identities across the post-rename rescan. */
+static char retained[256][13];
+static int refresh_retained()
+{
+    int i,j,k,n;
+    n=0;
+    for(i=0;i<browser.navigation.count;++i) if(marks.value[i]) {
+        for(j=0;j<13;++j) retained[n][j]=names[i][j];
+        ++n;
+    }
+    if(!refresh()) return 0;
+    fm_marks_clear(&marks);
+    for(i=0;i<browser.navigation.count;++i) for(j=0;j<n;++j) {
+        for(k=0;k<12 && names[i][k]==retained[j][k];++k) ;
+        if(k==12) fm_marks_key(&marks,i+1,browser.navigation.count,44);
+    }
+    for(i=0;i<browser.navigation.count;++i) if(marks.value[i]) {
+        /* Use navigation itself to restore a visible first retained file. */
+        while(browser.navigation.selected<i+1) fm_browser_key(&browser,12);
+        break;
+    }
+    return 1;
+}
+static int rename_report(message)
+char *message;
+{
+    int ok;
+    if(!fm_console_begin(&console)) return 0;
+    ok=text(22,0,message,80,promptattr);
+    if(!fm_console_end(&console)) ok=0;
+    return ok;
+}
+static int rename_ask(name,target)
+char *name,*target;
+{
+    struct fm_input edit;
+    char heading[40];
+    int i,j,key,action,ok;
+    i=0;heading[i++]='R';heading[i++]='e';heading[i++]='n';
+    heading[i++]='a';heading[i++]='m';heading[i++]='e';
+    heading[i++]=',';heading[i++]=' ';
+    for(j=0;j<12 && name[j] && name[j]!=' ';++j) heading[i++]=name[j];
+    heading[i++]=' ';heading[i++]='t';heading[i++]='o';
+    heading[i++]=' ';heading[i++]='?';heading[i++]=' ';heading[i]=0;
+    fm_input_open(&edit);action=0;
+    do {
+        if(!fm_console_begin(&console)) return -2;
+        ok=text(21,0,heading,i,promptattr);
+        if(ok) ok=text(21,i,edit.text,80-i,promptattr);
+        if(!fm_console_end(&console) || !ok) return -2;
+        do {
+            key=fm_console_key(&console,0,0,0);
+            if(key==-1) __BDOS(142,0);
+        } while(key==-1);
+        if(key<0) return -2;
+        if(key>= 'a' && key<= 'z') key-=32;
+        if(key==24) {fm_input_open(&edit);action=0;continue;}
+        if(key<32 && key!=8 && key!=13 && key!=27) return 0;
+        action=fm_input_key(&edit,key);
+        if(action<0) return -1;
+    } while(action!=2);
+    for(j=0;j<=edit.length;++j) target[j]=edit.text[j];
+    return edit.length ? 1 : 0;
+}
+static int rename_action()
+{
+    struct fm_renamer ops;
+    int result;
+    if(directories || drives || !browser.navigation.count) {
+        notice="Select files to rename";return 1;
+    }
+    focus.active=0;
+    ops.ask=rename_ask;ops.change=fm_rename_file;ops.report=rename_report;
+    result=fm_rename_files(&browser,files,count,&marks,drive,dma,&ops);
+    if(!result || !refresh_retained()) return 0;
+    notice=marks.count ? "NOT RENAMED" : 0;
+    return 1;
+}
+static int print_notice(name)
+char *name;
+{
+    int ok;
+    if(!fm_console_begin(&console)) return 0;
+    ok=text(layout.prompt.row,layout.prompt.column,
+            "Press ANY KEY to stop printing",layout.prompt.width,promptattr);
+    if(ok) ok=text(23,0,"Printing, ",10,keyattr);
+    if(ok) ok=text(23,10,name,70,keyattr);
+    if(!fm_console_end(&console)) ok=0;
+    return ok;
+}
+static int print_action()
+{
+    struct fm_printer printer;
+    int result;
+    if(directories || drives || !browser.navigation.count) {
+        notice="Select files to print";return 1;
+    }
+    focus.active=0;
+    fm_printer_native(&printer,print_notice);
+    result=fm_print_files(&browser,files,count,&marks,drive,dma,&printer);
+    notice=result==0 ? "Printer not available" :
+           result<0 ? "NOT PRINTED: file or printer error" :
+           marks.count ? "NOT PRINTED" : 0;
+    return 1;
+}
+static int type_action()
+{
+    int result;
+    if(directories || drives || !browser.navigation.count) {
+        notice="Select files to type";return 1;
+    }
+    focus.active=0;
+    result=fm_view_files(&browser,files,count,&marks,drive,dma,
+                         &canvas,&console,normal);
+    if(result<0) {notice="NOT typed: file read/open/close error";return 1;}
+    return result;
 }
 main(argc,argv)
 int argc;
 char **argv;
 {
-    int i,result,key,action,original_user;
+    int i,j,result,key,action,original_user,original_drive;
     if(argc!=1) { printf("USAGE: FMVIEW\n"); return 1; }
-    drive=(__BDOS(25,0)&255)+1;user=__BDOS(32,255)&255;original_user=user;
+    drive=(__BDOS(25,0)&255)+1;user=__BDOS(32,255)&255;original_user=user;original_drive=drive;
+    for(i=0;i<16;++i) for(j=0;j<11;++j) masks[i][j]='?';
     fm_config_defaults(&config);
     if(fm_config_load(&config,dma)<0) {
         printf("FMVIEW: configuration read failed\n");return 1;
@@ -159,7 +365,7 @@ char **argv;
         printf("FMVIEW: CDOS 4.1 PC window console required\n");return 1;
     }
     __BDOS(6,27);__BDOS(6,'f');
-    if(!decoration() || !fm_browser_paint(&browser,&canvas,&console)) result=-1;
+    if(!repaint()) result=-1;
     else {
         do {
             key=fm_console_key(&console,0,0,0);
@@ -167,32 +373,43 @@ char **argv;
             else if(key<0) result=-1;
             else {
                 notice=0;
-                if(key==0xc3) result=directory_view() ? 1 : -1;
+                if(input.active) result=subset_key(key) ? 1 : -1;
+                else if(key==0xbc || key==2) result=type_action() ? 1 : -1;
+                else if(key==0xc3) result=directory_view() ? 1 : -1;
                 else {
                     action=fm_focus_key(&focus,key);
                     if(action==2) {
                         if(fm_focus_index(&focus)==1) result=directory_view() ? 1 : -1;
+                        else if(fm_focus_index(&focus)==2) {fm_input_open(&input);result=1;}
+                        else if(fm_focus_index(&focus)==3) result=drive_view() ? 1 : -1;
+                        else if(fm_focus_index(&focus)==4) result=type_action() ? 1 : -1;
+                        else if(fm_focus_index(&focus)==5) result=print_action();
+                        else if(fm_focus_index(&focus)==7) result=rename_action() ? 1 : -1;
                         else {notice="This action is not yet implemented";result=1;}
                     } else if(action<0) {
-                        if(key==27 && directories) {
-                            directories=0;result=refresh() ? 1 : -1;
-                            if(result==1 && saved_selection<=browser.navigation.count) {
-                                browser.navigation.selected=saved_selection;
-                                browser.navigation.offset=saved_offset;
-                            }
+                        if(key==27 && (directories || drives)) {
+                            result=picker_cancel() ? 1 : -1;
                         } else if(key==27) result=2;
+                        else if(key==13 && drives) result=drive_select() ? 1 : -1;
                         else if(key==13 && directories) result=directory_select() ? 1 : -1;
-                        else result=fm_browser_key(&browser,key)>0 ? 1 : 0;
+                        else {
+                            action=(!directories && !drives) ?
+                                fm_marks_key(&marks,browser.navigation.selected,
+                                             browser.navigation.count,key) : -1;
+                            if(action>=0) result=action;
+                            else result=fm_browser_key(&browser,key)>0 ? 1 : 0;
+                        }
                     } else result=action ? 1 : 0;
                 }
                 if(result==1) {
-                    if(!decoration() || !fm_browser_paint(&browser,&canvas,&console))
+                    if(!repaint())
                         result=-1;
                 }
             }
         } while(result>=0 && result!=2);
     }
     fm_term_close(&console);
+    __BDOS(14,original_drive-1);
     __BDOS(32,original_user);
     __BDOS(6,27);__BDOS(6,'e');
     __BDOS(6,27);__BDOS(6,'E');

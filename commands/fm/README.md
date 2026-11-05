@@ -9,11 +9,15 @@ user testing of layout, configuration, keys and file operations.
 | Original CMD container | All 73,856 bytes covered and checked against SHA-256 |
 | First-pass disassembly | 23,716 reachable instructions; 3,486 CODE bytes still unclassified |
 | ASM86 reconstruction | Not yet implemented; the listing is not assembler source |
-| Configuration parser | First C module; native and host regression target |
-| Menu metadata | 28 entries recovered; labels, commands and selection bounds checked |
+| Configuration | Original defaults and FM.CFG assignments; local/system lookup integrated |
+| Menus | 28 descriptors checked; Tab focus, scrolling and setup submenu integrated |
 | UI cores | Read-only pane composes names, key translation, navigation and rendering; live read-only browser validated |
-| Directory display | Formatting, sorting and bounded BDOS search tested; current-drive file pane integrated |
-| Operations, launch | Not implemented |
+| Directory display | Sorted file/directory views, FAT child/parent navigation and CP/M users |
+| Selection | Per-drive wildcard subsets, configured drive picker, comma/Insert marking and Delete unmarking |
+| Type | Internal read-only paged viewer; menu or F2/Ctrl-B, marked files or current file |
+| Print | Internal list-device printing; selected files, cancellation and selection retention |
+| Rename | Per-file prompt; skip/cancel, native collision refusal and retained selections |
+| Copy, delete, launch | Not implemented |
 | Distribution replacement | Not enabled |
 
 ## Build
@@ -21,16 +25,17 @@ user testing of layout, configuration, keys and file operations.
 Uses `drccpm_cc` and `drccpm_link`, following WINDOW and CHKDOSFS.
 
 ```
-make              # FMCHECK core tests and experimental FMVIEW browser
+make              # FMCHECK core tests and experimental FMVIEW
 make check        # reference byte coverage, host and native core checks
-make check-live   # disposable PCE FAT browser regression
+make -j4 check-live # disposable FAT/configuration and CP/M-user scenarios
 make reference    # explicitly regenerate the reviewed reference listing
 make clean
 ```
 
 The executables are `fmcheck.cmd` and `fmview.cmd`; there is no replacement
 `fm.cmd` yet. `disassemble.py` uses NDISASM only as a decoder, not an assembler.
-No parent build or media recipe is changed.
+No parent build or media recipe is changed. Maintained LINK86 `.inp` files follow
+PRINT and avoid the command-tail limit when linking the shared modules.
 
 ## Reference
 
@@ -49,23 +54,28 @@ is not assembly equivalence, code comprehension or functional parity.
 
 | Module | Responsibility |
 |---|---|
-| `config.c` (started) | Configuration keywords and numeric assignments |
-| `menu.c` (started) | Ordered file/setup menu descriptors |
-| `layout.c` (started) | All five menu positions and expanded bottom menu |
-| `screen.c` (started) | Cursor protocol and output sink; native transactions pending |
+| `config.c`, `cfgio.c` | Configuration parsing and native FCB loading |
+| `menu.c` | Ordered file/setup menu descriptors |
+| `layout.c` | All five menu positions and expanded bottom menu |
+| `screen.c` | Cursor protocol and output sink |
 | `frame.c` | Border cells and original colour translation |
 | `keys.c` | Terminal remapping and key normalization |
-| `navigate.c` | Selection and viewport movement; event-loop integration pending |
+| `navigate.c` | Selection and viewport movement |
 | `dirlist.c` | Original display-name formatting and sorting |
 | `scan.c` | Bounded read-only search with injected BDOS operations |
-| `actions.c` (planned) | Copy, rename, delete, type and print |
+| `select.c`, `selectio.c`, `marks.c` | Subset input, drive selection and display-only marks |
+| `type.c`, `typeio.c`, `viewer.c` | Text conversion, native read-only FCB stream and paged Type action |
+| `prtext.c`, `printjob.c`, `printio.c` | Printer text conversion, selected-file batch and native list ownership |
+| `renjob.c`, `renio.c` | Rename selection loop and validated native rename |
+| `actions.c` (planned) | Copy and delete |
 | `launch.c` (planned) | External tools, command shell, return to FM |
-| `event.c` (started) | Read-only input/navigation/repaint loop and Escape cleanup |
-| `conio.c` (started) | Direct-screen lock ownership, BDOS-output boundary and mapped input |
-| `browse.c` (started) | Read-only pane, selection highlight and repaint |
-| `term.c`, `fmxios.a86` (started) | CDOS window discovery and guarded direct-screen backend |
-| `native.c` (started) | Native BDOS search callbacks; console backend pending |
-| `fm.c` (planned) | Application state and event loop |
+| `event.c` | Read-only input/navigation/repaint loop and Escape cleanup |
+| `conio.c` | Direct-screen lock ownership, BDOS-output boundary and mapped input |
+| `browse.c` | Read-only pane, selection highlight and repaint |
+| `term.c`, `fmxios.a86` | CDOS window discovery and guarded direct-screen backend |
+| `native.c` | Native BDOS search, input and FAT directory mapping |
+| `focus.c` | Menu focus, scrolling and setup submenu |
+| `fmview.c` | Experimental read-only application and view transitions |
 
 Keep all original layouts, prompts and bindings traceable to the reference.
 Do not mix raw keys with file-operation logic, or terminal output with disk
@@ -75,8 +85,8 @@ own comparative tests.
 ## Configuration compatibility
 
 The supplied `extra/fm.cfg` describes lookup on the system drive, user 0
-(FAT root directory). Preserve the original file unchanged. Native lookup,
-line handling and defaults are still to be integrated and verified.
+(FAT root directory). Preserve the original file unchanged. Native lookup, line handling and defaults
+are integrated; OVPMODE remains under investigation.
 
 The actual parser recognises these settings, beyond the eight colour settings
 in the supplied example:
@@ -93,8 +103,16 @@ in the supplied example:
 
 Keywords include a literal `=`. Letter case is ignored; spacing is significant.
 Numeric values skip ASCII spaces, require decimal digits, wrap at 16 bits and
-are assigned as bytes. No range clamp is invented. Whole-file handling and
-interactions between settings are not yet claimed compatible.
+are assigned as bytes. The parser does not clamp values. FMVIEW rejects invalid
+colours or geometry before opening its display. Full-file input accepts CR/LF,
+Ctrl-Z and a final unterminated line; oversized lines are discarded as a unit.
+
+`cfgio.c` tries the current location, then the floating system drive P: in
+user 0. It restores the user/DMA and commits settings only after successful
+read and close. The original release FM.CFG and a custom left-hand colour
+configuration are covered by live tests. System-drive lookup is also tested
+from another drive in user 4. Complete original configuration semantics,
+including OVPMODE and compact/horizontal menus, remain unfinished.
 
 The example's prose calls the first two windows WINDOW and MENU, but its
 actual assignments use OBJECT and COMMAND. Match the executable's parser.
@@ -174,12 +192,10 @@ the eventual screen appearance.
 injected sink. Positioning is checked against supplied terminal dimensions.
 Tests capture bytes on both the host and the actual DR C executable.
 
-This is not yet a native rendering backend. The original wraps output through
-CODE `6E01h`/`6DECh` and uses a console lock at `6FB3h`; replacing these with
-holding that direct-screen lock during BDOS output would risk deadlock. The native
-sink must handle that transaction before a live preview is enabled. The C border renderer and colour mapping are now recovered and tested against
-the original DATA tables (512 colour cases and six border comparisons). Native
-console output, resizing and repaint integration remain.
+The border renderer and colour mapping are checked against the original DATA
+(512 colour cases and six border comparisons). `term.c` supplies the native
+locked-cell backend; `conio.c` releases that lock before BDOS output to avoid
+deadlock. Resizing and complete original redraw behaviour remain pending.
 
 ## Console ownership and input
 
@@ -198,8 +214,8 @@ bridge (`fmxios.a86`). It requires BDOS identity 1441h, validates console number
 and image pointer, writes only within the 24x80 virtual image while locked,
 and refreshes the physical window after unlocking. The status line is untouched.
 Host tests simulate the gateway and verify discovery, bounds and lock ordering;
-the native backend is assembled/linked but has not yet been exercised in PCE.
-Terminal-map discovery and live console tests remain pending. The adapter does not yet enable an interactive executable.
+the PCE scenarios exercise actual display, keyboard input and exit cleanup.
+Alternate terminal-map discovery remains pending.
 
 ## Key translation
 
@@ -219,8 +235,8 @@ match a later source entry. The source-table NUL terminator is respected.
 
 All 256 inputs are compared with the original machine-code routine.
 Native DR C tests cover navigation values, Escape and cascading mappings.
-Actual input acquisition, terminal-table discovery and context-sensitive actions
-still need integration; this is not an interactive file manager yet.
+Native PC input is integrated. Alternate terminal-table discovery and the full
+set of context-sensitive actions remain pending.
 
 ## Selection and scrolling
 
@@ -233,7 +249,8 @@ movement uses the normalized control values; their meaning remains contextual.
 The core has no disk or screen side effects. Tests cover ten reference-derived
 boundary cases, 121,200 visibility/alignment invariants and native DR C cases.
 These are not a full differential execution of the original navigation loop.
-Marking, filename search and event-loop integration remain pending.
+Comma/Insert marking and Delete unmarking are implemented. Filename search
+remains pending.
 
 ## Directory display
 
@@ -263,8 +280,8 @@ Search state is consumed, so searches cannot be interleaved.
 
 Host tests cover all four DMA slots, user filtering, FAT/CP/M classification,
 capacity boundaries and cleanup. The native DR C executable searches a disposable
-host directory through emu2 and verifies its files are unchanged. The separate live test exercises a FAT directory on CDOS through PCE. Full paths,
-metadata interpretation and directory changes remain pending.
+host directory through emu2 and verifies its files are unchanged. PCE tests
+exercise FAT child/parent navigation and CP/M user selection. Typed full paths and detailed metadata display remain pending.
 
 The native callback table is assigned at runtime: DR C 1.11 produced incorrect
 code-address relocations for its static aggregate initializer. The native test
@@ -283,34 +300,119 @@ this is not yet a claim that every original FM grid mode has been recovered.
 `event.c` now drives the pane through the console callbacks: idle input does
 not repaint, navigation repaints under screen ownership, and Escape exits with
 no lock held. Failed rendering also releases ownership. Tests cover that full
-sequence. Terminal maps, menu focus and directory changes remain pending.
+sequence. Alternate terminal maps and the complete action dispatcher remain pending.
 
 ## Experimental live browser
 
-Run `FMVIEW` without arguments on CDOS 4.1. It shows sorted files from the
-current drive/user, with arrow navigation, Home/End scrolling and Escape to
-exit. It uses a fixed initial layout; menus are disabled reference labels.
-The search retains at most 256 entries and reports truncation. Directories
-are filtered from this first pane. FM.CFG loading and file operations are
-not yet integrated.
+Run `FMVIEW` without arguments on CDOS 4.1. It is an experimental read-only
+file manager, not the replacement FM.CMD. Rename modifies files; the other
+implemented file actions only read them.
 
-The local XIOS adapter locks the virtual screen only while painting. It disables
-programmable-key expansion with ESC 6 while open and restores the prior mode
-on exit; otherwise arrow keys can disappear into empty key definitions.
+| Control | Current behaviour |
+|---|---|
+| Arrows, Home/End | Move selection and scroll |
+| Tab | Switch between files and menu |
+| Enter in menu | Open File Directory, Subset, Drive, Type, Print, Rename or Set Up System; other actions report unavailable |
+| Subset | Enter a wildcard filespec (12 characters maximum); native BDOS parsing, per-drive filter |
+| Drive | Select a configured drive; Escape cancels |
+| Comma / Insert | Mark the current file without moving |
+| Delete | Unmark the current file; never deletes a file |
+| Rename menu | Prompt for each marked file, or current file; blank skips, Escape cancels remaining files |
+| Print menu | Print marked files, or the current file; any key stops printing |
+| F2 / Ctrl-B / Type menu | Display marked files, or the current file when none are marked |
+| F9 | Show FAT directories or CP/M users 0–15 |
+| Enter in directory view | Enter selected directory/user; `..` returns to the parent |
+| Escape | Back from setup/menu/directory view; exit from files |
 
-`make check-live` boots a disposable image and checks a 90-file FAT listing,
-selection attributes after Right/Down, End scrolling, Home, and clean Escape
-return. The FAT image must remain byte-identical. Core checks and this live
-regression pass; this is not full FM parity or approval to replace the original.
-Live artifacts are retained in the printed temporary directory for inspection;
-the emulator exits after the scenario and has a 90-second timeout.
+FM.CFG controls colours and geometry. Right/left vertical menus are tested live;
+compact/horizontal layouts remain provisional. Search retains at most 256
+entries and reports truncation. FAT directory mapping is process-local, and
+exit restores the initial drive and CP/M user. Cancelling a picker preserves
+marks and the file position, including after switching between pickers. Accepting
+a directory, drive or subset clears marks. Invalid subsets leave the filter
+unchanged. No copy, delete or launch operation is enabled. Typed full
+paths and filename-search selection remain pending.
+
+The XIOS adapter locks only while painting. ESC 6 disables programmable-key
+expansion while open; exit restores its previous state. Full-word version checks
+use the local BDOS bridge: DR C's `__BDOS` wrapper returns only a byte.
+
+After `make`, `make -j4 check-live` runs independent disposable PCE scenarios:
+defaults, release FM.CFG, custom left-hand colours, and CP/M users/system FM.CFG.
+Checks cover selection attributes, scrolling, setup/menu return, FAT child/parent
+entry, cancellation, user 0/4/15, empty views and clean exit. The custom scenario
+also covers subsets, drives, marks and nested picker cancellation. Data images must
+remain byte-identical and the parent shell must retain its directory/user.
+Each emulator exits after its scenario, with a 90-second timeout; artifacts
+remain in the printed temporary directories. This is not full original-FM
+parity or approval to replace the distributed binary.
+
+`select.c` handles bounded input and mask matching; `selectio.c` adapts BDOS
+parsing and the configured-drive table; `marks.c` owns display-only marks.
+`tests/pickers.py` exercises the actual FMVIEW controller with a simulated disk
+adapter. Selection/marking passes host, native and live FAT checks. CP/M user navigation
+and configuration fallback also pass with the rebuilt isolated boot fixture.
+Live tests accept `--boot-image`; the CP/M-user test also accepts `--base-image`
+so isolated fixtures can be used during concurrent media rebuilds.
+
+## Internal Type action
+
+`viewer.c` follows CODE `3AB8h`/`3E02h`: seven-bit text, Ctrl-Z or physical EOF,
+CR-driven rows, ignored LF, eight-column tabs and 78-column clipping without
+wrapping. Return advances a page; another key cancels. At file end, Return
+continues to the next selected file; the final file waits for any key.
+Completed files are unmarked. Cancelled, unprocessed and failed files remain
+marked. Read errors are distinguished from EOF, avoiding false completion.
+
+`typeio.c` uses only FCB open/read/close and DMA selection. Every read restores
+the caller's DMA; disk and keyboard calls occur outside screen ownership.
+Host tests cover all byte values, paging, selection order, cancellation,
+rendering/I/O failures and cleanup. Live PCE checks pass for tabs, pagination,
+Ctrl-Z, completion and cancellation back to the browser, with an unchanged
+data image. The viewer currently uses a fixed 24-row
+screen; configuration-dependent viewer geometry still needs comparison.
+
+## Internal Print action
+
+`printjob.c` follows CODE `3E1Ah`/`4017h`. It conditionally attaches the current
+logical printer (BDOS 161), writes through BDOS 5 and detaches with BDOS 159.
+It does not invoke a spooler or change printer selection. Any key stops the
+batch after the current source character; completed files are unmarked and
+unfinished or failed files remain marked.
+
+Text is seven-bit, with eight-column tabs and CR resetting the column. LF and
+form feed pass through; other controls become spaces. Ctrl-Z, raw FFh and
+physical EOF end input, matching the original. Each opened file gets a trailing
+form feed, including on cancellation. Read errors remain distinct from EOF;
+cleanup detaches only after a successful attach. Host tests cover conversion,
+selection order, cancellation, errors and native BDOS call sequences. Live tests
+capture printer bytes to a temporary file; no physical printer is used. The
+live two-file run passes byte comparison and completion/unmarking checks.
+For files without Ctrl-Z, final BDOS-record zero padding becomes spaces, as
+in the original. Printer capture uses CGA: PCE VGA overlaps port 3BCh.
+
+## Rename
+
+`renjob.c` follows CODE `4E24h`/`4FD3h`: one uppercase name per selected file,
+12-character input, blank to skip, Escape to cancel remaining prompts and
+Ctrl-X to clear input. Drive prefixes and invalid names retry the same file;
+rename failures retain the file and proceed to the next. Successful names are
+rescanned and sorted, with remaining marks remapped by filename.
+
+`renio.c` uses BDOS 152 and 23. It accepts concrete bare 8.3 names only and
+never deletes or overwrites a destination. Wildcards, paths, passwords and
+trailing tokens are rejected before the mutation call. Existing destinations
+are left to BDOS's collision check; no preflight race is introduced. Host tests
+cover parsing, native errors, per-file decisions and selection retention.
+`tests/rename_live.py --media fat|cpm --boot-image PATH` checks disposable files,
+including collision refusal, cancellation and content preservation.
 
 ## Host preview
 
 `make preview` produces `preview.svg` using the C layout, frame and colour
 modules. It shows synthetic filenames, a selected entry and the original menu labels.
-It is not a running FM: the file list is synthetic, and the key legend and native
-console transactions are not yet integrated. Do not use it as parity evidence.
+It is a synthetic preview, separate from the live FMVIEW tests. Do not use it
+as parity evidence.
 
 ## Acceptance before replacement
 

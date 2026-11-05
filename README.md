@@ -55,6 +55,7 @@ status](source-map.md) and `sources.json` record the origins and source hashes.
 
 The current version includes:
 
+- Enhanced SUBMIT
 - BIOS INT 1Ah RTC startup and native/DOS date-time write-back, with software-clock fallback.
 - CP/M-Plus-style command-line cursor movement, insertion, deletion and recall.
 - Left/Right, Home/End, Delete and Up during buffered console input.

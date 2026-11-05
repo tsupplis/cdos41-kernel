@@ -2,6 +2,7 @@
  * DMA restoration is explicit: BDOS has no portable get-DMA service.
  */
 #include "scan.h"
+int BDOS();
 static int getuser() { return __BDOS(32,255) & 255; }
 static int setuser(user)
 int user;
@@ -53,9 +54,9 @@ char *entry;
     char fcb[36];
     int i;
     if(drive<1 || drive>16 || !entry || !(entry[16]&64) ||
-       (__BDOS(12,0)&65535)!=0x1441) return 0;
+       (BDOS(12,0)&65535)!=0x1441) return 0;
     for(i=0;i<36;++i) fcb[i]=0;
     fcb[0]=drive|128;
     for(i=1;i<12;++i) fcb[i]=entry[i]&127;
-    return (__BDOS(15,fcb)&255)==0;
+    return (BDOS(15,fcb)&255)==0;
 }

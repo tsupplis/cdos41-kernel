@@ -3,11 +3,15 @@ from pathlib import Path
 import tempfile,shutil,subprocess,re,argparse
 parser=argparse.ArgumentParser()
 parser.add_argument("--config",choices=["none","release","custom"],default="none")
-mode=parser.parse_args().config
+parser.add_argument("--selection",action="store_true")
+parser.add_argument("--type",action="store_true")
+parser.add_argument("--print",dest="printing",action="store_true")
+parser.add_argument("--boot-image",type=Path)
+args=parser.parse_args();mode=args.config
 R=Path(__file__).resolve().parents[3]
 F=Path(tempfile.mkdtemp(prefix='fmview-live-'));print(F,flush=True)
 def run(*a):return subprocess.run(a,cwd=F,check=True,capture_output=True)
-shutil.copyfile(R/'media/cdos86.img',F/'cdos86.img')
+shutil.copyfile(args.boot_image or R/'media/cdos86.img',F/'cdos86.img')
 run('mformat','-C','-i','fat.img','-t','40','-h','2','-n','8','-c','2','::')
 run('mcopy','-i','fat.img',str(R/'commands/fm/fmview.cmd'),'::')
 if mode!='none':
@@ -16,17 +20,24 @@ if mode!='none':
      b'MENU POSITION=3\r\nOBJECT FG COLOR=7\r\nOBJECT BG COLOR=1\r\n\x1a')
  run('mcopy','-i','fat.img',str(p),'::')
 for i in range(90):
- p=F/('f%07d.txt'%i);p.write_text('Read only FM test\r\n');run('mcopy','-i','fat.img',str(p),'::')
+ p=F/('f%07d.txt'%i)
+ p.write_bytes((b'FIRST\tPAGE\r\n'+b'Line\r\n'*20+b'LAST PAGE\r\n\x1aHIDDEN') if args.type and i==0 else b'Read only FM test\r\n')
+ run('mcopy','-i','fat.img',str(p),'::')
 run('mmd','-i','fat.img','::SUBDIR')
 p=F/'child.txt';p.write_text('Child directory fixture\r\n')
 run('mcopy','-i','fat.img',str(p),'::SUBDIR/CHILD.TXT')
 cfg=(R/'media/cdos86.cfg').read_text().replace('driver = "sdl"','driver = "null"').replace('driver      = "sdl:lowpass=5000"','driver      = "null"').replace('cdostools.img','fat.img')
 cfg=re.sub(r'(?m)^path\s*=\s*"([^"\n]+)"',lambda m:'path = "'+str((R/'media'/m[1]).resolve())+'"',cfg)
+# VGA's emulated I/O range overlaps the 3BCh list port. Print fixtures use
+# CGA below so logical printer 0 reaches the captured parallel port.
+if args.printing:
+ cfg+='\nparport {\n address = 0x3bc\n driver = \"stdio:file=printer.out:flush=1\"\n}\n'
 (F/'cdos86.cfg').write_text(cfg)
-c=['c f000000']
-def snap(label):c.extend(['c 8000000',f'save "{label}.bin" bin b800:0000 fa0'])
+c=['c f000000'];labels=[]
+def snap(label):
+ labels.append(label);c.extend(['c 8000000',f'save "{label}.bin" bin b800:0000 fa0'])
 def command(s):
- for ch in s+'\n':c.extend(['key '+{':':'+Shift Semicolon -Shift','\n':'Return'}.get(ch,ch),'c 200000'])
+ for ch in s+'\n':c.extend(['key '+{'*':'+Shift 8 -Shift','?':'+Shift Slash -Shift',' ':'Space',':':'+Shift Semicolon -Shift','\n':'Return'}.get(ch,ch),'c 200000'])
 command('b:');command('fmview');snap('initial')
 for key in ['Right','Down','End','Home']:
  c.extend(['key '+key,'c 200000']);snap(key.lower())
@@ -38,13 +49,38 @@ for key,label in [('F9','directories'),('Return','child'),('F9','parent_list'),
                   ('Tab','menu_again'),('Home','first_action'),('Down','directory_action'),
                   ('Return','menu_directories'),('Esc','cancel_directory')]:
  c.extend(['key '+key,'c 200000']);snap(label)
+if args.selection:
+ def keys(*items):
+  for key in items:c.extend(['key '+key,'c 200000'])
+ def action(index):
+  keys('Tab','Home');keys(*(['Down']*index));keys('Return')
+ keys('Home','Comma','Right','Comma','Left','Delete','Down');snap('marks')
+ keys('End');snap('before_picker')
+ action(3);keys('F9','Esc');snap('cancel_pickers')
+ keys('Home','Down');snap('marks_after_cancel')
+ action(2);command('*.txt');snap('filtered');keys('End');snap('filtered_end')
+ action(2);command('abc.txt');snap('invalid_subset');keys('Esc')
+ action(2);keys('A','Esc','Esc');snap('cancel_subset')
+ action(3);snap('drives');keys('Home','Return');snap('drive_a')
+ action(3);keys('Home','Right','Return');snap('drive_b')
+ action(2);command('*.*');keys('End');snap('all_files')
+if args.type:
+ c.extend(['key Home','c 200000','key F2']);snap('type_page')
+ c.append('key Return');snap('type_end')
+ c.append('key Space');snap('type_return')
+ c.append('key F2');snap('type_again')
+ c.append('key Esc');snap('type_cancel')
+if args.printing:
+ for key in ['Home','Delete','Right','Comma','Right','Comma','Tab','Home']+['Down']*5+['Return']:
+  c.extend(['key '+key,'c 200000'])
+ snap('print_return')
 c.extend(['key Esc']);snap('exit')
 command('dir fmview.cmd');snap('shell_directory');c.append('q')
 before=(F/'fat.img').read_bytes()
 with (F/'pce.log').open('wb') as log:
- subprocess.run(['pce-ibmpc','-c','cdos86.cfg','-t','null','-g','vga'],cwd=F,input=('\n'.join(c)+'\n').encode(),stdout=log,stderr=log,timeout=90,check=True)
+ subprocess.run(['pce-ibmpc','-c','cdos86.cfg','-t','null','-g','cga' if args.printing else 'vga'],cwd=F,input=('\n'.join(c)+'\n').encode(),stdout=log,stderr=log,timeout=90,check=True)
 screens={}
-for label in ['initial','right','down','end','home','menu','menu_down','setup_entry','setup','setup_end','menu_back','files_back','directories','child','parent_list','parent_selected','parent_return','menu_again','first_action','directory_action','menu_directories','cancel_directory','exit','shell_directory']:
+for label in labels:
  b=(F/(label+'.bin')).read_bytes();s='\n'.join(bytes(b[j:j+160:2]).decode('cp437').rstrip() for j in range(0,3840,160));(F/(label+'.txt')).write_text(s);screens[label]=s
 assert before==(F/'fat.img').read_bytes(), 'Browser changed FAT image'
 assert 'FMVIEW: closed' in screens['exit'] and 'B>' in screens['exit']
@@ -84,5 +120,41 @@ assert '..' in screens['parent_list']
 assert 'F0000000.TXT' in screens['parent_return']
 assert 'SUBDIR' in screens['menu_directories'] and 'F0000000.TXT' not in screens['menu_directories']
 assert 'F0000000.TXT' in screens['cancel_directory']
-assert 'FMVIEW' in screens['shell_directory'] and 'CHILD' not in screens['shell_directory']
+assert re.search(r'FMVIEW +CMD',screens['shell_directory'])
+assert 'Command =' not in screens['shell_directory'] and 'CHILD' not in screens['shell_directory']
 print('PASS: F9 and menu directory selection, child entry, dot-dot return, cancellation, shell mapping unchanged')
+
+if args.selection:
+ assert screens['before_picker']==screens['cancel_pickers']
+ assert attribute('marks_after_cancel',1,column+14)==selected
+ assert attribute('marks',1,column)==(0x17 if mode=='custom' else 0x30)
+ assert attribute('marks',1,column+14)==selected
+ assert 'FMVIEW.CMD' not in screens['filtered_end'] and 'F0000089.TXT' in screens['filtered_end']
+ assert 'Include ? or *, 12 characters max.' in screens['invalid_subset']
+ assert 'FMVIEW.CMD' not in screens['cancel_subset']
+ assert 'A:' in screens['drives'] and 'B:' in screens['drives']
+ assert 'CCPM.SYS' in screens['drive_a'] and 'F0000000.TXT' not in screens['drive_a']
+ assert 'F0000000.TXT' in screens['drive_b']
+ assert 'FMVIEW.CMD' in screens['all_files']
+ print('PASS: BDOS wildcard subset, rejection/cancellation, A/B drive selection and return')
+
+if args.type:
+ assert 'Typing F0000000.TXT' in screens['type_page']
+ assert 'FIRST   PAGE' in screens['type_page']
+ assert 'Press return for next page' in screens['type_page']
+ assert 'LAST PAGE' in screens['type_end'] and 'HIDDEN' not in screens['type_end']
+ assert 'Last page of F0000000.TXT' in screens['type_end']
+ assert 'Press any key to quit' in screens['type_end']
+ assert 'F0000000.TXT' in screens['type_return'] and 'File  Directory' in screens['type_return']
+ assert 'Typing F0000000.TXT' in screens['type_again']
+ assert 'F0000000.TXT' in screens['type_cancel'] and 'File  Directory' in screens['type_cancel']
+ print('PASS: live internal Type, tabs, pages, Ctrl-Z, return/cancel and unchanged disk')
+
+if args.printing:
+ # No Ctrl-Z in this FAT fixture: the BDOS record reader returns zero
+ # padding to 128 bytes, which historical Print converts to spaces.
+ assert (F/'printer.out').read_bytes()==(b'Read only FM test\r\n'.ljust(128,b' ')+b'\x0c')*2
+ assert 'File  Directory' in screens['print_return']
+ assert attribute('print_return',1,column+14)==(0x17 if mode=='custom' else 0x30)
+ assert attribute('print_return',1,column+28)==selected
+ print('PASS: native Print, two marked files, exact printer bytes, unmarking and unchanged disk')
