@@ -1770,3 +1770,28 @@ layout symbols remain intact. ASM86 symbol count falls from 2,389 to 2,291
 and reported utilisation from 99% to 95%. The complete rebuilt xios.con
 is byte-identical; all surviving symbol values are unchanged. Graphics,
 cursor and RTC assembled-code checks pass.
+
+## Hercules graphics: native and DOS
+
+Ported the CCP/M page-zero Hercules backend to CDOS: native mode C0h,
+capability bit 4, 720×348 pixels and 90×43 software text cells. It supports
+pixel XOR, glyph read/write, logical cursors, teletype and rectangular
+scrolling, and restores the saved monochrome text console. Plain MDA and
+enhanced adapters are excluded by detection. No character shadow buffer
+or second graphics page is allocated.
+
+The DOS interface exposes project mode 7Fh through INT 10h and ESC a,
+including mode queries, BIOS data synchronization and DOS-exit restoration.
+The native dispatcher also offers simple cursor/TTY calls to the graphics
+backend before falling back to the historical text implementation.
+
+`make check-hercules` exercises native CMD and DOS COM programs on Hercules
+and checks rejection on MDA. The API documents the project-specific mode,
+font requirements and remaining limits. XIOS grows by 1,408 bytes in the
+CON file; PCTMP's padded RSP size is unchanged. ASM86 use factor rises from
+95% to 98%, with zero assembly errors; the symbol count rises by 69
+(from 2,291 to 2,360).
+
+Validation passed: assembled graphics guards; native and DOS Hercules;
+plain-MDA rejection; VGA, colour/monochrome EGA and CGA graphics; and
+40-column CGA text, including DOS-exit restoration.
