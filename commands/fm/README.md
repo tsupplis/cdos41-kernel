@@ -48,6 +48,7 @@ is not assembly equivalence, code comprehension or functional parity.
 |---|---|
 | `config.c` (started) | Configuration keywords and numeric assignments |
 | `menu.c` (started) | Ordered file/setup menu descriptors |
+| `layout.c` (started) | All five menu positions and expanded bottom menu |
 | `screen.c` (started) | Cursor protocol and output sink; frames/colour/redraw pending |
 | `keys.c` (planned) | Terminal input translated into FM actions |
 | `directory.c` (planned) | Drives, users, FAT paths, sorting and selection |
@@ -135,6 +136,27 @@ Alternate terminal text mentions space/backspace navigation and TERM.DAT.
 Do not replace this with a PC-only scan-code assumption. The runtime lowercases
 the command tail before argument parsing. Application arguments and switches
 are not yet established; do not invent new syntax.
+
+## Default layout
+
+`layout.c` translates MENU POSITION=1..5 (CODE `8032h..8565h`). With 24 rows,
+80 columns and the defaults restored by `5D3Ah`, the outer rectangles are:
+
+| Region | Row | Column | Width | Height |
+|---|---:|---:|---:|---:|
+| Files | 0 | 0 | 60 | 21 |
+| Command menu | 0 | 60 | 20 | 21 |
+| Prompt | 21 | 0 | 80 | 1 |
+
+Coordinates are zero-based. Borders, the remaining bottom area and key legend
+are not drawn yet. Positions 1/2/3/4/5 put the menu right/bottom/left/top/bottom respectively.
+Position 5 uses a one-row menu; position 2 uses three or eight rows depending
+on DATA `0D00h`. The source of that mode flag still needs tracing. Invalid rectangles are rejected before drawing.
+
+`tests/layout.py` executes the original straight-line calculation with a
+strict, limited instruction interpreter and compares 480 configurations with
+the compiled C module. Native DR C checks also cover every position. This checks geometry, not
+the eventual screen appearance.
 
 ## Rendering boundary
 

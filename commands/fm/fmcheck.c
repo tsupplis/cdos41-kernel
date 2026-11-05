@@ -2,6 +2,7 @@
 #include "fm.h"
 #include "menu.h"
 #include "screen.h"
+#include "layout.h"
 #ifdef HOST_TEST
 #include <stdio.h>
 #else
@@ -31,9 +32,26 @@ main()
 {
     struct fm_config config;
     struct fm_screen screen;
+    struct fm_layout layout;
+    static int file_row[]={0,0,0,3,0};
+    static int file_col[]={0,0,20,0,0};
+    static int file_width[]={60,80,60,80,80};
+    static int file_height[]={21,18,21,18,20};
     char *p, *before;
     unsigned value;
     int i;
+    for (i=0;i<FM_CONFIG_COUNT;++i) config.value[i]=0;
+    config.value[8]=17; config.value[9]=1; config.value[11]=2;
+    for (i=0;i<5;++i) {
+        config.value[1]=i+1;
+        verify(fm_layout_calculate(&layout,&config,24,80,0) &&
+            layout.files.row==file_row[i] && layout.files.column==file_col[i] &&
+            layout.files.width==file_width[i] && layout.files.height==file_height[i] &&
+            layout.prompt.row==21 && layout.prompt.width==80,"native menu geometry");
+    }
+    config.value[1]=2;
+    verify(fm_layout_calculate(&layout,&config,24,80,1) &&
+        layout.menu.height==8 && layout.files.height==13,"expanded bottom menu");
     screen.rows=24; screen.columns=80; screen.write=capture;
     verify(fm_screen_position(&screen,23,79) && screen_length==4 &&
         screen_bytes[0]==27 && screen_bytes[1]=='Y' &&
