@@ -402,14 +402,22 @@ unsigned head;
         attr=entry[11]&255;
         if(attr==15) continue; /* VFAT long-name entries are not file owners. */
         if(entry[0]=='.' && (entry[1]==' ' || (entry[1]=='.' && entry[2]==' '))) {
-            if(probing_directory && (c!=framehead[depth] || framesec[depth]!=0 ||
-               !((slot==0 && entry[1]==' ') || (slot==1 && entry[1]=='.')))) {
-                issue("Invalid recovered dot-entry position",c); return 0;
+            unsigned dotparent;
+            dotparent=depth ? framehead[depth-1] : 0;
+            for(i=entry[1]=='.' ? 2 : 1;i<11 && entry[i]==' ';i++);
+            if(!c || c!=framehead[depth] || framesec[depth]!=0 ||
+               !((slot==0 && entry[1]==' ') || (slot==1 && entry[1]=='.')) ||
+               i!=11 || !(attr&16) || (attr&0xc8) || longget(entry+28)!=0 ||
+               wordget(entry+26)!=(slot==0 ? framehead[depth] : dotparent)) {
+                issue("Invalid dot entry",c);
             }
             continue;
         }
         if(attr&8) {
-            if(probing_directory) { issue("Invalid recovered directory attribute",c); return 0; }
+            if(c || (attr&0xd0) || wordget(entry+26)!=0 || longget(entry+28)!=0) {
+                issue("Invalid volume label entry",c);
+                continue;
+            }
             volume_label(entry);
             continue;
         }
@@ -483,6 +491,15 @@ static mirrors()
     unsigned copy,sec,i;
     for(sec=0;sec<vol.fatsiz && !failed;sec++) {
         if(!rdsect(vol.fatbase+sec,dirbuf)) { failed=1; break; }
+        if(sec==0) {
+            unsigned first,second,media;
+            first=wordget(dirbuf); media=first&255;
+            second=vol.fat16 ? wordget(dirbuf+2) : wordget(dirbuf+1)>>4;
+            if((media!=240 && media<248) ||
+               (vol.fat16 ? (first&65280)!=65280 : (first&3840)!=3840) ||
+               (vol.fat16 ? (second&16383)!=16383 : second!=4095))
+                issue("Invalid reserved FAT entries",0);
+        }
         for(copy=1;copy<vol.nfat && !failed;copy++) {
             if(!rdsect(vol.fatbase+(long)copy*vol.fatsiz+sec,mirror)) {
                 failed=1; break;

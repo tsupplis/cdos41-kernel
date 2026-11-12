@@ -24,6 +24,8 @@ The C version improves the original logic:
 - Validates complete ownership and candidate directory trees before recovery.
 - Checks recovery-name collisions and root-directory capacity before publication.
 - Stops on I/O errors instead of continuing with potentially stale data.
+- Blocks repairs on malformed dot/volume-label entries in ordinary directories.
+- Validates reserved FAT entries, allowing FAT16 shutdown/error status bits.
 - Requires separate confirmation before releasing lost clusters.
 - Rereads committed metadata to verify changes.
 

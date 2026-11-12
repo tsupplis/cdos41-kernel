@@ -32,6 +32,31 @@ with tempfile.TemporaryDirectory(prefix='chkdosfs-safety-') as temporary:
         count+=1
         return result.returncode,result.stdout,path.read_bytes(),writes
 
+    for bits in (12,16):
+        for kind in ('label-cluster','label-directory','root-dot','dot-attribute',
+                     'dot-parent','fat-zero','fat-one'):
+            b,fat,entry,end,data=fixture(bits)
+            fat(2,end)
+            if kind.startswith('label'):
+                entry(0,b'DAMAGED TXT',2,512,attr=24 if kind=='label-directory' else 8)
+            elif kind=='root-dot': entry(0,b'.',2,512)
+            elif kind.startswith('dot-'):
+                entry(0,b'SUB',2,attr=16)
+                entry(0,b'.',2,attr=0 if kind=='dot-attribute' else 16,sector=data)
+                entry(1,b'..',3 if kind=='dot-parent' else 0,attr=16,sector=data)
+            else:
+                entry(0,b'LIVE    TXT',2,512)
+                fat(0 if kind=='fat-zero' else 1,0)
+            for fix in (False,True):
+                status,out,after,writes=run(b,fix=fix,answers='YYYY')
+                assert status==(2 if fix else 1),(bits,kind,fix,out)
+                assert after==b and not writes,(bits,kind,'unsafe write')
+    # FAT16 clean-shutdown/hard-error bits are status bits, not corruption.
+    for value in (0x3fff,0x7fff,0xbfff,0xffff):
+        b,fat,entry,end,data=fixture(16);fat(1,value)
+        status,out,after,writes=run(b)
+        assert status==0 and after==b and not writes,(value,out)
+
     def dot_fixture(bits):
         b,fat,entry,end,data=fixture(bits)
         entry(0,b'.',40,attr=16,sector=data+38)
