@@ -273,10 +273,7 @@ static FM_CONST int function_commands[] = {
 
 static void clear_marks(struct fm_model *model)
 {
-    int index;
-
-    for (index = 0; index < model->files.count; ++index)
-        model->files.marked[index] = 0;
+    fm_marks_clear(&model->files);
 }
 
 /* Single translation from a key/menu selection to a command identity. */
@@ -333,9 +330,9 @@ int fm_dispatch_to(struct fm_model *model, struct fm_invoker *invoker, struct fm
     if (model->files.focused && model->files.cursor.selected != FM_NO_SELECTION) {
         index = model->files.cursor.selected;
         if (key == ' ' || key == ',' || key == FM_KEY_INSERT)
-            model->files.marked[index] = !model->files.marked[index];
+            fm_mark_set(&model->files, index, !fm_marked(&model->files, index));
         if (key == FM_KEY_DELETE)
-            model->files.marked[index] = 0;
+            fm_mark_set(&model->files, index, 0);
     }
     cursor = model->files.focused ? &model->files.cursor : &model->actions.cursor;
     count = model->files.focused ? model->files.count : model->actions.count;

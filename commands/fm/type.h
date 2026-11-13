@@ -18,6 +18,7 @@ struct fm_type {
 };
 int fm_type_begin (struct fm_type *, struct fm_filesystem *,
                            FM_CONST struct fm_location *, FM_CONST char *);
+/* END without new content preserves the last page; begin resets rows. */
 int fm_type_next (struct fm_type *);
 int fm_type_close (struct fm_type *);
 /* Type implements the shared invocation port. Entries/location are borrowed
@@ -33,7 +34,6 @@ struct fm_type_job {
     struct fm_type reader;
     struct fm_text_page page;
     char title[80];
-    char previous[FM_TEXT_ROWS][FM_TEXT_COLUMNS + 1];
 };
 void fm_type_job_bind (struct fm_invoker *, struct fm_type_job *,
                                struct fm_filesystem *, FM_CONST struct fm_location *,

@@ -137,9 +137,9 @@ int main(void)
     assert(!strcmp(model.device.capacity, "5480k"));
     key(&browser, &model, FM_KEY_TAB);
     key(&browser, &model, ' ');
-    assert(model.files.marked[0]);
+    assert(fm_marked(&model.files, 0));
     key(&browser, &model, FM_KEY_F1 + 3);
-    assert(!model.files.marked[0]);
+    assert(!fm_marked(&model.files, 0));
 
     /* Cancel a location change without losing selection or marks. */
     key(&browser, &model, ' ');
@@ -147,15 +147,15 @@ int main(void)
     key(&browser, &model, FM_KEY_PGDN);
     assert(model.dialog.selected > 0);
     key(&browser, &model, FM_KEY_ESCAPE);
-    assert(browser.location.user == 4 && model.files.marked[0]);
+    assert(browser.location.user == 4 && fm_marked(&model.files, 0));
     key(&browser, &model, FM_KEY_F1 + 8);
     key(&browser, &model, FM_KEY_HOME);
     key(&browser, &model, FM_KEY_DOWN);
     key(&browser, &model, FM_KEY_ENTER);
-    assert(browser.location.user == 1 && !model.files.marked[0]);
+    assert(browser.location.user == 1 && !fm_marked(&model.files, 0));
 
     /* A marked set overrides the cursor; Type preserves it on return. */
-    model.files.marked[0] = model.files.marked[1] = 1;
+    fm_mark_set(&model.files, 0, 1); fm_mark_set(&model.files, 1, 1);
     model.files.cursor.selected = 1;
     key(&browser, &model, FM_KEY_F1 + 1);
     assert(model.job_active && !strcmp(disk.opened, "FILE0.TXT"));
@@ -163,7 +163,7 @@ int main(void)
     key(&browser, &model, FM_KEY_ENTER);
     assert(!strcmp(disk.opened, "FILE1.TXT"));
     key(&browser, &model, FM_KEY_ESCAPE);
-    assert(model.files.cursor.selected == 1 && model.files.marked[0] && model.files.marked[1]);
+    assert(model.files.cursor.selected == 1 && fm_marked(&model.files, 0) && fm_marked(&model.files, 1));
     assert(disk.opens == disk.closes);
     opened = disk.opens;
     key(&browser, &model, FM_KEY_F1 + 2);
@@ -195,34 +195,34 @@ int main(void)
     assert(!fm_browser_open(&browser, &model, &fs, &memory, 1, 0));
     assert(!strcmp(model.device.media, "DOS Media"));
     assert(model.files.count == 1 && !strcmp(model.files.items[0].name, "FILE1.TXT"));
-    model.files.marked[0] = 1;
+    fm_mark_set(&model.files, 0, 1);
     key(&browser, &model, FM_KEY_F1 + 8);
     assert(browser.picking && !strcmp(model.dialog.title, "Select directory"));
     model.dialog.selected = 0; /* DOCS is a directory, not a menu command. */
     key(&browser, &model, FM_KEY_ENTER);
     assert(!strcmp(browser.picker.candidate.path, "\\DOCS"));
-    assert(!strcmp(browser.location.path, "\\") && model.files.marked[0]);
+    assert(!strcmp(browser.location.path, "\\") && fm_marked(&model.files, 0));
     key(&browser, &model, FM_KEY_ESCAPE);
-    assert(!strcmp(browser.location.path, "\\") && model.files.marked[0]);
+    assert(!strcmp(browser.location.path, "\\") && fm_marked(&model.files, 0));
     key(&browser, &model, FM_KEY_F1 + 8);
     model.dialog.selected = 0;
     key(&browser, &model, FM_KEY_ENTER);
     key(&browser, &model, FM_KEY_F1 + 1); /* Choose this directory. */
     assert(!strcmp(browser.location.path, "\\DOCS"));
-    assert(model.files.count == 1 && !model.files.marked[0]);
+    assert(model.files.count == 1 && !fm_marked(&model.files, 0));
     key(&browser, &model, FM_KEY_F1 + 1);
     assert(model.job_active && !strcmp(disk.opened, "FILE1.TXT"));
     key(&browser, &model, FM_KEY_ESCAPE);
 
     /* Copy's destination picker does not replace the source catalog/marks. */
     fm_browser_copy_bind(&browser, &store);
-    model.files.marked[0] = 1;
+    fm_mark_set(&model.files, 0, 1);
     assert(!browser.actions.execute(browser.actions.context, &model, FM_CMD_COPY));
     assert(browser.copy_pending && browser.picking);
     assert(strstr(model.dialog.title, "Copy FILE1.TXT"));
     assert(strstr(model.help.status, "FILE1.TXT"));
     key(&browser, &model, FM_KEY_ESCAPE);
-    assert(!browser.copy_pending && model.files.marked[0]);
+    assert(!browser.copy_pending && fm_marked(&model.files, 0));
     assert(!strcmp(browser.location.path, "\\DOCS"));
     assert(!browser.actions.execute(browser.actions.context, &model, FM_CMD_COPY));
     key(&browser, &model, FM_KEY_ENTER); /* Drive A. */
@@ -230,7 +230,7 @@ int main(void)
     key(&browser, &model, FM_KEY_ENTER); /* User 1. */
     assert(model.job_active && model.pending.count == 1);
     assert(browser.copy_job.destination.drive == 0 && browser.copy_job.destination.user == 1);
-    assert(browser.location.drive == 1 && model.files.marked[0]);
+    assert(browser.location.drive == 1 && fm_marked(&model.files, 0));
     key(&browser, &model, FM_KEY_ESCAPE);
     assert(!model.job_active);
     assert(!fm_browser_close(&browser));
@@ -279,7 +279,7 @@ int main(void)
     key(&browser, &model, FM_KEY_F1 + 1);
     assert(!strcmp(disk.opened, "FILE99.TXT"));
     key(&browser, &model, FM_KEY_ESCAPE);
-    assert(model.files.marked[199] && model.files.cursor.selected == 199);
+    assert(fm_marked(&model.files, 199) && model.files.cursor.selected == 199);
     assert(!fm_browser_close(&browser));
     disk.count = FM_MAX_FILES + 1;
     fm_model_init(&model);
@@ -354,7 +354,7 @@ int main(void)
     key(&browser, &model, ' ');
     key(&browser, &model, FM_KEY_END);
     assert(strstr(model.files.items[19].detail, "1978-01-01"));
-    assert(model.files.marked[0]);
+    assert(fm_marked(&model.files, 0));
     browser.mutation_refresh = 1;
     key(&browser, &model, FM_KEY_TICK);
     assert(model.files.cursor.selected == 19);

@@ -157,6 +157,25 @@ int main(void)
     assert(!fm_type_next(&state));
     assert(!strcmp(state.lines[0], "    Z"));
 
+    /* A wrapped full page followed only by CR/LF and ^Z must survive the
+     * EOF probe. Exercise byte-at-a-time reads across both terminators. */
+    for (i = 0; i < 18 * 76; ++i) text[i] = 'q';
+    strcpy(text + i, "\r\n\032padding");
+    source.size = strlen(text);
+    source.chunk = 1;
+    assert(!fm_type_begin(&state, &fs, &location, "EXACT.TXT"));
+    assert(!fm_type_next(&state));
+    assert(fm_type_next(&state) == FM_FS_END);
+    assert(state.rows == 18 && state.lines[0][0] == 'q');
+    assert(strlen(state.lines[17]) == 76);
+
+    /* Blank lines are content: replacing the preserved page must clear it. */
+    source.text = "\r\n";
+    source.size = 2;
+    assert(!fm_type_begin(&state, &fs, &location, "BLANK.TXT"));
+    assert(!fm_type_next(&state));
+    assert(state.rows == 1 && state.lines[0][0] == 0);
+
     source.size = 0;
     assert(!fm_type_begin(&state, &fs, &location, "EMPTY.TXT"));
     assert(fm_type_next(&state) == FM_FS_END);

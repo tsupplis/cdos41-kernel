@@ -45,8 +45,8 @@ copyfst: tests/copyfs.c fsnative.c fsnative.h copy.h fm.h
 metatest: tests/metadata.c metadata.c location.h fm.h
 	$(CC) $(HOSTFLAGS) -I. tests/metadata.c metadata.c -o $@
 
-cfgtest: tests/config.c config.c ui.c config.h location.h fm.h
-	$(CC) $(HOSTFLAGS) -I. tests/config.c config.c ui.c -o $@
+cfgtest: tests/config.c config.c ui.c model.c config.h location.h fm.h
+	$(CC) $(HOSTFLAGS) -I. tests/config.c config.c ui.c model.c -o $@
 
 keytest: tests/keys.c keys.c fm.h
 	$(CC) $(HOSTFLAGS) -I. tests/keys.c keys.c -o $@

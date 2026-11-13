@@ -76,7 +76,7 @@ static int next_byte(struct fm_type *state, int *value)
 
 int fm_type_next(struct fm_type *state)
 {
-    int row, column, value, result, spaces;
+    int row, column, value, result, spaces, started;
 
     if (!state || state->status != FM_FS_OK)
         return FM_FS_ERROR;
@@ -84,9 +84,7 @@ int fm_type_next(struct fm_type *state)
         return FM_FS_END;
     if (!state->opened)
         return FM_FS_ERROR;
-    for (row = 0; row < FM_TEXT_ROWS; ++row)
-        state->lines[row][0] = 0;
-    state->rows = 0;
+    started = 0;
     row = column = 0;
     while (row < FM_TEXT_ROWS) {
         if (state->pending_spaces) {
@@ -105,19 +103,29 @@ int fm_type_next(struct fm_type *state)
             state->eof = 1;
             if (fm_type_close(state) != FM_FS_OK)
                 return FM_FS_ERROR;
-            return state->rows ? FM_FS_OK : FM_FS_END;
+            return started ? FM_FS_OK : FM_FS_END;
         }
         if (state->skip_lf) {
             state->skip_lf = 0;
             if (value == 10)
                 continue;
         }
+        if ((value == 13 || value == 10) && state->wrapped) {
+            state->skip_lf = value == 13;
+            state->wrapped = 0;
+            continue;
+        }
+        /* Skip the prior page's CR/LF before discarding it. EOF, including
+         * CP/M ^Z, leaves that page available without a second page buffer. */
+        if (!started) {
+            for (row = 0; row < FM_TEXT_ROWS; ++row)
+                state->lines[row][0] = 0;
+            row = 0;
+            state->rows = 0;
+            started = 1;
+        }
         if (value == 13 || value == 10) {
             state->skip_lf = value == 13;
-            if (state->wrapped) {
-                state->wrapped = 0;
-                continue;
-            }
             state->rows = ++row;
             column = 0;
             continue;
@@ -194,7 +202,7 @@ static int type_advance(void *context,
     struct fm_job_result *result)
 {
     struct fm_type_job *job;
-    int row, old_rows, status, destination;
+    int row, status, destination;
     job = (struct fm_type_job *)context;
     if (!job->active || job->target >= job->request->count || !reply || !result || reply->token != job->request->token ||
         reply->decision || reply->answer < FM_REPLY_NONE || reply->answer > FM_REPLY_LAST ||
@@ -234,17 +242,10 @@ static int type_advance(void *context,
         return FM_SUCCESS;
     }
     if (job->loading) {
-        old_rows = job->reader.rows;
-        for (row = 0; row < old_rows; ++row)
-            strcpy(job->previous[row], job->reader.lines[row]);
         status = fm_type_next(&job->reader);
         if (status != FM_FS_OK && status != FM_FS_END) return FM_JOB_ERROR;
-        /* Exact page-sized files need an EOF read, not an extra blank page. */
-        if (status == FM_FS_END && !job->reader.rows && job->page_number >= 0) {
-            job->reader.rows = old_rows;
-            for (row = 0; row < old_rows; ++row)
-                strcpy(job->reader.lines[row], job->previous[row]);
-        } else {
+        /* EOF without a new page preserves both its text and page number. */
+        if (status != FM_FS_END || job->page_number < 0) {
             if (job->page_number == 32766) return FM_JOB_ERROR;
             ++job->page_number;
         }

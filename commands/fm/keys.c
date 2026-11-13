@@ -4,8 +4,7 @@
  * serial TERM.DAT translation belongs to a future terminal adapter.
  */
 #include "fm.h"
-int fm_key_decode(key)
-int key;
+int fm_key_decode(int key)
 {
     if (key >= 0xe1 && key <= 0xea)
         return FM_KEY_F1 + key - 0xe1;

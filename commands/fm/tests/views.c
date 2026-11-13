@@ -55,10 +55,51 @@ int main(void)
     m.device.media="Media"; m.device.capacity="10k"; m.device.location="Path";
     m.files.panel=panel(0,3,30,6); m.files.items=files; m.files.count=5;
     m.files.columns=2; m.files.cursor.selected=1; m.files.focused=1;
-    m.files.heading="Files"; m.files.empty_text="Empty"; m.files.marked[1]=1;
+    m.files.heading="Files"; m.files.empty_text="Empty"; fm_mark_set(&m.files, 1, 1);
     m.actions.columns=1; m.actions.panel=panel(30,0,20,4); m.actions.items=commands; m.actions.count=3;
     m.actions.cursor.selected=0; m.actions.empty_text="None";
     m.help.panel=panel(0,21,80,3); m.help.status="Status"; m.help.hints=hint; m.help.count=1;
+    /* Publication certifies immutable names, never cursor/layout bounds.
+     * Replacement or changed length must fall back to full validation. */
+    {
+        struct fm_file bad[5];
+        memcpy(bad, files, sizeof(bad));
+        assert(!fm_files_publish(&m.files));
+        assert(m.files.validated_items == files && m.files.validated_count == 5);
+        m.files.cursor.selected = 5;
+        assert(!fm_files_valid(&m.files));
+        m.files.cursor.selected = 1;
+        bad[4].name = 0;
+        m.files.items = bad;
+        assert(!fm_files_valid(&m.files));
+        assert(fm_files_publish(&m.files) == FM_BAD_MODEL);
+        m.files.items = files;
+        assert(!fm_files_publish(&m.files));
+        m.files.validated_count = -1; /* Owner revokes before content changes. */
+        assert(fm_files_valid(&m.files));
+    }
+    /* Bit boundaries, the final catalog slot and rejected indices must not
+     * affect neighbouring marks or write outside the compact storage. */
+    {
+        struct fm_files_model marks = {0};
+        marks.count = FM_MAX_FILES;
+        assert(!fm_mark_set(&marks, 7, 1));
+        assert(!fm_mark_set(&marks, 8, 1));
+        assert(!fm_mark_set(&marks, 1023, 1));
+        assert(fm_marked(&marks, 7) && fm_marked(&marks, 8));
+        assert(fm_marked(&marks, 1023) && !fm_marked(&marks, 1022));
+        assert(!fm_mark_set(&marks, 7, 0));
+        assert(!fm_marked(&marks, 7) && fm_marked(&marks, 8));
+        assert(fm_mark_set(&marks, -1, 1) == FM_BAD_MODEL);
+        assert(fm_mark_set(&marks, 1024, 1) == FM_BAD_MODEL);
+        assert(!fm_marked(&marks, -1) && !fm_marked(&marks, 1024));
+        marks.count = 8;
+        assert(!fm_marked(&marks, 8));
+        assert(fm_mark_set(&marks, 8, 0) == FM_BAD_MODEL);
+        fm_marks_clear(&marks);
+        marks.count = FM_MAX_FILES;
+        assert(!fm_marked(&marks, 8) && !fm_marked(&marks, 1023));
+    }
     before=m;
     assert(fm_render(&m,&d)==FM_SUCCESS);
     assert(!memcmp(&m,&before,sizeof(m)));
@@ -87,11 +128,11 @@ int main(void)
 
     /* No marks: current file is the implicit target, without a star/caret
      * while Actions owns focus. An off-screen mark suppresses that target. */
-    m.files.marked[1] = 0;
+    fm_mark_set(&m.files, 1, 0);
     assert(!fm_files_render(&m.files, &d));
     assert(r.attrs[5][16] == m.files.panel.style.marked);
     assert(r.cells[5][15] == ' ');
-    m.files.marked[4] = 1;
+    fm_mark_set(&m.files, 4, 1);
     assert(!fm_files_render(&m.files, &d));
     assert(r.attrs[5][16] == m.files.panel.style.normal);
     assert(r.cells[5][15] == ' ');
@@ -101,7 +142,7 @@ int main(void)
     assert(!fm_actions_render(&m.actions, &d));
     assert(r.attrs[5][16] == m.files.panel.style.selected);
     assert(r.cells[5][15] == 16 && r.cells[1][31] == ' ');
-    m.files.marked[4] = 0;
+    fm_mark_set(&m.files, 4, 0);
     assert(!fm_files_render(&m.files, &d));
     assert(r.attrs[5][16] == m.files.panel.style.selected);
 

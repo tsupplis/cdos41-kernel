@@ -1,6 +1,30 @@
 /* Shared model validation. Pure, allocation-free and independent of UI output. */
 #include "fm.h"
 
+int fm_marked(const struct fm_files_model *files, int index)
+{
+    if (!files || index < 0 || index >= files->count || index >= FM_MAX_FILES)
+        return 0;
+    return (files->marks[index / 8] & (1U << (index % 8))) != 0;
+}
+
+int fm_mark_set(struct fm_files_model *files, int index, int marked)
+{
+    unsigned mask;
+
+    if (!files || index < 0 || index >= files->count || index >= FM_MAX_FILES)
+        return FM_BAD_MODEL;
+    mask = 1U << (index % 8);
+    if (marked) files->marks[index / 8] |= mask;
+    else files->marks[index / 8] &= ~mask;
+    return FM_SUCCESS;
+}
+
+void fm_marks_clear(struct fm_files_model *files)
+{
+    if (files) memset(files->marks, 0, sizeof(files->marks));
+}
+
 int fm_panel_valid(FM_CONST struct fm_panel *panel)
 {
     FM_CONST struct fm_rect *r;
@@ -47,11 +71,27 @@ int fm_files_valid(FM_CONST struct fm_files_model *model)
         model->columns > (model->panel.rect.width - 2) / 2 ||
         !model->heading || !model->empty_text)
         return 0;
+    if (model->validated_items == model->items &&
+        model->validated_count == model->count)
+        return 1;
     for (index = 0; index < model->count; ++index) {
         if (!model->items[index].name)
             return 0;
     }
     return 1;
+}
+
+/* Called only after publication has established cursor/layout invariants.
+ * Names remain immutable until the owner revokes this certificate. */
+int fm_files_publish(struct fm_files_model *model)
+{
+    if (!model) return FM_BAD_MODEL;
+    model->validated_items = 0;
+    model->validated_count = -1;
+    if (!fm_files_valid(model)) return FM_BAD_MODEL;
+    model->validated_items = model->items;
+    model->validated_count = model->count;
+    return FM_SUCCESS;
 }
 
 int fm_actions_valid(FM_CONST struct fm_actions_model *model)
@@ -165,9 +205,12 @@ int fm_control_valid(FM_CONST struct fm_model *model)
         model->catalog_count > FM_MAX_FILES ||
         (model->catalog_count && !model->catalog))
         return 0;
-    for (index = 0; index < model->catalog_count; ++index) {
-        if (!model->catalog[index].name)
-            return 0;
+    if (model->catalog != model->files.validated_items ||
+        model->catalog_count != model->files.validated_count) {
+        for (index = 0; index < model->catalog_count; ++index) {
+            if (!model->catalog[index].name)
+                return 0;
+        }
     }
     if (model->dialog.kind == FM_DIALOG_PICK &&
         (model->dialog.purpose != FM_PURPOSE_DIRECTORY_SLOT ||
@@ -223,7 +266,7 @@ int fm_resolve_targets(FM_CONST struct fm_files_model *files, int policy, struct
         return FM_SUCCESS;
     count = 0;
     for (index = 0; index < files->count; ++index) {
-        if (files->marked[index])
+        if (fm_marked(files, index))
             ++count;
     }
     if (!count && files->cursor.selected != FM_NO_SELECTION) {
@@ -236,7 +279,7 @@ int fm_resolve_targets(FM_CONST struct fm_files_model *files, int policy, struct
     if (policy == FM_TARGET_ONE && count > 1)
         return FM_TOO_MANY_TARGETS;
     for (index = 0; index < files->count; ++index) {
-        if (files->marked[index])
+        if (fm_marked(files, index))
             request->files[request->count++] = index;
     }
     return FM_SUCCESS;

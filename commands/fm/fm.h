@@ -140,10 +140,14 @@ struct fm_files_model {
     struct fm_panel panel;
     FM_CONST struct fm_file *items;
     int count;
+    /* Certificate for immutable item names; revoke before replacing contents.
+     * Unpublished standalone models retain full validation on every call. */
+    FM_CONST struct fm_file *validated_items;
+    int validated_count;
     int columns;
     int normal_columns;         /* Layout-selected columns without metadata. */
     struct fm_cursor cursor;
-    char marked[FM_MAX_FILES]; /* Boolean selection, one byte per file. */
+    unsigned char marks[(FM_MAX_FILES + 7) / 8]; /* Private to mark accessors. */
     int focused;
     int details;
     FM_CONST char *heading;
@@ -278,6 +282,12 @@ struct fm_invoker {
 /* Pure checks shared by controllers and views; no rendering dependency. */
 int fm_panel_valid (FM_CONST struct fm_panel *);
 int fm_device_valid (FM_CONST struct fm_device_model *);
+/* Marks are bounded by the current catalog. Invalid reads return false;
+ * invalid writes fail without mutation. Clear also resets unused capacity. */
+int fm_marked(const struct fm_files_model *, int);
+int fm_mark_set(struct fm_files_model *, int, int);
+void fm_marks_clear(struct fm_files_model *);
+int fm_files_publish(struct fm_files_model *);
 int fm_files_valid (FM_CONST struct fm_files_model *);
 int fm_actions_valid (FM_CONST struct fm_actions_model *);
 int fm_help_valid (FM_CONST struct fm_help_model *);

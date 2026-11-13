@@ -57,9 +57,14 @@ static FM_CONST struct fm_hint hints[] = {
     {66, 1, "F9=Directory"}, {66, 2, "F10=Command"}
 };
 
-static void panel_init(panel, x, y, width, height, normal, selected, accent)
-struct fm_panel *panel;
-int x, y, width, height, normal, selected, accent;
+static void panel_init(struct fm_panel *panel,
+                       int x,
+                       int y,
+                       int width,
+                       int height,
+                       int normal,
+                       int selected,
+                       int accent)
 {
     panel->rect.x = x;
     panel->rect.y = y;
@@ -72,11 +77,8 @@ int x, y, width, height, normal, selected, accent;
     panel->style.accent = accent;
 }
 
-void fm_model_init(model)
-struct fm_model *model;
+void fm_model_init(struct fm_model *model)
 {
-    int index;
-
     panel_init(&model->device.panel, 0, 0, 60, 4, 48, 3, 63);
     panel_init(&model->files.panel, 0, 3, 60, 18, 48, 3, 63);
     panel_init(&model->actions.panel, 60, 0, 20, 21, 32, 2, 47);
@@ -86,6 +88,8 @@ struct fm_model *model;
     model->device.capacity = "";
     model->device.location = "Select a drive";
     model->files.items = 0;
+    model->files.validated_items = 0;
+    model->files.validated_count = -1;
     model->files.count = 0;
     model->files.columns = model->files.normal_columns = 4;
     model->files.cursor.selected = FM_NO_SELECTION;
@@ -94,8 +98,7 @@ struct fm_model *model;
     model->files.details = 0;
     model->files.heading = "Select a command";
     model->files.empty_text = "No files";
-    for (index = 0; index < FM_MAX_FILES; ++index)
-        model->files.marked[index] = 0;
+    fm_marks_clear(&model->files);
     model->actions.label_command = FM_CMD_DETAILS;
     model->actions.label = "Size/Date ON";
     model->actions.columns = 1;
@@ -129,8 +132,7 @@ struct fm_model *model;
 
 
 /* Shared overlay presentation, with no command-specific policy. */
-void fm_dialog_close(model)
-struct fm_model *model;
+void fm_dialog_close(struct fm_model *model)
 {
     model->dialog.kind = FM_DIALOG_NONE;
     model->dialog.footer[0] = model->dialog.footer[1] = 0;
@@ -141,9 +143,7 @@ struct fm_model *model;
     model->dialog.panel.rect.height = 10;
 }
 
-void fm_dialog_info(model, title, text)
-struct fm_model *model;
-FM_CONST char *title, *text;
+void fm_dialog_info(struct fm_model *model, FM_CONST char *title, FM_CONST char *text)
 {
     fm_dialog_close(model);
     model->dialog.kind = FM_DIALOG_INFO;
@@ -154,25 +154,20 @@ FM_CONST char *title, *text;
 
 /* Original colour translation, including bright backgrounds becoming bright
  * foregrounds in reverse video. Blinking is never enabled. */
-static int attribute(foreground, background)
-int foreground, background;
+static int attribute(int foreground, int background)
 {
     static int pc[] = {0,1,4,5,2,3,6,7,8,9,12,13,10,11,14,15};
     return pc[foreground] | ((pc[background] & 7) << 4);
 }
 
-static void apply_style(style, foreground, background)
-struct fm_style *style;
-int foreground, background;
+static void apply_style(struct fm_style *style, int foreground, int background)
 {
     style->normal = style->border = attribute(foreground, background);
     style->selected = attribute(background, foreground);
     style->marked = style->accent = attribute(15, background);
 }
 
-int fm_config_apply(config, model)
-FM_CONST struct fm_config *config;
-struct fm_model *model;
+int fm_config_apply(FM_CONST struct fm_config *config, struct fm_model *model)
 {
     int index;
 
@@ -202,9 +197,7 @@ struct fm_model *model;
  * retained; horizontal menus use the same scrollable command model as vertical
  * menus. Prompt and key legend remain one view with three or more rows.
  */
-int fm_layout_apply(config, model)
-FM_CONST struct fm_config *config;
-struct fm_model *model;
+int fm_layout_apply(FM_CONST struct fm_config *config, struct fm_model *model)
 {
     int position, width, height, menu, x, y, object_x, object_y;
     int object_width, object_height, menu_x, menu_y, menu_width, menu_height;

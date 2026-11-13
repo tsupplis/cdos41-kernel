@@ -271,3 +271,25 @@ Copy names its effective source in the dialog title and status. With no marks,
 it uses the current file, shown in target colour when Actions has focus. With marks, `*` identifies
 each target and the dialog shows their count. Picker controls sit below the
 directory-only list; scroll indicators appear only when another page exists.
+
+## Optimization — 13 November 2026
+
+Copy skips complete frame construction on idle ticks when its progress text is
+unchanged; input, decisions, errors and completion still repaint. Catalog names
+are validated on publication and remain immutable until refresh; cursor and
+layout bounds are checked on every use. Type preserves its last page at EOF
+without a second 1,386-byte page buffer. Production definitions and native
+adapter declarations use ANSI prototypes, enforced by the architecture check.
+
+Fields paint their text and trailing padding once; bordered panels clear only
+interiors, and Help paints each background row once. A 30-frame comparison
+across all five layouts (focus, marks, details, dialogs and empty listings)
+produced identical characters/attributes with 79,313 rather than 122,795 painted
+cells (35.4% fewer view writes by cell count, not an elapsed-time benchmark).
+Marks use bounded bitset accessors, saving another 896 bytes of static RAM.
+Together these changes reduce static RAM by 2,278 bytes; paragraph-aligned code
+is 53,568 bytes, up 560 bytes from the pre-optimization build.
+
+Validation: `make check` passes, including mark-byte boundaries and the final
+catalog slot. One combined PCE run passed navigation, exact-page Type EOF,
+Copy with byte-for-byte destination verification and exit; its emulator closed.

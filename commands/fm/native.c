@@ -13,7 +13,7 @@ int BDOS(int function, ...);
 static unsigned window, image;
 static int console_number, expansion, opened;
 
-int fm_native_open()
+int fm_native_open(void)
 {
     unsigned table, video;
     int count;
@@ -63,7 +63,7 @@ int fm_native_present(const struct fm_canvas *canvas)
     return FM_SUCCESS;
 }
 
-int fm_native_read()
+int fm_native_read(void)
 {
     int key;
 
@@ -75,7 +75,7 @@ int fm_native_read()
     return fm_key_decode(key);
 }
 
-void fm_native_close()
+void fm_native_close(void)
 {
     if (!opened)
         return;

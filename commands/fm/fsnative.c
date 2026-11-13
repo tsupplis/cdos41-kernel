@@ -4,15 +4,11 @@
  */
 #include <stdio.h>
 #include "fsnative.h"
-#ifdef HOST_TEST
 int BDOS(int, ...);
 int XINIT(void);
 int XSEG(void);
 int FARWORD(int, int);
 int FMLOC(int, int *);
-#else
-int BDOS(), XINIT(), XSEG(), FARWORD(), FMLOC();
-#endif
 
 static void clear_fcb(struct fm_native_fs *state)
 {

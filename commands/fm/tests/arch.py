@@ -20,7 +20,7 @@ ALLOWED = {
              "native", "runos", "backupos", "ui", "view"},
     "backup": {"mutate"}, "backupos": {"fsnative"},
     "model": set(), "canvas": set(), "copy": set(), "type": set(),
-    "config": set(), "keys": set(), "metadata": set(), "ui": set(),
+    "config": set(), "keys": set(), "metadata": set(), "ui": {"model"},
     "fsnative": {"mutate"}, "mutate": set(), "run": set(), "print": set(),
     "runos": {"fsnative", "native", "spawn"}, "spawn": set(),
 }
@@ -59,7 +59,7 @@ def main():
         for module, source in sources.items():
             obj = Path(folder) / (module + ".o")
             subprocess.run(compiler + ["-DHOST_TEST", "-std=c89",
-                           "-Wno-deprecated-non-prototype", "-c", str(source),
+                           "-Werror", "-Wstrict-prototypes", "-Wold-style-definition", "-c", str(source),
                            "-o", str(obj)], check=True, capture_output=True)
             references[module] = set()
             for line in subprocess.check_output(["nm", "-g", str(obj)], text=True).splitlines():

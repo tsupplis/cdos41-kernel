@@ -4,14 +4,16 @@
  */
 #include "fm.h"
 
-/* Paint the whole field before its text so selection includes trailing space.
+/* Paint text and trailing padding once; selection includes the whole field.
  * The adapter receives counted runs, avoiding temporary string construction.
  */
-static int field(panel, display, x, y, width, attribute, text)
-FM_CONST struct fm_panel *panel;
-struct fm_display *display;
-int x, y, width, attribute;
-FM_CONST char *text;
+static int field(FM_CONST struct fm_panel *panel,
+                 struct fm_display *display,
+                 int x,
+                 int y,
+                 int width,
+                 int attribute,
+                 FM_CONST char *text)
 {
     static char spaces[] =
         "                                                                                ";
@@ -22,23 +24,26 @@ FM_CONST char *text;
         return FM_BAD_MODEL;
     if (width > panel->rect.width - x)
         width = panel->rect.width - x;
-    if ((*display->write)(display->context, panel->rect.x + x,
-                         panel->rect.y + y, attribute, spaces, width))
-        return FM_OUTPUT_ERROR;
     for (length = 0; length < width && text[length]; ++length)
         ;
     if (length && (*display->write)(display->context, panel->rect.x + x,
                                    panel->rect.y + y, attribute, text, length))
         return FM_OUTPUT_ERROR;
+    if (length < width && (*display->write)(display->context,
+            panel->rect.x + x + length, panel->rect.y + y,
+            attribute, spaces, width - length))
+        return FM_OUTPUT_ERROR;
     return FM_SUCCESS;
 }
 
 /* Centre within a field without altering or copying model text. */
-static int centred(panel, display, x, y, width, attribute, text)
-FM_CONST struct fm_panel *panel;
-struct fm_display *display;
-int x, y, width, attribute;
-FM_CONST char *text;
+static int centred(FM_CONST struct fm_panel *panel,
+                   struct fm_display *display,
+                   int x,
+                   int y,
+                   int width,
+                   int attribute,
+                   FM_CONST char *text)
 {
     int length, offset;
 
@@ -48,14 +53,12 @@ FM_CONST char *text;
     return field(panel, display, x + offset, y, width - offset, attribute, text);
 }
 
-static int clear_panel(panel, display)
-FM_CONST struct fm_panel *panel;
-struct fm_display *display;
+static int clear_panel(FM_CONST struct fm_panel *panel, struct fm_display *display, int inset)
 {
     int row, status;
 
-    for (row = 0; row < panel->rect.height; ++row) {
-        status = field(panel, display, 0, row, panel->rect.width,
+    for (row = inset; row < panel->rect.height - inset; ++row) {
+        status = field(panel, display, inset, row, panel->rect.width - 2 * inset,
                        panel->style.normal, "");
         if (status)
             return status;
@@ -63,9 +66,7 @@ struct fm_display *display;
     return FM_SUCCESS;
 }
 
-static int frame(panel, display)
-FM_CONST struct fm_panel *panel;
-struct fm_display *display;
+static int frame(FM_CONST struct fm_panel *panel, struct fm_display *display)
 {
     char rule[FM_COLUMNS + 1];
     int column, row, status;
@@ -91,9 +92,7 @@ struct fm_display *display;
     return status;
 }
 
-int fm_device_render(model, display)
-FM_CONST struct fm_device_model *model;
-struct fm_display *display;
+int fm_device_render(FM_CONST struct fm_device_model *model, struct fm_display *display)
 {
     FM_CONST struct fm_panel *panel;
     int status, divider, row;
@@ -102,7 +101,7 @@ struct fm_display *display;
         return FM_BAD_MODEL;
     panel = &model->panel;
     divider = model->media_width + 1;
-    status = clear_panel(panel, display);
+    status = clear_panel(panel, display, 1);
     if (!status)
         status = frame(panel, display);
     for (row = 1; !status && row < panel->rect.height - 1; ++row)
@@ -134,7 +133,7 @@ int fm_files_render(const struct fm_files_model *model,
     if (!fm_files_valid(model))
         return FM_BAD_MODEL;
     panel = &model->panel;
-    status = clear_panel(panel, display);
+    status = clear_panel(panel, display, 1);
     if (!status)
         status = frame(panel, display);
     if (!status)
@@ -150,7 +149,7 @@ int fm_files_render(const struct fm_files_model *model,
      * marks outside the viewport. Focus is a separate presentation state. */
     has_marks = 0;
     for (index = 0; index < model->count; ++index)
-        if (model->marked[index]) {
+        if (fm_marked(model, index)) {
             has_marks = 1;
             break;
         }
@@ -163,14 +162,14 @@ int fm_files_render(const struct fm_files_model *model,
             break;
         x = 1 + (slot % model->columns) * width;
         y = 2 + slot / model->columns;
-        attribute = model->marked[index] ||
+        attribute = fm_marked(model, index) ||
                     (!has_marks && index == model->cursor.selected) ?
                     panel->style.marked : panel->style.normal;
         if (model->focused && index == model->cursor.selected)
             attribute = panel->style.selected;
         /* Reserve one glyph for the keyboard cursor, independent of colour. */
         status = field(panel, display, x, y, 1, panel->style.normal,
-                       model->marked[index] ? "*" :
+                       fm_marked(model, index) ? "*" :
                        model->focused && index == model->cursor.selected ? "\020" : " ");
         if (!status)
             status = field(panel, display, x + 1, y, width - 2, attribute,
@@ -208,7 +207,7 @@ int fm_actions_render(const struct fm_actions_model *model,
     inset = panel->rect.height == 1 ? 0 : 1;
     rows = panel->rect.height - 2 * inset;
     width = (panel->rect.width - 2 * inset) / model->columns;
-    status = clear_panel(panel, display);
+    status = clear_panel(panel, display, inset);
     if (!status && inset)
         status = frame(panel, display);
     if (status)
@@ -245,18 +244,15 @@ int fm_actions_render(const struct fm_actions_model *model,
     return FM_SUCCESS;
 }
 
-int fm_help_render(model, display)
-FM_CONST struct fm_help_model *model;
-struct fm_display *display;
+int fm_help_render(FM_CONST struct fm_help_model *model, struct fm_display *display)
 {
     FM_CONST struct fm_hint *hint;
     int index, row, status;
 
     if (!fm_help_valid(model))
         return FM_BAD_MODEL;
-    status = clear_panel(&model->panel, display);
-    if (!status)
-        status = field(&model->panel, display, 0, 0, model->panel.rect.width,
+    /* Status and legend rows cover this borderless panel completely. */
+    status = field(&model->panel, display, 0, 0, model->panel.rect.width,
                        model->panel.style.normal, model->status);
     /* The legend has its own configured background, including blank cells. */
     for (row = 1; !status && row < model->panel.rect.height; ++row)
@@ -271,11 +267,10 @@ struct fm_display *display;
 }
 
 /* Word-wrap bounded dialog text. The temporary buffer holds one display line. */
-static int message_lines(panel, display, text, width)
-FM_CONST struct fm_panel *panel;
-struct fm_display *display;
-FM_CONST char *text;
-int width;
+static int message_lines(FM_CONST struct fm_panel *panel,
+                         struct fm_display *display,
+                         FM_CONST char *text,
+                         int width)
 {
     char line[FM_COLUMNS + 1];
     int row, length, split, index, status;
@@ -303,9 +298,7 @@ int width;
     return FM_SUCCESS;
 }
 
-static int dialog_render(dialog, display)
-FM_CONST struct fm_dialog *dialog;
-struct fm_display *display;
+static int dialog_render(FM_CONST struct fm_dialog *dialog, struct fm_display *display)
 {
     FM_CONST struct fm_panel *panel;
     int status, row, index, attribute, width, title_width, start;
@@ -320,7 +313,7 @@ struct fm_display *display;
     title_width = strlen(dialog->title);
     if (title_width > width)
         title_width = width;
-    status = clear_panel(panel, display);
+    status = clear_panel(panel, display, 1);
     if (!status)
         status = frame(panel, display);
     if (!status)
@@ -366,9 +359,7 @@ struct fm_display *display;
     return status;
 }
 
-int fm_render(model, display)
-FM_CONST struct fm_model *model;
-struct fm_display *display;
+int fm_render(FM_CONST struct fm_model *model, struct fm_display *display)
 {
     int status, end_status;
 

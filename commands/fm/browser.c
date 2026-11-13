@@ -145,13 +145,15 @@ static int refresh(struct fm_browser *browser,
     }
     browser->location = *location;
     count = 0;
+    model->files.validated_items = 0;
+    model->files.validated_count = -1;
     model->files.count = 0;
     model->files.cursor.selected = FM_NO_SELECTION;
     model->files.cursor.first = 0;
     model->files.items = browser->files;
     model->catalog = browser->files;
     model->catalog_count = 0;
-    memset(model->files.marked, 0, sizeof(model->files.marked));
+    fm_marks_clear(&model->files);
     ++model->generation;
     if (location->media == FM_MEDIA_CPM) {
         snprintf(browser->location_text, sizeof(browser->location_text), "You are here > %c: User %d",
@@ -197,6 +199,7 @@ static int refresh(struct fm_browser *browser,
                      browser->copy_job.store, &browser->location, browser->entries);
     model->files.count = model->catalog_count = count;
     model->files.cursor.selected = count ? 0 : FM_NO_SELECTION;
+    if (fm_files_publish(&model->files)) return FM_FS_ERROR;
     if (closed != FM_FS_OK || (result != FM_FS_OK && result != FM_FS_END)) {
         error(model, "Directory read failed; displayed listing may be incomplete.");
         return FM_FS_ERROR;
@@ -216,7 +219,7 @@ static void selection_status(struct fm_browser *browser, struct fm_model *model)
     const struct fm_command *action;
 
     for (index = 0; index < model->files.count; ++index)
-        if (model->files.marked[index]) {
+        if (fm_marked(&model->files, index)) {
             if (!count) name = browser->entries[index].name;
             ++count;
         }
@@ -700,7 +703,7 @@ int fm_browser_key(struct fm_browser *browser,
         model->pending.command == FM_CMD_PRINT &&
         model->pending.generation == model->generation) {
         for (index = 0; index < model->job.completed; ++index)
-            model->files.marked[model->pending.files[index]] = 0;
+            fm_mark_set(&model->files, model->pending.files[index], 0);
     }
     if (browser->mutation_refresh && !model->job_active && !model->dialog.kind) {
         refresh_after_action(browser, model);

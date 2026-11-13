@@ -24,7 +24,8 @@ int main(int argc, char **argv)
     static struct fm_canvas canvas;
     struct fm_display display;
     struct fm_invoker invoker;
-    int key, status;
+    int key, status, repaint, copy_tick;
+    char progress_text[80];
     static struct fm_browser browser;
     static struct fm_native_fs filesystem_state;
     static struct fm_filesystem filesystem;
@@ -100,13 +101,14 @@ int main(int argc, char **argv)
             fm_dialog_info(&model, "FM.CFG", "Colours loaded. Unsupported OVPMODE or invalid layout; defaults retained.");
     }
     status = FM_SUCCESS;
+    repaint = 1;
     while (!model.exit_requested) {
-        status = fm_render(&model, &display);
-        if (status)
-            break;
-        status = fm_native_present(&canvas);
-        if (status)
-            break;
+        if (repaint) {
+            status = fm_render(&model, &display);
+            if (status) break;
+            status = fm_native_present(&canvas);
+            if (status) break;
+        }
         /* Idle ticks yield in the input adapter, but need no new frame.
          * Only a running job consumes ticks; a decision waits for an answer. */
         do {
@@ -115,7 +117,16 @@ int main(int argc, char **argv)
                  (!model.job_active || (model.job.state == FM_JOB_DECISION || model.job.state == FM_JOB_VIEW || model.job.state == FM_JOB_INPUT)));
         if (key == '\n')
             key = FM_KEY_ENTER;
+        copy_tick = key == FM_KEY_TICK && model.job_active &&
+                    browser.active_service == &browser.copy_service &&
+                    model.dialog.kind == FM_DIALOG_PROGRESS;
+        if (copy_tick) strcpy(progress_text, model.dialog.text);
         status = fm_browser_key(&browser, &model, &invoker, key);
+        /* Copy's progress overlay is its only visible change during a tick.
+         * Decisions, completion, errors and keyboard input always repaint. */
+        repaint = !copy_tick || status || !model.job_active ||
+                  model.dialog.kind != FM_DIALOG_PROGRESS ||
+                  strcmp(progress_text, model.dialog.text) != 0;
         if (status == FM_JOB_ERROR)
             status = FM_SUCCESS;    /* Controller has prepared an error overlay. */
         if (status)
