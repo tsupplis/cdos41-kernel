@@ -11,9 +11,9 @@ CFLAGS=-target=cpm86 -Osize
 HOSTFLAGS=-DHOST_TEST -std=c89 -Wall -Wextra -Werror -Wno-unused-parameter -Wno-deprecated-non-prototype
 OBJECTS=main.o ui.o model.o view.o control.o canvas.o native.o keys.o config.o browser.o locpick.o type.o metadata.o copy.o backup.o backupos.o mutate.o print.o run.o runos.o spawn.o spawnos.o fsnative.o fsmap.o xios.o
 
-all: fmview.cmd
+all: fm.cmd
 
-fmview.cmd: $(OBJECTS) Makefile
+fm.cmd: $(OBJECTS) Makefile
 	$(ACC) $(CFLAGS) -o $@ $(OBJECTS)
 	$(CMDINFO) $@
 
