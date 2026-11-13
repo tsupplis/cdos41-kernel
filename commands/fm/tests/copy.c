@@ -111,7 +111,9 @@ int main(void) {
     store.abort = abort_copy;
     store.error = error;
     fm_copy_bind(&port, &job, &fs, &store, &source, entries);
-    job.count = 2;
+    assert(!fm_copy_configure(&job, 2, "A:15", 0));
+    assert(fm_copy_configure(&job, -1, "A:15", 0) == FM_BAD_MODEL);
+    assert(job.count == 2 && job.destination.user == 15);
     assert(!fm_copy_destination(&fs, "A:15", &destination) && destination.user == 15);
     assert(!fm_copy_destination(&fs, "b:\\DOCS", &destination) && !strcmp(destination.path, "\\DOCS"));
     assert(fm_copy_destination(&fs, "A:", &destination));
@@ -127,6 +129,7 @@ int main(void) {
     reply.decision = 0;
     reply.answer = FM_REPLY_NONE;
     assert(!port.invoke(port.context, &request));
+    assert(fm_copy_configure(&job, 0, "A:0", 0) == FM_BAD_MODEL);
     for (steps = 0; steps < 50; ++steps) {
         assert(!port.advance(port.context, &reply, &result));
         if (result.state == FM_JOB_COMPLETE)
@@ -174,6 +177,9 @@ int main(void) {
     assert(!port.advance(port.context, &reply, &result));
     for (steps = 0; steps < 10 && !storage.used; ++steps)
         assert(!port.advance(port.context, &reply, &result));
+    /* Eight short read/write pairs per advance, then cancellation before
+     * close/publication. The ninth record must wait for the next advance. */
+    assert(storage.position == 8 * 37 && storage.used == 8 * 37);
     assert(storage.owned && storage.used > 0);
     assert(!port.cancel(port.context) && !storage.owned && storage.opens == storage.closes);
     storage.fail_commit = 1;

@@ -56,7 +56,10 @@ files do not create an extra blank page. Cleanup errors remain visible.
 
 ## Copy safety and scope
 
-Copy snapshots selected files and transfers binary bytes in bounded steps.
+Copy snapshots selected files and transfers binary bytes in bounded steps: at
+most eight read/write pairs (1 KiB) before returning to input handling.
+Confirmation, close and publication remain separate steps. Transfer progress
+text stays stable so each block does not trigger a screen redraw.
 An existing target requires Y; N/Esc cancels the operation. Completed files stay;
 the current temporary is removed where cleanup succeeds. Recovery files are
 retained and named when rollback fails. This is not power-loss atomic.
@@ -293,3 +296,10 @@ is 53,568 bytes, up 560 bytes from the pre-optimization build.
 Validation: `make check` passes, including mark-byte boundaries and the final
 catalog slot. One combined PCE run passed navigation, exact-page Type EOF,
 Copy with byte-for-byte destination verification and exit; its emulator closed.
+
+Copy batching measurement: the same 16,388-byte FAT-to-FAT copy in disposable
+PCE disks took 93,323,264 emulated cycles versus 1,017,380,864 before batching
+and stable progress text (10.9× fewer cycles). Both outputs matched the source
+exactly. This is one emulator workload, not a physical-disk throughput claim.
+Host checks cover the eight-pair bound with short reads, cancellation before
+publication and existing failure/rollback cases.

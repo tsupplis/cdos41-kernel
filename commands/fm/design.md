@@ -160,7 +160,10 @@ Report unresolved violations explicitly. Passing tests alone does not satisfy
 this gate. Native read/write operations share mapping internals in fsnative.c.
 
 Copy uses prepare/begin/write/commit/abort storage operations. Controllers call
-fm_copy_configure rather than editing job fields. Publication retains the old
+fm_copy_configure rather than editing job fields. Backup, Print, Run and
+Mutation likewise expose idle-only configure calls. Browser retains injected
+ports independently of job storage; Type receives its catalog when bound.
+The architecture check rejects direct browser access to job fields. Publication retains the old
 file until the complete temporary is closed; failed rollback preserves a named
 backup. File replacement is not an atomic transaction against power loss or
 concurrent writers. Native Copy acceptance passed with persisted byte comparisons.

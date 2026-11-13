@@ -5,6 +5,7 @@ ownership. Those remain part of the documented manual phase review.
 """
 from pathlib import Path
 import os
+import re
 import shlex
 import subprocess
 import tempfile
@@ -52,6 +53,9 @@ def validate(graph):
 
 def main():
     sources = {path.stem: path for path in ROOT.glob("*.c")}
+    # Controllers configure jobs through public contracts, never private fields.
+    assert not re.search(r"browser->\w+_job\s*\.",
+                         sources["browser"].read_text()), "Browser accesses job internals"
     assert sources.keys() == ALLOWED.keys(), "Review dependency policy for changed modules"
     owners, references = {}, {}
     compiler = shlex.split(os.environ.get("CC", "cc"))

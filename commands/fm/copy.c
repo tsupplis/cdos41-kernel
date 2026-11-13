@@ -1,4 +1,4 @@
-/* Cooperative binary Copy. Each advance transfers at most one 128-byte block.
+/* Cooperative binary Copy. Each data advance transfers at most eight 128-byte blocks.
  * Selection is snapshotted; text EOF has no meaning in this action. */
 #include <stdio.h>
 #include "copy.h"
@@ -9,6 +9,7 @@
 #define COPY_COMMIT 4
 #define COPY_WRITE 5
 #define COPY_CLOSE 6
+#define COPY_IO_BUDGET 16 /* Eight read/write pairs; return to input afterwards. */
 
 static int cleanup(struct fm_copy_job *job)
 {
@@ -63,7 +64,7 @@ static int advance(void *context, FM_CONST struct fm_reply *reply, struct fm_job
     struct fm_copy_job *job;
     FM_CONST char *name;
     FM_CONST char *failure;
-    int status, count;
+    int status, count, budget;
     static FM_CONST char *stages[] = {"prepare", "confirm", "open", "read",
                                       "publish", "write",   "close"};
     job = (struct fm_copy_job *)context;
@@ -88,91 +89,95 @@ static int advance(void *context, FM_CONST struct fm_reply *reply, struct fm_job
     }
     name = job->entries[job->request->files[job->target]].name;
     snprintf(job->message, sizeof(job->message), "Copy %.12s: %.8s. Esc cancels.", name,
-             stages[job->stage]);
+             job->stage == COPY_DATA || job->stage == COPY_WRITE ? "transfer" : stages[job->stage]);
     result->prompt = job->message;
     status = FM_FS_OK;
     failure = 0;
-    switch (job->stage) {
-    /* Resolve and check the target before opening either file. */
-    case COPY_PREPARE:
-        status = (*job->store->prepare)(job->store->context, job->location, &job->destination, name,
-                                        &job->replace);
-        if (!status) {
-            job->stage = job->replace ? COPY_CONFIRM : COPY_OPEN;
-            if (job->replace) {
-                if (!++job->decision)
-                    ++job->decision;
-                snprintf(job->message, sizeof(job->message),
-                         "Replace %.12s? Y replaces; N/Esc cancels Copy.", name);
+    budget = job->stage == COPY_DATA || job->stage == COPY_WRITE ? COPY_IO_BUDGET : 1;
+    do {
+        switch (job->stage) {
+        /* Resolve and check the target before opening either file. */
+        case COPY_PREPARE:
+            status = (*job->store->prepare)(job->store->context, job->location, &job->destination,
+                                            name, &job->replace);
+            if (!status) {
+                job->stage = job->replace ? COPY_CONFIRM : COPY_OPEN;
+                if (job->replace) {
+                    if (!++job->decision)
+                        ++job->decision;
+                    snprintf(job->message, sizeof(job->message),
+                             "Replace %.12s? Y replaces; N/Esc cancels Copy.", name);
+                }
             }
-        }
-        break;
-    case COPY_CONFIRM:
-        if (reply->answer == FM_REPLY_ACCEPT)
-            job->stage = COPY_OPEN;
-        break;
-    case COPY_OPEN:
-        status = (*job->source->file_open)(job->source->context, job->location, name, &job->handle);
-        if (status)
-            failure = "Cannot open source file.";
-        if (!status) {
-            job->opened = 1;
-            status = (*job->store->begin)(job->store->context);
+            break;
+        case COPY_CONFIRM:
+            if (reply->answer == FM_REPLY_ACCEPT)
+                job->stage = COPY_OPEN;
+            break;
+        case COPY_OPEN:
+            status =
+                (*job->source->file_open)(job->source->context, job->location, name, &job->handle);
+            if (status)
+                failure = "Cannot open source file.";
+            if (!status) {
+                job->opened = 1;
+                status = (*job->store->begin)(job->store->context);
+                if (!status)
+                    job->stage = COPY_DATA;
+            }
+            break;
+        /* Bound I/O calls as well as bytes, including short reads. */
+        case COPY_DATA:
+            count = 0;
+            status = (*job->source->file_read)(job->source->context, job->handle, job->buffer,
+                                               sizeof(job->buffer), &count);
+            if ((status != FM_FS_OK && status != FM_FS_END) || count < 0 || count > 128 ||
+                (!count && status == FM_FS_OK)) {
+                status = FM_FS_ERROR;
+                break;
+            }
+            job->buffered = count;
+            job->source_end = status == FM_FS_END;
+            job->stage = count ? COPY_WRITE : COPY_CLOSE;
+            status = FM_FS_OK;
+            break;
+        case COPY_WRITE:
+            status = (*job->store->write)(job->store->context, job->buffer, job->buffered);
             if (!status)
-                job->stage = COPY_DATA;
-        }
-        break;
-    /* A bounded step yields to input between blocks; bytes are never text. */
-    case COPY_DATA:
-        count = 0;
-        status = (*job->source->file_read)(job->source->context, job->handle, job->buffer,
-                                           sizeof(job->buffer), &count);
-        if ((status != FM_FS_OK && status != FM_FS_END) || count < 0 || count > 128 ||
-            (!count && status == FM_FS_OK)) {
-            status = FM_FS_ERROR;
+                job->stage = job->source_end ? COPY_CLOSE : COPY_DATA;
+            break;
+        case COPY_CLOSE:
+            job->opened = 0;
+            status = (*job->source->file_close)(job->source->context, job->handle);
+            if (!status)
+                job->stage = COPY_COMMIT;
+            break;
+        /* Publication belongs to storage; only a successful commit counts. */
+        case COPY_COMMIT:
+            status = (*job->store->commit)(job->store->context, job->replace);
+            if (!status && job->request->command == FM_CMD_SYSTEM_COPY) {
+                if (!job->attributes || !job->attributes->prepare_attributes)
+                    status = FM_FS_ERROR;
+                else {
+                    status = job->attributes->prepare_attributes(job->attributes->context,
+                                                                 &job->destination, name, 1);
+                    if (!status)
+                        status = job->attributes->commit(job->attributes->context);
+                }
+                if (status)
+                    failure = "File copied; SYS/RO attributes could not be set.";
+            }
+            if (!status) {
+                result->completed = ++job->target;
+                job->stage = COPY_PREPARE;
+                if (job->target == job->request->count) {
+                    result->state = FM_JOB_COMPLETE;
+                    result->prompt = 0;
+                }
+            }
             break;
         }
-        job->buffered = count;
-        job->source_end = status == FM_FS_END;
-        job->stage = count ? COPY_WRITE : COPY_CLOSE;
-        status = FM_FS_OK;
-        break;
-    case COPY_WRITE:
-        status = (*job->store->write)(job->store->context, job->buffer, job->buffered);
-        if (!status)
-            job->stage = job->source_end ? COPY_CLOSE : COPY_DATA;
-        break;
-    case COPY_CLOSE:
-        job->opened = 0;
-        status = (*job->source->file_close)(job->source->context, job->handle);
-        if (!status)
-            job->stage = COPY_COMMIT;
-        break;
-    /* Publication belongs to storage; only a successful commit counts. */
-    case COPY_COMMIT:
-        status = (*job->store->commit)(job->store->context, job->replace);
-        if (!status && job->request->command == FM_CMD_SYSTEM_COPY) {
-            if (!job->attributes || !job->attributes->prepare_attributes)
-                status = FM_FS_ERROR;
-            else {
-                status = job->attributes->prepare_attributes(job->attributes->context,
-                                                             &job->destination, name, 1);
-                if (!status)
-                    status = job->attributes->commit(job->attributes->context);
-            }
-            if (status)
-                failure = "File copied; SYS/RO attributes could not be set.";
-        }
-        if (!status) {
-            result->completed = ++job->target;
-            job->stage = COPY_PREPARE;
-            if (job->target == job->request->count) {
-                result->state = FM_JOB_COMPLETE;
-                result->prompt = 0;
-            }
-        }
-        break;
-    }
+    } while (!status && --budget && (job->stage == COPY_DATA || job->stage == COPY_WRITE));
     if (status) {
         cleanup(job);
         snprintf(job->message, sizeof(job->message), "Copy %.12s: %.8s failed. %.36s", name,
