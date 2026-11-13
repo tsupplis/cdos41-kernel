@@ -9,8 +9,8 @@
 
 struct fm_mutation_store {
     void *context;
-    int (*prepare)(void *context, const struct fm_location *location,
-                   const char *name, const char *replacement);
+    int (*prepare)(void *context, const struct fm_location *location, const char *name,
+                   const char *replacement);
     int (*commit)(void *context);
     const char *(*error)(void *context);
     /* Optional attribute operation; preserves unrelated flags. commit uses
@@ -29,8 +29,11 @@ struct fm_mutation_job {
 };
 
 int fm_mutation_name(const char *name);
+/* Configure only while idle. Catalog is borrowed until cancel/completion.
+ * Invalid input leaves the job unchanged; returns FM_SUCCESS/FM_BAD_MODEL. */
+int fm_mutation_configure(struct fm_mutation_job *, const struct fm_entry *, int);
+
 void fm_mutation_bind(struct fm_invoker *port, struct fm_mutation_job *job,
-                      struct fm_mutation_store *store,
-                      const struct fm_location *location);
+                      struct fm_mutation_store *store, const struct fm_location *location);
 
 #endif

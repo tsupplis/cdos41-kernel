@@ -24,11 +24,9 @@ struct fm_location_picker {
 
 /* drives selects the drive chooser; otherwise open candidate's users/folders.
  * Bookmarks are snapshots, independent of subsequent changes by the caller. */
-int fm_location_begin(struct fm_location_picker *picker,
-                      struct fm_dialog *dialog, struct fm_filesystem *filesystem,
-                      const struct fm_location *current, int drives,
-                      const struct fm_location *bookmarks, const int *available);
-int fm_location_key(struct fm_location_picker *picker,
-                    struct fm_dialog *dialog, int key);
+int fm_location_begin(struct fm_location_picker *picker, struct fm_dialog *dialog,
+                      struct fm_filesystem *filesystem, const struct fm_location *current,
+                      int drives, const struct fm_location *bookmarks, const int *available);
+int fm_location_key(struct fm_location_picker *picker, struct fm_dialog *dialog, int key);
 
 #endif

@@ -42,8 +42,7 @@ struct fm_config {
 void fm_config_defaults(struct fm_config *config);
 void fm_config_line(struct fm_config *config, const char *line);
 
-int fm_config_load(struct fm_config *config,
-                   struct fm_filesystem *filesystem,
+int fm_config_load(struct fm_config *config, struct fm_filesystem *filesystem,
                    const struct fm_location *location);
 
 /* UI policy implemented in ui.c, not by the configuration I/O service.
@@ -54,6 +53,5 @@ int fm_config_apply(const struct fm_config *config, struct fm_model *model);
 /* Apply bounded legacy geometry to the four views. Invalid layouts leave all
  * models unchanged. Called after model initialization, before opening a catalog. */
 int fm_layout_apply(const struct fm_config *config, struct fm_model *model);
-
 
 #endif

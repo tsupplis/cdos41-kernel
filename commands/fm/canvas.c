@@ -10,13 +10,12 @@ static int begin_frame(void *context)
     return FM_SUCCESS;
 }
 
-static int write_run(void *context, int x, int y, int attribute,
-                     const char *text, int length)
+static int write_run(void *context, int x, int y, int attribute, const char *text, int length)
 {
     struct fm_canvas *canvas = context;
 
-    if (!text || length < 0 || length > FM_COLUMNS || y < 0 || y >= FM_ROWS ||
-        x < 0 || x > FM_COLUMNS - length)
+    if (!text || length < 0 || length > FM_COLUMNS || y < 0 || y >= FM_ROWS || x < 0 ||
+        x > FM_COLUMNS - length)
         return FM_OUTPUT_ERROR;
     memcpy(&canvas->text[y][x], text, length);
     memset(&canvas->attribute[y][x], attribute, length);

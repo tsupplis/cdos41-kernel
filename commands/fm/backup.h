@@ -29,9 +29,12 @@ struct fm_backup_job {
     char control[13], command[32], text[180];
 };
 
-void fm_backup_bind(struct fm_invoker *, struct fm_backup_job *,
-                    struct fm_backup_host *, struct fm_copy_store *,
-                    const struct fm_location *);
+/* Configure only while idle. Catalog is borrowed until cancel/completion.
+ * Invalid input leaves the job unchanged; returns FM_SUCCESS/FM_BAD_MODEL. */
+int fm_backup_configure(struct fm_backup_job *, const struct fm_entry *, int);
+
+void fm_backup_bind(struct fm_invoker *, struct fm_backup_job *, struct fm_backup_host *,
+                    struct fm_copy_store *, const struct fm_location *);
 
 /* Native composition uses the same launcher and transactional file store. */
 struct fm_native_fs;

@@ -18,15 +18,13 @@
  */
 struct fm_copy_store {
     void *context;
-    int (*prepare) (void *context,
-                            FM_CONST struct fm_location *source,
-                            FM_CONST struct fm_location *destination,
-                            FM_CONST char *name, int *exists);
-    int (*begin) (void *context);
-    int (*write) (void *context, FM_CONST char *bytes, int count);
-    int (*commit) (void *context, int replace);
-    int (*abort) (void *context);
-    FM_CONST char *(*error) (void *context);
+    int (*prepare)(void *context, FM_CONST struct fm_location *source,
+                   FM_CONST struct fm_location *destination, FM_CONST char *name, int *exists);
+    int (*begin)(void *context);
+    int (*write)(void *context, FM_CONST char *bytes, int count);
+    int (*commit)(void *context, int replace);
+    int (*abort)(void *context);
+    FM_CONST char *(*error)(void *context);
 };
 
 /* Caller-owned storage. Fields are private to copy.c after binding; controllers
@@ -47,14 +45,13 @@ struct fm_copy_job {
     unsigned decision;
     char buffer[128], message[80];
 };
-void fm_copy_bind (struct fm_invoker *port, struct fm_copy_job *job,
-                           struct fm_filesystem *source,
-                           struct fm_copy_store *store,
-                           FM_CONST struct fm_location *location,
-                           FM_CONST struct fm_entry *entries);
-int fm_copy_destination (struct fm_filesystem *, FM_CONST char *, struct fm_location *);
-/* Configure while idle. Returns FM_BAD_MODEL for invalid input/active jobs.
+void fm_copy_bind(struct fm_invoker *port, struct fm_copy_job *job, struct fm_filesystem *source,
+                  struct fm_copy_store *store, FM_CONST struct fm_location *location,
+                  FM_CONST struct fm_entry *entries);
+int fm_copy_destination(struct fm_filesystem *, FM_CONST char *, struct fm_location *);
+/* Optional attributes are applied only after successful system-copy publication.
+ * Configure while idle. Returns FM_BAD_MODEL for invalid input/active jobs.
  * All bound services and the borrowed source catalog outlive the invocation. */
-int fm_copy_configure (struct fm_copy_job *job, int count,
-                               FM_CONST char *destination);
+int fm_copy_configure(struct fm_copy_job *job, int count, FM_CONST char *destination,
+                      struct fm_mutation_store *attributes);
 #endif

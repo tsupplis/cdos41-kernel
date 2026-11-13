@@ -109,10 +109,10 @@ int main(void)
         location.media = mode == 1 ? FM_MEDIA_CPM : FM_MEDIA_FAT;
         location.user = 4;
         fm_backup_bind(&port, &job, &host, &store, &location);
-        job.entries = entries;
-        job.count = 2;
+        assert(!fm_backup_configure(&job, entries, 2));
         request.count = mode == 6 ? 0 : 2;
         assert(!port.invoke(port.context, &request));
+        assert(fm_backup_configure(&job, 0, 0) == FM_BAD_MODEL);
         memset(&reply, 0, sizeof(reply));
         reply.token = 7;
         assert(!port.advance(port.context, &reply, &result));

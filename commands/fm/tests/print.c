@@ -63,8 +63,9 @@ int main(void)
         memset(&f, 0, sizeof(f)); f.unavailable = mode == 1;
         f.failed = mode == 2; f.longfile = mode == 3;
         fm_print_bind(&port, &job, &files, &printer, &location);
-        job.entries = entries; job.count = 2;
+        assert(!fm_print_configure(&job, entries, 2));
         assert(!port.invoke(port.context, &request));
+        assert(fm_print_configure(&job, 0, 0) == FM_BAD_MODEL);
         reply.token = 2;
         assert(port.advance(port.context, &reply, &result) == FM_BAD_MODEL);
         assert(!f.attached); reply.token = 1;

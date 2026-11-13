@@ -15,14 +15,17 @@ int fm_mark_set(struct fm_files_model *files, int index, int marked)
     if (!files || index < 0 || index >= files->count || index >= FM_MAX_FILES)
         return FM_BAD_MODEL;
     mask = 1U << (index % 8);
-    if (marked) files->marks[index / 8] |= mask;
-    else files->marks[index / 8] &= ~mask;
+    if (marked)
+        files->marks[index / 8] |= mask;
+    else
+        files->marks[index / 8] &= ~mask;
     return FM_SUCCESS;
 }
 
 void fm_marks_clear(struct fm_files_model *files)
 {
-    if (files) memset(files->marks, 0, sizeof(files->marks));
+    if (files)
+        memset(files->marks, 0, sizeof(files->marks));
 }
 
 int fm_panel_valid(FM_CONST struct fm_panel *panel)
@@ -32,31 +35,27 @@ int fm_panel_valid(FM_CONST struct fm_panel *panel)
     if (!panel)
         return 0;
     r = &panel->rect;
-    if (panel->style.normal < 0 || panel->style.normal > 255 ||
-        panel->style.selected < 0 || panel->style.selected > 255 ||
-        panel->style.marked < 0 || panel->style.marked > 255 ||
-        panel->style.accent < 0 || panel->style.accent > 255 ||
-        panel->style.border < 0 || panel->style.border > 255)
+    if (panel->style.normal < 0 || panel->style.normal > 255 || panel->style.selected < 0 ||
+        panel->style.selected > 255 || panel->style.marked < 0 || panel->style.marked > 255 ||
+        panel->style.accent < 0 || panel->style.accent > 255 || panel->style.border < 0 ||
+        panel->style.border > 255)
         return 0;
-    return r->width > 0 && r->width <= FM_COLUMNS &&
-           r->height > 0 && r->height <= FM_ROWS &&
-           r->x >= 0 && r->x <= FM_COLUMNS - r->width &&
-           r->y >= 0 && r->y <= FM_ROWS - r->height;
+    return r->width > 0 && r->width <= FM_COLUMNS && r->height > 0 && r->height <= FM_ROWS &&
+           r->x >= 0 && r->x <= FM_COLUMNS - r->width && r->y >= 0 && r->y <= FM_ROWS - r->height;
 }
 
 static int cursor_valid(FM_CONST struct fm_cursor *cursor, int count)
 {
     if (count == 0)
         return cursor->selected == FM_NO_SELECTION && cursor->first == 0;
-    return cursor->selected >= FM_NO_SELECTION && cursor->selected < count &&
-           cursor->first >= 0 && cursor->first < count;
+    return cursor->selected >= FM_NO_SELECTION && cursor->selected < count && cursor->first >= 0 &&
+           cursor->first < count;
 }
 
 int fm_device_valid(FM_CONST struct fm_device_model *model)
 {
-    return model && fm_panel_valid(&model->panel) &&
-           model->panel.rect.height >= 4 && model->media_width > 0 &&
-           model->media_width <= model->panel.rect.width - 5 &&
+    return model && fm_panel_valid(&model->panel) && model->panel.rect.height >= 4 &&
+           model->media_width > 0 && model->media_width <= model->panel.rect.width - 5 &&
            model->media && model->capacity && model->location;
 }
 
@@ -64,15 +63,12 @@ int fm_files_valid(FM_CONST struct fm_files_model *model)
 {
     int index;
 
-    if (!model || !fm_panel_valid(&model->panel) ||
-        model->panel.rect.height < 5 || model->count < 0 ||
-        model->count > FM_MAX_FILES || (model->count && !model->items) ||
+    if (!model || !fm_panel_valid(&model->panel) || model->panel.rect.height < 5 ||
+        model->count < 0 || model->count > FM_MAX_FILES || (model->count && !model->items) ||
         !cursor_valid(&model->cursor, model->count) || model->columns < 1 ||
-        model->columns > (model->panel.rect.width - 2) / 2 ||
-        !model->heading || !model->empty_text)
+        model->columns > (model->panel.rect.width - 2) / 2 || !model->heading || !model->empty_text)
         return 0;
-    if (model->validated_items == model->items &&
-        model->validated_count == model->count)
+    if (model->validated_items == model->items && model->validated_count == model->count)
         return 1;
     for (index = 0; index < model->count; ++index) {
         if (!model->items[index].name)
@@ -85,10 +81,12 @@ int fm_files_valid(FM_CONST struct fm_files_model *model)
  * Names remain immutable until the owner revokes this certificate. */
 int fm_files_publish(struct fm_files_model *model)
 {
-    if (!model) return FM_BAD_MODEL;
+    if (!model)
+        return FM_BAD_MODEL;
     model->validated_items = 0;
     model->validated_count = -1;
-    if (!fm_files_valid(model)) return FM_BAD_MODEL;
+    if (!fm_files_valid(model))
+        return FM_BAD_MODEL;
     model->validated_items = model->items;
     model->validated_count = model->count;
     return FM_SUCCESS;
@@ -101,8 +99,8 @@ int fm_actions_valid(FM_CONST struct fm_actions_model *model)
     if (!model || !fm_panel_valid(&model->panel) ||
         (model->panel.rect.height != 1 && model->panel.rect.height < 3) ||
         model->panel.rect.width < 3 || model->columns < 1 ||
-        model->columns > model->panel.rect.width / 2 ||
-        model->count < 0 || model->count > FM_MAX_FILES || (model->count && !model->items) ||
+        model->columns > model->panel.rect.width / 2 || model->count < 0 ||
+        model->count > FM_MAX_FILES || (model->count && !model->items) ||
         !cursor_valid(&model->cursor, model->count) || !model->empty_text)
         return 0;
     for (index = 0; index < model->count; ++index) {
@@ -119,14 +117,13 @@ int fm_help_valid(FM_CONST struct fm_help_model *model)
     int index;
     FM_CONST struct fm_hint *hint;
 
-    if (!model || !fm_panel_valid(&model->panel) || !model->status ||
-        model->count < 0 || model->count > 16 || (model->count && !model->hints))
+    if (!model || !fm_panel_valid(&model->panel) || !model->status || model->count < 0 ||
+        model->count > 16 || (model->count && !model->hints))
         return 0;
     for (index = 0; index < model->count; ++index) {
         hint = &model->hints[index];
-        if (!hint->text || hint->column < 0 ||
-            hint->column >= model->panel.rect.width || hint->row < 1 ||
-            hint->row >= model->panel.rect.height)
+        if (!hint->text || hint->column < 0 || hint->column >= model->panel.rect.width ||
+            hint->row < 1 || hint->row >= model->panel.rect.height)
             return 0;
     }
     return 1;
@@ -168,11 +165,12 @@ int fm_dialog_valid(FM_CONST struct fm_dialog *dialog)
         if (dialog->count < 0 || dialog->count > 16 || dialog->first < 0)
             return 0;
         if (!dialog->count) {
-            if (dialog->first || dialog->selected != FM_NO_SELECTION) return 0;
+            if (dialog->first || dialog->selected != FM_NO_SELECTION)
+                return 0;
         } else if (dialog->first >= dialog->count || dialog->selected < dialog->first ||
                    dialog->selected >= dialog->count ||
-                   dialog->selected >= dialog->first + dialog->panel.rect.height - 4 -
-                                       (dialog->footer[0] ? 2 : 0))
+                   dialog->selected >=
+                       dialog->first + dialog->panel.rect.height - 4 - (dialog->footer[0] ? 2 : 0))
             return 0;
         for (index = 0; index < dialog->count; ++index) {
             if (!dialog->options[index])
@@ -184,9 +182,9 @@ int fm_dialog_valid(FM_CONST struct fm_dialog *dialog)
 
 int fm_validate(FM_CONST struct fm_model *model)
 {
-    if (!model || !fm_device_valid(&model->device) ||
-        !fm_files_valid(&model->files) || !fm_actions_valid(&model->actions) ||
-        !fm_help_valid(&model->help) || !fm_dialog_valid(&model->dialog) ||
+    if (!model || !fm_device_valid(&model->device) || !fm_files_valid(&model->files) ||
+        !fm_actions_valid(&model->actions) || !fm_help_valid(&model->help) ||
+        !fm_dialog_valid(&model->dialog) ||
         (model->files.focused != 0 && model->files.focused != 1) ||
         (model->actions.focused != 0 && model->actions.focused != 1) ||
         model->files.focused + model->actions.focused != 1)
@@ -194,15 +192,13 @@ int fm_validate(FM_CONST struct fm_model *model)
     return FM_SUCCESS;
 }
 
-
 /* Controller-only data is validated separately: standalone view models do not
  * need a catalogue or a job service. */
 int fm_control_valid(FM_CONST struct fm_model *model)
 {
     int index;
 
-    if (!model || model->catalog_count < 0 ||
-        model->catalog_count > FM_MAX_FILES ||
+    if (!model || model->catalog_count < 0 || model->catalog_count > FM_MAX_FILES ||
         (model->catalog_count && !model->catalog))
         return 0;
     if (model->catalog != model->files.validated_items ||
@@ -213,11 +209,10 @@ int fm_control_valid(FM_CONST struct fm_model *model)
         }
     }
     if (model->dialog.kind == FM_DIALOG_PICK &&
-        (model->dialog.purpose != FM_PURPOSE_DIRECTORY_SLOT ||
-         model->dialog.count < 1 || model->dialog.count > 3))
+        (model->dialog.purpose != FM_PURPOSE_DIRECTORY_SLOT || model->dialog.count < 1 ||
+         model->dialog.count > 3))
         return 0;
-    if (model->dialog.kind == FM_DIALOG_INPUT &&
-        model->dialog.purpose != FM_PURPOSE_SUBSET &&
+    if (model->dialog.kind == FM_DIALOG_INPUT && model->dialog.purpose != FM_PURPOSE_SUBSET &&
         model->dialog.purpose != FM_PURPOSE_COMMAND &&
         model->dialog.purpose != FM_PURPOSE_COPY_DESTINATION &&
         model->dialog.purpose != FM_PURPOSE_RENAME)
@@ -225,9 +220,9 @@ int fm_control_valid(FM_CONST struct fm_model *model)
     if (model->job_active != 0 && model->job_active != 1)
         return 0;
     if (model->job_active) {
-        if (!model->job.token || model->job.total < 0 ||
-            model->job.total > FM_MAX_FILES || model->job.failed != 0 ||
-            model->job.completed < 0 || model->job.completed > model->job.total)
+        if (!model->job.token || model->job.total < 0 || model->job.total > FM_MAX_FILES ||
+            model->job.failed != 0 || model->job.completed < 0 ||
+            model->job.completed > model->job.total)
             return 0;
         if (model->job.state == FM_JOB_DECISION) {
             if (!model->job.decision || model->dialog.kind != FM_DIALOG_CONFIRM)
@@ -253,7 +248,8 @@ int fm_control_valid(FM_CONST struct fm_model *model)
 
 /* Target policy is independent of any command, dialog, renderer or backend.
  * Count first so a rejected single-file action cannot leave a partial request. */
-int fm_resolve_targets(FM_CONST struct fm_files_model *files, int policy, struct fm_request *request)
+int fm_resolve_targets(FM_CONST struct fm_files_model *files, int policy,
+                       struct fm_request *request)
 {
     int index, count;
 
@@ -304,5 +300,3 @@ void fm_cursor_move(struct fm_cursor *cursor, int count, int delta, int columns,
     if (next >= cursor->first + capacity)
         cursor->first = (next / columns - rows + 1) * columns;
 }
-
-

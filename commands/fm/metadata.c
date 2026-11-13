@@ -12,7 +12,7 @@ static int leap(int year)
  * very large files use MiB to stay within native 16-bit arithmetic. */
 void fm_metadata_format(FM_CONST struct fm_metadata *metadata, char *output)
 {
-    static int months[] = {31,28,31,30,31,30,31,31,30,31,30,31};
+    static int months[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
     char size[12];
     unsigned days, amount;
     int year, month, length;
@@ -31,8 +31,7 @@ void fm_metadata_format(FM_CONST struct fm_metadata *metadata, char *output)
             snprintf(size, sizeof(size), "%u MiB", amount);
         }
     }
-    if (!metadata->date_known || !metadata->days ||
-        metadata->hour < 0 || metadata->hour > 23 ||
+    if (!metadata->date_known || !metadata->days || metadata->hour < 0 || metadata->hour > 23 ||
         metadata->minute < 0 || metadata->minute > 59) {
         snprintf(output, FM_DETAIL_CAPACITY, "%8s  --", size);
         return;
@@ -51,6 +50,6 @@ void fm_metadata_format(FM_CONST struct fm_metadata *metadata, char *output)
         days -= length;
         ++month;
     }
-    snprintf(output, FM_DETAIL_CAPACITY, "%8s  %04d-%02d-%02d %02d:%02d", size,
-            year, month + 1, days + 1, metadata->hour, metadata->minute);
+    snprintf(output, FM_DETAIL_CAPACITY, "%8s  %04d-%02d-%02d %02d:%02d", size, year, month + 1,
+             days + 1, metadata->hour, metadata->minute);
 }

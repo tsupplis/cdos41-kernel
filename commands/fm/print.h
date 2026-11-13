@@ -26,6 +26,10 @@ struct fm_print_job {
     char buffer[128], message[80];
 };
 
+/* Configure only while idle. Catalog is borrowed until cancel/completion.
+ * Invalid input leaves the job unchanged; returns FM_SUCCESS/FM_BAD_MODEL. */
+int fm_print_configure(struct fm_print_job *, const struct fm_entry *, int);
+
 void fm_print_bind(struct fm_invoker *port, struct fm_print_job *job,
                    struct fm_filesystem *filesystem, struct fm_printer *printer,
                    const struct fm_location *location);

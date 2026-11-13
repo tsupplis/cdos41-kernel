@@ -75,7 +75,7 @@
 #define FM_KEY_F1 270
 #define FM_KEY_TICK 300
 /* PC-console byte to semantic key; unknown bytes pass through unchanged. */
-int fm_key_decode (int);
+int fm_key_decode(int);
 #define FM_DIALOG_NONE 0
 #define FM_DIALOG_INFO 1
 #define FM_DIALOG_PICK 2
@@ -118,8 +118,8 @@ struct fm_panel {
 };
 
 struct fm_cursor {
-    int selected;               /* Index in the full list, or FM_NO_SELECTION. */
-    int first;                  /* Index of first visible item. */
+    int selected; /* Index in the full list, or FM_NO_SELECTION. */
+    int first;    /* Index of first visible item. */
 };
 
 struct fm_device_model {
@@ -132,8 +132,8 @@ struct fm_device_model {
 
 struct fm_file {
     FM_CONST char *name;
-    FM_CONST char *detail;       /* Preformatted metadata; renderer does no I/O. */
-    int directory;             /* Presentation marker; never inferred from a name. */
+    FM_CONST char *detail; /* Preformatted metadata; renderer does no I/O. */
+    int directory;         /* Presentation marker; never inferred from a name. */
 };
 
 struct fm_files_model {
@@ -145,7 +145,7 @@ struct fm_files_model {
     FM_CONST struct fm_file *validated_items;
     int validated_count;
     int columns;
-    int normal_columns;         /* Layout-selected columns without metadata. */
+    int normal_columns; /* Layout-selected columns without metadata. */
     struct fm_cursor cursor;
     unsigned char marks[(FM_MAX_FILES + 7) / 8]; /* Private to mark accessors. */
     int focused;
@@ -155,20 +155,20 @@ struct fm_files_model {
 };
 
 struct fm_command {
-    int id;                     /* Stable identifier, never a menu position. */
+    int id; /* Stable identifier, never a menu position. */
     FM_CONST char *label;
     FM_CONST char *help;
-    int targets;                /* NONE, ONE or MANY; independent of menu order. */
+    int targets; /* NONE, ONE or MANY; independent of menu order. */
 };
 
 struct fm_actions_model {
     struct fm_panel panel;
-    int columns;                /* Grid columns; height 1 is a borderless strip. */
+    int columns; /* Grid columns; height 1 is a borderless strip. */
     FM_CONST struct fm_command *items;
     int count;
     struct fm_cursor cursor;
     int focused;
-    int label_command;          /* Optional per-model label override. */
+    int label_command; /* Optional per-model label override. */
     const char *label;
     FM_CONST char *empty_text;
 };
@@ -189,9 +189,9 @@ struct fm_help_model {
 struct fm_dialog {
     struct fm_panel panel;
     int kind, purpose, selected, first, count, position;
-    const char *footer[2];      /* Optional controls, separate from list entries. */
+    const char *footer[2]; /* Optional controls, separate from list entries. */
     int more_before, more_after;
-    unsigned generation;       /* Listing captured when a Copy picker opens. */
+    unsigned generation; /* Listing captured when a Copy picker opens. */
     FM_CONST char *title;
     FM_CONST char *options[16];
     int page_count;
@@ -218,7 +218,8 @@ struct fm_job_result {
     unsigned token, generation, decision;
     int state, completed, failed, total;
     FM_CONST struct fm_text_page *page;
-    FM_CONST char *prompt;      /* Decision text or optional progress/result detail; borrowed until advance. */
+    FM_CONST char
+        *prompt; /* Decision text or optional progress/result detail; borrowed until advance. */
 };
 
 struct fm_reply {
@@ -251,7 +252,7 @@ struct fm_model {
     struct fm_dialog dialog;
     FM_CONST struct fm_file *catalog;
     int catalog_count;
-    struct fm_request pending;  /* Target snapshot; only parameters change before invoke. */
+    struct fm_request pending; /* Target snapshot; only parameters change before invoke. */
     int job_active;
     unsigned next_job_token;
     struct fm_job_result job;
@@ -265,73 +266,73 @@ struct fm_model {
  */
 struct fm_display {
     void *context;
-    int (*begin) (void *);
-    int (*write) (void *, int, int, int, FM_CONST char *, int);
-    int (*end) (void *);
+    int (*begin)(void *);
+    int (*write)(void *, int, int, int, FM_CONST char *, int);
+    int (*end)(void *);
 };
 
 struct fm_invoker {
     void *context;
-    int (*invoke) (void *, FM_CONST struct fm_request *);
-    int (*advance) (void *, FM_CONST struct fm_reply *, struct fm_job_result *);
-    int (*cancel) (void *);
-    FM_CONST char *(*error) (void *); /* Optional cleanup detail. */
-    int interactive; /* Viewer completion/cancel returns directly to browser. */
+    int (*invoke)(void *, FM_CONST struct fm_request *);
+    int (*advance)(void *, FM_CONST struct fm_reply *, struct fm_job_result *);
+    int (*cancel)(void *);
+    FM_CONST char *(*error)(void *); /* Optional cleanup detail. */
+    int interactive;                 /* Viewer completion/cancel returns directly to browser. */
 };
 
 /* Pure checks shared by controllers and views; no rendering dependency. */
-int fm_panel_valid (FM_CONST struct fm_panel *);
-int fm_device_valid (FM_CONST struct fm_device_model *);
+int fm_panel_valid(FM_CONST struct fm_panel *);
+int fm_device_valid(FM_CONST struct fm_device_model *);
 /* Marks are bounded by the current catalog. Invalid reads return false;
  * invalid writes fail without mutation. Clear also resets unused capacity. */
 int fm_marked(const struct fm_files_model *, int);
 int fm_mark_set(struct fm_files_model *, int, int);
 void fm_marks_clear(struct fm_files_model *);
 int fm_files_publish(struct fm_files_model *);
-int fm_files_valid (FM_CONST struct fm_files_model *);
-int fm_actions_valid (FM_CONST struct fm_actions_model *);
-int fm_help_valid (FM_CONST struct fm_help_model *);
-int fm_dialog_valid (FM_CONST struct fm_dialog *);
+int fm_files_valid(FM_CONST struct fm_files_model *);
+int fm_actions_valid(FM_CONST struct fm_actions_model *);
+int fm_help_valid(FM_CONST struct fm_help_model *);
+int fm_dialog_valid(FM_CONST struct fm_dialog *);
 
-int fm_device_render (FM_CONST struct fm_device_model *, struct fm_display *);
-int fm_files_render (FM_CONST struct fm_files_model *, struct fm_display *);
-int fm_actions_render (FM_CONST struct fm_actions_model *, struct fm_display *);
-int fm_help_render (FM_CONST struct fm_help_model *, struct fm_display *);
-int fm_render (FM_CONST struct fm_model *, struct fm_display *);
-int fm_validate (FM_CONST struct fm_model *);
-int fm_control_valid (FM_CONST struct fm_model *);
+int fm_device_render(FM_CONST struct fm_device_model *, struct fm_display *);
+int fm_files_render(FM_CONST struct fm_files_model *, struct fm_display *);
+int fm_actions_render(FM_CONST struct fm_actions_model *, struct fm_display *);
+int fm_help_render(FM_CONST struct fm_help_model *, struct fm_display *);
+int fm_render(FM_CONST struct fm_model *, struct fm_display *);
+int fm_validate(FM_CONST struct fm_model *);
+int fm_control_valid(FM_CONST struct fm_model *);
 /* Resolves marks before cursor, in listing order, without changing the model.
  * On rejection request.count is zero; other request fields are untouched. */
-int fm_resolve_targets (FM_CONST struct fm_files_model *, int, struct fm_request *);
+int fm_resolve_targets(FM_CONST struct fm_files_model *, int, struct fm_request *);
 /* Controller extension, not a backend service. execute borrows the mutable
  * model for this call and returns an FM_* result. Context outlives dispatch.
  * Shared routing handles pane movement/marks before invoking named actions.
  */
 struct fm_action_handler {
     void *context;
-    int (*execute) (void *, struct fm_model *, int);
+    int (*execute)(void *, struct fm_model *, int);
     /* Optional: accept a completed non-job picker/input. Owns commit policy. */
-    int (*accept) (void *, struct fm_model *, struct fm_invoker *);
+    int (*accept)(void *, struct fm_model *, struct fm_invoker *);
 };
-int fm_dispatch_to (struct fm_model *, struct fm_invoker *, struct fm_action_handler *, int);
-void fm_model_init (struct fm_model *);
+int fm_dispatch_to(struct fm_model *, struct fm_invoker *, struct fm_action_handler *, int);
+void fm_model_init(struct fm_model *);
 void fm_setup_menu(struct fm_model *model, int enabled);
-int fm_job_start (struct fm_model *, struct fm_invoker *);
+int fm_job_start(struct fm_model *, struct fm_invoker *);
 
 /* Display adapter storage; views depend only on fm_display. */
 struct fm_canvas {
     char text[FM_ROWS][FM_COLUMNS];
     char attribute[FM_ROWS][FM_COLUMNS];
 };
-void fm_canvas_bind (struct fm_display *, struct fm_canvas *);
-int fm_native_open (void);
-int fm_native_present (FM_CONST struct fm_canvas *);
-int fm_native_read (void);
-void fm_native_close (void);
+void fm_canvas_bind(struct fm_display *, struct fm_canvas *);
+int fm_native_open(void);
+int fm_native_present(FM_CONST struct fm_canvas *);
+int fm_native_read(void);
+void fm_native_close(void);
 
 /* Shared presentation/cursor helpers; no action policy or filesystem access. */
-void fm_dialog_close (struct fm_model *);
-void fm_dialog_info (struct fm_model *, FM_CONST char *, FM_CONST char *);
-void fm_cursor_move (struct fm_cursor *, int, int, int, int);
+void fm_dialog_close(struct fm_model *);
+void fm_dialog_info(struct fm_model *, FM_CONST char *, FM_CONST char *);
+void fm_cursor_move(struct fm_cursor *, int, int, int, int);
 
 #endif

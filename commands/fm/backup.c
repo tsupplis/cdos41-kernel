@@ -11,20 +11,18 @@
 #define BACK_COMMIT 6
 #define BACK_RUN 7
 
-static const char header[] =
-    "CLEAR: 2,27,69\r\n"
-    "ATTRIBUTE: start screen: 9,27,99,0,27,97,3,27,98,2\r\n"
-    "ATTRIBUTE: leave screen: 3,27,98,7\r\n"
-    "ATTRIBUTE: general: 3,27,98,2\r\n"
-    "ATTRIBUTE: errors: 3,27,98,15\r\n"
-    "ATTRIBUTE: message: 3,27,98,14\r\n"
-    "ATTRIBUTE: data: 3,27,98,3\r\n"
-    "ATTRIBUTE: input: 3,27,98,12\r\n"
-    "PRINTER INIT: 1,13\r\nFORMFEED: 1,12\r\nLENGTH: 60\r\nWIDTH: 80\r\n"
-    "REPORT PRINT: true\r\nSHOW SKIPS: true\r\n"
-    "ID:Concurrent DOS Hard Disk Backup\r\nSPLIT: true\r\nERASE: true\r\n";
-static const char exclusions[] =
-    "EXC:  ?,?,c,k,control?.br\r\nEXC:  ?,?,n,k,*.br?\r\n";
+static const char header[] = "CLEAR: 2,27,69\r\n"
+                             "ATTRIBUTE: start screen: 9,27,99,0,27,97,3,27,98,2\r\n"
+                             "ATTRIBUTE: leave screen: 3,27,98,7\r\n"
+                             "ATTRIBUTE: general: 3,27,98,2\r\n"
+                             "ATTRIBUTE: errors: 3,27,98,15\r\n"
+                             "ATTRIBUTE: message: 3,27,98,14\r\n"
+                             "ATTRIBUTE: data: 3,27,98,3\r\n"
+                             "ATTRIBUTE: input: 3,27,98,12\r\n"
+                             "PRINTER INIT: 1,13\r\nFORMFEED: 1,12\r\nLENGTH: 60\r\nWIDTH: 80\r\n"
+                             "REPORT PRINT: true\r\nSHOW SKIPS: true\r\n"
+                             "ID:Concurrent DOS Hard Disk Backup\r\nSPLIT: true\r\nERASE: true\r\n";
+static const char exclusions[] = "EXC:  ?,?,c,k,control?.br\r\nEXC:  ?,?,n,k,*.br?\r\n";
 
 static int invoke(void *context, const struct fm_request *request)
 {
@@ -69,12 +67,12 @@ static const char *last_error(void *context)
 static int write_text(struct fm_backup_job *job, const char *text, int size)
 {
     int result = job->store->write(job->store->context, text, size);
-    if (result) job->failure = job->store->error(job->store->context);
+    if (result)
+        job->failure = job->store->error(job->store->context);
     return result;
 }
 
-static int advance(void *context, const struct fm_reply *reply,
-                   struct fm_job_result *result)
+static int advance(void *context, const struct fm_reply *reply, struct fm_job_result *result)
 {
     struct fm_backup_job *job = context;
     const char *name;
@@ -101,7 +99,8 @@ static int advance(void *context, const struct fm_reply *reply,
     if (job->stage == BACK_MODE) {
         if (reply->answer == FM_REPLY_TEXT && reply->text[0] && !reply->text[1]) {
             choice = reply->text[0];
-            if (choice >= 'a' && choice <= 'z') choice -= 'a' - 'A';
+            if (choice >= 'a' && choice <= 'z')
+                choice -= 'a' - 'A';
             if (choice == 'R' || (choice >= '1' && choice <= '4')) {
                 job->restore = choice == 'R';
                 job->whole = choice == '3' || choice == '4';
@@ -111,18 +110,20 @@ static int advance(void *context, const struct fm_reply *reply,
                 snprintf(job->control, sizeof(job->control), "CONTROL%c.BR", 'A' + job->root.drive);
                 snprintf(job->command, sizeof(job->command), "%s.CMD CTL=%c",
                          job->restore ? "REST" : "BACK", 'A' + job->root.drive);
-                if (!job->restore && job->store->prepare(job->store->context, 0,
-                        &job->root, job->control, &job->exists)) {
+                if (!job->restore && job->store->prepare(job->store->context, 0, &job->root,
+                                                         job->control, &job->exists)) {
                     job->failure = job->store->error(job->store->context);
                     return FM_FS_ERROR;
                 }
                 job->stage = BACK_CONFIRM;
-                if (!++job->decision) ++job->decision;
+                if (!++job->decision)
+                    ++job->decision;
             }
         }
-ask:
+    ask:
         if (job->stage == BACK_MODE) {
-            if (!++job->decision) ++job->decision;
+            if (!++job->decision)
+                ++job->decision;
             result->state = FM_JOB_INPUT;
             result->decision = job->decision;
             result->prompt = "1/2: selected to A/B. 3/4: all here to A/B. R: restore.";
@@ -135,9 +136,9 @@ ask:
             job->stage = job->restore ? BACK_RUN : BACK_BEGIN;
             break;
         }
-        snprintf(job->text, sizeof(job->text), job->restore ?
-                 "Run REST with %s? Restored files may replace existing files." :
-                 "Write %s and run BACK to %c:? Destination disks will be erased.",
+        snprintf(job->text, sizeof(job->text),
+                 job->restore ? "Run REST with %s? Restored files may replace existing files."
+                              : "Write %s and run BACK to %c:? Destination disks will be erased.",
                  job->control, 'A' + job->destination);
         result->state = FM_JOB_DECISION;
         result->decision = job->decision;
@@ -145,12 +146,15 @@ ask:
         break;
     case BACK_BEGIN:
         status = job->store->begin(job->store->context);
-        if (status) job->failure = job->store->error(job->store->context);
-        else job->stage = BACK_HEADER;
+        if (status)
+            job->failure = job->store->error(job->store->context);
+        else
+            job->stage = BACK_HEADER;
         break;
     case BACK_HEADER:
         length = sizeof(header) - 1 - job->line;
-        if (length > 128) length = 128;
+        if (length > 128)
+            length = 128;
         if (length) {
             status = write_text(job, header + job->line, length);
             job->line += length;
@@ -166,20 +170,24 @@ ask:
     case BACK_RULES:
         if (!job->line++) {
             if (job->location->media == FM_MEDIA_FAT)
-                snprintf(job->text, sizeof(job->text), "PATH: %c:%s\r\n",
-                         'A' + job->root.drive, job->location->path);
-            else strcpy(job->text, "USERS: 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15\r\n");
+                snprintf(job->text, sizeof(job->text), "PATH: %c:%s\r\n", 'A' + job->root.drive,
+                         job->location->path);
+            else
+                strcpy(job->text, "USERS: 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15\r\n");
             status = write_text(job, job->text, strlen(job->text));
         } else if (job->line == 2) {
             status = write_text(job, exclusions, sizeof(exclusions) - 1);
         } else {
             name = job->whole ? "*.*" : job->entries[job->request->files[job->target]].name;
             if (job->location->media == FM_MEDIA_FAT)
-                snprintf(job->text, sizeof(job->text), "EXC:  D,%c,a,k,%s\r\n", 'A' + job->root.drive, name);
-            else snprintf(job->text, sizeof(job->text), "EXC: %2d,%c,a,k,%s\r\n",
-                          job->location->user, 'A' + job->root.drive, name);
+                snprintf(job->text, sizeof(job->text), "EXC:  D,%c,a,k,%s\r\n",
+                         'A' + job->root.drive, name);
+            else
+                snprintf(job->text, sizeof(job->text), "EXC: %2d,%c,a,k,%s\r\n",
+                         job->location->user, 'A' + job->root.drive, name);
             status = write_text(job, job->text, strlen(job->text));
-            if (job->whole || ++job->target == job->request->count) job->stage = BACK_END;
+            if (job->whole || ++job->target == job->request->count)
+                job->stage = BACK_END;
         }
         break;
     case BACK_END:
@@ -188,12 +196,15 @@ ask:
         break;
     case BACK_COMMIT:
         status = job->store->commit(job->store->context, job->exists);
-        if (status) job->failure = job->store->error(job->store->context);
-        else job->stage = BACK_RUN;
+        if (status)
+            job->failure = job->store->error(job->store->context);
+        else
+            job->stage = BACK_RUN;
         break;
     case BACK_RUN:
         status = job->host->execute(job->host->context, &job->root, job->command);
-        if (status) job->failure = job->host->error(job->host->context);
+        if (status)
+            job->failure = job->host->error(job->host->context);
         else {
             result->state = FM_JOB_COMPLETE;
             result->completed = result->total;
@@ -205,9 +216,8 @@ ask:
     return status;
 }
 
-void fm_backup_bind(struct fm_invoker *port, struct fm_backup_job *job,
-                    struct fm_backup_host *host, struct fm_copy_store *store,
-                    const struct fm_location *location)
+void fm_backup_bind(struct fm_invoker *port, struct fm_backup_job *job, struct fm_backup_host *host,
+                    struct fm_copy_store *store, const struct fm_location *location)
 {
     memset(job, 0, sizeof(*job));
     job->host = host;
@@ -219,4 +229,14 @@ void fm_backup_bind(struct fm_invoker *port, struct fm_backup_job *job,
     port->cancel = cancel;
     port->error = last_error;
     port->interactive = 0;
+}
+
+/* Borrow a stable catalog while idle; reject changes during an invocation. */
+int fm_backup_configure(struct fm_backup_job *job, const struct fm_entry *entries, int count)
+{
+    if (!job || job->active || count < 0 || count > FM_MAX_FILES || (count && !entries))
+        return FM_BAD_MODEL;
+    job->entries = entries;
+    job->count = count;
+    return FM_SUCCESS;
 }

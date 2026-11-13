@@ -12,8 +12,7 @@ int fm_native_system_drive(void)
     return pcsysdisk() - 1;
 }
 
-static int execute(void *context, const struct fm_location *location,
-                   const char *command)
+static int execute(void *context, const struct fm_location *location, const char *command)
 {
     struct fm_native_run *state = context;
     char tail[128];
@@ -41,8 +40,10 @@ static int execute(void *context, const struct fm_location *location,
     BDOS(51, spawn_data());
     BDOS(26, state->filesystem->restore_dma);
     reopened = fm_native_open();
-    if (reopened) state->failure = "Could not restore the FM console.";
-    else if (status) state->failure = "Program not found or launch failed.";
+    if (reopened)
+        state->failure = "Could not restore the FM console.";
+    else if (status)
+        state->failure = "Program not found or launch failed.";
     return reopened || status ? FM_FS_ERROR : FM_SUCCESS;
 }
 

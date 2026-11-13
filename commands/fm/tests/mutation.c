@@ -48,8 +48,9 @@ int main(void)
     request.count = 2;
     request.files[1] = 1;
     fm_mutation_bind(&port, &job, &storage, &location);
-    job.entries = entries; job.count = 2;
+    assert(!fm_mutation_configure(&job, entries, 2));
     assert(!port.invoke(port.context, &request));
+        assert(fm_mutation_configure(&job, 0, 0) == FM_BAD_MODEL);
     reply.token = 1; reply.answer = FM_REPLY_NONE; reply.decision = 0;
     assert(!port.advance(port.context, &reply, &result));
     assert(result.state == FM_JOB_DECISION && !s.commits);

@@ -7,9 +7,8 @@
 
 static FM_CONST char *regions[] = {"OBJECT", "COMMAND", "PROMPT", "KEY"};
 static FM_CONST char *geometry[] = {
-    "OVPMODE=", "MENU POSITION=", "MENU SIZE=", "PROMPT SIZE=",
-    "TOP MARGIN=", "BOTTOM MARGIN=", "LEFT MARGIN=", "RIGHT MARGIN="
-};
+    "OVPMODE=",    "MENU POSITION=", "MENU SIZE=",   "PROMPT SIZE=",
+    "TOP MARGIN=", "BOTTOM MARGIN=", "LEFT MARGIN=", "RIGHT MARGIN="};
 
 /* Match the exact keyword spacing, ignoring ASCII case only. */
 static FM_CONST char *match(FM_CONST char *text, FM_CONST char *keyword)
@@ -32,12 +31,15 @@ static int decimal(FM_CONST char *text, int maximum)
 {
     int number, digit;
 
-    while (*text == ' ') ++text;
-    if (*text < '0' || *text > '9') return -1;
+    while (*text == ' ')
+        ++text;
+    if (*text < '0' || *text > '9')
+        return -1;
     number = 0;
     while (*text >= '0' && *text <= '9') {
         digit = *text++ - '0';
-        if (number > 25 || number * 10 + digit > maximum) return -1;
+        if (number > 25 || number * 10 + digit > maximum)
+            return -1;
         number = number * 10 + digit;
     }
     return number;
@@ -68,7 +70,8 @@ void fm_config_line(struct fm_config *config, FM_CONST char *line)
         if (!value)
             continue;
         number = decimal(value, 255);
-        if (number < 0) return;
+        if (number < 0)
+            return;
         config->geometry[index] = number;
         if (index == FM_CFG_OVPMODE)
             config->unsupported = number != 2;
@@ -87,7 +90,8 @@ void fm_config_line(struct fm_config *config, FM_CONST char *line)
         if (!value)
             return;
         number = decimal(value, 15);
-        if (number < 0) return;
+        if (number < 0)
+            return;
         if (background)
             config->background[region] = number;
         else
@@ -96,9 +100,8 @@ void fm_config_line(struct fm_config *config, FM_CONST char *line)
     }
 }
 
-int fm_config_load(struct fm_config *config,
-    struct fm_filesystem *filesystem,
-    FM_CONST struct fm_location *location)
+int fm_config_load(struct fm_config *config, struct fm_filesystem *filesystem,
+                   FM_CONST struct fm_location *location)
 {
     struct fm_config candidate;
     char record[128], line[82];
@@ -110,10 +113,10 @@ int fm_config_load(struct fm_config *config,
     used = overflow = ended = failed = 0;
     while (!ended) {
         count = 0;
-        status = (*filesystem->file_read)(filesystem->context, handle,
-                                          record, sizeof(record), &count);
-        if ((status != FM_FS_OK && status != FM_FS_END) ||
-            count < 0 || count > (int)sizeof(record) || (!count && status == FM_FS_OK)) {
+        status =
+            (*filesystem->file_read)(filesystem->context, handle, record, sizeof(record), &count);
+        if ((status != FM_FS_OK && status != FM_FS_END) || count < 0 ||
+            count > (int)sizeof(record) || (!count && status == FM_FS_OK)) {
             failed = 1;
             break;
         }
@@ -145,4 +148,3 @@ int fm_config_load(struct fm_config *config,
     *config = candidate;
     return FM_CFG_LOADED;
 }
-

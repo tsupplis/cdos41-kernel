@@ -19,19 +19,24 @@ int BDOS(int function, ...);
 static int find_file(char *fcb, int user)
 {
     int drive;
-    if (bdos(15, fcb) != 255) return user;
-    if (fcb[0]) return -1;
+    if (bdos(15, fcb) != 255)
+        return user;
+    if (fcb[0])
+        return -1;
     drive = pcsysdisk();
-    if (drive < 1 || drive > 16) return -1;
+    if (drive < 1 || drive > 16)
+        return -1;
     fcb[0] = drive;
     if (bdos(15, fcb) != 255) {
-        if (fcb[10] & 128) return user;
+        if (fcb[10] & 128)
+            return user;
         bdos(16, fcb);
     }
     if (user) {
         bdos(32, 0);
         if (bdos(15, fcb) != 255) {
-            if (fcb[10] & 128) return 0;
+            if (fcb[10] & 128)
+                return 0;
             bdos(16, fcb);
         }
         bdos(32, user);
@@ -46,19 +51,25 @@ int p_spawn(char *command)
     char ext[4];
     int user, owner, n, i, explicit_type, rc, oldprio, priority, dos;
 
-    if (!command || strlen(command) > 127) return -1;
+    if (!command || strlen(command) > 127)
+        return -1;
     p = command;
-    while (*p == ' ' || *p == '\t') ++p;
+    while (*p == ' ' || *p == '\t')
+        ++p;
     for (n = 0; p[n] && p[n] != ' ' && p[n] != '\t'; ++n) {
-        if (n >= (int)sizeof(name) - 1) return -1;
+        if (n >= (int)sizeof(name) - 1)
+            return -1;
         name[n] = p[n];
     }
-    if (!n) return -1;
+    if (!n)
+        return -1;
     name[n] = 0;
     oldprio = getpriority();
     priority = getppriority() - 1;
-    if (priority < 64) priority = 64;
-    if (priority > 197) priority = 197;
+    if (priority < 64)
+        priority = 64;
+    if (priority > 197)
+        priority = 197;
     order[0] = 1;
     user = bdos(32, 255);
     owner = user;
@@ -67,11 +78,13 @@ int p_spawn(char *command)
         fcbinit(name, fcb);
         explicit_type = fcb[9] != ' ';
         if (explicit_type && strncmp(fcb + 9, "CMD", 3) && strncmp(fcb + 9, "BAT", 3) &&
-            strncmp(fcb + 9, "COM", 3) && strncmp(fcb + 9, "EXE", 3)) return -1;
+            strncmp(fcb + 9, "COM", 3) && strncmp(fcb + 9, "EXE", 3))
+            return -1;
         for (i = 0; i < 4; ++i) {
             fcbinit(name, fcb);
             type = explicit_type ? fcb + 9 : order + 1 + i * 3;
-            if (!explicit_type) memcpy(fcb + 9, type, 3);
+            if (!explicit_type)
+                memcpy(fcb + 9, type, 3);
             memcpy(ext, type, 3);
             type = ext;
             owner = find_file(fcb, user);
@@ -102,10 +115,12 @@ int p_spawn(char *command)
     rc = dos ? ms_p_cli(fcb, command) : p_cli(command);
     if (!rc) {
         conattach();
-        if (dos) pcclean();
+        if (dos)
+            pcclean();
     }
     /* The translator consumes the open FCB, as in BATCH. */
-    if (dos || owner == 0) bdos(32, user);
+    if (dos || owner == 0)
+        bdos(32, user);
     p_priority(oldprio);
     return rc;
 }

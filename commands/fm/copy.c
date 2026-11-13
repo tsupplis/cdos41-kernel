@@ -27,13 +27,15 @@ static int invoke(void *context, FM_CONST struct fm_request *request)
     struct fm_copy_job *job;
     int index, selected;
     job = (struct fm_copy_job *)context;
-    if (job->active || !request || (request->command != FM_CMD_COPY && request->command != FM_CMD_SYSTEM_COPY) ||
+    if (job->active || !request ||
+        (request->command != FM_CMD_COPY && request->command != FM_CMD_SYSTEM_COPY) ||
         !request->token || request->count < 1 || request->count > FM_MAX_FILES)
         return FM_BAD_MODEL;
     for (index = 0; index < request->count; ++index) {
         selected = request->files[index];
         if (selected < 0 || selected >= job->count || job->entries[selected].directory ||
-            (index && selected <= request->files[index - 1])) return FM_BAD_MODEL;
+            (index && selected <= request->files[index - 1]))
+            return FM_BAD_MODEL;
     }
     job->request = request;
     job->target = 0;
@@ -56,23 +58,21 @@ static int cancel(void *context)
     return status;
 }
 
-static int advance(void *context,
-    FM_CONST struct fm_reply *reply,
-    struct fm_job_result *result)
+static int advance(void *context, FM_CONST struct fm_reply *reply, struct fm_job_result *result)
 {
     struct fm_copy_job *job;
     FM_CONST char *name;
     FM_CONST char *failure;
     int status, count;
-    static FM_CONST char *stages[] = {
-        "prepare", "confirm", "open", "read", "publish", "write", "close"
-    };
+    static FM_CONST char *stages[] = {"prepare", "confirm", "open", "read",
+                                      "publish", "write",   "close"};
     job = (struct fm_copy_job *)context;
     if (!job->active || !reply || !result || reply->token != job->request->token ||
         (reply->answer != FM_REPLY_NONE && reply->answer != FM_REPLY_ACCEPT) ||
         (reply->answer == FM_REPLY_ACCEPT &&
          (job->stage != COPY_CONFIRM || reply->decision != job->decision)) ||
-        (reply->answer == FM_REPLY_NONE && reply->decision)) return FM_BAD_MODEL;
+        (reply->answer == FM_REPLY_NONE && reply->decision))
+        return FM_BAD_MODEL;
     result->token = job->request->token;
     result->generation = job->request->generation;
     result->completed = job->target;
@@ -88,21 +88,22 @@ static int advance(void *context,
     }
     name = job->entries[job->request->files[job->target]].name;
     snprintf(job->message, sizeof(job->message), "Copy %.12s: %.8s. Esc cancels.", name,
-            stages[job->stage]);
+             stages[job->stage]);
     result->prompt = job->message;
     status = FM_FS_OK;
     failure = 0;
     switch (job->stage) {
     /* Resolve and check the target before opening either file. */
     case COPY_PREPARE:
-        status = (*job->store->prepare)(job->store->context, job->location,
-                                       &job->destination, name, &job->replace);
+        status = (*job->store->prepare)(job->store->context, job->location, &job->destination, name,
+                                        &job->replace);
         if (!status) {
             job->stage = job->replace ? COPY_CONFIRM : COPY_OPEN;
             if (job->replace) {
                 if (!++job->decision)
                     ++job->decision;
-                snprintf(job->message, sizeof(job->message), "Replace %.12s? Y replaces; N/Esc cancels Copy.", name);
+                snprintf(job->message, sizeof(job->message),
+                         "Replace %.12s? Y replaces; N/Esc cancels Copy.", name);
             }
         }
         break;
@@ -124,8 +125,8 @@ static int advance(void *context,
     /* A bounded step yields to input between blocks; bytes are never text. */
     case COPY_DATA:
         count = 0;
-        status = (*job->source->file_read)(job->source->context, job->handle,
-                                          job->buffer, sizeof(job->buffer), &count);
+        status = (*job->source->file_read)(job->source->context, job->handle, job->buffer,
+                                           sizeof(job->buffer), &count);
         if ((status != FM_FS_OK && status != FM_FS_END) || count < 0 || count > 128 ||
             (!count && status == FM_FS_OK)) {
             status = FM_FS_ERROR;
@@ -137,8 +138,7 @@ static int advance(void *context,
         status = FM_FS_OK;
         break;
     case COPY_WRITE:
-        status = (*job->store->write)(job->store->context, job->buffer,
-                                     job->buffered);
+        status = (*job->store->write)(job->store->context, job->buffer, job->buffered);
         if (!status)
             job->stage = job->source_end ? COPY_CLOSE : COPY_DATA;
         break;
@@ -156,10 +156,12 @@ static int advance(void *context,
                 status = FM_FS_ERROR;
             else {
                 status = job->attributes->prepare_attributes(job->attributes->context,
-                           &job->destination, name, 1);
-                if (!status) status = job->attributes->commit(job->attributes->context);
+                                                             &job->destination, name, 1);
+                if (!status)
+                    status = job->attributes->commit(job->attributes->context);
             }
-            if (status) failure = "File copied; SYS/RO attributes could not be set.";
+            if (status)
+                failure = "File copied; SYS/RO attributes could not be set.";
         }
         if (!status) {
             result->completed = ++job->target;
@@ -173,8 +175,8 @@ static int advance(void *context,
     }
     if (status) {
         cleanup(job);
-        snprintf(job->message, sizeof(job->message), "Copy %.12s: %.8s failed. %.36s", name, stages[job->stage],
-                failure ? failure : (*job->store->error)(job->store->context));
+        snprintf(job->message, sizeof(job->message), "Copy %.12s: %.8s failed. %.36s", name,
+                 stages[job->stage], failure ? failure : (*job->store->error)(job->store->context));
         result->state = FM_JOB_FAILED;
         result->failed = 1;
         result->prompt = job->message;
@@ -188,16 +190,17 @@ static int advance(void *context,
 
 /* Explicit destination syntax: A:0..15 on CP/M, B:\absolute\path on FAT.
  * No implicit current drive/user and no path truncation. */
-int fm_copy_destination(struct fm_filesystem *filesystem,
-    FM_CONST char *text,
-    struct fm_location *location)
+int fm_copy_destination(struct fm_filesystem *filesystem, FM_CONST char *text,
+                        struct fm_location *location)
 {
     int drive, media, index, user, length;
     if (!text || !text[0] || text[1] != ':')
         return FM_FS_ERROR;
     drive = text[0];
-    if (drive >= 'a' && drive <= 'p') drive -= 'a' - 'A';
-    if (drive < 'A' || drive > 'P' || (*filesystem->probe)(filesystem->context, drive - 'A', &media))
+    if (drive >= 'a' && drive <= 'p')
+        drive -= 'a' - 'A';
+    if (drive < 'A' || drive > 'P' ||
+        (*filesystem->probe)(filesystem->context, drive - 'A', &media))
         return FM_FS_ERROR;
     if (media == FM_MEDIA_CPM) {
         if (!text[2])
@@ -231,12 +234,9 @@ static FM_CONST char *last_error(void *context)
     return (*job->store->error)(job->store->context);
 }
 
-void fm_copy_bind(struct fm_invoker *port,
-    struct fm_copy_job *job,
-    struct fm_filesystem *source,
-    struct fm_copy_store *store,
-    FM_CONST struct fm_location *location,
-    FM_CONST struct fm_entry *entries)
+void fm_copy_bind(struct fm_invoker *port, struct fm_copy_job *job, struct fm_filesystem *source,
+                  struct fm_copy_store *store, FM_CONST struct fm_location *location,
+                  FM_CONST struct fm_entry *entries)
 {
     job->source = source;
     job->store = store;
@@ -257,13 +257,16 @@ void fm_copy_bind(struct fm_invoker *port,
 /* Configure an idle action without exposing its mutable state to controllers.
  * The source catalog remains borrowed and must be stable until cancellation.
  * Destination coordinates are copied only after complete syntax validation. */
-int fm_copy_configure(struct fm_copy_job *job, int count, FM_CONST char *text)
+int fm_copy_configure(struct fm_copy_job *job, int count, FM_CONST char *text,
+                      struct fm_mutation_store *attributes)
 {
     struct fm_location destination;
 
-    if (job->active || count < 0 || count > FM_MAX_FILES ||
+    if (!job || job->active || count < 0 || count > FM_MAX_FILES ||
+        (attributes && (!attributes->prepare_attributes || !attributes->commit)) ||
         fm_copy_destination(job->source, text, &destination))
         return FM_BAD_MODEL;
+    job->attributes = attributes;
     job->destination.drive = destination.drive;
     job->destination.media = destination.media;
     job->destination.user = destination.user;

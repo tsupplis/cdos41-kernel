@@ -20,28 +20,32 @@ static FM_CONST struct fm_command commands[] = {
     {FM_CMD_FORMAT_DISK, "Format Diskette", "Format a diskette", FM_TARGET_NONE},
     {FM_CMD_MEMORY, "Free   Memory", "Display available memory", FM_TARGET_NONE},
     {FM_CMD_DETAILS, "Size/Date", "Toggle file size and date", FM_TARGET_NONE},
-    {FM_CMD_SETUP, "Set Up System", "Open system setup", FM_TARGET_NONE}
-};
+    {FM_CMD_SETUP, "Set Up System", "Open system setup", FM_TARGET_NONE}};
 static const struct fm_command setup_commands[] = {
-    {FM_CMD_SYSTEM_COPY, "Copy to Sys Disk", "Copy selected files to system disk, user 0/root, SYS and RO", FM_TARGET_MANY},
-    {FM_CMD_SYSTEM_ATTR, "System Attributes", "Set selected files SYS and read-only", FM_TARGET_MANY},
-    {FM_CMD_LOCAL_ATTR, "Local Attributes", "Set selected files DIR and read/write", FM_TARGET_MANY},
-    {FM_CMD_LOAD_KEYS, "Load Func Keys", "Load function keys from the selected file", FM_TARGET_ONE},
-    {FM_CMD_ASSIGN_KEYS, "Assign Func Keys", "Assign function keys, then save system parameters", FM_TARGET_NONE},
-    {FM_CMD_SERIAL, "Serial Ports", "Configure serial ports, then save system parameters", FM_TARGET_NONE},
+    {FM_CMD_SYSTEM_COPY, "Copy to Sys Disk",
+     "Copy selected files to system disk, user 0/root, SYS and RO", FM_TARGET_MANY},
+    {FM_CMD_SYSTEM_ATTR, "System Attributes", "Set selected files SYS and read-only",
+     FM_TARGET_MANY},
+    {FM_CMD_LOCAL_ATTR, "Local Attributes", "Set selected files DIR and read/write",
+     FM_TARGET_MANY},
+    {FM_CMD_LOAD_KEYS, "Load Func Keys", "Load function keys from the selected file",
+     FM_TARGET_ONE},
+    {FM_CMD_ASSIGN_KEYS, "Assign Func Keys", "Assign function keys, then save system parameters",
+     FM_TARGET_NONE},
+    {FM_CMD_SERIAL, "Serial Ports", "Configure serial ports, then save system parameters",
+     FM_TARGET_NONE},
     {FM_CMD_DEFAULTS, "System Defaults", "Configure system defaults", FM_TARGET_NONE},
     {FM_CMD_MEMORY_DISK, "Memory Disk", "Configure memory disk", FM_TARGET_NONE},
     {FM_CMD_BOOT_DISK, "Boot From H D", "Install hard-disk boot support", FM_TARGET_NONE},
     {FM_CMD_HARD_MAINT, "Hard Disk Maint", "Open hard disk maintenance", FM_TARGET_NONE},
-    {FM_CMD_FLOPPY_MAINT, "Diskette Maint", "Open diskette maintenance", FM_TARGET_NONE}
-};
+    {FM_CMD_FLOPPY_MAINT, "Diskette Maint", "Open diskette maintenance", FM_TARGET_NONE}};
 
 /* Reuse the Actions view; submenu changes never replace the Files model. */
 void fm_setup_menu(struct fm_model *model, int enabled)
 {
     model->actions.items = enabled ? setup_commands : commands;
-    model->actions.count = enabled ? sizeof(setup_commands) / sizeof(setup_commands[0]) :
-                                    sizeof(commands) / sizeof(commands[0]);
+    model->actions.count = enabled ? sizeof(setup_commands) / sizeof(setup_commands[0])
+                                   : sizeof(commands) / sizeof(commands[0]);
     model->actions.cursor.first = model->actions.cursor.selected = 0;
     model->actions.focused = 1;
     model->files.focused = 0;
@@ -49,22 +53,12 @@ void fm_setup_menu(struct fm_model *model, int enabled)
 }
 
 static FM_CONST struct fm_hint hints[] = {
-    {0, 1, "Esc="}, {0, 2, "EXIT"},
-    {11, 1, "F1=HELP"}, {11, 2, "F2=Type"},
-    {25, 1, "F3=Repeat"}, {25, 2, "F4=Cancel"},
-    {39, 1, "F5=Run"}, {39, 2, "F6=Edit"},
-    {53, 1, "F7=Dir1"}, {53, 2, "F8=Dir2"},
-    {66, 1, "F9=Directory"}, {66, 2, "F10=Command"}
-};
+    {0, 1, "Esc="},       {0, 2, "EXIT"},       {11, 1, "F1=HELP"},      {11, 2, "F2=Type"},
+    {25, 1, "F3=Repeat"}, {25, 2, "F4=Cancel"}, {39, 1, "F5=Run"},       {39, 2, "F6=Edit"},
+    {53, 1, "F7=Dir1"},   {53, 2, "F8=Dir2"},   {66, 1, "F9=Directory"}, {66, 2, "F10=Command"}};
 
-static void panel_init(struct fm_panel *panel,
-                       int x,
-                       int y,
-                       int width,
-                       int height,
-                       int normal,
-                       int selected,
-                       int accent)
+static void panel_init(struct fm_panel *panel, int x, int y, int width, int height, int normal,
+                       int selected, int accent)
 {
     panel->rect.x = x;
     panel->rect.y = y;
@@ -130,7 +124,6 @@ void fm_model_init(struct fm_model *model)
     model->status[0] = 0;
 }
 
-
 /* Shared overlay presentation, with no command-specific policy. */
 void fm_dialog_close(struct fm_model *model)
 {
@@ -151,12 +144,11 @@ void fm_dialog_info(struct fm_model *model, FM_CONST char *title, FM_CONST char 
     sprintf(model->dialog.text, "%.79s", text);
 }
 
-
 /* Original colour translation, including bright backgrounds becoming bright
  * foregrounds in reverse video. Blinking is never enabled. */
 static int attribute(int foreground, int background)
 {
-    static int pc[] = {0,1,4,5,2,3,6,7,8,9,12,13,10,11,14,15};
+    static int pc[] = {0, 1, 4, 5, 2, 3, 6, 7, 8, 9, 12, 13, 10, 11, 14, 15};
     return pc[foreground] | ((pc[background] & 7) << 4);
 }
 
@@ -180,15 +172,15 @@ int fm_config_apply(FM_CONST struct fm_config *config, struct fm_model *model)
             return FM_BAD_MODEL;
     }
     apply_style(&model->device.panel.style, config->foreground[FM_CFG_OBJECT],
-          config->background[FM_CFG_OBJECT]);
+                config->background[FM_CFG_OBJECT]);
     apply_style(&model->files.panel.style, config->foreground[FM_CFG_OBJECT],
-          config->background[FM_CFG_OBJECT]);
+                config->background[FM_CFG_OBJECT]);
     apply_style(&model->actions.panel.style, config->foreground[FM_CFG_COMMAND],
-          config->background[FM_CFG_COMMAND]);
+                config->background[FM_CFG_COMMAND]);
     apply_style(&model->help.panel.style, config->foreground[FM_CFG_PROMPT],
-          config->background[FM_CFG_PROMPT]);
-    model->help.panel.style.accent = attribute(config->foreground[FM_CFG_KEY],
-                                              config->background[FM_CFG_KEY]);
+                config->background[FM_CFG_PROMPT]);
+    model->help.panel.style.accent =
+        attribute(config->foreground[FM_CFG_KEY], config->background[FM_CFG_KEY]);
     return FM_SUCCESS;
 }
 
@@ -212,11 +204,9 @@ int fm_layout_apply(FM_CONST struct fm_config *config, struct fm_model *model)
     x = config->geometry[FM_CFG_LEFT];
     y = config->geometry[FM_CFG_TOP];
     width = FM_COLUMNS - x - config->geometry[FM_CFG_RIGHT];
-    height = FM_ROWS - y - config->geometry[FM_CFG_BOTTOM] -
-             config->geometry[FM_CFG_PROMPT_SIZE];
+    height = FM_ROWS - y - config->geometry[FM_CFG_BOTTOM] - config->geometry[FM_CFG_PROMPT_SIZE];
     if (position < 1 || position > 5 || width < 67 || height < 8 ||
-        config->geometry[FM_CFG_PROMPT_SIZE] < 1 ||
-        FM_ROWS - y - height < 3)
+        config->geometry[FM_CFG_PROMPT_SIZE] < 1 || FM_ROWS - y - height < 3)
         return FM_BAD_MODEL;
     object_x = menu_x = x;
     object_y = menu_y = y;

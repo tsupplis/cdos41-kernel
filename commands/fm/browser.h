@@ -1,5 +1,6 @@
 /* Browser controller. Owns catalog and displayed text borrowed by models.
- * Filesystem and action services are injected. The composition root owns this state for the session. */
+ * Filesystem and action services are injected. The composition root owns this state for the
+ * session. */
 #ifndef FM_BROWSER_H
 #define FM_BROWSER_H
 #include "type.h"
@@ -14,12 +15,15 @@
 /* Allocator is injected; failure returns NULL and never consumes old storage. */
 struct fm_memory {
     void *context;
-    void *(*allocate) (void *, unsigned);
-    void (*release) (void *, void *);
+    void *(*allocate)(void *, unsigned);
+    void (*release)(void *, void *);
 };
 
 struct fm_browser {
     struct fm_filesystem *filesystem;
+    /* Injected ports retained by the controller; job state stays private. */
+    struct fm_copy_store *copy_store;
+    struct fm_mutation_store *mutation_store;
     struct fm_action_handler actions;
     struct fm_location location;
     struct fm_location slots[2];
@@ -62,13 +66,13 @@ struct fm_browser {
  * borrow browser storage, so browser must outlive the model using them.
  * Recoverable listing errors appear in the model; invalid setup returns ERROR.
  * Close releases the viewer handle before state is reused or discarded. */
-int fm_browser_open (struct fm_browser *, struct fm_model *, struct fm_filesystem *, struct fm_memory *, int, int);
-int fm_browser_key (struct fm_browser *, struct fm_model *, struct fm_invoker *, int);
-void fm_browser_copy_bind (struct fm_browser *, struct fm_copy_store *);
-int fm_browser_close (struct fm_browser *);
+int fm_browser_open(struct fm_browser *, struct fm_model *, struct fm_filesystem *,
+                    struct fm_memory *, int, int);
+int fm_browser_key(struct fm_browser *, struct fm_model *, struct fm_invoker *, int);
+void fm_browser_copy_bind(struct fm_browser *, struct fm_copy_store *);
+int fm_browser_close(struct fm_browser *);
 
-void fm_browser_mutation_bind(struct fm_browser *browser,
-                              struct fm_mutation_store *store);
+void fm_browser_mutation_bind(struct fm_browser *browser, struct fm_mutation_store *store);
 void fm_browser_run_bind(struct fm_browser *browser, struct fm_executor *executor);
 void fm_browser_print_bind(struct fm_browser *browser, struct fm_printer *printer);
 void fm_browser_backup_bind(struct fm_browser *, struct fm_backup_host *);

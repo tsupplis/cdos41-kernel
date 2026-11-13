@@ -17,7 +17,8 @@ int fm_job_start(struct fm_model *model, struct fm_invoker *invoker)
         if (request->files[index] < 0 || request->files[index] >= model->files.count ||
             (index && request->files[index] <= request->files[index - 1]))
             return FM_BAD_MODEL;
-    if (!++model->next_job_token) ++model->next_job_token;
+    if (!++model->next_job_token)
+        ++model->next_job_token;
     request->token = model->next_job_token;
     status = (*invoker->invoke)(invoker->context, request);
     if (status) {
@@ -47,8 +48,9 @@ static int job_error(struct fm_model *model, struct fm_invoker *invoker)
     model->job_active = 0;
     model->job.state = FM_JOB_FAILED;
     model->job.decision = 0;
-    fm_dialog_info(model, "Action failed", invoker->error ? (*invoker->error)(invoker->context) :
-              "Service or cleanup failed. Progress and selection retained.");
+    fm_dialog_info(model, "Action failed",
+                   invoker->error ? (*invoker->error)(invoker->context)
+                                  : "Service or cleanup failed. Progress and selection retained.");
     return FM_JOB_ERROR;
 }
 
@@ -61,7 +63,8 @@ static int job_step(struct fm_model *model, struct fm_invoker *invoker, int answ
     if (model->generation != model->job.generation)
         return job_error(model, invoker);
     reply.token = model->job.token;
-    reply.decision = (answer == FM_REPLY_ACCEPT || answer == FM_REPLY_TEXT) ? model->job.decision : 0;
+    reply.decision =
+        (answer == FM_REPLY_ACCEPT || answer == FM_REPLY_TEXT) ? model->job.decision : 0;
     reply.answer = answer;
     reply.text = answer == FM_REPLY_TEXT ? model->dialog.input : 0;
     /* An adapter reporting success must fill every result field. Initializing
@@ -74,26 +77,28 @@ static int job_step(struct fm_model *model, struct fm_invoker *invoker, int answ
     status = (*invoker->advance)(invoker->context, &reply, &result);
     if (status)
         return job_error(model, invoker);
-    if (result.token != model->job.token ||
-        result.generation != model->job.generation ||
-        result.total != model->job.total ||
-        result.completed < model->job.completed || result.failed < 0 ||
-        result.completed > result.total ||
-        result.failed > result.total - result.completed ||
-        result.state < FM_JOB_PROGRESS || result.state > FM_JOB_INPUT ||
-        ((result.state == FM_JOB_DECISION || result.state == FM_JOB_INPUT) ? !result.decision : result.decision != 0) ||
+    if (result.token != model->job.token || result.generation != model->job.generation ||
+        result.total != model->job.total || result.completed < model->job.completed ||
+        result.failed < 0 || result.completed > result.total ||
+        result.failed > result.total - result.completed || result.state < FM_JOB_PROGRESS ||
+        result.state > FM_JOB_INPUT ||
+        ((result.state == FM_JOB_DECISION || result.state == FM_JOB_INPUT)
+             ? !result.decision
+             : result.decision != 0) ||
         (answer == FM_REPLY_ACCEPT && result.state == FM_JOB_DECISION &&
          result.decision == reply.decision) ||
-        (result.state == FM_JOB_COMPLETE &&
-         result.completed + result.failed != result.total) ||
-        ((result.state == FM_JOB_PROGRESS || result.state == FM_JOB_DECISION || result.state == FM_JOB_VIEW || result.state == FM_JOB_INPUT) && result.failed))
+        (result.state == FM_JOB_COMPLETE && result.completed + result.failed != result.total) ||
+        ((result.state == FM_JOB_PROGRESS || result.state == FM_JOB_DECISION ||
+          result.state == FM_JOB_VIEW || result.state == FM_JOB_INPUT) &&
+         result.failed))
         return job_error(model, invoker);
     if (result.state == FM_JOB_VIEW) {
-        if (!invoker->interactive || !result.page || !result.page->title ||
-            !result.page->hint || result.page->count < 0 || result.page->count > 18)
+        if (!invoker->interactive || !result.page || !result.page->title || !result.page->hint ||
+            result.page->count < 0 || result.page->count > 18)
             return job_error(model, invoker);
         for (row = 0; row < result.page->count; ++row)
-            if (!result.page->lines[row]) return job_error(model, invoker);
+            if (!result.page->lines[row])
+                return job_error(model, invoker);
     }
     if ((result.state == FM_JOB_DECISION || result.state == FM_JOB_INPUT) && !result.prompt)
         return job_error(model, invoker);
@@ -127,10 +132,11 @@ static int job_step(struct fm_model *model, struct fm_invoker *invoker, int answ
         if (result.prompt)
             sprintf(model->dialog.text, "%.79s", result.prompt);
         else
-            sprintf(model->dialog.text, "Processed %d of %d files. Esc cancels.",
-                    result.completed, result.total);
+            sprintf(model->dialog.text, "Processed %d of %d files. Esc cancels.", result.completed,
+                    result.total);
     } else {
-        if ((*invoker->cancel)(invoker->context)) return job_error(model, invoker);
+        if ((*invoker->cancel)(invoker->context))
+            return job_error(model, invoker);
         model->job_active = 0;
         if (invoker->interactive && result.state == FM_JOB_COMPLETE) {
             fm_dialog_close(model);
@@ -140,13 +146,14 @@ static int job_step(struct fm_model *model, struct fm_invoker *invoker, int answ
             snprintf(model->status, sizeof(model->status), "%s", result.prompt);
         else
             snprintf(model->status, sizeof(model->status),
-                     "%d completed, %d failed, %d unprocessed.",
-                     result.completed, result.failed,
+                     "%d completed, %d failed, %d unprocessed.", result.completed, result.failed,
                      result.total - result.completed - result.failed);
         model->help.status = model->status;
-        fm_dialog_info(model, result.state == FM_JOB_COMPLETE ? "Action complete" :
-                  result.state == FM_JOB_CANCELLED ? "Action cancelled" : "Action failed",
-                  result.prompt ? result.prompt : model->status);
+        fm_dialog_info(model,
+                       result.state == FM_JOB_COMPLETE    ? "Action complete"
+                       : result.state == FM_JOB_CANCELLED ? "Action cancelled"
+                                                          : "Action failed",
+                       result.prompt ? result.prompt : model->status);
     }
     return FM_SUCCESS;
 }
@@ -194,14 +201,17 @@ static int input_key(struct fm_model *model, struct fm_invoker *invoker,
     return FM_SUCCESS;
 }
 
-static int dialog_key(struct fm_model *model, struct fm_invoker *invoker, struct fm_action_handler *handler, int key)
+static int dialog_key(struct fm_model *model, struct fm_invoker *invoker,
+                      struct fm_action_handler *handler, int key)
 {
     struct fm_dialog *dialog;
 
     dialog = &model->dialog;
     if (model->job_active) {
-        if (key == FM_KEY_ESCAPE || (dialog->kind == FM_DIALOG_CONFIRM && (key == 'n' || key == 'N'))) {
-            if ((*invoker->cancel)(invoker->context)) return job_error(model, invoker);
+        if (key == FM_KEY_ESCAPE ||
+            (dialog->kind == FM_DIALOG_CONFIRM && (key == 'n' || key == 'N'))) {
+            if ((*invoker->cancel)(invoker->context))
+                return job_error(model, invoker);
             model->job_active = 0;
             model->job.state = FM_JOB_CANCELLED;
             model->job.decision = 0;
@@ -209,8 +219,8 @@ static int dialog_key(struct fm_model *model, struct fm_invoker *invoker, struct
                 fm_dialog_close(model);
                 return FM_SUCCESS;
             }
-            sprintf(model->status, "Cancelled: %d completed, %d unprocessed.",
-                    model->job.completed, model->job.total - model->job.completed);
+            sprintf(model->status, "Cancelled: %d completed, %d unprocessed.", model->job.completed,
+                    model->job.total - model->job.completed);
             fm_dialog_info(model, "Action cancelled", model->status);
             return FM_SUCCESS;
         }
@@ -219,15 +229,19 @@ static int dialog_key(struct fm_model *model, struct fm_invoker *invoker, struct
         if (dialog->kind == FM_DIALOG_TEXT) {
             if (key == ' ' || key == FM_KEY_PGDN || key == FM_KEY_ENTER)
                 return job_step(model, invoker, FM_REPLY_NEXT);
-            if (key == FM_KEY_PGUP) return job_step(model, invoker, FM_REPLY_PREVIOUS);
-            if (key == FM_KEY_HOME) return job_step(model, invoker, FM_REPLY_FIRST);
-            if (key == FM_KEY_END) return job_step(model, invoker, FM_REPLY_LAST);
+            if (key == FM_KEY_PGUP)
+                return job_step(model, invoker, FM_REPLY_PREVIOUS);
+            if (key == FM_KEY_HOME)
+                return job_step(model, invoker, FM_REPLY_FIRST);
+            if (key == FM_KEY_END)
+                return job_step(model, invoker, FM_REPLY_LAST);
             return FM_SUCCESS;
         }
         if (dialog->kind == FM_DIALOG_CONFIRM)
-            return key == 'y' || key == 'Y' ?
-                job_step(model, invoker, FM_REPLY_ACCEPT) : FM_SUCCESS;
-        return key == FM_KEY_TICK || key == ' ' ? job_step(model, invoker, FM_REPLY_NONE) : FM_SUCCESS;
+            return key == 'y' || key == 'Y' ? job_step(model, invoker, FM_REPLY_ACCEPT)
+                                            : FM_SUCCESS;
+        return key == FM_KEY_TICK || key == ' ' ? job_step(model, invoker, FM_REPLY_NONE)
+                                                : FM_SUCCESS;
     }
     if (key == FM_KEY_ESCAPE || (dialog->kind == FM_DIALOG_INFO && key == FM_KEY_ENTER)) {
         fm_dialog_close(model);
@@ -266,10 +280,10 @@ static int dialog_key(struct fm_model *model, struct fm_invoker *invoker, struct
 }
 
 /* These bindings share the same command IDs as the injected action list. */
-static FM_CONST int function_commands[] = {
-    FM_CMD_HELP, FM_CMD_TYPE, 0, FM_CMD_CLEAR, FM_CMD_RUN, FM_CMD_EDIT,
-    FM_CMD_BOOKMARK1, FM_CMD_BOOKMARK2, FM_CMD_DIRECTORY, FM_CMD_COMMAND
-};
+static FM_CONST int function_commands[] = {FM_CMD_HELP,      FM_CMD_TYPE,      0,
+                                           FM_CMD_CLEAR,     FM_CMD_RUN,       FM_CMD_EDIT,
+                                           FM_CMD_BOOKMARK1, FM_CMD_BOOKMARK2, FM_CMD_DIRECTORY,
+                                           FM_CMD_COMMAND};
 
 static void clear_marks(struct fm_model *model)
 {
@@ -294,7 +308,8 @@ static int command_key(struct fm_model *model, int key)
     return 0;
 }
 
-int fm_dispatch_to(struct fm_model *model, struct fm_invoker *invoker, struct fm_action_handler *handler, int key)
+int fm_dispatch_to(struct fm_model *model, struct fm_invoker *invoker,
+                   struct fm_action_handler *handler, int key)
 {
     int delta, index, rows, columns, count, command;
     struct fm_cursor *cursor;
@@ -337,19 +352,35 @@ int fm_dispatch_to(struct fm_model *model, struct fm_invoker *invoker, struct fm
     cursor = model->files.focused ? &model->files.cursor : &model->actions.cursor;
     count = model->files.focused ? model->files.count : model->actions.count;
     columns = model->files.focused ? model->files.columns : model->actions.columns;
-    rows = model->files.focused ? model->files.panel.rect.height - 4 :
-                                 model->actions.panel.rect.height -
-                                 (model->actions.panel.rect.height == 1 ? 0 : 2);
+    rows = model->files.focused
+               ? model->files.panel.rect.height - 4
+               : model->actions.panel.rect.height - (model->actions.panel.rect.height == 1 ? 0 : 2);
     delta = 0;
     switch (key) {
-    case FM_KEY_UP:    delta = -columns; break;
-    case FM_KEY_DOWN:  delta = columns; break;
-    case FM_KEY_LEFT:  delta = -1; break;
-    case FM_KEY_RIGHT: delta = 1; break;
-    case FM_KEY_HOME:  delta = -count; break;
-    case FM_KEY_END:   delta = count; break;
-    case FM_KEY_PGUP:  delta = -columns * rows; break;
-    case FM_KEY_PGDN:  delta = columns * rows; break;
+    case FM_KEY_UP:
+        delta = -columns;
+        break;
+    case FM_KEY_DOWN:
+        delta = columns;
+        break;
+    case FM_KEY_LEFT:
+        delta = -1;
+        break;
+    case FM_KEY_RIGHT:
+        delta = 1;
+        break;
+    case FM_KEY_HOME:
+        delta = -count;
+        break;
+    case FM_KEY_END:
+        delta = count;
+        break;
+    case FM_KEY_PGUP:
+        delta = -columns * rows;
+        break;
+    case FM_KEY_PGDN:
+        delta = columns * rows;
+        break;
     }
     if (delta)
         fm_cursor_move(cursor, count, delta, columns, rows);
@@ -357,4 +388,3 @@ int fm_dispatch_to(struct fm_model *model, struct fm_invoker *invoker, struct fm
         model->help.status = model->actions.items[cursor->selected].help;
     return FM_SUCCESS;
 }
-

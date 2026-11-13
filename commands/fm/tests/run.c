@@ -43,12 +43,13 @@ int main(void)
     memset(&location, 0, sizeof(location)); location.drive = 1;
     memset(&entry, 0, sizeof(entry)); strcpy(entry.name, "PROBE.CMD");
     fm_run_bind(&port, &job, &executor, &location);
-    job.entries = &entry; job.count = 1;
+    assert(!fm_run_configure(&job, &entry, 1));
     memset(&request, 0, sizeof(request)); request.token = 17; request.generation = 2;
     for (i = 0; i < (int)(sizeof(actions) / sizeof(actions[0])); ++i) {
         request.command = actions[i];
         request.count = fm_run_policy(actions[i]) == FM_TARGET_ONE;
         assert(!port.invoke(port.context, &request));
+        assert(fm_run_configure(&job, 0, 0) == FM_BAD_MODEL);
         reply.token = 17; reply.answer = FM_REPLY_NONE; reply.decision = 0; reply.text = 0;
         assert(!port.advance(port.context, &reply, &result));
         assert(result.state == FM_JOB_INPUT);

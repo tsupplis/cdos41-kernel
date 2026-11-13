@@ -20,8 +20,10 @@ static int mask_component(FM_CONST char *name, FM_CONST char *pattern, int width
             return 1;
         actual = *name && *name != '.' ? *name++ : ' ';
         wanted = *pattern && *pattern != '.' ? *pattern++ : ' ';
-        if (actual >= 'a' && actual <= 'z') actual -= 'a' - 'A';
-        if (wanted >= 'a' && wanted <= 'z') wanted -= 'a' - 'A';
+        if (actual >= 'a' && actual <= 'z')
+            actual -= 'a' - 'A';
+        if (wanted >= 'a' && wanted <= 'z')
+            wanted -= 'a' - 'A';
         if (wanted != '?' && actual != wanted)
             return 0;
     }
@@ -35,17 +37,21 @@ static int subset_valid(FM_CONST char *pattern)
     int index, length, extension, ch;
 
     length = extension = 0;
-    if (!pattern[0]) return 0;
+    if (!pattern[0])
+        return 0;
     for (index = 0; pattern[index]; ++index) {
         ch = pattern[index];
         if (ch == '.') {
-            if (extension || !length) return 0;
+            if (extension || !length)
+                return 0;
             extension = 1;
             length = 0;
         } else {
-            if (ch <= ' ' || ch == ':' || ch == '\\' || ch == '/' ||
-                ch == '<' || ch == '>' || ch == '|' || ch == '"') return 0;
-            if (++length > (extension ? 3 : 8)) return 0;
+            if (ch <= ' ' || ch == ':' || ch == '\\' || ch == '/' || ch == '<' || ch == '>' ||
+                ch == '|' || ch == '"')
+                return 0;
+            if (++length > (extension ? 3 : 8))
+                return 0;
         }
     }
     return 1;
@@ -59,12 +65,15 @@ static int subset_match(FM_CONST char *name, FM_CONST char *pattern)
         return 1;
     extension = name;
     mask_extension = pattern;
-    while (*extension && *extension != '.') ++extension;
-    while (*mask_extension && *mask_extension != '.') ++mask_extension;
-    if (*extension) ++extension;
-    if (*mask_extension) ++mask_extension;
-    return mask_component(name, pattern, 8) &&
-           mask_component(extension, mask_extension, 3);
+    while (*extension && *extension != '.')
+        ++extension;
+    while (*mask_extension && *mask_extension != '.')
+        ++mask_extension;
+    if (*extension)
+        ++extension;
+    if (*mask_extension)
+        ++mask_extension;
+    return mask_component(name, pattern, 8) && mask_component(extension, mask_extension, 3);
 }
 
 /* Preserve the original lexical ordering, including its seven-bit comparison.
@@ -106,11 +115,12 @@ static int reserve_catalog(struct fm_browser *browser, int count)
     if (count <= browser->capacity)
         return FM_FS_OK;
     capacity = browser->capacity ? browser->capacity * 2 : 32;
-    while (capacity < count) capacity *= 2;
+    while (capacity < count)
+        capacity *= 2;
     if (capacity > FM_MAX_FILES)
         return FM_FS_LIMIT;
-    storage = (*browser->memory->allocate)(browser->memory->context,
-                  capacity * (sizeof(struct fm_entry) + sizeof(struct fm_file)));
+    storage = (*browser->memory->allocate)(
+        browser->memory->context, capacity * (sizeof(struct fm_entry) + sizeof(struct fm_file)));
     if (!storage)
         return FM_FS_ERROR;
     entries = (struct fm_entry *)storage;
@@ -128,9 +138,8 @@ static int reserve_catalog(struct fm_browser *browser, int count)
 
 /* Commit only after the new listing opens. Later read errors report an
  * incomplete catalog. The memory bound is explicit, never silent truncation. */
-static int refresh(struct fm_browser *browser,
-    struct fm_model *model,
-    FM_CONST struct fm_location *location)
+static int refresh(struct fm_browser *browser, struct fm_model *model,
+                   FM_CONST struct fm_location *location)
 {
     struct fm_filesystem *fs;
     struct fm_entry extra;
@@ -156,14 +165,13 @@ static int refresh(struct fm_browser *browser,
     fm_marks_clear(&model->files);
     ++model->generation;
     if (location->media == FM_MEDIA_CPM) {
-        snprintf(browser->location_text, sizeof(browser->location_text), "You are here > %c: User %d",
-                'A' + location->drive, location->user);
+        snprintf(browser->location_text, sizeof(browser->location_text),
+                 "You are here > %c: User %d", 'A' + location->drive, location->user);
         model->device.media = "CP/M Media";
     } else {
         snprintf(browser->location_text, sizeof(browser->location_text), "You are here > %c:%s",
-                'A' + location->drive, location->path);
+                 'A' + location->drive, location->path);
         model->device.media = "DOS Media";
-
     }
     model->device.location = browser->location_text;
     strcpy(browser->capacity_text, "Unknown");
@@ -192,14 +200,15 @@ static int refresh(struct fm_browser *browser,
         snprintf(browser->capacity_text, sizeof(browser->capacity_text), "%luk", kib);
     sort_entries(browser, count);
     model->files.items = model->catalog = browser->files;
-    fm_type_job_bind(&browser->type_service, &browser->type_job, fs,
-                     &browser->location, browser->entries, count);
+    fm_type_job_bind(&browser->type_service, &browser->type_job, fs, &browser->location,
+                     browser->entries, count);
     if (browser->copy_enabled)
-        fm_copy_bind(&browser->copy_service, &browser->copy_job, fs,
-                     browser->copy_job.store, &browser->location, browser->entries);
+        fm_copy_bind(&browser->copy_service, &browser->copy_job, fs, browser->copy_store,
+                     &browser->location, browser->entries);
     model->files.count = model->catalog_count = count;
     model->files.cursor.selected = count ? 0 : FM_NO_SELECTION;
-    if (fm_files_publish(&model->files)) return FM_FS_ERROR;
+    if (fm_files_publish(&model->files))
+        return FM_FS_ERROR;
     if (closed != FM_FS_OK || (result != FM_FS_OK && result != FM_FS_END)) {
         error(model, "Directory read failed; displayed listing may be incomplete.");
         return FM_FS_ERROR;
@@ -220,27 +229,29 @@ static void selection_status(struct fm_browser *browser, struct fm_model *model)
 
     for (index = 0; index < model->files.count; ++index)
         if (fm_marked(&model->files, index)) {
-            if (!count) name = browser->entries[index].name;
+            if (!count)
+                name = browser->entries[index].name;
             ++count;
         }
     if (!count && model->files.cursor.selected >= 0)
         name = browser->entries[model->files.cursor.selected].name;
-    action = model->actions.cursor.selected >= 0 ?
-             &model->actions.items[model->actions.cursor.selected] : 0;
+    action = model->actions.cursor.selected >= 0
+                 ? &model->actions.items[model->actions.cursor.selected]
+                 : 0;
     if (model->actions.focused && action && action->targets) {
         if (count)
             snprintf(browser->selection_text, sizeof(browser->selection_text),
                      "%s: %d marked files (*). Tab: files; F4: clear.", action->label, count);
         else
             snprintf(browser->selection_text, sizeof(browser->selection_text),
-                     "%s: %s (current file). Tab: select files.",
-                     action->label, *name ? name : "none");
+                     "%s: %s (current file). Tab: select files.", action->label,
+                     *name ? name : "none");
     } else if (count)
         snprintf(browser->selection_text, sizeof(browser->selection_text),
                  "%d files marked (*). Tab: switch pane; F4: clear.", count);
     else
-        snprintf(browser->selection_text, sizeof(browser->selection_text),
-                 "Current file: %s. %s", *name ? name : "none",
+        snprintf(browser->selection_text, sizeof(browser->selection_text), "Current file: %s. %s",
+                 *name ? name : "none",
                  model->files.focused ? "Space: mark; Tab: actions." : "Tab: select files.");
     model->help.status = browser->selection_text;
 }
@@ -250,15 +261,14 @@ static void copy_context(struct fm_browser *browser, struct fm_model *model)
     const char *name = browser->entries[model->pending.files[0]].name;
 
     if (model->pending.count == 1)
-        snprintf(browser->copy_title, sizeof(browser->copy_title),
-                 "Copy %s - destination", name);
+        snprintf(browser->copy_title, sizeof(browser->copy_title), "Copy %s - destination", name);
     else
         snprintf(browser->copy_title, sizeof(browser->copy_title),
                  "Copy %d marked files - destination", model->pending.count);
-    snprintf(browser->selection_text, sizeof(browser->selection_text),
-             "Copy from %c:%s  %s%s", 'A' + browser->location.drive,
-             browser->location.media == FM_MEDIA_FAT ? browser->location.path : "",
-             name, model->pending.count > 1 ? " and other marked files (*)" : "");
+    snprintf(browser->selection_text, sizeof(browser->selection_text), "Copy from %c:%s  %s%s",
+             'A' + browser->location.drive,
+             browser->location.media == FM_MEDIA_FAT ? browser->location.path : "", name,
+             model->pending.count > 1 ? " and other marked files (*)" : "");
     if (browser->location.media == FM_MEDIA_CPM)
         snprintf(browser->selection_text, sizeof(browser->selection_text),
                  "Copy from %c: User %d: %s%s", 'A' + browser->location.drive,
@@ -273,9 +283,8 @@ static void pick(struct fm_browser *browser, struct fm_model *model, int drives)
 {
     fm_dialog_close(model);
     browser->picking = 1;
-    if (fm_location_begin(&browser->picker, &model->dialog, browser->filesystem,
-                          &browser->location, drives, browser->slots,
-                          browser->slot_set) == FM_PICK_ERROR) {
+    if (fm_location_begin(&browser->picker, &model->dialog, browser->filesystem, &browser->location,
+                          drives, browser->slots, browser->slot_set) == FM_PICK_ERROR) {
         browser->picking = browser->copy_pending = 0;
         error(model, "Cannot open location picker.");
     }
@@ -311,7 +320,8 @@ static int execute(void *context, struct fm_model *model, int command)
     }
     if (command == FM_CMD_BACKUP && browser->backup_enabled) {
         result = fm_resolve_targets(&model->files, FM_TARGET_MANY, &model->pending);
-        if (result && result != FM_NO_TARGETS) return result;
+        if (result && result != FM_NO_TARGETS)
+            return result;
         /* Directory cursors are valid for whole-location backup/restore.
          * Selected-file mode can only use the snapshotted regular files. */
         result = 0;
@@ -322,8 +332,9 @@ static int execute(void *context, struct fm_model *model, int command)
         model->pending.command = command;
         model->pending.generation = model->generation;
         model->last_command = command;
-        browser->backup_job.entries = browser->entries;
-        browser->backup_job.count = model->files.count;
+        result = fm_backup_configure(&browser->backup_job, browser->entries, model->files.count);
+        if (result)
+            return result;
         browser->active_service = &browser->backup_service;
         browser->mutation_refresh = 1;
         return fm_job_start(model, browser->active_service);
@@ -342,23 +353,25 @@ static int execute(void *context, struct fm_model *model, int command)
         model->pending.command = command;
         model->pending.generation = model->generation;
         model->last_command = command;
-        browser->print_job.entries = browser->entries;
-        browser->print_job.count = model->files.count;
+        result = fm_print_configure(&browser->print_job, browser->entries, model->files.count);
+        if (result)
+            return result;
         browser->active_service = &browser->print_service;
         return fm_job_start(model, browser->active_service);
     }
     if (browser->run_enabled && fm_run_policy(command) >= 0) {
         result = fm_resolve_targets(&model->files, fm_run_policy(command), &model->pending);
-        if (result || (model->pending.count &&
-            browser->entries[model->pending.files[0]].directory)) {
+        if (result ||
+            (model->pending.count && browser->entries[model->pending.files[0]].directory)) {
             error(model, "Select one file; directories cannot be executed or edited.");
             return FM_SUCCESS;
         }
         model->pending.command = command;
         model->pending.generation = model->generation;
         model->last_command = command;
-        browser->run_job.entries = browser->entries;
-        browser->run_job.count = model->files.count;
+        result = fm_run_configure(&browser->run_job, browser->entries, model->files.count);
+        if (result)
+            return result;
         browser->active_service = &browser->run_service;
         browser->mutation_refresh = 1;
         return fm_job_start(model, browser->active_service);
@@ -401,12 +414,12 @@ static int execute(void *context, struct fm_model *model, int command)
         pick(browser, model, command == FM_CMD_DRIVE);
         return FM_SUCCESS;
     }
-    if (command == FM_CMD_OPEN) command = FM_CMD_TYPE;
-    if ((command == FM_CMD_RENAME || command == FM_CMD_DELETE ||
-         command == FM_CMD_SYSTEM_ATTR || command == FM_CMD_LOCAL_ATTR) && browser->mutation_enabled) {
-        result = fm_resolve_targets(&model->files,
-                    FM_TARGET_MANY,
-                    &model->pending);
+    if (command == FM_CMD_OPEN)
+        command = FM_CMD_TYPE;
+    if ((command == FM_CMD_RENAME || command == FM_CMD_DELETE || command == FM_CMD_SYSTEM_ATTR ||
+         command == FM_CMD_LOCAL_ATTR) &&
+        browser->mutation_enabled) {
+        result = fm_resolve_targets(&model->files, FM_TARGET_MANY, &model->pending);
         if (result) {
             error(model, "No files selected.");
             return FM_SUCCESS;
@@ -420,8 +433,10 @@ static int execute(void *context, struct fm_model *model, int command)
         model->pending.command = command;
         model->pending.generation = model->generation;
         model->last_command = command;
-        browser->mutation_job.entries = browser->entries;
-        browser->mutation_job.count = model->files.count;
+        result =
+            fm_mutation_configure(&browser->mutation_job, browser->entries, model->files.count);
+        if (result)
+            return result;
         browser->active_service = &browser->mutation_service;
         browser->mutation_refresh = 1;
         return fm_job_start(model, browser->active_service);
@@ -439,29 +454,29 @@ static int execute(void *context, struct fm_model *model, int command)
         model->pending.command = command;
         model->pending.generation = model->generation;
         model->last_command = command;
-        browser->copy_job.attributes = 0;
         if (command == FM_CMD_SYSTEM_COPY) {
             if (browser->system_drive < 0 || browser->system_drive > 15 ||
                 !browser->mutation_enabled ||
-                browser->filesystem->probe(browser->filesystem->context,
-                                            browser->system_drive, &media)) {
+                browser->filesystem->probe(browser->filesystem->context, browser->system_drive,
+                                           &media)) {
                 error(model, "System disk is unavailable.");
                 return FM_SUCCESS;
             }
             snprintf(destination, sizeof(destination), "%c:%s", 'A' + browser->system_drive,
                      media == FM_MEDIA_CPM ? "0" : "\\");
-            if (fm_copy_configure(&browser->copy_job, model->files.count, destination)) {
+            if (fm_copy_configure(&browser->copy_job, model->files.count, destination,
+                                  browser->mutation_store)) {
                 error(model, "Cannot prepare system-disk destination.");
                 return FM_SUCCESS;
             }
-            browser->copy_job.attributes = browser->mutation_job.store;
             browser->active_service = &browser->copy_service;
             browser->mutation_refresh = 1;
             return fm_job_start(model, browser->active_service);
         }
         browser->copy_pending = 1;
         pick(browser, model, 1);
-        if (browser->picking) copy_context(browser, model);
+        if (browser->picking)
+            copy_context(browser, model);
         return FM_SUCCESS;
     }
     if (command == FM_CMD_TYPE) {
@@ -472,11 +487,11 @@ static int execute(void *context, struct fm_model *model, int command)
             model->last_command = command;
             model->pending.command = command;
             model->pending.generation = model->generation;
-            browser->type_job.count = model->files.count;
             browser->active_service = &browser->type_service;
             result = fm_job_start(model, browser->active_service);
             if (!result)
-                result = fm_dispatch_to(model, &browser->type_service, &browser->actions, FM_KEY_TICK);
+                result =
+                    fm_dispatch_to(model, &browser->type_service, &browser->actions, FM_KEY_TICK);
             return result;
         }
         return FM_SUCCESS;
@@ -487,8 +502,8 @@ static int execute(void *context, struct fm_model *model, int command)
         model->files.details = !model->files.details;
         model->actions.label = model->files.details ? "Size/Date OFF" : "Size/Date ON";
         model->files.columns = model->files.details ? 1 : model->files.normal_columns;
-        fm_cursor_move(&model->files.cursor, model->files.count, 0,
-                       model->files.columns, model->files.panel.rect.height - 4);
+        fm_cursor_move(&model->files.cursor, model->files.count, 0, model->files.columns,
+                       model->files.panel.rect.height - 4);
         browser->detail_first = -1;
     } else {
         error(model, "This action is not available in this package.");
@@ -496,19 +511,15 @@ static int execute(void *context, struct fm_model *model, int command)
     return FM_SUCCESS;
 }
 
-int fm_browser_open(struct fm_browser *browser,
-    struct fm_model *model,
-    struct fm_filesystem *filesystem,
-    struct fm_memory *memory,
-    int drive,
-    int user)
+int fm_browser_open(struct fm_browser *browser, struct fm_model *model,
+                    struct fm_filesystem *filesystem, struct fm_memory *memory, int drive, int user)
 {
     int media;
-    if (!browser || !model || !memory || !memory->allocate || !memory->release || !filesystem || !filesystem->drives ||
-        !filesystem->probe || !filesystem->list_open || !filesystem->list_next ||
-        !filesystem->list_close || !filesystem->file_open ||
-        !filesystem->file_read || !filesystem->file_close ||
-        drive < 0 || drive > 15 || user < 0 || user > 15)
+    if (!browser || !model || !memory || !memory->allocate || !memory->release || !filesystem ||
+        !filesystem->drives || !filesystem->probe || !filesystem->list_open ||
+        !filesystem->list_next || !filesystem->list_close || !filesystem->file_open ||
+        !filesystem->file_read || !filesystem->file_close || drive < 0 || drive > 15 || user < 0 ||
+        user > 15)
         return FM_FS_ERROR;
     browser->memory = memory;
     browser->catalog_storage = 0;
@@ -533,8 +544,8 @@ int fm_browser_open(struct fm_browser *browser,
     browser->actions.accept = 0;
     browser->picking = browser->copy_pending = browser->copy_enabled = 0;
     browser->active_service = &browser->type_service;
-    fm_type_job_bind(&browser->type_service, &browser->type_job, filesystem,
-                     &browser->location, browser->entries, 0);
+    fm_type_job_bind(&browser->type_service, &browser->type_job, filesystem, &browser->location,
+                     browser->entries, 0);
     browser->location.drive = drive;
     browser->location.user = user;
     strcpy(browser->location.path, "\\");
@@ -547,10 +558,8 @@ int fm_browser_open(struct fm_browser *browser,
     return FM_FS_OK;
 }
 
-static int browser_key(struct fm_browser *browser,
-    struct fm_model *model,
-    struct fm_invoker *invoker,
-    int key)
+static int browser_key(struct fm_browser *browser, struct fm_model *model,
+                       struct fm_invoker *invoker, int key)
 {
     int choice, command, result;
     char destination[FM_INPUT_CAPACITY];
@@ -604,12 +613,14 @@ static int browser_key(struct fm_browser *browser,
     }
     if (browser->picking) {
         result = fm_location_key(&browser->picker, &model->dialog, key);
-        if (result == FM_PICK_WAIT) return FM_SUCCESS;
+        if (result == FM_PICK_WAIT)
+            return FM_SUCCESS;
         browser->picking = 0;
         fm_dialog_close(model);
         if (result != FM_PICK_ACCEPT) {
             browser->copy_pending = 0;
-            if (result == FM_PICK_ERROR) error(model, "Cannot read this location.");
+            if (result == FM_PICK_ERROR)
+                error(model, "Cannot read this location.");
             return FM_SUCCESS;
         }
         if (!browser->copy_pending) {
@@ -627,7 +638,7 @@ static int browser_key(struct fm_browser *browser,
         else
             snprintf(destination, sizeof(destination), "%c:%s",
                      'A' + browser->picker.candidate.drive, browser->picker.candidate.path);
-        if (fm_copy_configure(&browser->copy_job, model->files.count, destination)) {
+        if (fm_copy_configure(&browser->copy_job, model->files.count, destination, 0)) {
             error(model, "Cannot prepare this destination.");
             return FM_SUCCESS;
         }
@@ -652,10 +663,12 @@ static int browser_key(struct fm_browser *browser,
  * remains usable with a read-only filesystem and no Copy store. */
 void fm_browser_copy_bind(struct fm_browser *browser, struct fm_copy_store *store)
 {
-    if (!browser || !store || !store->prepare || !store->begin || !store->write ||
-        !store->commit || !store->abort || !store->error) return;
-    fm_copy_bind(&browser->copy_service, &browser->copy_job, browser->filesystem,
-                 store, &browser->location, browser->entries);
+    if (!browser || !store || !store->prepare || !store->begin || !store->write || !store->commit ||
+        !store->abort || !store->error)
+        return;
+    fm_copy_bind(&browser->copy_service, &browser->copy_job, browser->filesystem, store,
+                 &browser->location, browser->entries);
+    browser->copy_store = store;
     browser->copy_enabled = 1;
 }
 
@@ -671,23 +684,22 @@ static void refresh_after_action(struct fm_browser *browser, struct fm_model *mo
     if (selected >= 0 && selected < model->files.count)
         strcpy(name, browser->entries[selected].name);
     browser->mutation_refresh = 0;
-    if (refresh(browser, model, &browser->location)) return;
+    if (refresh(browser, model, &browser->location))
+        return;
     for (index = 0; index < model->files.count; ++index)
         if (!strcmp(name, browser->entries[index].name)) {
             selected = index;
             break;
         }
-    fm_cursor_move(&model->files.cursor, model->files.count, selected,
-                   model->files.columns, model->files.panel.rect.height - 4);
+    fm_cursor_move(&model->files.cursor, model->files.count, selected, model->files.columns,
+                   model->files.panel.rect.height - 4);
 }
 
 /* Refresh only the visible metadata page after controller transitions.
  * The view borrows formatted strings and performs no filesystem queries.
  * A job owns the filesystem while active; refresh waits until it finishes. */
-int fm_browser_key(struct fm_browser *browser,
-    struct fm_model *model,
-    struct fm_invoker *invoker,
-    int key)
+int fm_browser_key(struct fm_browser *browser, struct fm_model *model, struct fm_invoker *invoker,
+                   int key)
 {
     struct fm_metadata metadata;
     int result, row, index, was_printing;
@@ -699,8 +711,7 @@ int fm_browser_key(struct fm_browser *browser,
     was_printing = model->job_active && browser->active_service == &browser->print_service;
     result = browser_key(browser, model, invoker, key);
     /* Printing has no catalog mutation. Clear only successfully printed marks. */
-    if (was_printing &&
-        model->pending.command == FM_CMD_PRINT &&
+    if (was_printing && model->pending.command == FM_CMD_PRINT &&
         model->pending.generation == model->generation) {
         for (index = 0; index < model->job.completed; ++index)
             fm_mark_set(&model->files, model->pending.files[index], 0);
@@ -708,8 +719,10 @@ int fm_browser_key(struct fm_browser *browser,
     if (browser->mutation_refresh && !model->job_active && !model->dialog.kind) {
         refresh_after_action(browser, model);
     }
-    if (browser->picking && browser->copy_pending) copy_context(browser, model);
-    else if (!model->job_active && !model->dialog.kind) selection_status(browser, model);
+    if (browser->picking && browser->copy_pending)
+        copy_context(browser, model);
+    else if (!model->job_active && !model->dialog.kind)
+        selection_status(browser, model);
     if (result || model->job_active || model->dialog.kind || !model->files.details)
         return result;
     if (browser->detail_first == model->files.cursor.first &&
@@ -724,8 +737,8 @@ int fm_browser_key(struct fm_browser *browser,
             strcpy(browser->details[row], "<DIR>");
         } else if (browser->filesystem->metadata) {
             metadata.size_known = metadata.date_known = 0;
-            if (!(*browser->filesystem->metadata)(browser->filesystem->context,
-                    &browser->location, browser->entries[index].name, &metadata))
+            if (!(*browser->filesystem->metadata)(browser->filesystem->context, &browser->location,
+                                                  browser->entries[index].name, &metadata))
                 fm_metadata_format(&metadata, browser->details[row]);
         }
         browser->files[index].detail = browser->details[row];
@@ -735,13 +748,12 @@ int fm_browser_key(struct fm_browser *browser,
     return result;
 }
 
-void fm_browser_mutation_bind(struct fm_browser *browser,
-                              struct fm_mutation_store *store)
+void fm_browser_mutation_bind(struct fm_browser *browser, struct fm_mutation_store *store)
 {
     if (!browser || !store || !store->prepare || !store->commit || !store->error)
         return;
-    fm_mutation_bind(&browser->mutation_service, &browser->mutation_job,
-                     store, &browser->location);
+    fm_mutation_bind(&browser->mutation_service, &browser->mutation_job, store, &browser->location);
+    browser->mutation_store = store;
     browser->mutation_enabled = 1;
 }
 
@@ -753,17 +765,19 @@ void fm_browser_run_bind(struct fm_browser *browser, struct fm_executor *executo
 
 void fm_browser_print_bind(struct fm_browser *browser, struct fm_printer *printer)
 {
-    if (!printer || !printer->attach || !printer->put || !printer->detach) return;
-    fm_print_bind(&browser->print_service, &browser->print_job,
-                  browser->filesystem, printer, &browser->location);
+    if (!printer || !printer->attach || !printer->put || !printer->detach)
+        return;
+    fm_print_bind(&browser->print_service, &browser->print_job, browser->filesystem, printer,
+                  &browser->location);
     browser->print_enabled = 1;
 }
 
 void fm_browser_backup_bind(struct fm_browser *browser, struct fm_backup_host *host)
 {
-    if (!browser || !browser->copy_enabled || !host || !host->prepare ||
-        !host->execute || !host->error) return;
-    fm_backup_bind(&browser->backup_service, &browser->backup_job, host,
-                   browser->copy_job.store, &browser->location);
+    if (!browser || !browser->copy_enabled || !host || !host->prepare || !host->execute ||
+        !host->error)
+        return;
+    fm_backup_bind(&browser->backup_service, &browser->backup_job, host, browser->copy_store,
+                   &browser->location);
     browser->backup_enabled = 1;
 }

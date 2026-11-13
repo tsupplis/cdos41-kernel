@@ -58,8 +58,7 @@ int main(int argc, char **argv)
         config_location.user = BDOS(32, 255) & 255;
         strcpy(config_location.path, "\\");
         config_status = FM_CFG_ABSENT;
-        if (!(*filesystem.probe)(filesystem.context, config_location.drive,
-                                 &config_location.media))
+        if (!(*filesystem.probe)(filesystem.context, config_location.drive, &config_location.media))
             config_status = fm_config_load(&config, &filesystem, &config_location);
         if (config_status == FM_CFG_ABSENT) {
             config_location.drive = 15; /* CDOS floating system drive P:. */
@@ -78,8 +77,8 @@ int main(int argc, char **argv)
         memory.context = 0;
         memory.allocate = allocate_catalog;
         memory.release = release_catalog;
-        if (fm_browser_open(&browser, &model, &filesystem, &memory,
-                            BDOS(25, 0) & 255, BDOS(32, 255) & 255)) {
+        if (fm_browser_open(&browser, &model, &filesystem, &memory, BDOS(25, 0) & 255,
+                            BDOS(32, 255) & 255)) {
             fm_native_close();
             puts("Cannot initialize browser.");
             return 1;
@@ -98,29 +97,35 @@ int main(int argc, char **argv)
         if (config_status == FM_CFG_ERROR)
             fm_dialog_info(&model, "FM.CFG", "Configuration read failed; defaults retained.");
         else if (config.unsupported)
-            fm_dialog_info(&model, "FM.CFG", "Colours loaded. Unsupported OVPMODE or invalid layout; defaults retained.");
+            fm_dialog_info(
+                &model, "FM.CFG",
+                "Colours loaded. Unsupported OVPMODE or invalid layout; defaults retained.");
     }
     status = FM_SUCCESS;
     repaint = 1;
     while (!model.exit_requested) {
         if (repaint) {
             status = fm_render(&model, &display);
-            if (status) break;
+            if (status)
+                break;
             status = fm_native_present(&canvas);
-            if (status) break;
+            if (status)
+                break;
         }
         /* Idle ticks yield in the input adapter, but need no new frame.
          * Only a running job consumes ticks; a decision waits for an answer. */
         do {
             key = fm_native_read();
-        } while (key == FM_KEY_TICK &&
-                 (!model.job_active || (model.job.state == FM_JOB_DECISION || model.job.state == FM_JOB_VIEW || model.job.state == FM_JOB_INPUT)));
+        } while (key == FM_KEY_TICK && (!model.job_active || (model.job.state == FM_JOB_DECISION ||
+                                                              model.job.state == FM_JOB_VIEW ||
+                                                              model.job.state == FM_JOB_INPUT)));
         if (key == '\n')
             key = FM_KEY_ENTER;
         copy_tick = key == FM_KEY_TICK && model.job_active &&
                     browser.active_service == &browser.copy_service &&
                     model.dialog.kind == FM_DIALOG_PROGRESS;
-        if (copy_tick) strcpy(progress_text, model.dialog.text);
+        if (copy_tick)
+            strcpy(progress_text, model.dialog.text);
         status = fm_browser_key(&browser, &model, &invoker, key);
         /* Copy's progress overlay is its only visible change during a tick.
          * Decisions, completion, errors and keyboard input always repaint. */
@@ -128,7 +133,7 @@ int main(int argc, char **argv)
                   model.dialog.kind != FM_DIALOG_PROGRESS ||
                   strcmp(progress_text, model.dialog.text) != 0;
         if (status == FM_JOB_ERROR)
-            status = FM_SUCCESS;    /* Controller has prepared an error overlay. */
+            status = FM_SUCCESS; /* Controller has prepared an error overlay. */
         if (status)
             break;
     }

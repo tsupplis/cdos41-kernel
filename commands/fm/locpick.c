@@ -10,8 +10,8 @@
 #define FOLDERS 3
 #define PAGE_SIZE 12
 
-static void option(struct fm_location_picker *picker, struct fm_dialog *dialog,
-                   int operation, const char *label)
+static void option(struct fm_location_picker *picker, struct fm_dialog *dialog, int operation,
+                   const char *label)
 {
     int index = dialog->count++;
 
@@ -41,9 +41,11 @@ static int display(struct fm_location_picker *picker, struct fm_dialog *dialog)
         dialog->title = "Select drive";
         strcpy(dialog->text, "Choose a drive to browse");
         dialog->footer[0] = "Enter:open  F7/F8:bookmarks";
-        if (fs->drives(fs->context, &mask)) return FM_PICK_ERROR;
+        if (fs->drives(fs->context, &mask))
+            return FM_PICK_ERROR;
         for (index = 0; index < 16; ++index) {
-            if (!(mask & ((unsigned)1 << index))) continue;
+            if (!(mask & ((unsigned)1 << index)))
+                continue;
             snprintf(label, sizeof(label), "Drive %c:", 'A' + index);
             option(picker, dialog, index, label);
         }
@@ -51,8 +53,7 @@ static int display(struct fm_location_picker *picker, struct fm_dialog *dialog)
     }
     if (picker->mode == USERS) {
         dialog->title = "Select user area";
-        snprintf(dialog->text, sizeof(dialog->text),
-                 "%c: Choose a user area",
+        snprintf(dialog->text, sizeof(dialog->text), "%c: Choose a user area",
                  'A' + picker->candidate.drive);
         dialog->footer[0] = "Enter:choose  F3:drives";
         for (index = 0; index < 16; ++index) {
@@ -60,20 +61,23 @@ static int display(struct fm_location_picker *picker, struct fm_dialog *dialog)
             option(picker, dialog, index, label);
         }
         dialog->selected = picker->candidate.user;
-        if (dialog->selected >= PAGE_SIZE) dialog->first = dialog->selected - PAGE_SIZE + 1;
+        if (dialog->selected >= PAGE_SIZE)
+            dialog->first = dialog->selected - PAGE_SIZE + 1;
         return FM_PICK_WAIT;
     }
     dialog->title = "Select directory";
-    snprintf(dialog->text, sizeof(dialog->text), "%c:%s",
-             'A' + picker->candidate.drive, picker->candidate.path);
+    snprintf(dialog->text, sizeof(dialog->text), "%c:%s", 'A' + picker->candidate.drive,
+             picker->candidate.path);
     if (fs->list_open(fs->context, &picker->candidate, &handle))
         return FM_PICK_ERROR;
     skipped = shown = 0;
     while ((result = fs->list_next(fs->context, handle, &entry)) == FM_FS_OK) {
-        if (!entry.directory || !strcmp(entry.name, ".") ||
-            !strcmp(entry.name, "..")) continue;
-        if (skipped++ < picker->offset) continue;
-        if (shown == PAGE_SIZE) break;
+        if (!entry.directory || !strcmp(entry.name, ".") || !strcmp(entry.name, ".."))
+            continue;
+        if (skipped++ < picker->offset)
+            continue;
+        if (shown == PAGE_SIZE)
+            break;
         snprintf(label, sizeof(label), "%s\\", entry.name);
         option(picker, dialog, 0, label);
         ++shown;
@@ -83,7 +87,8 @@ static int display(struct fm_location_picker *picker, struct fm_dialog *dialog)
         return FM_PICK_ERROR;
     dialog->more_before = picker->offset > 0;
     dialog->more_after = result == FM_FS_OK;
-    if (!dialog->count) dialog->selected = FM_NO_SELECTION;
+    if (!dialog->count)
+        dialog->selected = FM_NO_SELECTION;
     return FM_PICK_WAIT;
 }
 
@@ -91,38 +96,39 @@ static void parent(struct fm_location *location)
 {
     char *slash = strrchr(location->path, '\\');
 
-    if (!slash || slash == location->path) location->path[1] = 0;
-    else *slash = 0;
+    if (!slash || slash == location->path)
+        location->path[1] = 0;
+    else
+        *slash = 0;
 }
 
-int fm_location_begin(struct fm_location_picker *picker,
-                      struct fm_dialog *dialog, struct fm_filesystem *filesystem,
-                      const struct fm_location *current, int drives,
-                      const struct fm_location *bookmarks, const int *available)
+int fm_location_begin(struct fm_location_picker *picker, struct fm_dialog *dialog,
+                      struct fm_filesystem *filesystem, const struct fm_location *current,
+                      int drives, const struct fm_location *bookmarks, const int *available)
 {
     int index;
 
     picker->filesystem = filesystem;
     picker->candidate = *current;
     picker->offset = 0;
-    picker->mode = drives ? DRIVES :
-                   current->media == FM_MEDIA_CPM ? USERS : FOLDERS;
+    picker->mode = drives ? DRIVES : current->media == FM_MEDIA_CPM ? USERS : FOLDERS;
     for (index = 0; index < 2; ++index) {
         picker->bookmark_set[index] = available[index];
-        if (available[index]) picker->bookmarks[index] = bookmarks[index];
+        if (available[index])
+            picker->bookmarks[index] = bookmarks[index];
     }
     return display(picker, dialog);
 }
 
-int fm_location_key(struct fm_location_picker *picker,
-                    struct fm_dialog *dialog, int key)
+int fm_location_key(struct fm_location_picker *picker, struct fm_dialog *dialog, int key)
 {
     struct fm_location before;
     struct fm_cursor cursor;
     int operation, result, length, old_mode, old_offset, bookmark;
 
     before = picker->candidate;
-    if (key == FM_KEY_ESCAPE) return FM_PICK_CANCEL;
+    if (key == FM_KEY_ESCAPE)
+        return FM_PICK_CANCEL;
     old_mode = picker->mode;
     old_offset = picker->offset;
     if (key == FM_KEY_F1 + 6 || key == FM_KEY_F1 + 7) {
@@ -141,15 +147,18 @@ int fm_location_key(struct fm_location_picker *picker,
     if (key == FM_KEY_F1 + 2) {
         picker->mode = DRIVES;
         picker->offset = 0;
-    } else if (picker->mode == FOLDERS &&
-               (key == FM_KEY_PGUP || key == FM_KEY_PGDN)) {
-        if (key == FM_KEY_PGUP && picker->offset) picker->offset -= PAGE_SIZE;
-        else if (key == FM_KEY_PGDN && dialog->more_after) picker->offset += PAGE_SIZE;
-        else return FM_PICK_WAIT;
+    } else if (picker->mode == FOLDERS && (key == FM_KEY_PGUP || key == FM_KEY_PGDN)) {
+        if (key == FM_KEY_PGUP && picker->offset)
+            picker->offset -= PAGE_SIZE;
+        else if (key == FM_KEY_PGDN && dialog->more_after)
+            picker->offset += PAGE_SIZE;
+        else
+            return FM_PICK_WAIT;
     } else if (key == 8) {
         if (picker->mode == FOLDERS && picker->candidate.path[1])
             parent(&picker->candidate);
-        else picker->mode = DRIVES;
+        else
+            picker->mode = DRIVES;
         picker->offset = 0;
     } else if (key == FM_KEY_ENTER) {
         if (dialog->selected < 0 || dialog->selected >= dialog->count)
@@ -177,7 +186,8 @@ int fm_location_key(struct fm_location_picker *picker,
                 strcpy(dialog->text, "Directory path is too long.");
                 return FM_PICK_WAIT;
             }
-            if (length > 1) strcat(picker->candidate.path, "\\");
+            if (length > 1)
+                strcat(picker->candidate.path, "\\");
             strcat(picker->candidate.path, picker->labels[dialog->selected]);
             picker->candidate.path[strlen(picker->candidate.path) - 1] = 0;
             picker->offset = 0;
@@ -186,14 +196,19 @@ int fm_location_key(struct fm_location_picker *picker,
         cursor.selected = dialog->selected;
         cursor.first = dialog->first;
         operation = 0;
-        if (key == FM_KEY_UP) operation = -1;
-        if (key == FM_KEY_DOWN) operation = 1;
-        if (key == FM_KEY_HOME) operation = -dialog->count;
-        if (key == FM_KEY_END) operation = dialog->count;
-        if (key == FM_KEY_PGUP) operation = -(dialog->panel.rect.height - 6);
-        if (key == FM_KEY_PGDN) operation = dialog->panel.rect.height - 6;
-        fm_cursor_move(&cursor, dialog->count, operation, 1,
-                       dialog->panel.rect.height - 6);
+        if (key == FM_KEY_UP)
+            operation = -1;
+        if (key == FM_KEY_DOWN)
+            operation = 1;
+        if (key == FM_KEY_HOME)
+            operation = -dialog->count;
+        if (key == FM_KEY_END)
+            operation = dialog->count;
+        if (key == FM_KEY_PGUP)
+            operation = -(dialog->panel.rect.height - 6);
+        if (key == FM_KEY_PGDN)
+            operation = dialog->panel.rect.height - 6;
+        fm_cursor_move(&cursor, dialog->count, operation, 1, dialog->panel.rect.height - 6);
         dialog->selected = cursor.selected;
         dialog->first = cursor.first;
         return FM_PICK_WAIT;
@@ -204,7 +219,8 @@ int fm_location_key(struct fm_location_picker *picker,
         picker->mode = old_mode;
         picker->offset = old_offset;
         /* Restore the previous page where possible; no caller state commits. */
-        if (display(picker, dialog) == FM_PICK_ERROR) return FM_PICK_ERROR;
+        if (display(picker, dialog) == FM_PICK_ERROR)
+            return FM_PICK_ERROR;
         strcpy(dialog->text, "Cannot read that location. Previous location retained.");
     }
     return FM_PICK_WAIT;

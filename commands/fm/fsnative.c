@@ -57,8 +57,8 @@ static int probe(void *context, int drive, int *media)
     unsigned mask;
 
     state = (struct fm_native_fs *)context;
-    if (!media || state->active || drive < 0 || drive > 15 ||
-        drives(context, &mask) || !(mask & ((unsigned)1 << drive)))
+    if (!media || state->active || drive < 0 || drive > 15 || drives(context, &mask) ||
+        !(mask & ((unsigned)1 << drive)))
         return FM_FS_ERROR;
     saved_drive = BDOS(25, 0) & 255;
     result = FM_FS_ERROR;
@@ -69,13 +69,12 @@ static int probe(void *context, int drive, int *media)
             state->dma[index] = 0;
         user = enter(state);
         BDOS(17, state->fcb);
-        *media = (state->dma[0] & 255) == 32 &&
-                 (state->dma[15] & 255) == 128 ? FM_MEDIA_FAT : FM_MEDIA_CPM;
+        *media = (state->dma[0] & 255) == 32 && (state->dma[15] & 255) == 128 ? FM_MEDIA_FAT
+                                                                              : FM_MEDIA_CPM;
         leave(state, user);
         result = FM_FS_OK;
     }
-    if ((BDOS(14, saved_drive) & 255)
-        == 255)
+    if ((BDOS(14, saved_drive) & 255) == 255)
         result = FM_FS_ERROR;
     return result;
 }
@@ -85,9 +84,8 @@ static int probe(void *context, int drive, int *media)
 static int valid_location(FM_CONST struct fm_location *location)
 {
     int length;
-    if (!location || location->drive < 0 || location->drive > 15 ||
-        location->user < 0 || location->user > 15 ||
-        (location->media != FM_MEDIA_CPM && location->media != FM_MEDIA_FAT))
+    if (!location || location->drive < 0 || location->drive > 15 || location->user < 0 ||
+        location->user > 15 || (location->media != FM_MEDIA_CPM && location->media != FM_MEDIA_FAT))
         return 0;
     if (location->media == FM_MEDIA_CPM)
         return 1;
@@ -104,8 +102,8 @@ static int parse_name(struct fm_native_fs *state, FM_CONST char *name)
     if (!name || !name[0])
         return FM_FS_ERROR;
     for (index = 0; name[index]; ++index) {
-        if (index >= 12 || name[index] == ':' || name[index] == '\\' ||
-            name[index] == '/' || name[index] == '*' || name[index] == '?')
+        if (index >= 12 || name[index] == ':' || name[index] == '\\' || name[index] == '/' ||
+            name[index] == '*' || name[index] == '?')
             return FM_FS_ERROR;
     }
     clear_fcb(state);
@@ -136,8 +134,8 @@ static int map_location(struct fm_native_fs *state, FM_CONST struct fm_location 
                 return FM_FS_ERROR;
     } else {
         for (candidate = 14; candidate <= 16; ++candidate) {
-            if (candidate != location->drive + 1 && FMLOC(candidate, identity) &&
-                !identity[3]) break;
+            if (candidate != location->drive + 1 && FMLOC(candidate, identity) && !identity[3])
+                break;
         }
         if (candidate > 16)
             return FM_FS_ERROR;
@@ -158,7 +156,10 @@ static int map_location(struct fm_native_fs *state, FM_CONST struct fm_location 
     while (!result && location->path[start]) {
         length = 0;
         while (location->path[start] && location->path[start] != '\\') {
-            if (length == FM_NAME_CAPACITY - 1) { result = 255; break; }
+            if (length == FM_NAME_CAPACITY - 1) {
+                result = 255;
+                break;
+            }
             component[length++] = location->path[start++];
         }
         component[length] = 0;
@@ -222,22 +223,20 @@ static int list_next(void *context, int handle, struct fm_entry *output)
             continue;
         used = 0;
         for (index = 1; index < 9; ++index) {
-            if ((entry[index] & 127)
-                != ' ')
+            if ((entry[index] & 127) != ' ')
                 output->name[used++] = entry[index] & 127;
         }
-        if ((entry[9] & 127)
-            != ' ')
+        if ((entry[9] & 127) != ' ')
             output->name[used++] = '.';
         for (index = 9; index < 12; ++index) {
-            if ((entry[index] & 127)
-                != ' ')
+            if ((entry[index] & 127) != ' ')
                 output->name[used++] = entry[index] & 127;
         }
         output->name[used] = 0;
-        output->directory = state->media == FM_MEDIA_FAT &&
-                            entry[16] == entry[17] && (entry[16] & 192) == 192;
-        if (output->directory && output->name[0] == '.') continue;
+        output->directory =
+            state->media == FM_MEDIA_FAT && entry[16] == entry[17] && (entry[16] & 192) == 192;
+        if (output->directory && output->name[0] == '.')
+            continue;
         leave(state, user);
         return FM_FS_OK;
     }
@@ -253,13 +252,14 @@ static int list_close(void *context, int handle)
     return FM_FS_OK;
 }
 
-static int file_open(void *context, FM_CONST struct fm_location *location, FM_CONST char *name, int *handle)
+static int file_open(void *context, FM_CONST struct fm_location *location, FM_CONST char *name,
+                     int *handle)
 {
     struct fm_native_fs *state;
     int user, result;
     state = (struct fm_native_fs *)context;
-    if (state->active || !handle || !valid_location(location) ||
-        parse_name(state, name) || map_location(state, location) || parse_name(state, name))
+    if (state->active || !handle || !valid_location(location) || parse_name(state, name) ||
+        map_location(state, location) || parse_name(state, name))
         return FM_FS_ERROR;
     state->fcb[0] = state->effective_drive;
     user = enter(state);
@@ -298,7 +298,8 @@ static int file_read(void *context, int handle, char *output, int capacity, int 
     while (*count < capacity && state->position < state->available) {
         output[(*count)++] = state->dma[state->position++];
         if (state->media == FM_MEDIA_FAT) {
-            if (!state->remaining_low) --state->remaining_high;
+            if (!state->remaining_low)
+                --state->remaining_high;
             --state->remaining_low;
         }
     }
@@ -323,7 +324,8 @@ static int file_close(void *context, int handle)
  * disturbed. Function 35 includes all extents; function 102 returns the update
  * stamp at FCB 28 on CP/M, FCB 20 on FAT (CDOS black.a86:xfcb).
  * Missing timestamps do not invalidate a known file size. */
-static int metadata(void *context, FM_CONST struct fm_location *location, FM_CONST char *name, struct fm_metadata *output)
+static int metadata(void *context, FM_CONST struct fm_location *location, FM_CONST char *name,
+                    struct fm_metadata *output)
 {
     struct fm_native_fs *state;
     int user, result, hour, minute, stamp;
@@ -331,8 +333,8 @@ static int metadata(void *context, FM_CONST struct fm_location *location, FM_CON
 
     state = (struct fm_native_fs *)context;
     output->size_known = output->date_known = 0;
-    if (state->active || !valid_location(location) ||
-        map_location(state, location) || parse_name(state, name))
+    if (state->active || !valid_location(location) || map_location(state, location) ||
+        parse_name(state, name))
         return FM_FS_ERROR;
     state->fcb[0] = state->effective_drive;
     user = enter(state);
@@ -355,8 +357,7 @@ static int metadata(void *context, FM_CONST struct fm_location *location, FM_CON
     if (result == 255)
         return FM_FS_OK;
     stamp = location->media == FM_MEDIA_FAT ? 20 : 28;
-    output->days = (state->fcb[stamp] & 255) |
-                   ((state->fcb[stamp + 1] & 255) << 8);
+    output->days = (state->fcb[stamp] & 255) | ((state->fcb[stamp + 1] & 255) << 8);
     hour = state->fcb[stamp + 2] & 255;
     minute = state->fcb[stamp + 3] & 255;
     if ((hour & 15) > 9 || (minute & 15) > 9)
@@ -380,8 +381,7 @@ static int space(void *context, int drive, unsigned long *kib)
     user = enter(state);
     memset(state->dma, 255, 3);
     status = BDOS(46, drive);
-    records = (unsigned char)state->dma[0] |
-              ((unsigned long)(unsigned char)state->dma[1] << 8) |
+    records = (unsigned char)state->dma[0] | ((unsigned long)(unsigned char)state->dma[1] << 8) |
               ((unsigned long)(unsigned char)state->dma[2] << 16);
     leave(state, user);
     if ((unsigned)status == 65535U || records == 0xffffffUL)
@@ -410,7 +410,8 @@ void fm_native_fs_bind(struct fm_filesystem *port, struct fm_native_fs *state, c
 /* Transactional destination adapter. Scratch FCB calls are used only when the
  * temporary file is closed. Source and destination use separate native state. */
 
-static int lookup(struct fm_native_copy *copy, const char *name, int *found, char *snapshot, int allow_readonly)
+static int lookup(struct fm_native_copy *copy, const char *name, int *found, char *snapshot,
+                  int allow_readonly)
 {
     struct fm_native_fs *state;
     char *entry;
@@ -424,14 +425,15 @@ static int lookup(struct fm_native_copy *copy, const char *name, int *found, cha
     *found = slot <= 3;
     if (*found) {
         entry = state->dma + slot * 32;
-        if (((entry[9] & 128) && !allow_readonly) || (state->media == FM_MEDIA_FAT &&
-            entry[16] == entry[17] && (entry[16] & 192) == 192)) {
+        if (((entry[9] & 128) && !allow_readonly) ||
+            (state->media == FM_MEDIA_FAT && entry[16] == entry[17] && (entry[16] & 192) == 192)) {
             leave(state, user);
             strcpy(copy->message, "Destination is protected or is a directory.");
             return FM_FS_ERROR;
         }
-        if (snapshot) for (index = 0; index < 32; ++index)
-            snapshot[index] = entry[index];
+        if (snapshot)
+            for (index = 0; index < 32; ++index)
+                snapshot[index] = entry[index];
     }
     leave(state, user);
     return slot <= 3 || slot == 255 ? FM_FS_OK : FM_FS_ERROR;
@@ -442,7 +444,8 @@ static int copy_lookup(struct fm_native_copy *copy, const char *name, int *found
     return lookup(copy, name, found, snapshot, 0);
 }
 
-static int copy_prepare(void *context, FM_CONST struct fm_location *source, FM_CONST struct fm_location *destination, FM_CONST char *name, int *exists)
+static int copy_prepare(void *context, FM_CONST struct fm_location *source,
+                        FM_CONST struct fm_location *destination, FM_CONST char *name, int *exists)
 {
     struct fm_native_copy *copy;
     int source_id[4], destination_id[4];
@@ -450,8 +453,8 @@ static int copy_prepare(void *context, FM_CONST struct fm_location *source, FM_C
     strcpy(copy->message, "I/O error; source retained.");
     if (copy->opened || copy->owned || copy->backed || copy->source->active ||
         (source && !valid_location(source)) || !valid_location(destination) ||
-        parse_name(&copy->destination, name) ||
-        (source && map_location(copy->source, source)) || map_location(&copy->destination, destination))
+        parse_name(&copy->destination, name) || (source && map_location(copy->source, source)) ||
+        map_location(&copy->destination, destination))
         return FM_FS_ERROR;
     if (source && source->media == destination->media) {
         if (source->media == FM_MEDIA_CPM) {
@@ -461,7 +464,8 @@ static int copy_prepare(void *context, FM_CONST struct fm_location *source, FM_C
             }
         } else {
             if (!FMLOC(copy->source->effective_drive, source_id) ||
-                !FMLOC(copy->destination.effective_drive, destination_id)) return FM_FS_ERROR;
+                !FMLOC(copy->destination.effective_drive, destination_id))
+                return FM_FS_ERROR;
             if (source_id[0] == destination_id[0] && source_id[2] == destination_id[2]) {
                 strcpy(copy->message, "Source and target: same directory.");
                 return FM_FS_ERROR;
@@ -645,8 +649,8 @@ static int copy_commit(void *context, int replace)
                 strcpy(copy->message, "Destination changed during Copy; not replaced.");
                 return FM_FS_ERROR;
             }
-        if (copy_unused(copy, copy->backup, "FB") ||
-            copy_rename(copy, copy->name, copy->backup)) return FM_FS_ERROR;
+        if (copy_unused(copy, copy->backup, "FB") || copy_rename(copy, copy->name, copy->backup))
+            return FM_FS_ERROR;
         copy->backed = 1;
     }
     /* Keep the old file under its backup name until publication succeeds.
@@ -681,7 +685,8 @@ static int copy_abort(void *context)
         sprintf(copy->message, "Recovery file retained: %.12s", copy->backup);
         return FM_FS_ERROR;
     }
-    if (copy->owned) sprintf(copy->message, "Temporary retained: %.12s", copy->temporary);
+    if (copy->owned)
+        sprintf(copy->message, "Temporary retained: %.12s", copy->temporary);
     return result;
 }
 
@@ -690,7 +695,8 @@ static FM_CONST char *copy_error(void *context)
     return ((struct fm_native_copy *)context)->message;
 }
 
-void fm_native_copy_bind(struct fm_copy_store *port, struct fm_native_copy *state, struct fm_native_fs *source, char *restore_dma)
+void fm_native_copy_bind(struct fm_copy_store *port, struct fm_native_copy *state,
+                         struct fm_native_fs *source, char *restore_dma)
 {
     state->source = source;
     state->destination.restore_dma = restore_dma;
@@ -710,8 +716,8 @@ void fm_native_copy_bind(struct fm_copy_store *port, struct fm_native_copy *stat
  * temporary or backup. Confirmation holds no open file or filesystem lock.
  * Revalidation detects changes across that wait; BDOS enforces final locking.
  */
-static int mutation_prepare(void *context, const struct fm_location *location,
-                            const char *name, const char *replacement)
+static int mutation_prepare(void *context, const struct fm_location *location, const char *name,
+                            const char *replacement)
 {
     struct fm_native_mutation *mutation = context;
     struct fm_native_copy *files = mutation->files;
@@ -721,15 +727,16 @@ static int mutation_prepare(void *context, const struct fm_location *location,
     mutation->attributes = 0;
     strcpy(files->message, "Cannot prepare file change.");
     if (!valid_location(location) || !fm_mutation_name(name) ||
-        (replacement && !fm_mutation_name(replacement)) ||
-        files->source->active || files->opened || files->owned || files->backed ||
-        map_location(&files->destination, location)) return FM_FS_ERROR;
+        (replacement && !fm_mutation_name(replacement)) || files->source->active || files->opened ||
+        files->owned || files->backed || map_location(&files->destination, location))
+        return FM_FS_ERROR;
     if (copy_lookup(files, name, &found, files->original) || !found)
         return FM_FS_ERROR;
     strcpy(files->name, name);
     mutation->replacement[0] = 0;
     if (replacement) {
-        if (copy_lookup(files, replacement, &found, 0)) return FM_FS_ERROR;
+        if (copy_lookup(files, replacement, &found, 0))
+            return FM_FS_ERROR;
         if (found) {
             strcpy(files->message, "Rename target already exists; nothing changed.");
             return FM_FS_ERROR;
@@ -740,8 +747,8 @@ static int mutation_prepare(void *context, const struct fm_location *location,
     return FM_FS_OK;
 }
 
-static int attributes_prepare(void *context, const struct fm_location *location,
-                              const char *name, int system)
+static int attributes_prepare(void *context, const struct fm_location *location, const char *name,
+                              int system)
 {
     struct fm_native_mutation *mutation = context;
     struct fm_native_copy *files = mutation->files;
@@ -749,8 +756,8 @@ static int attributes_prepare(void *context, const struct fm_location *location,
 
     mutation->prepared = 0;
     strcpy(files->message, "Cannot prepare attribute change.");
-    if (!valid_location(location) || !fm_mutation_name(name) ||
-        files->source->active || files->opened || files->owned || files->backed ||
+    if (!valid_location(location) || !fm_mutation_name(name) || files->source->active ||
+        files->opened || files->owned || files->backed ||
         map_location(&files->destination, location) ||
         lookup(files, name, &found, files->original, 1) || !found)
         return FM_FS_ERROR;
@@ -768,14 +775,17 @@ static int mutation_commit(void *context)
     int found, result, user, index;
     struct fm_native_fs *state = &files->destination;
 
-    if (!mutation->prepared) return FM_FS_ERROR;
+    if (!mutation->prepared)
+        return FM_FS_ERROR;
     mutation->prepared = 0;
     strcpy(files->message, "File changed or unavailable; nothing changed.");
     if (files->source->active || files->opened || files->owned || files->backed ||
         lookup(files, files->name, &found, current, mutation->attributes != 0) || !found ||
-        memcmp(current, files->original, sizeof(current))) return FM_FS_ERROR;
+        memcmp(current, files->original, sizeof(current)))
+        return FM_FS_ERROR;
     if (mutation->attributes) {
-        if (parse_name(state, files->name)) return FM_FS_ERROR;
+        if (parse_name(state, files->name))
+            return FM_FS_ERROR;
         for (index = 1; index <= 11; ++index)
             state->fcb[index] = current[index];
         state->fcb[9] &= 127;
@@ -795,7 +805,8 @@ static int mutation_commit(void *context)
     } else {
         result = copy_remove(files, files->name);
     }
-    if (result) strcpy(files->message, "File operation failed; listing will be refreshed.");
+    if (result)
+        strcpy(files->message, "File operation failed; listing will be refreshed.");
     return result;
 }
 
@@ -804,8 +815,7 @@ static const char *mutation_error(void *context)
     return ((struct fm_native_mutation *)context)->files->message;
 }
 
-void fm_native_mutation_bind(struct fm_mutation_store *port,
-                             struct fm_native_mutation *state,
+void fm_native_mutation_bind(struct fm_mutation_store *port, struct fm_native_mutation *state,
                              struct fm_native_copy *files)
 {
     state->files = files;
@@ -818,12 +828,11 @@ void fm_native_mutation_bind(struct fm_mutation_store *port,
 }
 
 /* Reuse the same directory alias and validation as file operations. */
-int fm_native_run_location(struct fm_native_fs *state,
-                           const struct fm_location *location,
+int fm_native_run_location(struct fm_native_fs *state, const struct fm_location *location,
                            int *drive, int *user)
 {
-    if (!state || state->active || !drive || !user ||
-        !valid_location(location) || map_location(state, location))
+    if (!state || state->active || !drive || !user || !valid_location(location) ||
+        map_location(state, location))
         return FM_FS_ERROR;
     *drive = state->effective_drive - 1;
     *user = state->user;
@@ -832,27 +841,33 @@ int fm_native_run_location(struct fm_native_fs *state,
 
 /* Resolve permanent media through its DPH/DPB, as the historical FM does.
  * This is read-only. Generated controls always live at physical root/user 0. */
-int fm_native_backup_location(struct fm_native_fs *state,
-                               const struct fm_location *location,
-                               struct fm_location *root)
+int fm_native_backup_location(struct fm_native_fs *state, const struct fm_location *location,
+                              struct fm_location *root)
 {
     int identity[4], physical;
     unsigned dph, dpb;
 
-    if (state->active || !valid_location(location)) return FM_FS_ERROR;
+    if (state->active || !valid_location(location))
+        return FM_FS_ERROR;
     physical = location->drive + 1;
     if (location->media == FM_MEDIA_FAT) {
-        if (!FMLOC(physical, identity)) return FM_FS_ERROR;
+        if (!FMLOC(physical, identity))
+            return FM_FS_ERROR;
         physical = identity[0];
     }
-    if (physical < 1 || physical > 13) return FM_FS_ERROR;
+    if (physical < 1 || physical > 13)
+        return FM_FS_ERROR;
     XINIT();
     dph = FARWORD(XSEG(), 0xc18 + 2 * (physical - 1));
-    if (!dph || dph > 65525U) return FM_FS_ERROR;
+    if (!dph || dph > 65525U)
+        return FM_FS_ERROR;
     dpb = FARWORD(XSEG(), dph + 8);
-    if (!dpb || dpb > 65510U) return FM_FS_ERROR;
-    if ((unsigned)FARWORD(XSEG(), dpb) >= 65520U) dpb += 12;
-    if (!(FARWORD(XSEG(), dpb + 11) & 32768U)) return FM_FS_ERROR;
+    if (!dpb || dpb > 65510U)
+        return FM_FS_ERROR;
+    if ((unsigned)FARWORD(XSEG(), dpb) >= 65520U)
+        dpb += 12;
+    if (!(FARWORD(XSEG(), dpb + 11) & 32768U))
+        return FM_FS_ERROR;
     *root = *location;
     root->drive = physical - 1;
     root->user = 0;
@@ -869,7 +884,8 @@ static int saved_path(struct fm_native_fs *state, int drive, char *path)
     int user, status, child, slot, length, used = 0, i;
     char name[13], *entry;
 
-    if (!FMLOC(drive, original)) return FM_FS_ERROR;
+    if (!FMLOC(drive, original))
+        return FM_FS_ERROR;
     if (!original[2]) {
         strcpy(path, "\\");
         return FM_FS_OK;
@@ -878,7 +894,8 @@ static int saved_path(struct fm_native_fs *state, int drive, char *path)
     root.media = FM_MEDIA_FAT;
     root.user = 0;
     strcpy(root.path, "\\");
-    if (map_location(state, &root)) return FM_FS_ERROR;
+    if (map_location(state, &root))
+        return FM_FS_ERROR;
     user = enter(state);
     clear_fcb(state);
     state->fcb[0] = drive | 128;
@@ -888,14 +905,19 @@ static int saved_path(struct fm_native_fs *state, int drive, char *path)
     path[0] = 0;
     while (!status) {
         if (!FMLOC(state->alias, identity) || identity[0] != original[0] ||
-            identity[1] != original[1]) { status = 255; break; }
+            identity[1] != original[1]) {
+            status = 255;
+            break;
+        }
         child = identity[2];
-        if (!child) break;
+        if (!child)
+            break;
         clear_fcb(state);
         state->fcb[0] = state->alias | 128;
         state->fcb[1] = state->fcb[2] = '.';
         status = BDOS(15, state->fcb) & 255;
-        if (status) break;
+        if (status)
+            break;
         clear_fcb(state);
         memset(state->fcb + 1, '?', 11);
         state->fcb[0] = state->alias | 128;
@@ -903,10 +925,14 @@ static int saved_path(struct fm_native_fs *state, int drive, char *path)
         while (slot <= 3) {
             entry = state->dma + slot * 32;
             if ((entry[16] & 64) && (entry[1] & 127) != '.' &&
-                ((entry[26] & 255) | ((entry[27] & 255) << 8)) == child) break;
+                ((entry[26] & 255) | ((entry[27] & 255) << 8)) == child)
+                break;
             slot = BDOS(18, state->fcb) & 255;
         }
-        if (slot > 3) { status = 255; break; }
+        if (slot > 3) {
+            status = 255;
+            break;
+        }
         length = 0;
         for (i = 1; i <= 8 && (entry[i] & 127) != ' '; ++i)
             name[length++] = entry[i] & 127;
@@ -925,23 +951,28 @@ static int saved_path(struct fm_native_fs *state, int drive, char *path)
         memcpy(path + 1, name, length);
         used += length + 1;
     }
-    if (!FMLOC(drive, after) || memcmp(original, after, sizeof(original))) status = 255;
+    if (!FMLOC(drive, after) || memcmp(original, after, sizeof(original)))
+        status = 255;
     /* Retain the alias's actual identity on errors, so a later use is safe. */
-    if (!FMLOC(state->alias, state->identity)) status = 255;
+    if (!FMLOC(state->alias, state->identity))
+        status = 255;
     leave(state, user);
-    if (!used) strcpy(path, "\\");
+    if (!used)
+        strcpy(path, "\\");
     return status ? FM_FS_ERROR : FM_FS_OK;
 }
 
 int fm_native_root_enter(struct fm_native_fs *state, const struct fm_location *root,
-                          struct fm_root_guard *guard)
+                         struct fm_root_guard *guard)
 {
     int identity[4], user, status;
 
     guard->active = 0;
-    if (root->media == FM_MEDIA_CPM) return FM_FS_OK;
+    if (root->media == FM_MEDIA_CPM)
+        return FM_FS_OK;
     if (state->active || !FMLOC(root->drive + 1, identity) ||
-        saved_path(state, root->drive + 1, guard->path)) return FM_FS_ERROR;
+        saved_path(state, root->drive + 1, guard->path))
+        return FM_FS_ERROR;
     guard->drive = root->drive + 1;
     /* Unmapped physical roots have no sequence value to retain. */
     guard->sequence = identity[3] ? identity[1] : -1;
@@ -960,10 +991,10 @@ int fm_native_root_leave(struct fm_native_fs *state, struct fm_root_guard *guard
     int identity[4], user, status, start, length;
     char name[13];
 
-    if (!guard->active) return FM_FS_OK;
+    if (!guard->active)
+        return FM_FS_OK;
     guard->active = 0;
-    if (state->active || !FMLOC(guard->drive, identity) ||
-        identity[0] != guard->drive ||
+    if (state->active || !FMLOC(guard->drive, identity) || identity[0] != guard->drive ||
         (guard->sequence >= 0 && identity[3] && identity[1] != guard->sequence))
         return FM_FS_ERROR;
     user = enter(state);
@@ -975,7 +1006,10 @@ int fm_native_root_leave(struct fm_native_fs *state, struct fm_root_guard *guard
     while (!status && guard->path[start]) {
         length = 0;
         while (guard->path[start] && guard->path[start] != '\\') {
-            if (length == 12) { status = 255; break; }
+            if (length == 12) {
+                status = 255;
+                break;
+            }
             name[length++] = guard->path[start++];
         }
         name[length] = 0;
@@ -985,7 +1019,8 @@ int fm_native_root_leave(struct fm_native_fs *state, struct fm_root_guard *guard
         }
         state->fcb[0] = guard->drive | 128;
         status = BDOS(15, state->fcb) & 255;
-        if (guard->path[start] == '\\') ++start;
+        if (guard->path[start] == '\\')
+            ++start;
     }
     leave(state, user);
     return status ? FM_FS_ERROR : FM_FS_OK;

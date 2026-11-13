@@ -54,12 +54,11 @@ int fm_native_present(const struct fm_canvas *canvas)
     /* One bounded transfer, not 1,920 calls across the far-memory boundary.
      * Compare against the authoritative window image: no duplicate shadow
      * buffer, and external window redraws cannot invalidate a private cache. */
-    changed = FMCOPY(image, &canvas->text[0][0], &canvas->attribute[0][0],
-                     FM_ROWS * FM_COLUMNS);
+    changed = FMCOPY(image, &canvas->text[0][0], &canvas->attribute[0][0], FM_ROWS * FM_COLUMNS);
     FMLOCK(system_segment, window, 1);
     if (changed)
-        XCALL(20, FARWORD(system_segment, window + 4),
-              FARWORD(system_segment, window + 2), console_number);
+        XCALL(20, FARWORD(system_segment, window + 4), FARWORD(system_segment, window + 2),
+              console_number);
     return FM_SUCCESS;
 }
 
@@ -68,7 +67,7 @@ int fm_native_read(void)
     int key;
 
     if (!(BDOS(6, 254) & 1)) {
-        BDOS(141, 1);            /* One scheduler tick; never busy-wait. */
+        BDOS(141, 1); /* One scheduler tick; never busy-wait. */
         return FM_KEY_TICK;
     }
     key = BDOS(6, 253) & 255;
