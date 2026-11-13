@@ -52,7 +52,7 @@ ADMIN_COMMANDS = ../commands/function/function.cmd ../commands/disk/dcopy.cmd ..
     ../commands/n/n.cmd ../base/national.msg \
     ../commands/setport/setport.cmd ../commands/setup/setup.cmd \
     ../commands/stop/stop.cmd \
-    ../commands/chkcpmfs/chkcpmfs.cmd ../extra/fm.cmd ../extra/fm.cfg ../base/term.dat
+    ../commands/chkcpmfs/chkcpmfs.cmd ../commands/fm/fm.cmd ../extra/fm.cfg ../base/term.dat
 
 .PHONY: all check check-media check-pce test clean
 .DELETE_ON_ERROR:
