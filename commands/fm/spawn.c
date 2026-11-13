@@ -1,4 +1,4 @@
-/* Local copy of cpm86-hacking/spawn.c; see SPAWN-LICENSE.md. */
+/* Local copy of cpm86-hacking/spawn.c; see LICENSE.md. */
 /* Concurrent program launch. PCTMP supplies the four three-byte ORDER
  * entries. Without that translator the supervisor owns all resolution. */
 #include <stdio.h>

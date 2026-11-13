@@ -1,9 +1,8 @@
-# FM — private browser framework
+# FM — file manager
 
-Four persistent views: **Device, Files, Actions, Help**. The original distributed
-FM is unchanged. `FMVIEW` browses CP/M user areas and FAT directories, reads files through Type, copies, renames and deletes selected files, and launches external programs.
+Four persistent views: **Device, Files, Actions, Help**. `FM` browses CP/M user areas and FAT directories, reads files through Type, copies, renames and deletes selected files, and launches external programs.
 The former mock is archived under `garbage/mock`; it has no active build or runtime path.
-FM is MIT licensed; the copied launcher retains its attribution in `SPAWN-LICENSE.md`.
+FM is MIT licensed; the copied launcher retains its attribution in `LICENSE.md`.
 
 ## Current behaviour
 
@@ -34,7 +33,7 @@ Subsets, directory slots, Type and Copy use the filesystem adapter.
 ## Build and checks
 
 ```
-make                       # Aztec 4.3 FMVIEW.CMD
+make                       # Aztec 4.3 FM.CMD
 make check                 # native build + all host contract suites
 python3 tests/browse.py      # combined FAT/CP/M end-to-end PCE run
 ```
@@ -44,7 +43,7 @@ releases the screen mutex before input or BDOS I/O. Host tests inject filesystem
 display and job services without an emulator. Host suites and a compiled dependency check cover the contracts,
 including metadata conversion and selection while changing display mode.
 
-[DESIGN.md](DESIGN.md) defines contracts, invariants, modules, keybindings and the
+[design.md](design.md) defines contracts, invariants, modules, keybindings and the
 completed framework phases. CP/M/FAT browsing and Type now use the shared
 action lifecycle. Copy, Rename/Delete and external execution use the same lifecycle. Original FM functional
 parity is not claimed. The shipped colour configuration is supported; the five menu placements are supported within the bounds below. Alternate
@@ -129,8 +128,7 @@ Measured with `aztec43_acc -target=cpm86 -Osize`, standard runtime only (no `-lm
 | Static data, initialized and zero-initialized | 26,656 |
 | Code remaining below 64 KiB | 12,528 |
 
-`FMVIEW.CMD` is the only active native target. The distribution continues to
-use the original FM.
+`FM.CMD` is the native build target and is included on the administration disk.
 
 Catalog heap storage is additional: 32 entries initially, doubling to 1,024.
 Each native entry plus its view descriptor occupies 21 bytes: 672 bytes initially,
@@ -140,7 +138,7 @@ reduction is not a claim that peak RAM has fallen by the same percentage.
 
 The former DRC build used 58,624 code bytes and 21,264 static data bytes.
 Historical component measurements and remaining-action estimates are retained
-in [ASSESS.md](ASSESS.md); they are not Aztec size predictions.
+in [model.md](model.md); they are not Aztec size predictions.
 
 The host suites and combined native navigation, metadata, Type and Copy
 regression pass with Aztec. Touched C modules use ANSI definitions and bounded runtime formatting. `xios.asm` and
@@ -207,9 +205,8 @@ FM action. It does not add a separate memory manager.
 `FM_TEST_ACTIONS=1 python3 tests/browse.py` checks actual printer bytes and the
 STOP launch route in one disposable emulator session.
 
-Backup and Set Up System are implemented. The original FM remains in the
-distribution pending user acceptance; exact historical dialog parity and alternate
-OVPMODE/serial-terminal operation are not claimed.
+Backup and Set Up System are implemented. Exact historical dialog parity and
+alternate OVPMODE/serial-terminal operation are not claimed.
 
 ## Set Up System and Backup
 

@@ -16,11 +16,11 @@ for name in ('cdos86.img','fat.img','cdos86.cfg'): shutil.copyfile(source/name,f
 shutil.copyfile(os.environ['FM_TEST_HARD'],folder/'hard.img')
 with (folder/'cdos86.cfg').open('a') as f:f.write('\ndisk { drive=0x80 type="auto" file="hard.img" optional=0 }\n')
 def run(*args):subprocess.run(args,check=True,stdout=subprocess.DEVNULL)
-run('mcopy','-o','-i',str(folder/'fat.img'),str(root/'commands/fm/fmview.cmd'),'::FMVIEW.CMD')
+run('mcopy','-o','-i',str(folder/'fat.img'),str(root/'commands/fm/fm.cmd'),'::FMVIEW.CMD')
 image=str(folder/'hard.img')+'@@512'
 run('mcopy','-o','-i',image,str(root/'commands/chdir/chdir.cmd'),'::CHDIR.CMD')
 run('mmd','-i',image,'::FMTEST')
-run('mcopy','-o','-i',image,str(root/'commands/fm/fmview.cmd'),'::FMTEST/FMVIEW.CMD')
+run('mcopy','-o','-i',image,str(root/'commands/fm/fm.cmd'),'::FMTEST/FMVIEW.CMD')
 (folder/'CHECK.TXT').write_bytes(b'FM FINAL CHECK\r\n')
 run('mcopy','-i',image,str(folder/'CHECK.TXT'),'::FMTEST/CHECK.TXT')
 # Harmless launch probe; verifies handoff without running destructive utilities.

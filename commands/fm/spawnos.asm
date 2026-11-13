@@ -1,5 +1,5 @@
 ; Local launch subset copied from cpm86-hacking/os.asm (MIT).
-; See SPAWN-LICENSE.md. No sibling project is required to build FM.
+; See LICENSE.md. No sibling project is required to build FM.
 codeseg segment para public 'code'
 dataseg segment para public 'data'
 dataseg ends

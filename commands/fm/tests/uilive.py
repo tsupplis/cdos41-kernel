@@ -10,7 +10,7 @@ from pce import PCE
 source=Path(os.environ['FM_TEST_FIXTURE'])
 folder=Path(tempfile.mkdtemp(prefix='fm-ui-final-'))
 for name in ('hard.img','fat.img','cdos86.img','cdos86.cfg'):shutil.copyfile(source/name,folder/name)
-subprocess.run(['mcopy','-o','-i',str(folder/'hard.img')+'@@512',str(root/'fmview.cmd'),'::FMNEW.CMD'],check=True)
+subprocess.run(['mcopy','-o','-i',str(folder/'hard.img')+'@@512',str(root/'fm.cmd'),'::FMNEW.CMD'],check=True)
 print(folder,flush=True)
 with PCE(folder,timeout=120) as vm:
  def command(text):

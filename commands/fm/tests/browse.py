@@ -74,7 +74,7 @@ subprocess.run(
         "mcopy",
         "-i",
         str(F / "fat.img"),
-        str(R / "commands/fm/fmview.cmd"),
+        str(R / "commands/fm/fm.cmd"),
         "::FMVIEW.CMD",
     ],
     check=True,

@@ -19,7 +19,7 @@ def setup(kind):
  f=BASE/kind;f.mkdir()
  for name in ('hard.img','cdos86.img','cdos86.cfg'):shutil.copyfile(SOURCE/name,f/name)
  image=str(f/'hard.img')+'@@512'
- for src in (ROOT/'extra/back.cmd',ROOT/'extra/rest.cmd',ROOT/'commands/fm/fmview.cmd'):
+ for src in (ROOT/'extra/back.cmd',ROOT/'extra/rest.cmd',ROOT/'commands/fm/fm.cmd'):
   run('mcopy','-o','-i',image,src,'::'+src.name.upper())
   subprocess.run(['cpmrm','-f','cdos41-xt-hd',str(f/'hard.img'),'0:'+src.name.upper()],cwd=ROOT/'media',stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
   run('cpmcp','-f','cdos41-xt-hd',f/'hard.img',src,'0:'+src.name.upper())
@@ -71,7 +71,7 @@ class Session:
   self.cmd('PRINTER 1')
   if kind=='fat':self.cmd('C:')
   else:self.cmd('D:');self.cmd('USER 15')
-  self.cmd('C:FMVIEW')
+  self.cmd('C:FM')
   self.wait('fm',['Select a command'])
   if kind=='fat':
    self.enter_directory()
@@ -145,7 +145,7 @@ def case(kind):
   s.wait('boot',['A>'],40);s.cmd('PRINTER 1')
   s.cmd('C:' if kind=='fat' else 'D:')
   if kind=='cpm':s.cmd('USER 15')
-  s.cmd('C:FMVIEW');s.wait('fm',['Select a command'])
+  s.cmd('C:FM');s.wait('fm',['Select a command'])
   if kind=='fat':
    s.enter_directory()
   s.restore(kind);s.close()

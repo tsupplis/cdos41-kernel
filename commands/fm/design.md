@@ -1,8 +1,7 @@
 # FM design
 
 Four persistent views: **Device, Files, Actions, Help**. Dialogs and the Type
-viewer are temporary overlays. The private executable browses CP/M and FAT
-locations. It does not replace the distributed FM.
+viewer are temporary overlays. The distributed executable browses CP/M and FAT locations.
 
 ## Architecture (C4)
 
@@ -172,7 +171,7 @@ concurrent writers. Native Copy acceptance passed with persisted byte comparison
 The archived mock and historical phase notes are in `garbage/mock`; nothing
 there is built or used by production. The active application supports location
 selection, marking, filtering, directory slots, metadata, Type and Copy.
-Current action coverage and the code budget are tracked in ASSESS.md.
+Current action coverage and the code budget are tracked in model.md.
 
 The application owns the action request until completion/cancellation. Type and
 Copy borrow it rather than duplicating its target array. Catalog storage uses
