@@ -1,4 +1,4 @@
-/* CDOS 4.1 PC-window adapter. Screen ownership never spans keyboard/BDOS I/O.
+/* Concurrent 3.1/4.1 PC-window adapter. Screen ownership never spans keyboard/BDOS I/O.
  * The gateway ABI is shared with WINDOW. Serial TERM support is not claimed.
  */
 #include "fm.h"
@@ -16,9 +16,10 @@ static int console_number, expansion, opened;
 int fm_native_open(void)
 {
     unsigned table, video;
-    int count;
+    int count, version;
 
-    if ((BDOS(12, 0) & 65535) != 0x1441)
+    version = BDOS(12, 0) & 65535;
+    if (version != 0x1441 && version != 0x1431)
         return FM_BAD_MODEL;
     XINIT();
     system_segment = XSEG();

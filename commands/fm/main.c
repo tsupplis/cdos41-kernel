@@ -47,9 +47,10 @@ int main(int argc, char **argv)
     fm_model_init(&model);
     fm_canvas_bind(&display, &canvas);
     if (fm_native_open()) {
-        puts("FM requires a CDOS 4.1 PC console.");
+        puts("FM requires a Concurrent 3.1 or 4.1 PC console.");
         return 1;
     }
+    fm_features_apply(&model, (BDOS(12, 0) & 65535) == 0x1441 ? FM_FEATURE_ALL : 0);
     {
         BDOS(26, default_dma);
         fm_native_fs_bind(&filesystem, &filesystem_state, default_dma);
@@ -61,7 +62,7 @@ int main(int argc, char **argv)
         if (!(*filesystem.probe)(filesystem.context, config_location.drive, &config_location.media))
             config_status = fm_config_load(&config, &filesystem, &config_location);
         if (config_status == FM_CFG_ABSENT) {
-            config_location.drive = 15; /* CDOS floating system drive P:. */
+            config_location.drive = fm_native_system_drive();
             config_location.user = 0;
             if (!(*filesystem.probe)(filesystem.context, config_location.drive,
                                      &config_location.media))
@@ -92,8 +93,10 @@ int main(int argc, char **argv)
         browser.system_drive = fm_native_system_drive();
         fm_native_printer_bind(&printer);
         fm_browser_print_bind(&browser, &printer);
-        fm_native_backup_bind(&backup_host, &backup_state, &filesystem_state, &executor);
-        fm_browser_backup_bind(&browser, &backup_host);
+        if (model.features & FM_FEATURE_BACKUP) {
+            fm_native_backup_bind(&backup_host, &backup_state, &filesystem_state, &executor);
+            fm_browser_backup_bind(&browser, &backup_host);
+        }
         if (config_status == FM_CFG_ERROR)
             fm_dialog_info(&model, "FM.CFG", "Configuration read failed; defaults retained.");
         else if (config.unsupported)

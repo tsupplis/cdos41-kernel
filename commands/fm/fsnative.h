@@ -9,6 +9,7 @@
 #include "copy.h"
 #include "mutate.h"
 struct fm_native_fs {
+    int version; /* Captured by native binding; copied to destination state. */
     char *restore_dma;
     char fcb[36];
     char dma[128];

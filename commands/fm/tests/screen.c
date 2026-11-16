@@ -5,10 +5,11 @@
 #include "fm.h"
 
 static int held, copies, redraws, changed;
+static int version = 0x1441;
 
 int BDOS(int function, ...)
 {
-    return function == 12 ? 0x1441 : 0;
+    return function == 12 ? version : 0;
 }
 int XINIT(void) { return 0; }
 int XSEG(void) { return 1; }
@@ -59,6 +60,14 @@ int main(void)
     assert(copies == 3 && redraws == 2 && !held);
     fm_native_close();
     assert(fm_native_present(&canvas) == FM_OUTPUT_ERROR);
+    version = 0x1431;
+    assert(!fm_native_open());
+    changed = 1;
+    assert(!fm_native_present(&canvas));
+    assert(copies == 4 && redraws == 3 && !held);
+    fm_native_close();
+    version = 0x0022;
+    assert(fm_native_open() == FM_BAD_MODEL);
     puts("PASS: bulk screen transfer, unchanged-frame suppression and lock release");
     return 0;
 }

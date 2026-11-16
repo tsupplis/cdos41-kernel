@@ -33,6 +33,10 @@
 #define FM_KEY_DOWN 257
 #define FM_KEY_LEFT 258
 #define FM_KEY_RIGHT 259
+#define FM_FEATURE_BACKUP 1
+#define FM_FEATURE_SETUP_ARGS 2
+#define FM_FEATURE_ALL (FM_FEATURE_BACKUP | FM_FEATURE_SETUP_ARGS)
+#define FM_MENU_CAPACITY 17
 #define FM_CMD_HELP 1
 #define FM_CMD_DIRECTORY 2
 #define FM_CMD_SUBSET 3
@@ -243,6 +247,8 @@ struct fm_request {
 };
 
 struct fm_model {
+    unsigned features; /* Injected at startup; never inferred by generic UI code. */
+    struct fm_command menu_items[FM_MENU_CAPACITY];
     struct fm_device_model device;
     struct fm_files_model files;
     struct fm_actions_model actions;
@@ -316,6 +322,10 @@ struct fm_action_handler {
 };
 int fm_dispatch_to(struct fm_model *, struct fm_invoker *, struct fm_action_handler *, int);
 void fm_model_init(struct fm_model *);
+int fm_command_available(const struct fm_model *model, int command);
+/* Startup only, after model initialization and before opening a browser.
+ * Rebuilds the main action menu; features describe policy, not OS identity. */
+void fm_features_apply(struct fm_model *model, unsigned features);
 void fm_setup_menu(struct fm_model *model, int enabled);
 int fm_job_start(struct fm_model *, struct fm_invoker *);
 

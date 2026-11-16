@@ -46,7 +46,7 @@ int main(void)
     char line[256];
 
     fm_config_defaults(&config);
-    fixture = fopen("../../extra/fm.cfg", "rb");
+    fixture = fopen("tests/fm.cfg", "rb");
     assert(fixture);
     while (fgets(line, sizeof(line), fixture))
         fm_config_line(&config, line);

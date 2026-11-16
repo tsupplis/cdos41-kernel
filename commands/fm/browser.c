@@ -313,6 +313,10 @@ static int execute(void *context, struct fm_model *model, int command)
     int result, index, media;
     char destination[5];
     browser = (struct fm_browser *)context;
+    if (!fm_command_available(model, command)) {
+        fm_dialog_info(model, "Unavailable", "This action is not available on this system.");
+        return FM_SUCCESS;
+    }
     if (command == FM_CMD_SETUP) {
         browser->setup_menu = 1;
         fm_setup_menu(model, 1);

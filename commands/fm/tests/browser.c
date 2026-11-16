@@ -363,6 +363,26 @@ int main(void)
     assert(!strcmp(model.actions.label, "Size/Date ON"));
     assert(!fm_browser_close(&browser));
     assert(allocations == 0);
+    /* Restricted capabilities filter menus and reject Repeat/direct dispatch.
+     * DREDIX, native file operations and user-area navigation remain enabled. */
+    fm_model_init(&model);
+    fm_features_apply(&model, 0);
+    assert(model.actions.count == 16);
+    assert(!fm_command_available(&model, FM_CMD_BACKUP));
+    assert(fm_command_available(&model, FM_CMD_EDIT));
+    assert(fm_command_available(&model, FM_CMD_DIRECTORY));
+    fm_setup_menu(&model, 1);
+    assert(model.actions.count == 6);
+    fm_setup_menu(&model, 0);
+    assert(!fm_browser_open(&browser, &model, &fs, &memory, 0, 4));
+    assert(!browser.actions.execute(browser.actions.context, &model, FM_CMD_BACKUP));
+    assert(model.dialog.kind == FM_DIALOG_INFO && !model.job_active);
+    key(&browser, &model, FM_KEY_ENTER);
+    model.last_command = FM_CMD_BOOT_DISK;
+    key(&browser, &model, FM_KEY_F1 + 2);
+    assert(model.dialog.kind == FM_DIALOG_INFO && !model.job_active);
+    assert(!fm_browser_close(&browser));
+    assert(allocations == 0);
     /* Growth failure publishes only valid entries and releases all storage. */
     disk.count = 100;
     fail_on_call = allocate_calls + 2;

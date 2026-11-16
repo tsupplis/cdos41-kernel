@@ -9,10 +9,12 @@
 unsigned short XDATA;
 static int user = 7, drive = 3, searches, reads, closes, read_error, close_error;
 static int no_stamp, space_error;
+static int version = 0x1441;
 static unsigned long free_records;
 static int fat, alias_mapped, alias_cluster, alias_busy, map_error;
 int FMLOC(int number, int *identity)
 {
+    assert(version == 0x1441);
     if (!fat) return 0;
     identity[0] = 1; identity[1] = 1;
     identity[2] = alias_cluster;
@@ -33,7 +35,7 @@ int BDOS(int function, ...)
     va_start(args, function);
     value = 0;
     switch (function) {
-    case 12: value = 0x1441; break;
+    case 12: value = version; break;
     case 14: drive = va_arg(args, int); break;
     case 25: value = drive; break;
     case 26: dma = va_arg(args, char *); break;
@@ -202,6 +204,20 @@ int main(void)
     assert(!fs.metadata(fs.context, &location, "TEST.TXT", &metadata));
     restored();
     assert(metadata.size_known && !metadata.date_known);
+    /* CCP/M probing must not perform CDOS's special descriptor search, and
+     * even a forged FAT location must fail before FMLOC or directory I/O. */
+    version = 0x1431;
+    fat = 0;
+    fm_native_fs_bind(&fs, &native, restore);
+    assert(!fs.probe(fs.context, 0, &i) && i == FM_MEDIA_CPM);
+    assert(fs.file_open(fs.context, &location, "TEST.TXT", &handle) == FM_FS_ERROR);
+    assert(fs.list_open(fs.context, &location, &handle) == FM_FS_ERROR);
+    assert(fm_native_backup_location(&native, &location, &location) == FM_FS_ERROR);
+    location.media = FM_MEDIA_CPM;
+    assert(!fs.file_open(fs.context, &location, "TEST.TXT", &handle));
+    assert(!fs.file_read(fs.context, handle, data, 128, &count) && count == 128);
+    assert(!fs.file_close(fs.context, handle));
+    restored();
     puts("PASS: native adapter OS boundary, extent filtering, partial reads, EOF, exclusive handles, user/DMA restoration errors, FAT mapping ownership and exact byte EOF");
     return 0;
 }

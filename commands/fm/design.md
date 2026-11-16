@@ -289,3 +289,20 @@ exist, only marked files use target colour. Reverse video and the caret identify
 keyboard focus in the active pane; `*` persists independently of focus. Copy context comes from its immutable target
 snapshot. Location dialogs expose navigation through footer controls, not
 pseudo-directory entries. Empty directories remain valid destinations.
+
+## Concurrent runtime selection
+
+`main.c` selects action features after the native console validates BDOS 3.1
+or 4.1. Models own filtered menu descriptors; views do not inspect the OS.
+`ui.c` owns the common availability policy, and `browser.c` applies it before
+all action dispatch, including Repeat. Capability application is startup-only.
+Backup services are bound only when supported.
+
+`fsnative.c` captures the OS version when bound and propagates it to the Copy
+destination adapter. CCP/M reports CP/M media without the CDOS descriptor
+search; FAT locations fail before mapping. `fsmap.asm` retains its independent
+CDOS guard. Console gateway/descriptor fields match the supported kernels.
+
+The local launcher already selects BDOS P_CLI under TMP and uses PCTMP's
+translator when present. No OS selection enters generic controllers or jobs;
+no external implementation or build dependency is introduced.

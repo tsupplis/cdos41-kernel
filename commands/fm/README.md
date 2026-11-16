@@ -1,8 +1,30 @@
 # FM — file manager
 
 Four persistent views: **Device, Files, Actions, Help**. `FM` browses CP/M user areas and FAT directories, reads files through Type, copies, renames and deletes selected files, and launches external programs.
-The former mock is archived under `garbage/mock`; it has no active build or runtime path.
 FM is MIT licensed; the copied launcher retains its attribution in `LICENSE.md`.
+
+## Runtime compatibility
+
+One unchanged `FM.CMD` runs on CDOS 4.1 and CCP/M-86 3.1 PC consoles,
+with either TMP or PCTMP. Both repositories carry identical FM sources and
+build rules. No kernel, runtime or other command changes are required.
+
+| Capability | CDOS 4.1 | CCP/M-86 3.1 |
+|---|---|---|
+| Drives, CP/M users, selection, marks, Type, Copy, Rename/Delete, Print, size/date | Enabled | Enabled |
+| DOS filesystem paths, directory browsing and mapping | Enabled | Disabled; CP/M user picker only |
+| DREDIX, HELP, native program launch | Enabled | Enabled with TMP or PCTMP |
+| DOS executable launch | PCTMP | Requires PCTMP/PC-MODE; unavailable with TMP |
+| Backup/Restore | Enabled | Disabled |
+| System-file copy/attributes, function-key file loading | Enabled | Enabled |
+| Assign keys, serial setup, defaults, memory-disk and scripted boot setup | Existing CDOS protocols | Disabled; incompatible command arguments |
+| DCOPY, DFORM, HDMAINT, DSKMAINT, STOP | Launch installed tool | Launch installed tool with its own supported options |
+
+Initialization injects action capabilities. The same policy filters menus and
+checks command dispatch, including Repeat and shortcuts. CCP/M never performs
+CDOS media-descriptor searches or FAT alias operations; the assembly mapper's
+CDOS guard remains intact. The native PC-console gateway and window fields
+were checked against both kernels. Serial terminals remain unsupported.
 
 ## Current behaviour
 
@@ -35,8 +57,15 @@ Subsets, directory slots, Type and Copy use the filesystem adapter.
 ```
 make                       # Aztec 4.3 FM.CMD
 make check                 # native build + all host contract suites
-python3 tests/browse.py      # combined FAT/CP/M end-to-end PCE run
+python3 tests/browse.py      # CDOS-specific FAT/CP/M PCE regression
+python3 tests/compat.py --cdos /path/to/cdos41-kernel --ccpm /path/to/ccpm86-kernel
 ```
+
+`compat.py` uses one FM binary across CDOS, CCP/M PCTMP and CCP/M TMP.
+It checks rendering, CP/M user selection, native child launch/return, Type,
+Copy with extracted-byte verification and exit. CDOS and CCP/M PCTMP also run
+a DOS 1 COM probe. `make check` includes 18 host programs and the architecture
+check; these cover disabled-action dispatch and rejected FAT calls on CCP/M.
 
 PCE tests use disposable disks and close their own emulator. The native display
 releases the screen mutex before input or BDOS I/O. Host tests inject filesystem,
@@ -83,7 +112,7 @@ match expected bytes and record padding; no FAT temporary files remain.
 | 8.3 subsets and two directory slots | Implemented and tested |
 | Cancel/return-state preservation | Implemented and tested |
 | Size/date display | Implemented and tested |
-| Shipped FM.CFG colour assignments | Implemented; current location, then P: user 0/root |
+| Shipped FM.CFG colour assignments | Implemented; current location, then system drive user 0/root |
 | Five menu positions, menu size and margins | Implemented with bounded geometry validation |
 | Alternate OVPMODE; serial TERM mappings | Not implemented |
 | Alphabetical ordering and PC control-key aliases | Implemented; original disassembly used as reference |
@@ -97,9 +126,9 @@ verifies both output files, as well as recalling a stored FAT location.
 
 ## Configuration and PC keys
 
-Real mode reads `FM.CFG` from the current location, falling back to P: user 0
+Real mode reads `FM.CFG` from the current location, falling back to the system drive, user 0
 (or its FAT root) when it cannot open that file. It accepts the eight colour
-assignments in `extra/fm.cfg`, with original colour numbering, case-insensitive
+assignments in the reference `tests/fm.cfg`, with original colour numbering, case-insensitive
 keywords and significant spacing. CR/LF, Ctrl-Z and an unterminated final line
 are accepted. Colours outside 0–15 and oversized lines are ignored. A read or
 close failure keeps defaults. Invalid layout or alternate OVPMODE produces a warning.
@@ -127,11 +156,13 @@ Measured with `aztec43_acc -target=cpm86 -Osize`, standard runtime only (no `-lm
 
 | Native production image | Bytes |
 |---|---:|
-| Code (paragraph-aligned CMD group) | 53,008 |
-| Static data, initialized and zero-initialized | 26,656 |
-| Code remaining below 64 KiB | 12,528 |
+| Code (paragraph-aligned CMD group) | 54,528 |
+| Initialized data in CMD | 10,704 |
+| Minimum data allocation (including runtime reservations) | 40,992 |
+| Code remaining below 64 KiB | 11,008 |
 
-`FM.CMD` is the native build target and is included on the administration disk.
+`FM.CMD` is the native build target. CDOS packages it on the administration disk;
+this compatibility change does not modify either repository's media rules.
 
 Catalog heap storage is additional: 32 entries initially, doubling to 1,024.
 Each native entry plus its view descriptor occupies 21 bytes: 672 bytes initially,

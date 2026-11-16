@@ -57,7 +57,8 @@ check-arch:
 laytest: tests/layout.c config.c ui.c model.c view.c control.c canvas.c fm.h config.h
 	$(CC) $(HOSTFLAGS) -I. tests/layout.c config.c ui.c model.c view.c control.c canvas.c -o $@
 
-check-host: backostst backtest screentst printtst runostst runtest mutatest laytest check-arch keytest cfgtest metatest copyfst copytest browtest viewtest typetest fstest
+check-host: spawntst backostst backtest screentst printtst runostst runtest mutatest laytest check-arch keytest cfgtest metatest copyfst copytest browtest viewtest typetest fstest
+	./spawntst
 	./backostst
 	./backtest
 	./screentst
@@ -79,7 +80,7 @@ check-host: backostst backtest screentst printtst runostst runtest mutatest layt
 check: all type.o fsnative.o check-host
 
 clean:
-	$(RM) *.o *.obj *.cmd *.log *.sym *.map *.mp? viewtest typetest fstest browtest copytest copyfst metatest cfgtest keytest laytest mutatest runtest runostst printtst screentst backtest backostst
+	$(RM) *.o *.obj *.cmd *.log *.sym *.map *.mp? spawntst viewtest typetest fstest browtest copytest copyfst metatest cfgtest keytest laytest mutatest runtest runostst printtst screentst backtest backostst
 
 mutatest: tests/mutation.c mutate.c mutate.h location.h fm.h
 	$(CC) $(HOSTFLAGS) -I. tests/mutation.c mutate.c -o $@
@@ -101,3 +102,6 @@ backtest: tests/backup.c backup.c backup.h mutate.c
 
 backostst: tests/backos.c backupos.c backup.h fsnative.h
 	$(CC) $(HOSTFLAGS) -I. tests/backos.c backupos.c -o $@
+
+spawntst: tests/spawn.c spawn.c spawn.h
+	$(CC) $(HOSTFLAGS) -I. tests/spawn.c spawn.c -o $@

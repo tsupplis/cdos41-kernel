@@ -1,4 +1,4 @@
-/* CDOS 4.1 filesystem boundary. No UI or controller dependencies.
+/* Concurrent 3.1/4.1 filesystem boundary. No UI or controller dependencies.
  * Explicit FCB drives avoid changing the default drive during file/search I/O.
  * Each call restores user and the composition root's DMA buffer.
  */
@@ -36,8 +36,9 @@ static void leave(struct fm_native_fs *state, int user)
 
 static int drives(void *context, unsigned *mask)
 {
+    struct fm_native_fs *state = context;
     int index;
-    if (!mask || (BDOS(12, 0) & 65535) != 0x1441)
+    if (!mask || (state->version != 0x1441 && state->version != 0x1431))
         return FM_FS_ERROR;
     XINIT();
     *mask = 0;
@@ -60,6 +61,11 @@ static int probe(void *context, int drive, int *media)
     if (!media || state->active || drive < 0 || drive > 15 || drives(context, &mask) ||
         !(mask & ((unsigned)1 << drive)))
         return FM_FS_ERROR;
+    /* CCP/M has CP/M media only. Do not issue CDOS's descriptor search. */
+    if (state->version == 0x1431) {
+        *media = FM_MEDIA_CPM;
+        return FM_FS_OK;
+    }
     saved_drive = BDOS(25, 0) & 255;
     result = FM_FS_ERROR;
     if ((BDOS(14, drive) & 255) != 255) {
@@ -126,6 +132,8 @@ static int map_location(struct fm_native_fs *state, FM_CONST struct fm_location 
     state->effective_drive = location->drive + 1;
     if (location->media == FM_MEDIA_CPM)
         return FM_FS_OK;
+    if (state->version != 0x1441)
+        return FM_FS_ERROR;
     if (state->alias) {
         if (!FMLOC(state->alias, identity))
             return FM_FS_ERROR;
@@ -392,6 +400,7 @@ static int space(void *context, int drive, unsigned long *kib)
 
 void fm_native_fs_bind(struct fm_filesystem *port, struct fm_native_fs *state, char *restore_dma)
 {
+    state->version = BDOS(12, 0) & 65535;
     state->restore_dma = restore_dma;
     state->active = state->user = state->alias = 0;
     port->context = state;
@@ -699,6 +708,7 @@ void fm_native_copy_bind(struct fm_copy_store *port, struct fm_native_copy *stat
                          struct fm_native_fs *source, char *restore_dma)
 {
     state->source = source;
+    state->destination.version = source->version;
     state->destination.restore_dma = restore_dma;
     state->destination.active = state->destination.alias = 0;
     state->owned = state->backed = state->opened = state->sequence = 0;
@@ -847,7 +857,7 @@ int fm_native_backup_location(struct fm_native_fs *state, const struct fm_locati
     int identity[4], physical;
     unsigned dph, dpb;
 
-    if (state->active || !valid_location(location))
+    if (state->version != 0x1441 || state->active || !valid_location(location))
         return FM_FS_ERROR;
     physical = location->drive + 1;
     if (location->media == FM_MEDIA_FAT) {
@@ -968,6 +978,8 @@ int fm_native_root_enter(struct fm_native_fs *state, const struct fm_location *r
     int identity[4], user, status;
 
     guard->active = 0;
+    if (state->version != 0x1441)
+        return FM_FS_ERROR;
     if (root->media == FM_MEDIA_CPM)
         return FM_FS_OK;
     if (state->active || !FMLOC(root->drive + 1, identity) ||

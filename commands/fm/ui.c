@@ -40,16 +40,42 @@ static const struct fm_command setup_commands[] = {
     {FM_CMD_HARD_MAINT, "Hard Disk Maint", "Open hard disk maintenance", FM_TARGET_NONE},
     {FM_CMD_FLOPPY_MAINT, "Diskette Maint", "Open diskette maintenance", FM_TARGET_NONE}};
 
-/* Reuse the Actions view; submenu changes never replace the Files model. */
+/* Capability policy is shared by menus and dispatch, including Repeat and keys.
+ * The composition root supplies features; this module knows no OS versions. */
+int fm_command_available(const struct fm_model *model, int command)
+{
+    if (command == FM_CMD_BACKUP)
+        return (model->features & FM_FEATURE_BACKUP) != 0;
+    if (command == FM_CMD_ASSIGN_KEYS || command == FM_CMD_SERIAL ||
+        command == FM_CMD_DEFAULTS || command == FM_CMD_MEMORY_DISK ||
+        command == FM_CMD_BOOT_DISK)
+        return (model->features & FM_FEATURE_SETUP_ARGS) != 0;
+    return 1;
+}
+
+/* Reuse the Actions view; submenu changes never replace the Files model.
+ * Model-owned descriptors keep independent instances and filtered menus safe. */
 void fm_setup_menu(struct fm_model *model, int enabled)
 {
-    model->actions.items = enabled ? setup_commands : commands;
-    model->actions.count = enabled ? sizeof(setup_commands) / sizeof(setup_commands[0])
-                                   : sizeof(commands) / sizeof(commands[0]);
+    const struct fm_command *items = enabled ? setup_commands : commands;
+    int index, count = enabled ? sizeof(setup_commands) / sizeof(setup_commands[0])
+                               : sizeof(commands) / sizeof(commands[0]);
+
+    model->actions.count = 0;
+    for (index = 0; index < count; ++index)
+        if (fm_command_available(model, items[index].id))
+            model->menu_items[model->actions.count++] = items[index];
+    model->actions.items = model->menu_items;
     model->actions.cursor.first = model->actions.cursor.selected = 0;
     model->actions.focused = 1;
     model->files.focused = 0;
     model->help.status = enabled ? "System setup. Esc returns to the main menu." : commands[0].help;
+}
+
+void fm_features_apply(struct fm_model *model, unsigned features)
+{
+    model->features = features;
+    fm_setup_menu(model, 0);
 }
 
 static FM_CONST struct fm_hint hints[] = {
@@ -96,6 +122,7 @@ void fm_model_init(struct fm_model *model)
     model->actions.label_command = FM_CMD_DETAILS;
     model->actions.label = "Size/Date ON";
     model->actions.columns = 1;
+    model->features = FM_FEATURE_ALL;
     model->actions.items = commands;
     model->actions.count = sizeof(commands) / sizeof(commands[0]);
     model->actions.cursor.selected = 0;
