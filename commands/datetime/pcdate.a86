@@ -104,8 +104,8 @@ inline: call	eatblanks
 	mov	year,0
 	mov	di,offset year
 	call	process
-	; A complete short year uses the same 78 pivot as DATE.CMD:
-	; 00..77 => 2000..2077, 78..99 => 1978..1999.  Test the
+	; A complete short year uses the same 80 pivot as DATE.CMD:
+	; 00..79 => 2000..2079, 80..99 => 1980..1999.  Test the
 	; terminator first so 19 and 20 also work as short years.
 	call	isend1
 	jz	shortyr
@@ -119,7 +119,7 @@ inline: call	eatblanks
 	jmp	daterr
 shortyr:
 	mov	ax,1900
-	cmp	year,78
+	cmp	year,80
 	jae	addcentury
 	mov	ax,2000
 addcentury:

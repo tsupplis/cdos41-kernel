@@ -4,10 +4,18 @@ Only changes made for this 4.1 rebuild are recorded here. This is not the
 CCP/M 3.1 patch history or a catalogue of original Digital Research changes.
 Original archive hashes remain in sources.json alongside modified hashes.
 
-## DATE.EXE: short-year input
+## DATE: two-digit cutoff 80
 
-`commands/datetime/pcdate.a86` uses the native DATE.CMD pivot: 00..77 means
-2000..2077 and 78..99 means 1978..1999. Explicit 19xx/20xx is retained;
+Native DATE.CMD and DOS DATE.EXE use the same 1980–2079 input window.
+Only the two-digit cutoff changes; the native 1978 day-count epoch and
+explicit four-digit DOS input remain unchanged. `tools/dateshrt.py` tests
+all 100 short years plus leap days against the linked native command.
+HELP.HLP is rebuilt from the updated help.dat.
+
+### DATE.EXE: short-year input
+
+`commands/datetime/pcdate.a86` uses the native DATE.CMD pivot: 00..79 means
+2000..2079 and 80..99 means 1980..1999. Explicit 19xx/20xx is retained;
 short 19/20 means 2019/2020. Incomplete three-digit years are rejected.
 DOS validates calendar dates and its supported year range. The regression
 harness runs 54 command-line/interactive parser cases against the linked EXE,

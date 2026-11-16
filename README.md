@@ -412,8 +412,8 @@ case handling.
 ## Y2K utilities
 
 The native DATE(.CMD/.EXE), SDIR and SHOW imports retain the CCP/M project's date fixes.
-DOS DATE.EXE has the same short-year pivot as native DATE.CMD: 00–77 maps to
-2000–2077 and 78–99 to 1978–1999, subject to DOS calendar validation.
+DOS DATE.EXE has the same short-year pivot as native DATE.CMD: 00–79 maps to
+2000–2079 and 80–99 to 1980–1999, subject to DOS calendar validation.
 The regression runs 54 command-line/interactive cases without changing a clock.
 Native DATE.CMD is in `commands/date`; DOS DATE.EXE and its tests are in
 `commands/datetime`. TIME.EXE is rebuilt from the reconstructed `pctime.a86`.

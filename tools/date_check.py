@@ -20,7 +20,7 @@ def check():
         place = segment * 16 + offset
         value = struct.unpack_from('<H', image, place)[0]
         struct.pack_into('<H', image, place, (value + 0x2000) & 0xffff)
-    cases = [(f'1/2/{y:02}', 2000 + y if y < 78 else 1900 + y, 1, 2)
+    cases = [(f'1/2/{y:02}', 2000 + y if y < 80 else 1900 + y, 1, 2)
              for y in (0, 1, 19, 20, 26, 77, 78, 79, 80, 99)]
     cases += [(f'1/2/{y}', y, 1, 2) for y in (1978, 1980, 1999, 2000, 2019, 2020, 2026, 2077, 2099)]
     cases += [('2/29/00', 2000, 2, 29), ('2/29/2000', 2000, 2, 29)]
