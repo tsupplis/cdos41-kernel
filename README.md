@@ -198,8 +198,18 @@ The internal-interface count uses the nine services identified in [api.md](api.m
 | `cdosdos.img` | No | SETENV.CMD, COPY.EXE, DATE.EXE, ERASE.EXE, PATH.CMD, LOADCCPM.COM, TIME.EXE, REN.EXE, REDOS.COM and CHKDOSFS.CMD, core commands and PIP |
 | `cdosextras.img` | No | BACKREST, CARDFILE, DRTALK, their support files and PIP |
 | `cdosadmin.img` | No | FUNCTION, DCOPY/DCOMP, SETPORT, SETUP, STOP, CHKCPMFS, N with NATIONAL.MSG, FM with FM.CFG and TERM.DAT and PIP |
+| `cdos86-1440.img` | Yes | 1.44MB consolidated system, tools, development, maintenance, DOS and administration contents; EDITMENU and legacy extras remain on their 320K disks |
+| `cdosdev-1440.img` | No | 1.44MB development companion: native assembler/linker/librarian/debugger and BASIC compiler tools, DOS Microsoft assembler/linker/librarian, source-built development commands and PIP; no MBASIC |
 
-`make dist` places these eight images and `disks.zip` at the repository root.
+The consolidated 1.44MB images are included in `disks.zip` by root `make dist`.
+They use the native FEAT-compatible CP/M layout (`cpm86-1440` in diskdefs),
+not FAT. Use cpmtools with `-T raw -f cpm86-1440` directly; do not apply
+`cpm86twist.py`. All files are in user 0; system images mark BATCH SYS.
+The development companion is a data disk: boot a system image in A: and
+mount it in B:. DOS tools require PC-MODE on CCP/M or CDOS. Neither
+MBASIC.CMD nor MBASIC.COM is included on the development companion.
+
+`make dist` places these ten images and `disks.zip` at the repository root.
 Source distribution and history stay in Git.
 
 Boot the system or maintenance disk in A: and use the data disks in B:.
