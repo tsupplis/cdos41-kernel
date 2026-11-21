@@ -292,6 +292,7 @@ ddiorw:
                         mov     ax, word ptr curgap              ;* and gpl and dtl
                         mov     DS:word ptr gplstore,ax
 
+                        push    es                               ; preserve caller UDA for error mode
                         push    DS                               ;*
                         mov     ax,0 ! mov ds,ax                 ;* point to int vect
                         les     si,dword ptr .78h                ;* get int 1Eh vector contents
@@ -321,6 +322,7 @@ ddiorw:
                         jb      ddioparametersready
                         mov     curgap,1bh
 ddioparametersready:
+                        pop     es                               ; restore before iorw/dodiskerror
                         pop     bx                               ; restore the table index
                         pop     DS:retstore                      ;* adjust the stack
                         call    iorw                             ;   and perform operation

@@ -217,17 +217,24 @@ The filesystem and boot track are generated locally.
 
 | Format | Capacity | Read/write | DFORM | DSKMAINT |
 | --- | --- | --- | --- | --- |
-| CP/M | 160K | Yes | `[1]` | F2 |
-| CP/M | 320K | Yes | Default | F3 |
+| CP/M | 160K | Yes | `[160]` (legacy `[1]`) | CP/M menu: F4 |
+| CP/M | 320K | Yes | `[320]` (default) | CP/M menu: F5 |
+| CP/M | 720K | Yes | `[720]` | CP/M menu: F6 |
+| CP/M | 1.2M | Yes | `[1200]` | CP/M menu: F7 |
+| CP/M | 1.44M | Yes | `[1440]` | CP/M menu: F8 |
 | DOS | 160K / 320K | Yes | — | Copy operation only |
-| DOS | 180K | Yes | — | F4 |
-| DOS | 360K | Yes | `[DOS]` | F5 |
-| DOS | 720K | Yes | `[DOS720]` | F6 |
-| DOS | 1.2M | Yes | `[DOS1200]` | F7 |
-| DOS | 1.44M | Yes | `[DOS1440]` | F8 |
+| DOS | 180K | Yes | — | DOS menu: F4 |
+| DOS | 360K | Yes | `[DOS]` / `[DOS360]` | DOS menu: F5 |
+| DOS | 720K | Yes | `[DOS720]` | DOS menu: F6 |
+| DOS | 1.2M | Yes | `[DOS1200]` | DOS menu: F7 |
+| DOS | 1.44M | Yes | `[DOS1440]` | DOS menu: F8 |
 
-DCOPY/DCOMP copy and compare these formats. To make a system floppy, format
-it and copy the normal `CCPM.SYS` first, before adding other files.
+DSKMAINT: F7 opens format selection, then F2 selects CP/M or F3 selects DOS.
+DFORM verifies by default; `[Q]` skips verification.
+DCOPY/DCOMP copy and compare these formats; use `[8]` for legacy CP/M
+160K/320K and `[1]` for single-sided media. Larger formats are detected.
+To make a system floppy, format it and copy the normal `CCPM.SYS` first,
+before adding other files. CP/M 160K and DOS 180K cannot hold this kernel.
 
 ### Hard disks
 
