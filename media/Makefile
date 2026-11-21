@@ -59,15 +59,18 @@ ADMIN_COMMANDS = ../commands/function/function.cmd ../commands/disk/dcopy.cmd ..
 
 all: $(IMAGES)
 
-# Keep the empty filesystem template, but always install the source-built boot.
-cdos86base.img: base.img ../boot/boottrack.bin diskdefs ../tools/cpm86twist.py Makefile
-	cp base.img $@
-	dd if=../boot/boottrack.bin of=$@ bs=4096 count=1 conv=notrunc 2>/dev/null
+# On-demand empty physical fixture for existing tests.
+cdos86base.img: ../tools/mk320.py ../boot/bootsect.bin ../boot/loader.bin diskdefs Makefile
+	$(PYTHON) ../tools/mk320.py $@.logical.tmp --format ccpm86-320 \
+	    --boot ../boot/bootsect.bin --loader ../boot/loader.bin
+	$(TWIST) twist $@.logical.tmp $@
+	$(RM) $@.logical.tmp
 
 # Commands/kernel are built by the project root; these rules package outputs.
 
-cdos86.img: cdos86base.img ../kernel/sysgen/ccpm.sys $(SYSTEM_COMMANDS) $(PIP) Makefile
-	$(TWIST) untwist cdos86base.img $@.logical.tmp
+cdos86.img: ../tools/mk320.py ../boot/bootsect.bin ../boot/loader.bin diskdefs ../kernel/sysgen/ccpm.sys $(SYSTEM_COMMANDS) $(PIP) Makefile
+	$(PYTHON) ../tools/mk320.py $@.logical.tmp --format ccpm86-320 \
+	    --boot ../boot/bootsect.bin --loader ../boot/loader.bin
 	$(CPMCP) $@.logical.tmp ../kernel/sysgen/ccpm.sys $(SYSTEM_COMMANDS) 0:
 	$(CPMCP) $@.logical.tmp $(PIP) 0:PIP.CMD
 	cpmchattr -f $(FORMAT) $@.logical.tmp s 0:BATCH.CMD
@@ -76,8 +79,9 @@ cdos86.img: cdos86base.img ../kernel/sysgen/ccpm.sys $(SYSTEM_COMMANDS) $(PIP) M
 	mv $@.tmp $@
 	$(RM) $@.logical.tmp
 
-cdostools.img: cdos86base.img $(TOOLS_COMMANDS) $(PIP) Makefile
-	$(TWIST) untwist cdos86base.img $@.logical.tmp
+cdostools.img: ../tools/mk320.py ../boot/bootsect.bin ../boot/loader.bin diskdefs $(TOOLS_COMMANDS) $(PIP) Makefile
+	$(PYTHON) ../tools/mk320.py $@.logical.tmp --format ccpm86-320 \
+	    --boot ../boot/bootsect.bin --loader ../boot/loader.bin
 	$(CPMCP) $@.logical.tmp $(TOOLS_COMMANDS) 0:
 	$(CPMCP) $@.logical.tmp $(PIP) 0:PIP.CMD
 	cpmls -F -f $(FORMAT) $@.logical.tmp '0:*.*'
@@ -85,8 +89,9 @@ cdostools.img: cdos86base.img $(TOOLS_COMMANDS) $(PIP) Makefile
 	mv $@.tmp $@
 	$(RM) $@.logical.tmp
 
-cdosdev.img: cdos86base.img $(DEV_COMMANDS) $(PIP) Makefile
-	$(TWIST) untwist cdos86base.img $@.logical.tmp
+cdosdev.img: ../tools/mk320.py ../boot/bootsect.bin ../boot/loader.bin diskdefs $(DEV_COMMANDS) $(PIP) Makefile
+	$(PYTHON) ../tools/mk320.py $@.logical.tmp --format ccpm86-320 \
+	    --boot ../boot/bootsect.bin --loader ../boot/loader.bin
 	$(CPMCP) $@.logical.tmp $(DEV_COMMANDS) 0:
 	$(CPMCP) $@.logical.tmp $(PIP) 0:PIP.CMD
 	cpmls -F -f $(FORMAT) $@.logical.tmp '0:*.*'
@@ -94,8 +99,9 @@ cdosdev.img: cdos86base.img $(DEV_COMMANDS) $(PIP) Makefile
 	mv $@.tmp $@
 	$(RM) $@.logical.tmp
 
-cdosmaint.img: cdos86base.img ../kernel/sysgen/ccpm.sys $(MAINT_COMMANDS) $(PIP) Makefile
-	$(TWIST) untwist cdos86base.img $@.logical.tmp
+cdosmaint.img: ../tools/mk320.py ../boot/bootsect.bin ../boot/loader.bin diskdefs ../kernel/sysgen/ccpm.sys $(MAINT_COMMANDS) $(PIP) Makefile
+	$(PYTHON) ../tools/mk320.py $@.logical.tmp --format ccpm86-320 \
+	    --boot ../boot/bootsect.bin --loader ../boot/loader.bin
 	$(CPMCP) $@.logical.tmp ../kernel/sysgen/ccpm.sys $(MAINT_COMMANDS) 0:
 	$(CPMCP) $@.logical.tmp $(PIP) 0:PIP.CMD
 	cpmchattr -f $(FORMAT) $@.logical.tmp s 0:BATCH.CMD
@@ -104,8 +110,9 @@ cdosmaint.img: cdos86base.img ../kernel/sysgen/ccpm.sys $(MAINT_COMMANDS) $(PIP)
 	mv $@.tmp $@
 	$(RM) $@.logical.tmp
 
-cdosmenu.img: cdos86base.img $(MENU_COMMANDS) $(PIP) Makefile
-	$(TWIST) untwist cdos86base.img $@.logical.tmp
+cdosmenu.img: ../tools/mk320.py ../boot/bootsect.bin ../boot/loader.bin diskdefs $(MENU_COMMANDS) $(PIP) Makefile
+	$(PYTHON) ../tools/mk320.py $@.logical.tmp --format ccpm86-320 \
+	    --boot ../boot/bootsect.bin --loader ../boot/loader.bin
 	$(CPMCP) $@.logical.tmp $(MENU_COMMANDS) 0:
 	$(CPMCP) $@.logical.tmp $(PIP) 0:PIP.CMD
 	cpmls -F -f $(FORMAT) $@.logical.tmp '0:*.*'
@@ -113,8 +120,9 @@ cdosmenu.img: cdos86base.img $(MENU_COMMANDS) $(PIP) Makefile
 	mv $@.tmp $@
 	$(RM) $@.logical.tmp
 
-cdosdos.img: cdos86base.img $(DOS_COMMANDS) $(PIP) Makefile
-	$(TWIST) untwist cdos86base.img $@.logical.tmp
+cdosdos.img: ../tools/mk320.py ../boot/bootsect.bin ../boot/loader.bin diskdefs $(DOS_COMMANDS) $(PIP) Makefile
+	$(PYTHON) ../tools/mk320.py $@.logical.tmp --format ccpm86-320 \
+	    --boot ../boot/bootsect.bin --loader ../boot/loader.bin
 	$(CPMCP) $@.logical.tmp $(DOS_COMMANDS) 0:
 	$(CPMCP) $@.logical.tmp $(PIP) 0:PIP.CMD
 	cpmchattr -f $(FORMAT) $@.logical.tmp s 0:BATCH.CMD
@@ -123,8 +131,9 @@ cdosdos.img: cdos86base.img $(DOS_COMMANDS) $(PIP) Makefile
 	mv $@.tmp $@
 	$(RM) $@.logical.tmp
 
-cdosextras.img: cdos86base.img $(EXTRAS_COMMANDS) $(PIP) Makefile
-	$(TWIST) untwist cdos86base.img $@.logical.tmp
+cdosextras.img: ../tools/mk320.py ../boot/bootsect.bin ../boot/loader.bin diskdefs $(EXTRAS_COMMANDS) $(PIP) Makefile
+	$(PYTHON) ../tools/mk320.py $@.logical.tmp --format ccpm86-320 \
+	    --boot ../boot/bootsect.bin --loader ../boot/loader.bin
 	$(CPMCP) $@.logical.tmp $(EXTRAS_COMMANDS) 0:
 	$(CPMCP) $@.logical.tmp $(PIP) 0:PIP.CMD
 	cpmls -F -f $(FORMAT) $@.logical.tmp '0:*.*'
@@ -132,8 +141,9 @@ cdosextras.img: cdos86base.img $(EXTRAS_COMMANDS) $(PIP) Makefile
 	mv $@.tmp $@
 	$(RM) $@.logical.tmp
 
-cdosadmin.img: cdos86base.img $(ADMIN_COMMANDS) $(PIP) Makefile
-	$(TWIST) untwist cdos86base.img $@.logical.tmp
+cdosadmin.img: ../tools/mk320.py ../boot/bootsect.bin ../boot/loader.bin diskdefs $(ADMIN_COMMANDS) $(PIP) Makefile
+	$(PYTHON) ../tools/mk320.py $@.logical.tmp --format ccpm86-320 \
+	    --boot ../boot/bootsect.bin --loader ../boot/loader.bin
 	$(CPMCP) $@.logical.tmp $(ADMIN_COMMANDS) 0:
 	$(CPMCP) $@.logical.tmp $(PIP) 0:PIP.CMD
 	cpmls -F -f $(FORMAT) $@.logical.tmp '0:*.*'
