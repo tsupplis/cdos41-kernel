@@ -202,6 +202,9 @@ ioformat:
                         mov     bh,0                             ;   a cpm disk (or ss pc-dos) so that
                         mov     diskmodes[bx],0                  ;   the track numbering is consistent
 
+                        mov     floppyspt[bx],0                  ; discard prior native geometry
+                        mov     floppycylinders[bx],40
+
                         push    es                               ; save around stosw
                         mov     dmaseg,ds                        ; save format_block segment
                         mov     es,dmaseg
@@ -419,6 +422,28 @@ flopsizecont:
                         mov     diskmodes[bx],0                  ;assume cp/m for now
                         mov     floppyspt[bx],0
                         mov     floppycylinders[bx],40
+; Native CP/M formats share the established marker and reversed side two.
+                        cmp     byte ptr localbuffer+510,1
+                        jne     floppycheckbpb
+                        mov     al,byte ptr localbuffer+511
+                        mov     dx,offset cpmdpb720
+                        mov     cl,9
+                        cmp     al,72
+                        je      floppynativecpm
+                        mov     dx,offset cpmdpb1200
+                        mov     cl,15
+                        cmp     al,120
+                        je      floppynativecpm
+                        mov     dx,offset cpmdpb1440
+                        mov     cl,18
+                        cmp     al,144
+                        jne     floppycheckbpb
+floppynativecpm:
+                        mov     floppyspt[bx],cl
+                        mov     floppycylinders[bx],80
+                        mov     ax,dx
+                        jmp     flopsizegood
+floppycheckbpb:
                         cmp     word ptr localbuffer+11,512
                         je      floppybpbfield1
                         jmp     floppylegacyid
@@ -746,6 +771,27 @@ setdrivetype:
                         mov     curprotect,0                     ; assume no media protection
                         mov     curtop,topcylin48                ; assume 48 tpi drive
                         mov     bl,curdisk ! mov bh,0
+                        cmp     ddioentry,0ffh
+                        je      setdriveknownend
+                        cmp     diskmodes[bx],0
+                        jne     setdriveknownend
+                        cmp     floppycylinders[bx],80
+                        jne     setdriveknownend
+                        mov     curtop,79
+                        mov     al,floppyspt[bx]
+                        mov     cureot,al
+                        mov     curgap,1bh
+                        mov     datarate[bx],ratehyper96
+                        cmp     al,9
+                        ja      setdrivenativeend
+                        mov     curgap,2ah
+                        mov     datarate[bx],rateslow48
+                        cmp     drivetype[bx],hyperdrive
+                        jne     setdrivenativeend
+                        mov     datarate[bx],ratehyper48          ; 80 tracks, no double stepping
+setdrivenativeend:
+                        jmp     setdriverate
+setdriveknownend:
                         cmp     drivetype[bx],3
                         jb      setdrivelegacy
                         mov     curtop,79
@@ -1776,12 +1822,12 @@ dpbi                    dw      8                                ;sectors per tr
                         db      3                                ;block shift
                         db      7                                ;block mask
                         db      0                                ;extnt mask
-                        dw      157                              ;disk size in 1k blocks
+                        dw      354                              ;maximum allocation index for native media
 ;less offset track(s)
                         dw      255                              ;directory max
                         db      10000000b                        ;alloc0
                         db      0                                ;alloc1
-                        dw      56
+                        dw      64
                         dw      1                                ;offset
                         db      2                                ;phys sec shift
                         db      3                                ;phys sec mask
@@ -1818,6 +1864,30 @@ dpbd                    dw      8                                ;sectors per tr
                         db      2                                ;phys sec shift
                         db      3                                ;phys sec mask
 
+; Native CP/M DPBs: same allocation geometry as CP/M-86 pcdisks.def.
+; SPT is physical here; final bytes describe 512-byte sector deblocking.
+cpmdpb720               dw      9
+                        db      4,15,0
+                        dw      354,255
+                        db      0f0h,0
+                        dw      64+PERM,2
+                        db      2,3
+
+cpmdpb1200              dw      15
+                        db      5,31,1
+                        dw      295,255
+                        db      0c0h,0
+                        dw      64+PERM,2
+                        db      2,3
+
+cpmdpb1440              dw      18
+                        db      5,31,1
+                        dw      354,255
+                        db      0c0h,0
+                        dw      64+PERM,2
+                        db      2,3
+
+;
 ;	memory disk parameter block
 
 dpbmd                   dw      8                                ;sectors per track

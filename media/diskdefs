@@ -154,3 +154,39 @@ diskdef cdos41-xt-hd
   boottrk 976
   os 3
 end
+
+diskdef cpm86-720
+  libdsk:format ibm720
+  seclen 512
+  tracks 160
+  sectrk 9
+  blocksize 2048
+  maxdir 256
+  skew 1
+  boottrk 2
+  os 2.2
+end
+
+diskdef cpm86-1200
+ libdsk:format ibm1200
+ seclen 512
+ tracks 160
+ sectrk 15
+ blocksize 4096
+ maxdir 256
+ skew 1
+ boottrk 2
+ os 2.2
+end
+
+diskdef cpm86-1440
+  libdsk:format ibm1440
+  seclen 512
+  tracks 160
+  sectrk 18
+  blocksize 4096
+  maxdir 256
+  skew 1
+  boottrk 2
+  os 2.2
+end
