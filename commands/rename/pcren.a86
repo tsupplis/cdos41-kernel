@@ -11,9 +11,9 @@
 ; All original instructions, including unused helpers, are retained.
 ;
 ; DOS PSP and rename-FCB field offsets, independent of program layout.
-psp_tail equ 80h
-fcb_destination equ 16
-fcb_filename equ 1
+psp_tail                equ     80h
+fcb_destination         equ     16
+fcb_filename            equ     1
 
         cseg
         db 'COPYRIGHT(C)1984,DIGITAL RESEARCH(05/02/84)1031-0000       '
@@ -112,7 +112,8 @@ start:
         call parse_name
         call at_end
         jz missing_name
-        mov dx,offset rename_fcb+fcb_destination      ; destination half of DOS rename FCB
+; Parse the destination half of the DOS rename FCB.
+        mov dx,offset rename_fcb+fcb_destination
         call parse_name
         cmp byte ptr rename_fcb+fcb_destination+fcb_filename,' '
         jz missing_name

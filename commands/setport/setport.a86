@@ -22,14 +22,14 @@
 ;*****************************************************************************
 
 ; Concurrent DOS 4.1 private system layout; these are interface offsets.
-xios_gate equ 28h
-pd_uda equ 10h
-sys_console_table equ 54h
-console_descriptor_size equ 2ch
-window_video_segment equ 16h
-window_rows equ 28h
+xios_gate		equ	28h
+pd_uda			equ	10h
+sys_console_table	equ	54h
+console_descriptor_size	equ	2ch
+window_video_segment	equ	16h
+window_rows		equ	28h
 
-help_main_stack equ 124h
+help_main_stack		equ	124h
 
 	cseg
 	org	0

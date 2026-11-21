@@ -733,14 +733,31 @@
 ///1DFORM
     Syntax:
 
-    DFORM drive: [options]
-    [DOS] or [DOS360] selects DOS FAT12 360K.
-    [DOS720], [DOS1200], [DOS1440] select DOS 720K, 1.2M, 1.44M.
-    All DOS profiles install a system bootstrap; [1] is incompatible.
-    [V] verifies every track. Copy compatible CCPM.SYS as the first file.
-    Use the normal CCPM.SYS; no separate system-install command is needed.
-    The default is CP/M 320K; [1] selects CP/M 160K.
-    Example: DFORM B:[DOS1440] [V]. Confirm the target before answering Y.
+    DFORM drive: { [options] ... }
+
+    Formats an installed A: or B: floppy. All existing contents are replaced.
+    The selected capacity and verification setting are shown before Y confirms
+    formatting. N or Ctrl-C cancels.
+
+    CP/M: 160, 320 (default), 720, 1200 or 1440 selects capacity in K.
+    Legacy 1 and 2 select CP/M 160K and 320K respectively.
+    DOS or DOS360 selects FAT12 360K; DOS720, DOS1200 and DOS1440 select
+    the larger FAT12 formats. Do not combine DOS and CP/M capacity options.
+    V verifies every track (default). Q skips verification; V and Q conflict.
+
+    Combine options in one bracket group or use separate groups. The closing
+    ] is optional. Conflicting capacities and unknown options are rejected.
+    Use a drive/controller supporting the selected capacity.
+
+    DFORM and DSKMAINT install the same boot code for each format family.
+    Copy the normal CCPM.SYS first to complete a system disk; 160K is too
+    small for the distribution kernel. No separate installer is required.
+
+    Examples:
+
+    A>DFORM B:[720]
+    A>DFORM B:[1440Q]
+    A>DFORM B:[DOS720V]
 
 ///1DIR
     Syntax:
@@ -879,13 +896,18 @@
     Press  F7 to prepare new disks for use or to reformat used disks.   You must
     format a disk before you can record files on it. Select:
 
-    F2  CP/M 160K             F6  DOS FAT12 720K
-    F3  CP/M 320K             F7  DOS FAT12 1.2M
-    F4  DOS FAT12 180K        F8  DOS FAT12 1.44M
-    F5  DOS FAT12 360K
+    First select F2 for CP/M formats or F3 for DOS formats, then:
 
-    For DOS boot (360K and larger), copy compatible CCPM.SYS as the first
-    file. Use the normal distribution kernel; no special build is needed.
+        CP/M                 DOS FAT12
+    F4  160K                 180K
+    F5  320K                 360K
+    F6  720K                 720K
+    F7  1200K                1200K
+    F8  1440K                1440K
+
+    Use hardware supporting the selected capacity. To make a system disk,
+    copy the normal CCPM.SYS first; CP/M 160K and DOS 180K are too small
+    for the distribution kernel. No special kernel build is needed.
 
     Select  the  option  you want by pressing the  corresponding  function  key.
     DSKMAINT  responds  by  asking for the disk drive.   Insert the disk  to  be
@@ -895,7 +917,7 @@
     operation anyway,  all tracks are formatted and subsequently checked. If the
     disk fails the check a second time,  discard the disk.   After a  successful
     check,  DSKMAINT returns you to the list of format options to format another
-    disk.  To exit from DSKMAINT, press the Esc key twice.
+    disk. Press Esc to return through the menus and exit from the main menu.
 
 ///1DSP
     Syntax:
@@ -1395,8 +1417,8 @@
     HDMAINT
     The retained OEM hard-disk maintenance utility. Use its menus for the
     supported partition/format/system-disk operations. This is the CDOS 4.1
-    program, not the CP/M-86 HDMAINT 1.1N rebuild. Its source build remains
-    pending the original flat LBDOS loader; the original binary is packaged.
+    program, not the CP/M-86 HDMAINT 1.1N rebuild. It is rebuilt from source
+    and checked byte-for-byte against the original command.
     The original detailed operating reference is retained in base/help.hlp.
 
 ///1HELP
@@ -1701,7 +1723,7 @@
 ///1PRINT
     Syntax:
 
-    PRINT filename{[options]}{,filename{[options],...}
+    PRINT filename{[options]}{,filename{[options]}...}
 
     Explanation:
 

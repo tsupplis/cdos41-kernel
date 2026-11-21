@@ -1,9 +1,10 @@
 # DFORM
 
 Concurrent DOS 4.1 command-line floppy formatter, adapted from CCP/M DFORM.
-The default formats a 320K CP/M disk. `[1]` selects 160K CP/M. Both embed
-the local CDOS boot sector and loader. Copy the matching system file to
-complete a CP/M system disk.
+CP/M capacities are `[160]`, `[320]` (default), `[720]`, `[1200]` and
+`[1440]`. Legacy `[1]` and `[2]` select 160K and 320K. The boot sector and
+loader are built from the same sources as DSKMAINT. Copy `CCPM.SYS` first
+to complete a system disk; the distribution kernel does not fit on 160K.
 
 DOS profiles are explicit and always double-sided:
 
@@ -14,8 +15,8 @@ DOS profiles are explicit and always double-sided:
 | `[DOS1200]` | 1.2M | 80×2×15 | 1 sector/cluster, 7 sectors/FAT, 224 root entries |
 | `[DOS1440]` | 1.44M | 80×2×18 | 1 sector/cluster, 9 sectors/FAT, 224 root entries |
 
-Example: `DFORM B:[DOS1440] [V]`. `[V]` verifies every track; `[1]` is
-incompatible with DOS profiles. Confirm the target before answering Y.
+Example: `DFORM B:[DOS1440] [V]`. `[V]` verifies every track (the default); `[Q]` skips verification.
+`[V]` and `[Q]` conflict, as do DOS and CP/M capacity selections. Confirm the target before answering Y.
 Formatting overwrites all contents. Use a drive/controller supporting the
 selected capacity; 3.5-inch AT drives are identified by CMOS type 3 or 4.
 

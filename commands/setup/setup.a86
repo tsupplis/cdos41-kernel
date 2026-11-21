@@ -10,16 +10,17 @@
 ; Reconstructed from the 4.11 release. The displayed utility version is 4.1.
 
 ; Concurrent DOS 4.1 private system layout; preserve these interface offsets.
-xios_gate equ 28h	; far XIOS entry in SYSDAT, addressed through DS
-pd_uda equ 10h
-pd_drive equ 12h
-sys_setup_signature equ 0d70h
-setup_signature_size equ 10h
-sys_setup_block equ sys_setup_signature+setup_signature_size
-setup_block_words equ 100h
-cmd_header_paragraphs equ 8h
+; The far XIOS entry in SYSDAT is addressed through DS.
+xios_gate		equ	28h
+pd_uda			equ	10h
+pd_drive		equ	12h
+sys_setup_signature	equ	0d70h
+setup_signature_size	equ	10h
+sys_setup_block		equ	sys_setup_signature+setup_signature_size
+setup_block_words	equ	100h
+cmd_header_paragraphs	equ	8h
 
-help_main_stack equ 24h
+help_main_stack		equ	24h
 
 	cseg
 

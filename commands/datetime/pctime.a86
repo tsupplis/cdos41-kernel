@@ -2,7 +2,7 @@ title 'PC-DOS TIME UTILITY'
 ; Reconstructed from the complete CDOS 4.11 executable disassembly.
 
 ; DOS PSP counted command-tail offset; not a local DATA address.
-psp_tail equ 80h
+psp_tail                equ     80h
 
 cseg
 
