@@ -272,9 +272,7 @@ def main():
     args = parser.parse_args()
     system = local_system()
     if args.formats is None:
-        args.formats = [320] if system == "cdos" else [320, 720, 1200, 1440]
-    if system == "cdos" and args.formats != [320]:
-        parser.error("CDOS native large formats are not implemented yet")
+        args.formats = [320, 720, 1200, 1440]
     cwd = ROOT if system == "cpm86" else MEDIA
     disk_format = "cpm86-320" if system == "cpm86" else "ccpm86-320"
     private = ROOT / 'private'

@@ -10,6 +10,11 @@
 ; Blank names, missing second operand and invalid filespecs are diagnosed.
 ; All original instructions, including unused helpers, are retained.
 ;
+; DOS PSP and rename-FCB field offsets, independent of program layout.
+psp_tail equ 80h
+fcb_destination equ 16
+fcb_filename equ 1
+
         cseg
         db 'COPYRIGHT(C)1984,DIGITAL RESEARCH(05/02/84)1031-0000       '
 ; OEM patch reserve: 69 genuine NOP instructions, not executable DB data.
@@ -91,7 +96,7 @@ start:
         mov es,ax
         mov es:prefix,ds
         mov di,offset tail_length
-        mov si,80h
+        mov si,psp_tail
         movsb
         mov di,offset command_tail
         xor ch,ch
@@ -107,11 +112,11 @@ start:
         call parse_name
         call at_end
         jz missing_name
-        mov dx,offset rename_fcb+16      ; destination half of DOS rename FCB
+        mov dx,offset rename_fcb+fcb_destination      ; destination half of DOS rename FCB
         call parse_name
-        cmp byte ptr rename_fcb+17,' '
+        cmp byte ptr rename_fcb+fcb_destination+fcb_filename,' '
         jz missing_name
-        cmp byte ptr rename_fcb+1,' '
+        cmp byte ptr rename_fcb+fcb_filename,' '
         jz missing_name
         mov ah,17h                      ; DOS FCB rename, not pathname 56h
         mov dx,offset rename_fcb

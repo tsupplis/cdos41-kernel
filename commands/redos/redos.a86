@@ -58,7 +58,7 @@ get_destination:
 save_destination:
         mov     target_drive,al
 ; The release tests PSP:0006h against transfer_buffer + 7000h.
-        cmp     psp_limit,7769h
+        cmp     psp_limit,offset transfer_buffer+7000h
         ja      select_disk
         mov     dx,offset low_memory
         jmp     report_exit

@@ -21,6 +21,14 @@
 ; and the unloaded final record. It never patches instruction or data bytes.
 ;*****************************************************************************
 
+; Concurrent DOS 4.1 private system layout; these are interface offsets.
+xios_gate equ 28h
+pd_uda equ 10h
+sys_console_table equ 54h
+console_descriptor_size equ 2ch
+window_video_segment equ 16h
+window_rows equ 28h
+
 help_main_stack equ 124h
 
 	cseg
@@ -334,8 +342,8 @@ build_port_menu:
 	mov	bx,offset config_key_slots
 	jmps	add_port_one_fields
 add_port_zero_fields:
-	mov	word ptr config_port_0_label,726h
-	mov	word ptr config_port_0_serial_label,748h
+	mov	word ptr config_port_0_label,offset config_printer_3
+	mov	word ptr config_port_0_serial_label,offset config_serial_0
 	mov	ax,4h
 	add	word ptr config_field_count,ax
 	mov	si,offset port_0_field_pointers
@@ -352,8 +360,8 @@ add_port_zero_fields:
 add_port_one_fields:
 	cmp	byte ptr port_1_present,0ffh
 	jnz	port_menu_complete
-	mov	word ptr config_port_1_label,737h
-	mov	word ptr config_port_1_serial_label,75dh
+	mov	word ptr config_port_1_label,offset config_printer_4
+	mov	word ptr config_port_1_serial_label,offset config_serial_1
 	mov	ax,4h
 	add	word ptr config_field_count,ax
 	mov	cx,ax
@@ -366,8 +374,8 @@ add_port_one_fields:
 	rep	movsb
 	cmp	byte ptr port_0_present,0ffh
 	jz	port_menu_complete
-	mov	word ptr selected_display,849h
-	mov	word ptr selected_settings,0a2ah
+	mov	word ptr selected_display,offset port_1_baud_key_position
+	mov	word ptr selected_settings,offset port_1_settings
 port_menu_complete:
 	pop	es
 	ret
@@ -553,7 +561,7 @@ skip_tail_spaces:
 	dec	byte ptr tail_remaining
 	jmps	skip_tail_spaces
 begin_token_search:
-	mov	word ptr token_scan,8bdh
+	mov	word ptr token_scan,offset token_p3
 	mov	word ptr token_start,si
 next_token_candidate:
 	mov	si,word ptr token_scan
@@ -894,7 +902,7 @@ call_xios:
 	push	es
 	mov	ds,word ptr system_segment
 	mov	es,word ptr xios_segment
-	callf	dword ptr .28h
+	callf	dword ptr .xios_gate
 	pop	es
 	pop	ds
 	ret
@@ -1497,15 +1505,15 @@ locate_system:
 	mov	cl,9ch
 	call	bdos
 	mov	word ptr process_descriptor,bx
-	mov	ax,es:word ptr 10h[bx]
+	mov	ax,es:word ptr pd_uda[bx]
 	mov	word ptr xios_segment,ax
 	mov	cl,99h
 	call	bdos
 	xor	ah,ah
 	mov	byte ptr console_number,al
-	mov	bx,2ch
+	mov	bx,console_descriptor_size
 	mul	bx
-	add	ax,es:word ptr .54h
+	add	ax,es:word ptr .sys_console_table
 	mov	word ptr console_descriptor,ax
 	pop	es
 	ret
@@ -1530,24 +1538,24 @@ initialize_help_wrapper:
 	mov	cl,9ch
 	call	help_wrapper_bdos
 	mov	word ptr help_process_descriptor,bx
-	mov	ax,es:word ptr 10h[bx]
+	mov	ax,es:word ptr pd_uda[bx]
 	mov	word ptr help_xios_segment,ax
 	mov	cl,99h
 	call	help_wrapper_bdos
 	mov	byte ptr help_console_number,al
 	xor	ah,ah
-	mov	bx,2ch
+	mov	bx,console_descriptor_size
 	mul	bx
-	add	ax,es:word ptr .54h
+	add	ax,es:word ptr .sys_console_table
 	mov	word ptr help_console_descriptor,ax
 	mov	dl,byte ptr help_console_number
 	mov	al,10h
 	call	help_wrapper_xios
 	xchg	ax,bx
 	mov	word ptr help_window_descriptor,bx
-	mov	ax,es:word ptr 16h[bx]
+	mov	ax,es:word ptr window_video_segment[bx]
 	mov	word ptr help_video_segment,ax
-	mov	bx,es:word ptr 28h[bx]
+	mov	bx,es:word ptr window_rows[bx]
 	pop	es
 	mov	ax,50h
 	mul	bx
@@ -1557,7 +1565,7 @@ initialize_help_wrapper:
 	mov	byte ptr help_queue_console_digit,al
 	call	open_help_mutex
 	pop	dx
-	mov	word ptr help_dispatch,9d5h
+	mov	word ptr help_dispatch,offset help_screen_wrapper
 	jmp	word ptr help_dispatch
 
 ; -----------------------------------------------------------------------------
@@ -1731,7 +1739,7 @@ help_wrapper_xios:
 	push	es
 	mov	es,word ptr help_xios_segment
 	mov	ds,word ptr wrapper_system_segment
-	callf	dword ptr .28h
+	callf	dword ptr .xios_gate
 	pop	es
 	pop	ds
 	ret

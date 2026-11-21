@@ -9,7 +9,15 @@
 ; The command tail can also select one of the eight slash entries in tail_dispatch.
 ; Reconstructed from the 4.11 release. The displayed utility version is 4.1.
 
+; Concurrent DOS 4.1 private system layout; preserve these interface offsets.
 xios_gate equ 28h	; far XIOS entry in SYSDAT, addressed through DS
+pd_uda equ 10h
+pd_drive equ 12h
+sys_setup_signature equ 0d70h
+setup_signature_size equ 10h
+sys_setup_block equ sys_setup_signature+setup_signature_size
+setup_block_words equ 100h
+cmd_header_paragraphs equ 8h
 
 help_main_stack equ 24h
 
@@ -911,7 +919,7 @@ attributes_restored:
 ; Convert the paragraph address to a 128-byte record and a byte offset within it.
 locate_config_record:
 	mov	ax,word ptr system_code_paragraphs
-	add	ax,0dfh
+	add	ax,cmd_header_paragraphs+sys_setup_signature/16
 	push	ax
 	and	ax,7h
 	mov	cl,4h
@@ -928,14 +936,14 @@ check_setup_signature:
 	lea	di,record_buffer
 	add	di,word ptr config_record_offset
 	lea	si,setup_signature
-	mov	cx,10h
+	mov	cx,setup_signature_size
 	cld
 	repe	cmpsb
 	ret
 
 copy_config_block:
 	lea	si,config_block
-	mov	cx,100h
+	mov	cx,setup_block_words
 	cld
 	rep	movsw
 	ret
@@ -1088,9 +1096,9 @@ get_system_context:
 	mov	word ptr sysdat_segment,es
 	mov	cl,9ch
 	int	0e0h
-	mov	ax,es:word ptr 10h[bx]
+	mov	ax,es:word ptr pd_uda[bx]
 	mov	word ptr user_data_segment,ax
-	mov	al,es:byte ptr 12h[bx]
+	mov	al,es:byte ptr pd_drive[bx]
 	inc	al
 	mov	byte ptr system_fcb,al
 	ret
@@ -1122,17 +1130,17 @@ load_configuration:
 	pop	es
 	mov	di,offset setup_signature
 	mov	ds,word ptr sysdat_segment
-	mov	si,0d70h
-	mov	cx,10h
+	mov	si,sys_setup_signature
+	mov	cx,setup_signature_size
 	cld
 	repe	cmpsb
 	jnz	config_loaded
-	mov	es:byte ptr .642h,0ffh
-	mov	si,0d80h
+	mov	es:byte ptr config_present,0ffh
+	mov	si,sys_setup_block
 	cmp	word ptr [si],0ddb2h
 	jnz	config_loaded
 	lea	di,config_block
-	mov	cx,100h
+	mov	cx,setup_block_words
 	rep	movsw
 
 config_loaded:
