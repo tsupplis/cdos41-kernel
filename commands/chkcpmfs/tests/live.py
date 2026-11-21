@@ -74,7 +74,7 @@ def blocks(record, width):
 
 
 def prepare_empty(folder, system, cwd, size=320):
-    """Create local fixtures; CDOS retains its existing boot-image interface."""
+    """Create disposable local fixtures using the maintained boot sources."""
     logical = folder / f'empty-{size}-logical.img'
     if size != 320:
         logical.write_bytes(bytes([0xe5]) * (size * 1024))

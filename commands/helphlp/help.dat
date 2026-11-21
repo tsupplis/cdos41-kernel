@@ -380,7 +380,8 @@
 
     Native commands supplied across the eight disks:
     ASM80 ASM86 BACK BATCH BRINST CHDIR CHSET COPYMENU DATE DCOMP DCOPY DDT86
-    DIR DREDIX DSKMAINT DFORM DSP ED EDITMENU ERA ERAQ FM FUNCTION
+    CHKCPMFS CHKDOSFS DIR DREDIX DSKMAINT DFORM DSP ED EDITMENU
+    ERA ERAQ FM FUNCTION
     GENCCPM GENCMD GENLDR GET HDMAINT HELP HEXCOM INITDIR MKDIR N PIP
     PRINT PRINTMGR PUT RDR REN REST RMDIR SDIR SET SETENV SETPORT SETUP SHOW
     PATH SPL STOP SUBMIT SYSDISK SYSTAT WINDOW WMENU
@@ -898,7 +899,7 @@
 
     First select F2 for CP/M formats or F3 for DOS formats, then:
 
-        CP/M                 DOS FAT12
+    CP/M                 DOS FAT12
     F4  160K                 180K
     F5  320K                 360K
     F6  720K                 720K
@@ -1166,8 +1167,10 @@
     Syntax:
 
     FM
-    Starts the retained OEM file manager. Use its on-screen menus for file
-    operations. FM.CFG is supplied beside it on the OEM utilities disk.
+    Starts the shared file manager on the administration disk (cdosadmin.img).
+    Browse CP/M user areas and DOS directories, mark files and select actions
+    from the on-screen menus. CDOS supports Backup/Restore and DOS paths;
+    these features are disabled on CCP/M. FM.CFG is supplied beside FM.CMD.
 
 ///1FREEMEMORY
     SYSTAT [M] displays memory partitions; SYSTAT [O] displays system limits
@@ -2191,8 +2194,8 @@
 
     SETUP modifies CCPM.SYS for use at the next boot. That file must be
     available when saving changes. Use the menus for supported settings.
-    This distribution retains the original 4.1 SETUP binary; it is not the
-    older CCP/M CONFIG utility. The complete original reference is retained
+    The 4.1 SETUP command is rebuilt from source and checked byte-for-byte
+    against the original binary. The complete original reference is retained
     in base/help.hlp in the source tree.
 
 ///1SHOW
