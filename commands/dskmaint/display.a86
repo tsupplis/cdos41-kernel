@@ -756,7 +756,7 @@ help_on		dw	1
 help_on_1	db	21,12			;row,col for box
 		db	'F1 '			;key-id
 		dw	1			;# of messages for label
-		db	22,23			;row,col for label
+		db	22,22			;row,col for label
 		dw	offset help		;label
 ;
 help		dw	length help_2

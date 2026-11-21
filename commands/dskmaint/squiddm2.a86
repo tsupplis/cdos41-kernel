@@ -64,7 +64,13 @@ cpm_dpb_len	equ	17
 spt		equ	word ptr 0
 bsh		equ	byte ptr 2
 blm		equ	byte ptr 3
+exm		equ	byte ptr 4
 dsm		equ	word ptr 5
+drm		equ	word ptr 7
+physical_mask	equ	word ptr 15
+cpm720_index	equ	9
+cpm1200_index	equ	10
+cpm1440_index	equ	11
 off		equ	word ptr 13
 psh		equ	byte ptr 15
 ;
@@ -237,10 +243,53 @@ cff_1:
 	mov	ax,nclstrs[bx]		;get NCLSTRS  from source disk
 	repnz	scasw			;get the offse in list
 	pop	es
-	jnz	bad_format		;something is wrong
+	jz	dos_format_found
+	jmp	bad_format
+
+dos_format_found:
 	xchg	dx,cx			;put it in DX
 	jmps	format_for_write
 cpm_source:
+	cmp	spt[bx],8
+	je	cpm_legacy_source
+; Accept only the known native allocation geometry before auto-formatting.
+	cmp	off[bx],2
+	jne	cpm_unknown_format
+	cmp	drm[bx],255
+	jne	cpm_unknown_format
+	cmp	physical_mask[bx],0302h
+	jne	cpm_unknown_format
+	cmp	spt[bx],9
+	jne	cpm_high_density_source
+	cmp	shift_mask[bx],15*256+4
+	jne	cpm_unknown_format
+	cmp	exm[bx],0
+	jne	cpm_unknown_format
+	cmp	dsm[bx],354
+	jne	cpm_unknown_format
+	mov	dx,cpm720_index
+	jmps	format_for_write
+cpm_high_density_source:
+	cmp	shift_mask[bx],31*256+5
+	jne	cpm_unknown_format
+	cmp	exm[bx],1
+	jne	cpm_unknown_format
+	cmp	spt[bx],15
+	jne	cpm_1440_source
+	cmp	dsm[bx],295
+	jne	cpm_unknown_format
+	mov	dx,cpm1200_index
+	jmps	format_for_write
+cpm_1440_source:
+	cmp	spt[bx],18
+	jne	cpm_unknown_format
+	cmp	dsm[bx],354
+	jne	cpm_unknown_format
+	mov	dx,cpm1440_index
+	jmps	format_for_write
+cpm_unknown_format:
+	jmp	bad_format
+cpm_legacy_source:
 	mov	dx,two			;that's CP/M 1-8
 	cmp	shift_mask[bx],7*256+3	;looking for a 7 and a 3
 	jz	format_for_write
@@ -549,7 +598,11 @@ cpm_dpb_found:
 	mul	cx			;results in logical sectors per track
 	pop cx ! xchg ax,cx		; AX = logical sectors per disk
 					; CX = logical sectors per track
-	div	cx			;results in tracks per disk in AX
+	div	cx			;whole tracks and a possible partial track
+	or	dx,dx
+	jz	size_track_count_ready
+	inc	ax			;include the last partially allocated track
+size_track_count_ready:
 	add	ax,off[bx]		;add the number of reserved tracks
 	dec	ax			;then make it zero relative
 	mov	max_track,ax		;stash it
@@ -797,6 +850,27 @@ eject
 ;	EXIT	     zero flag if EXIT key pressed
 ;		AL = character
 common_menu:
+	; Drive selection supplies different length-prefixed titles and prompts.
+	; Centre their actual text; preserve caller registers for perform_menu.
+	cmp	si,offset sel_drive
+	jne	common_menu_show
+	push	ax
+	push	bx
+	mov	bx,func_title_@
+	mov	ax,screen
+	sub	ax,[bx]
+	shr	ax,one
+	inc	ax
+	mov	byte ptr func_title+1,al
+	mov	bx,func_prompt_@
+	mov	ax,screen
+	sub	ax,[bx]
+	shr	ax,one
+	inc	ax
+	mov	byte ptr func_prompt+1,al
+	pop	bx
+	pop	ax
+common_menu_show:
 	call	perform_menu		;blank the box first
 cm_@:
 	cmp	al,exit_key		; set the zero flag accordingly
@@ -964,13 +1038,13 @@ func_prompt	db	7		;row
 func_prompt_@	dw	0		;this has to be filled in
 ;
 sel_ver_dsk	dw	length sd_@
-sd_@		db	'  I N S E R T  A N D  S E L E C T  D I S K E T T E  T O  V E R I F Y   '
+sd_@		db	'INSERT AND SELECT DISKETTE TO VERIFY'
 ;
 sel_src_dsk	dw	length ssd_@
-ssd_@		db	'     I N S E R T  A N D  S E L E C T  S O U R C E  D I S K E T T E     '
+ssd_@		db	'INSERT AND SELECT SOURCE DISKETTE'
 ;
 sel_dest_dsk	dw	length sdd_@
-sdd_@		db	'I N S E R T  A N D  S E L E C T  D E S T I N A T I O N  D I S K E T T E'
+sdd_@		db	'INSERT AND SELECT DESTINATION DISKETTE'
 ;
 ;
 func_title	db	5				;row
@@ -979,10 +1053,10 @@ func_title	db	5				;row
 func_title_@	dw	0				;this has to be filled
 ;
 ver_msg		dw	length v_msg_@
-v_msg_@		db	'         Verify a Diskette         '
+v_msg_@		db	'Verify a Diskette'
 ;
 repro_msg	dw	length r_msg_@
-r_msg_@		db	' Copy from one Diskette to another '
+r_msg_@		db	'Copy from one Diskette to another'
 ;
 ;
 d_answers	dw	1
@@ -1068,7 +1142,7 @@ err_@		db	4
 		dw	offset err_ptr
 ;
 err_ptr		dw	length err
-err		db	' B A D    D I S K '
+err		db	'     BAD DISK     '
 ;
 any_@		db	8
 		db	(screen - length any_ptr_@)/2

@@ -11,11 +11,11 @@ INCS=bootsect.inc loader.inc fatboot.inc
 .PHONY: all check clean
 .DELETE_ON_ERROR:
 all: $(TOOLS) fatboot.bin
-bootsect.inc loader.inc: %.inc: ../../boot/%.bin
+bootsect.inc loader.inc: %.inc: ../dskmaint/%.bin
 	$(BIN2ASM) -m -f $@ $<
 	unix2dos $@
-../../boot/%.bin: ../../boot/%.a86
-	$(MAKE) -C ../../boot $*.bin
+../dskmaint/%.bin: ../dskmaint/%.a86
+	$(MAKE) -C ../dskmaint $*.bin
 
 # Both formatters use the same header-aware floppy bootstrap.
 fatboot.bin: ../dskmaint/dosbootx.a86 ../dskmaint/Makefile Makefile

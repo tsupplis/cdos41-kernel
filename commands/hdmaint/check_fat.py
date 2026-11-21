@@ -4,8 +4,8 @@ from pathlib import Path
 here = Path(__file__).resolve().parent
 root = here.parent.parent
 loader = (here / "pcboot3.bin").read_bytes()
-bios = (root / "boot/dribio.com").read_bytes()
-dos = (root / "boot/dridos.com").read_bytes()
+bios = (root / "base/dribio.com").read_bytes()
+dos = (root / "base/dridos.com").read_bytes()
 original = (root / "base/hdmaint.cmd").read_bytes()
 assert len(loader) == 1280, "Unexpected PCBOOT3 size"
 assert bios[:len(loader)] == loader, "PCBOOT3 differs from DRIBIO"

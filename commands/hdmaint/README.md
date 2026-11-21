@@ -18,7 +18,7 @@ omitted as in the historical SID-saved file. All transformations assert
 the expected boundaries and values.
 
 make check compares the entire resulting command byte-for-byte with
-base/hdmaint.cmd and independently checks PCBOOT3 against boot/dribio.com.
+base/hdmaint.cmd and independently checks PCBOOT3 against base/dribio.com.
 
 ## Installation and cold-boot verification
 

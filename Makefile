@@ -4,7 +4,7 @@
 DISKSZIP=disks.zip
 DIST_DISKS=cdos86.img cdostools.img cdosdev.img cdosmaint.img cdosmenu.img cdosdos.img cdosextras.img cdosadmin.img
 
-.PHONY: all commands kernel boot media check check-pce test clean xios-alt check-aliases dist check-dist check-redirection check-sdir check-type check-show check-set check-wmenu check-era check-ren check-systat check-window check-help check-dir-options check-batch-live check-help-live check-fat-batch check-fat-case check-rtc
+.PHONY: all commands kernel media check check-pce test clean xios-alt check-aliases dist check-dist check-redirection check-sdir check-type check-show check-set check-wmenu check-era check-ren check-systat check-window check-help check-dir-options check-batch-live check-help-live check-fat-batch check-fat-case check-rtc
 .DELETE_ON_ERROR:
 
 all: media
@@ -14,14 +14,11 @@ commands:
 kernel: commands
 	$(MAKE) -C kernel all
 
-boot:
-	$(MAKE) -C boot all
-
-media: kernel boot
+media: kernel
 	$(MAKE) -C media all
 
 .PHONY: chkcpmfs-live-images
-chkcpmfs-live-images: kernel boot
+chkcpmfs-live-images: kernel
 	$(MAKE) -C media cdos86.img
 
 xios-alt:
@@ -57,7 +54,6 @@ check: all
 	python3 tools/fat_delete_unit_check.py
 	python3 tools/pctmp_context_check.py
 	python3 tools/pctmp_critical_check.py
-	$(MAKE) -C boot check
 	$(MAKE) -C media check
 
 check-pce: all
@@ -70,7 +66,6 @@ clean:
 	$(MAKE) -C commands clean
 	$(MAKE) -C kernel clean
 	$(MAKE) -C kernel/xios clean
-	$(MAKE) -C boot clean
 	$(MAKE) -C media clean
 	$(RM) $(DISKSZIP) $(DIST_DISKS)
 

@@ -85,11 +85,6 @@ def prepare_empty(folder, system, cwd, size=320):
         data[510] = 1
         data[511] = marker
         logical.write_bytes(data)
-    elif system == 'cdos':
-        convert(MEDIA / 'base.img', logical, 'untwist', cwd)
-        data = bytearray(logical.read_bytes())
-        data[:4096] = (ROOT / 'boot/boottrack.bin').read_bytes()
-        logical.write_bytes(data)
     else:
         fmt = 'cpm86-320' if system == 'cpm86' else 'ccpm86-320'
         run(sys.executable, str(ROOT / 'tools/mk320.py'), str(logical),

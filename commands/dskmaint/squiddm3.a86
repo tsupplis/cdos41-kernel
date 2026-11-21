@@ -66,17 +66,31 @@ eject
 ;	EXIT	NONE
 ;
 format:
-	mov	dx,offset dskmaint_format	;help prompt and
-	mov bx,help_yes ! call show_help_key	; help key and
-	mov bx,previous_menu ! call show_esc_key;   ESC key stuff
-	mov	si,offset format_menu		;menu structure
-	call	common_menu			;get the offset of selection
-	jz	format_done			;zero flag set if ESC key
-	xor bh,bh ! shl bl,one			;make a word offset
-;
-	mov	si,current_menu_types	;get pointer to list of offsets
-	mov	bx,[bx+si]		;get offset into disk_type list
-	mov	last_choice,bx			;save last operator choice
+	mov	dx,offset dskmaint_format
+	mov bx,help_yes ! call show_help_key
+	mov bx,previous_menu ! call show_esc_key
+	mov	si,offset family_menu
+	call	common_menu
+	jnz	format_family_selected
+	ret
+format_family_selected:
+	mov	current_menu_types,offset cpm_format_types
+	mov	current_format_menu,offset cpm_format_menu
+	or	bl,bl
+	jz	format_capacity_menu
+	mov	current_menu_types,offset dos_format_types
+	mov	current_format_menu,offset dos_format_menu
+format_capacity_menu:
+	mov	dx,offset dskmaint_format
+	mov bx,help_yes ! call show_help_key
+	mov bx,previous_menu ! call show_esc_key
+	mov	si,current_format_menu
+	call	common_menu
+	jz	format
+	xor bh,bh ! shl bl,one
+	mov	si,current_menu_types
+	mov	bx,[bx+si]
+	mov	last_choice,bx
 format_again:
 	mov	bx,disk_type[bx]		;get disk table address
 	push bx ! push bx
@@ -87,7 +101,7 @@ format_again:
 	mov	func_prompt_@,offset sel_form_dsk ; function prompt
 	mov	si,offset sel_drive		;select drive screen
 	call	common_menu
-	jnz format_1 ! pop bx ! jmps format	;if ESC key start again
+	jnz format_1 ! pop bx ! jmps format_capacity_menu	;if ESC key start again
 format_1:
 	xor	bh,bh
 	mov	bl,flops[bx]		;get drive code for choice
@@ -97,11 +111,11 @@ format_1:
 	mov	format_@,bl		;put in format message
 	call	warn_user_1		;are you sure ?
 	pop	bx			;get the disk_type back
-	jz	format			;if zero then bail out
+	jz	format_capacity_menu			;if zero then bail out
 	call	format_disk		;go do the job
-	jz	format			;if bad disk start again
+	jz	format_capacity_menu			;if bad disk start again
 	call	write_sys_tracks[bx]	;write the system tracks
-	jnz	format			;zero flag means OK
+	jnz	format_capacity_menu			;zero flag means OK
 	mov	ax,tracks_to_format[bx]	;total number of tracks
 	dec	ax			;highest numbered track
 	mov	max_track,ax		; and save it away
@@ -241,13 +255,25 @@ cpm_sys_loader:
 	rep	movsb				;move the boot
 	mov ax,sides[bx] ! dec al		;number of sides -1
 	mov	es:side_@,al			;put it in the image
+	cmp	end_side_0[bx],79
+	jne	cpm_marker_ready
+	mov	es:byte ptr .1feh,1
+	mov	al,72
+	cmp	sectors_per_track[bx],9
+	je	cpm_marker_store
+	mov	al,120
+	cmp	sectors_per_track[bx],15
+	je	cpm_marker_store
+	mov	al,144
+cpm_marker_store:
+	mov	es:side_@,al
+cpm_marker_ready:
 	mov	di,loader_code_@		;start of loader image
 	mov	si,offset ldr			;move the second stage
 	mov	cx,ldrlen			;  loader into the image
 	rep	movsb
 	mov	ax,sectors_per_track[bx]
-	mov	mcnt,al				;number of sectors to write
-	call	write_boot_tracks		;write the boot tracks
+	call	write_known_boot		;identify geometry before the full track
 	pop	es
 	ret
 
@@ -346,6 +372,9 @@ write_first_two_tracks:
 	mov	al,one			;that's the boot sector
 	add al,dh ! add al,dh		;two copies of fat
 	add	al,[si]			;number of sectors in directory
+; Write the identifying sectors first, select the resulting geometry, then
+; write the full CP/M boot track or DOS metadata. AL is the final sector count.
+write_known_boot:
 	push	ax
 	mov	mcnt,two	;just two sectors for now,includes FAT id
 	call	write_boot_tracks	;write only two sectors
@@ -358,8 +387,15 @@ first_ok:
 ;
 	push	bx
 	mov	cl,cur_disk		;SELDSK is necessary to make sure that
-	call	seldsk			;the XIOS knows that a DOS disk is
-	pop	bx			;being used
+	call	seldsk			;detect the marker or DOS BPB
+	pop	bx
+	or	ax,ax
+	jnz	boot_geometry_ready
+	pop	ax
+	mov	al,1			;do not continue using unknown geometry
+	or	al,al
+	ret
+boot_geometry_ready:
 	pop	ax
 	mov	mcnt,al			;number of sectors to write
 	call	write_boot_tracks	;first two sectors are re-written
@@ -438,16 +474,15 @@ include date.dat
 ;add a cluster size of 2373 in front of 317, when support for the AT@
 ; is enabled	;
 
-cluster_list	dw	2849,715,2373,317,315,0,0,356,353   ;# of clusters by disk type
+cluster_list	dw	0,0,0,2849,715,2373,317,315,0,0,356,353   ;# of clusters by disk type
 n_clusters	equ	(offset $ -offset cluster_list)/2 ;
 num_clusters	dw	n_clusters
 ;
-current_menu_types	dw	offset format_types
-;
-;
- ; Menu answers F2..F8 follow the screen's column order. Each entry is
-; a byte offset into disk_type, whose historical entries keep their order.
-format_types dw 4,6,0,2,14,12,16
+current_menu_types	dw	offset cpm_format_types
+current_format_menu	dw	offset cpm_format_menu
+; Byte offsets into disk_type; the historical entries retain their order.
+cpm_format_types	dw	4,6,18,20,22
+dos_format_types	dw	0,2,14,12,16
 ;
 disk_type	dw	offset dos_1_9		;DOS SS 9 sector
 		dw	offset dos_2_9		;DOS DS 9   "
@@ -458,6 +493,7 @@ disk_type	dw	offset dos_1_9		;DOS SS 9 sector
 ;AT@
 		dw	offset dos_15		;DOS hi-dense 15 SPT 160 traks
         dw offset dos_720,offset dos_1440
+		dw offset cpm_720,offset cpm_1200,offset cpm_1440
 ;
 ;	definition of disk table
 ;
@@ -539,6 +575,22 @@ dos_1440 dw 18,160,2,512,512*18,0
         dw 0f66ch,offset dos_1440_name,0,160,io_new_format
         dw offset dos_sys_tracks,1,offset dos_1440_tbl
         db 79
+; Native CP/M profiles use the same physical geometry as their XIOS DPBs.
+cpm_720	dw	9,160,2,512,512*9,0
+		db	cpm_media
+		dw	0e550h,offset cpm_720_name,0,160,io_new_format
+		dw	offset cpm_sys_loader,0,0
+		db	79
+cpm_1200	dw	15,160,2,512,512*15,0
+		db	cpm_media
+		dw	0e554h,offset cpm_1200_name,0,160,io_new_format
+		dw	offset cpm_sys_loader,0,0
+		db	79
+cpm_1440	dw	18,160,2,512,512*18,0
+		db	cpm_media
+		dw	0e56ch,offset cpm_1440_name,0,160,io_new_format
+		dw	offset cpm_sys_loader,0,0
+		db	79
 ;
 ;	
 cpm_media		equ	0		;offsets in dos_directory
@@ -651,90 +703,151 @@ last_choice	dw	0
 ;
 ;	here are the menus
 ;
-format_menu	dw	0			;skip the plain message
-		dw	offset f_prompts	;titles
-		dw	offset f_keys		;F? keys and legends
-		dw	offset f_answers	;allowable answers
-;
-f_prompts	dw	2			;2 titles
-		dw	offset f_head		;title 1
-		dw	offset f_sel_func	;title 2
-;
-f_head		db	5			;row
-		db	(screen - length fh_@)/2 ;col
-		db	normal,normal		;start attribute, end attrib
-		dw	offset fh		;actual message string
-;
-fh		dw	length fh_@		;length of string
-fh_@		db	'Format Diskettes'	;and finally the string itself
-;
-f_sel_func	db	7
-		db	(screen - length fss_@)/2
-		db	high_on,high_off
-		dw	offset fss
-;
-fss		dw	length fss_@
-fss_@		db	'   S E L E C T   T Y P E   O F   D I S K E T T E   T O   F O R M A T   '
-;
-; Seven format choices; each key box occupies three screen rows.
-f_keys dw 7
-        dw offset format_key_cpm160
-        dw offset format_key_cpm320
-        dw offset format_key_dos180
-        dw offset format_key_dos360
-        dw offset format_key_dos720
-        dw offset format_key_dos1200
-        dw offset format_key_dos1440
-format_key_cpm160 db 9,4,'F2 '
-        dw 1
-        db 10,14
-        dw offset cpm_single
-format_key_cpm320 db 12,4,'F3 '
-        dw 1
-        db 13,14
-        dw offset cpm_double
-format_key_dos180 db 15,4,'F4 '
-        dw 1
-        db 16,14
-        dw offset dos_single
-format_key_dos360 db 18,4,'F5 '
-        dw 1
-        db 19,14
-        dw offset dos_double
-format_key_dos720 db 9,45,'F6 '
-        dw 1
-        db 10,55
-        dw offset dos_720_name
-format_key_dos1200 db 12,45,'F7 '
-        dw 1
-        db 13,55
-        dw offset dos_high_dense
-format_key_dos1440 db 15,45,'F8 '
-        dw 1
-        db 16,55
-        dw offset dos_1440_name
-cpm_single dw length cpm_single_text
-cpm_single_text db ' CP/M 160K (single-sided)'
-cpm_double dw length cpm_double_text
-cpm_double_text db ' CP/M 320K (double-sided)'
-dos_single dw length dos_single_text
-dos_single_text db ' DOS 180K (single-sided)'
-dos_double dw length dos_double_text
-dos_double_text db ' DOS 360K (double-sided)'
-dos_720_name dw length dos_720_name_text
-dos_720_name_text db ' DOS 720K (3.5 inch)'
-dos_high_dense dw length dos_high_dense_text
-dos_high_dense_text db ' DOS 1.2M (5.25 inch)'
-dos_1440_name dw length dos_1440_name_text
-dos_1440_name_text db ' DOS 1.44M (3.5 inch)'
-f_answers dw 1
-        dw offset fa
-fa      db offset fa_end - offset fa_keys
-fa_keys db 0bch,0bdh,0beh,0bfh,0c0h,0c1h,0c2h,1bh ; F2..F8, ESC
-fa_end  equ $
+; Select the filesystem first; both capacity screens use F4 through F8.
+family_menu	dw	0,offset family_prompts,offset family_keys,offset family_answers
+cpm_format_menu	dw	0,offset cpm_prompts,offset cpm_keys,offset capacity_answers
+dos_format_menu	dw	0,offset dos_prompts,offset dos_keys,offset capacity_answers
+family_prompts	dw	2,offset family_heading,offset format_prompt
+cpm_prompts	dw	2,offset cpm_heading,offset cpm_prompt
+dos_prompts	dw	2,offset dos_heading,offset dos_prompt
+family_heading	db	5,(screen-length family_title_text)/2,normal,normal
+		dw	offset family_title
+family_title	dw	length family_title_text
+family_title_text	db	'Format Diskettes'
+cpm_heading	db	5,(screen-length cpm_title_text)/2,normal,normal
+		dw	offset cpm_title
+cpm_title	dw	length cpm_title_text
+cpm_title_text	db	'Format CP/M Diskettes'
+dos_heading	db	5,(screen-length dos_title_text)/2,normal,normal
+		dw	offset dos_title
+dos_title	dw	length dos_title_text
+dos_title_text	db	'Format DOS Diskettes'
+cpm_prompt	db	7,(screen-length cpm_prompt_text)/2,high_on,high_off
+		dw	offset cpm_prompt_label
+cpm_prompt_label	dw	length cpm_prompt_text
+cpm_prompt_text	db	'SELECT DISK FORMAT'
+dos_prompt	db	7,(screen-length dos_prompt_text)/2,high_on,high_off
+		dw	offset dos_prompt_label
+dos_prompt_label	dw	length dos_prompt_text
+dos_prompt_text	db	'SELECT DISK FORMAT'
+format_prompt	db	7,(screen-length format_prompt_text)/2,high_on,high_off
+		dw	offset format_prompt_label
+format_prompt_label	dw	length format_prompt_text
+format_prompt_text	db	'SELECT DISK FORMAT'
+family_keys	dw	2,offset family_cpm,offset family_dos
+family_cpm	db	10,28,'F2 '
+		dw	1
+		db	11,39
+		dw	offset family_cpm_label
+family_dos	db	14,28,'F3 '
+		dw	1
+		db	15,39
+		dw	offset family_dos_label
+family_cpm_label	dw	length family_cpm_text
+family_cpm_text	db	'CP/M formats'
+family_dos_label	dw	length family_dos_text
+family_dos_text	db	'DOS formats'
+cpm_keys	dw	5
+		dw	offset key_cpm160
+		dw	offset key_cpm320
+		dw	offset key_cpm720
+		dw	offset key_cpm1200
+		dw	offset key_cpm1440
+key_cpm160	db	10,6,'F4 '
+		dw	1
+		db	11,13
+		dw	offset label_cpm160
+label_cpm160	dw	length text_cpm160
+text_cpm160	db	'Format 160K'
+key_cpm320	db	10,31,'F5 '
+		dw	1
+		db	11,38
+		dw	offset label_cpm320
+label_cpm320	dw	length text_cpm320
+text_cpm320	db	'Format 320K'
+key_cpm720	db	10,56,'F6 '
+		dw	1
+		db	11,63
+		dw	offset label_cpm720
+label_cpm720	dw	length text_cpm720
+text_cpm720	db	'Format 720K'
+key_cpm1200	db	14,6,'F7 '
+		dw	1
+		db	15,13
+		dw	offset label_cpm1200
+label_cpm1200	dw	length text_cpm1200
+text_cpm1200	db	'Format 1200K'
+key_cpm1440	db	14,31,'F8 '
+		dw	1
+		db	15,38
+		dw	offset label_cpm1440
+label_cpm1440	dw	length text_cpm1440
+text_cpm1440	db	'Format 1440K'
+dos_keys	dw	5
+		dw	offset key_dos180
+		dw	offset key_dos360
+		dw	offset key_dos720
+		dw	offset key_dos1200
+		dw	offset key_dos1440
+key_dos180	db	10,6,'F4 '
+		dw	1
+		db	11,13
+		dw	offset label_dos180
+label_dos180	dw	length text_dos180
+text_dos180	db	'Format 180K'
+key_dos360	db	10,31,'F5 '
+		dw	1
+		db	11,38
+		dw	offset label_dos360
+label_dos360	dw	length text_dos360
+text_dos360	db	'Format 360K'
+key_dos720	db	10,56,'F6 '
+		dw	1
+		db	11,63
+		dw	offset label_dos720
+label_dos720	dw	length text_dos720
+text_dos720	db	'Format 720K'
+key_dos1200	db	14,6,'F7 '
+		dw	1
+		db	15,13
+		dw	offset label_dos1200
+label_dos1200	dw	length text_dos1200
+text_dos1200	db	'Format 1200K'
+key_dos1440	db	14,31,'F8 '
+		dw	1
+		db	15,38
+		dw	offset label_dos1440
+label_dos1440	dw	length text_dos1440
+text_dos1440	db	'Format 1440K'
+cpm_single	dw	length cpm_single_text
+cpm_single_text	db	'CP/M 160K (single-sided)'
+cpm_double	dw	length cpm_double_text
+cpm_double_text	db	'CP/M 320K (double-sided)'
+cpm_720_name	dw	length cpm_720_name_text
+cpm_720_name_text	db	'CP/M 720K'
+cpm_1200_name	dw	length cpm_1200_name_text
+cpm_1200_name_text	db	'CP/M 1200K'
+cpm_1440_name	dw	length cpm_1440_name_text
+cpm_1440_name_text	db	'CP/M 1440K'
+dos_single	dw	length dos_single_text
+dos_single_text	db	'DOS 180K (single-sided)'
+dos_double	dw	length dos_double_text
+dos_double_text	db	'DOS 360K (double-sided)'
+dos_720_name	dw	length dos_720_name_text
+dos_720_name_text	db	'DOS 720K (3.5 inch)'
+dos_high_dense	dw	length dos_high_dense_text
+dos_high_dense_text	db	'DOS 1200K (5.25 inch)'
+dos_1440_name	dw	length dos_1440_name_text
+dos_1440_name_text	db	'DOS 1440K (3.5 inch)'
+family_answers	dw	1,offset family_answer_list
+family_answer_list	db	3
+family_answer_keys	db	0bch,0bdh,1bh	; F2, F3, ESC
+capacity_answers	dw	1,offset capacity_answer_list
+capacity_answer_list	db	6
+capacity_answer_keys	db	0beh,0bfh,0c0h,0c1h,0c2h,1bh	; F4..F8, ESC
 ;
 sel_form_dsk	dw	length sfd_@
-sfd_@		db	'           S E L E C T   D I S K E T T E   T O   F O R M A T           '
+sfd_@		db	'SELECT DISKETTE TO FORMAT'
 ; 
 form1_msg	dw	length fm1_@
 fm1_@		db	'  Format a Single Sided Diskette   '
@@ -762,102 +875,13 @@ eject
 side_byte	db	0
 
 ;
-;	loader taken from DSKMAINT for ABALONE ( 19 SEPT 83 Version 1.3 )
-;
-;	BOOTSTRAP LOADER HEX IMAGE FOR FORMAT
-;
-BOOT	DB	0FAH,8CH,0C8H,8EH,0D8H,8EH,0D0H,0BCH,00H,7CH,0FBH,0CDH
-	DB	12H,2DH,08H,00H,0B1H,06H,0D3H,0E0H,0A3H,51H,7CH,0B4H
-	DB	00H,0CDH,13H,8EH,06H,51H,7CH,0BAH,00H,00H,0B9H,05H
-	DB	00H,0BBH,00H,00H,0B8H,04H,02H,0CDH,13H,73H,09H,0FEH
-	DB	0EH,53H,7CH,75H,0E2H,0E9H,04H,00H,0FFH,2EH,4FH,7CH
-	DB	0BEH,54H,7CH,0FCH,0ACH,0B4H,0EH,2BH,0DBH,0CDH,10H,0ACH
-	DB	84H,0C0H,75H,0F5H,0FBH,0EBH,0FDH,00H,01H,00H,00H,04H
-	DB	0DH,0AH,0AH,2AH,2AH,2AH,20H,45H,72H,72H,6FH,72H
-	DB	20H,77H,68H,69H,6CH,65H,20H,72H,65H,61H,64H,69H
-	DB	6EH,67H,20H,4CH,6FH,61H,64H,65H,72H,20H,2AH,2AH
-	DB	2AH,0DH,0AH,54H,72H,79H,20H,61H,6EH,6FH,74H,68H
-	DB	65H,72H,20H,64H,69H,73H,6BH,65H,74H,74H,65H,2EH
-	DB	0DH,0AH,00H
-;
-boot_len	EQU	OFFSET $ - OFFSET BOOT
-;
-;	CP/M OR CCP/M SECOND STAGE LOADER IMAGE
-;
-LDR	DB	8CH,0C8H,8EH,0D8H,8EH,0D0H,0BCH,00H,01H,0E8H,3CH,01H
-	DB	0E8H,0BDH,00H,0C7H,06H,3AH,03H,8CH,03H,0C7H,06H,3CH
-	DB	03H,0A6H,03H,0C7H,06H,34H,03H,00H,25H,0E8H,1BH,00H
-	DB	0C7H,06H,3AH,03H,99H,03H,0C7H,06H,3CH,03H,0B7H,03H
-	DB	0C7H,06H,34H,03H,00H,00H,0E8H,06H,00H,0BEH,0C9H,03H
-	DB	0E9H,4FH,01H,0E8H,0C3H,00H,74H,01H,0C3H,0E8H,19H,00H
-	DB	0E8H,0BAH,00H,75H,08H,0C6H,06H,40H,03H,03H,0E8H,4FH
-	DB	00H,0E8H,2EH,01H,0FEH,0EH,40H,03H,75H,0EAH,0E9H,3DH
-	DB	01H,8BH,36H,3CH,03H,0E8H,2CH,01H,0FFH,06H,3EH,03H
-	DB	0E8H,96H,00H,74H,0EH,0E8H,12H,01H,0E8H,8EH,00H,74H
-	DB	06H,0BEH,0AH,04H,0E9H,0FH,01H,0E8H,04H,01H,8BH,3EH
-	DB	41H,03H,8AH,45H,10H,0E8H,23H,01H,0E8H,0DDH,00H,0BEH
-	DB	80H,00H,0E8H,98H,00H,83H,2EH,45H,03H,08H,0BBH,11H
-	DB	00H,0B9H,0FH,00H,0E8H,0CH,00H,0C3H,0B0H,2EH,0E8H,5DH
-	DB	01H,0BBH,10H,00H,0B9H,10H,00H,03H,1EH,41H,03H,8AH
-	DB	07H,84H,0C0H,75H,03H,0E9H,0E2H,00H,53H,51H,0E8H,0EEH
-	DB	00H,2BH,0F6H,0E8H,67H,00H,59H,5BH,43H,0E2H,0E8H,0C3H
-	DB	0C7H,06H,43H,03H,4EH,04H,0C6H,06H,4AH,03H,04H,0B0H
-	DB	00H,0E8H,0D3H,00H,0BFH,4EH,04H,0B9H,40H,00H,0B8H,7FH
-	DB	7FH,0FCH,80H,25H,0F0H,21H,45H,09H,20H,45H,0BH,83H
-	DB	0C7H,20H,0E2H,0F2H,0C7H,06H,43H,03H,4EH,0CH,0C6H,06H
-	DB	4AH,03H,08H,0C6H,06H,49H,03H,0FFH,0C3H,1EH,07H,0C7H
-	DB	06H,41H,03H,4EH,04H,0B9H,40H,00H,0FCH,51H,8BH,36H
-	DB	3AH,03H,8BH,3EH,41H,03H,8BH,0EH,3EH,03H,0F3H,0A6H
-	DB	59H,74H,09H,83H,06H,41H,03H,20H,0E2H,0E7H,0CH,0FFH
-	DB	0C3H,8BH,0EH,2EH,03H,2BH,0CEH,03H,36H,47H,03H,2BH
-	DB	0FFH,8EH,06H,45H,03H,0FCH,0F3H,0A4H,0A1H,30H,03H,01H
-	DB	06H,45H,03H,0C3H,2BH,0C0H,8EH,0C0H,0B8H,00H,04H,26H
-	DB	80H,3EH,0FFH,7DH,01H,75H,03H,0B8H,00H,08H,0A3H,2EH
-	DB	03H,0B1H,04H,0D3H,0E8H,0A3H,30H,03H,0B1H,05H,0D3H,0E8H
-	DB	0A2H,32H,03H,0C3H,8BH,1EH,47H,03H,8BH,47H,03H,0A3H
-	DB	36H,03H,0A3H,45H,03H,80H,7FH,09H,00H,74H,03H,8BH
-	DB	47H,0CH,0A3H,38H,03H,0C3H,8BH,36H,3AH,03H,0FEH,44H
-	DB	0CH,0C3H,0E8H,03H,00H,0FBH,0EBH,0FDH,0ACH,0E8H,6EH,00H
-	DB	0ACH,84H,0C0H,75H,0F8H,0C3H,0E8H,6CH,00H,0A1H,38H,03H
-	DB	8EH,0D8H,8EH,0C0H,0B2H,00H,2EH,0FFH,2EH,34H,03H,0C6H
-	DB	06H,4BH,03H,05H,0F6H,26H,32H,03H,0F6H,36H,33H,03H
-	DB	8AH,0ECH,0B1H,00H,0D1H,0E1H,81H,0C1H,4EH,0CH,89H,0EH
-	DB	47H,03H,3AH,06H,49H,03H,75H,01H,0C3H,0A2H,49H,03H
-	DB	0B6H,00H,04H,01H,8AH,0E8H,3CH,28H,72H,06H,0B5H,4FH
-	DB	2AH,0E8H,0B6H,01H,1EH,07H,0B1H,01H,8BH,1EH,43H,03H
-	DB	0A0H,4AH,03H,0B4H,02H,0CDH,13H,72H,01H,0C3H,0B4H,00H
-	DB	0CDH,13H,0FEH,0EH,4BH,03H,75H,0ECH,0BEH,0AH,04H,0E9H
-	DB	88H,0FFH,0B7H,00H,0B4H,0EH,0CDH,10H,0C3H,0B4H,01H,0CDH
-	DB	16H,74H,1AH,0B4H,00H,0CDH,16H,3CH,3FH,75H,12H,0BEH
-	DB	4CH,03H,0B9H,40H,00H,0ACH,32H,0C1H,0E8H,0DFH,0FFH,0E2H
-	DB	0F8H,0F6H,0E4H,0E2H,0FCH,0C3H,00H,00H,00H,00H,00H,08H
-	DB	00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,0CH,00H
-	DB	02H,00H,00H,00H,00H,00H,00H,00H,00H,0FFH,00H,00H
-	DB	4DH,35H,33H,37H,71H,4EH,59H,51H,18H,58H,50H,15H
-	DB	40H,5BH,5BH,42H,10H,4CH,41H,49H,49H,0BH,43H,5AH
-	DB	08H,45H,54H,4AH,51H,44H,4AH,55H,00H,6BH,71H,3DH
-	DB	65H,74H,6FH,39H,7AH,6EH,38H,3BH,3AH,33H,15H,55H
-	DB	75H,6EH,60H,2DH,4EH,6AH,66H,65H,69H,75H,62H,02H
-	DB	09H,0EH,0FH,0BH,00H,43H,50H,4DH,20H,20H,20H,20H
-	DB	20H,53H,59H,53H,00H,00H,43H,43H,50H,4DH,20H,20H
-	DB	20H,20H,53H,59H,53H,00H,4CH,6FH,61H,64H,69H,6EH
-	DB	67H,20H,43H,50H,4DH,2EH,53H,59H,53H,2EH,00H,4CH
-	DB	6FH,61H,64H,69H,6EH,67H,20H,43H,43H,50H,4DH,2EH
-	DB	53H,59H,53H,2EH,00H,2AH,2AH,2AH,20H,43H,61H,6EH
-	DB	6EH,6FH,74H,20H,66H,69H,6EH,64H,20H,43H,50H,4DH
-	DB	2EH,53H,59H,53H,20H,6FH,72H,20H,43H,43H,50H,4DH
-	DB	2EH,53H,59H,53H,20H,2AH,2AH,2AH,0DH,0AH,54H,72H
-	DB	79H,20H,61H,6EH,6FH,74H,68H,65H,72H,20H,64H,69H
-	DB	73H,6BH,65H,74H,74H,65H,2EH,0DH,0AH,00H,0DH,0AH
-	DB	0AH,2AH,2AH,2AH,20H,45H,72H,72H,6FH,72H,20H,77H
-	DB	68H,69H,6CH,65H,20H,72H,65H,61H,64H,69H,6EH,67H
-	DB	20H,53H,79H,73H,74H,65H,6DH,20H,46H,69H,6CH,65H
-	DB	20H,2AH,2AH,2AH,0DH,0AH,54H,72H,79H,20H,61H,6EH
-	DB	6FH,74H,68H,65H,72H,20H,64H,69H,73H,6BH,65H,74H
-	DB	74H,65H,2EH,0DH,0AH,00H
-;
-LDRLEN		EQU	OFFSET $ - OFFSET LDR
-;
+ ; Shared CP/M boot stages, built from the same sources as CP/M and CCP/M.
+BOOT:
+	include bootsect.inc
+boot_len	equ	offset $ - offset BOOT
+LDR:
+	include loader.inc
+ldrlen	equ	offset $ - offset LDR
 ;
 ;	this is the boot loader for the PC-DOS data disk
 ;

@@ -16,7 +16,7 @@ The assembly is based on partial 4.1 OEM sources corrected to align with Europea
 | Source rebuild | Kernel, four RSP families, boot sources and command tools |
 | Usability improvements | Command-line editing and recall, console shortcuts, paging and CLS |
 | Additional tools | ASM80, HEXCOM, Legacy CCP/M tools and floppy copy/compare commands |
-| Floppy formats | CP/M 160/320K; DOS FAT12 360K, 720K, 1.2M and 1.44M |
+| Storage | Native CP/M **720K/1.2M/1.44M** support (compatible with **144FEAT2**, no format-specific bootloader needed) alongside 160/320K, using the shared CP/M/CCP/M bootloader; DOS FAT12 floppies and CP/M/DOS hard-disk partitions below **32 MiB** |
 | Graphics | CGA plus EGA 0Dh/0Eh/10h, monochrome 0Fh on EGA monochrome/VGA, and VGA 11h/12h/13h, with graphics drawing and palette services |
 | DOS compatibility | 100% Coverage of DOS 2.10, Extended DOS APIs, CON raw/cooked handle I/O, inherited standard handles and PUT/GET/RDR redirection for native CMD and DOS programs, Full DOS Batch Language |
 | Date fixes | Patched native date/reporting utilities and corrected short-year input in DATE.EXE |

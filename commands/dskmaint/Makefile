@@ -4,6 +4,8 @@
 CMDINFO=cmdinfo
 ASM86=cpm86_asm86
 GENCMD=cpm86_gencmd
+H862BIN=h862bin
+BIN2ASM=bin2asm
 RASM86=pcdev_rasm86
 LINK86=pcdev_linkcmd
 INTEL_PLM86=intel_plm86
@@ -15,9 +17,11 @@ OBJECTS=squiddm1.obj squiddm2.obj squiddm3.obj display.obj system.obj pccrt.obj 
 .PHONY: all check clean check-boot
 .DELETE_ON_ERROR:
 
-all: $(TOOLS)
+all: $(TOOLS) boottrack.bin
 check: all
 	@set -e; for f in $(TOOLS); do $(CMDINFO) $$f; done
+
+squiddm3.obj: bootsect.inc loader.inc
 
 LOCAL_INCLUDES=$(wildcard *.a86 *.lib *.equ *.dat *.def *.h *.dcl)
 $(OBJECTS): $(LOCAL_INCLUDES) Makefile
@@ -41,6 +45,7 @@ $(OBJECTS): $(LOCAL_INCLUDES) Makefile
 clean:
 	rm -f *.sys *.loc *.cmd *.obj *.h86 *.hex *.sym *.lin *.lst *.prn *.log
 	rm -f *.mp? *.lnk *.map *.exe *.com dosboot.raw dosboot.bin dosbootx.raw dosbootx.bin dosbootx.inc dskmaint.raw dskraw.inp
+	rm -f bootsect.bin loader.bin boottrack.bin boottrack.bin.tmp bootsect.inc loader.inc
 
 help1.obj: help1.a86 Makefile
 	$(INTEL_ASM86) $<
@@ -73,3 +78,21 @@ check-boot: dskmaint.cmd
 	python3 embed_boot.py --check
 	python3 check_release.py
 	python3 check_formats.py
+
+# CP/M bootstrap owner for DSKMAINT, DFORM and distribution images.
+bootsect.bin loader.bin: %.bin: %.h86
+	$(H862BIN) $< $@
+
+bootsect.inc loader.inc: %.inc: %.bin
+	$(BIN2ASM) -m -f $@ $<
+	unix2dos $@
+
+# Legacy 320K reserved track; stage lengths follow their source builds.
+boottrack.bin: bootsect.bin loader.bin Makefile
+	@test "$$(wc -c < bootsect.bin)" -le 510
+	@test "$$(wc -c < loader.bin)" -le 1792
+	python3 -c "import sys; sys.stdout.buffer.write(b'\xe5' * 4096)" > $@.tmp
+	dd if=bootsect.bin of=$@.tmp bs=1 seek=0 conv=notrunc 2>/dev/null
+	printf '\001' | dd of=$@.tmp bs=1 seek=511 conv=notrunc 2>/dev/null
+	dd if=loader.bin of=$@.tmp bs=1 seek=2304 conv=notrunc 2>/dev/null
+	mv $@.tmp $@

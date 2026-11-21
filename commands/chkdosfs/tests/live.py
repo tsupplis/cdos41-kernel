@@ -38,10 +38,10 @@ def main():
         folder = Path(temporary)
         twist = str(ROOT / 'tools/cpm86twist.py')
         logical = folder / 'logical.img'
-        run('python3', twist, 'untwist', str(MEDIA / 'base.img'), str(logical), cwd=MEDIA)
-        data = bytearray(logical.read_bytes())
-        data[:4096] = (ROOT / 'boot/boottrack.bin').read_bytes()
-        logical.write_bytes(data)
+        run('python3', str(ROOT / 'tools/mk320.py'), str(logical),
+            '--format', 'ccpm86-320',
+            '--boot', str(ROOT / 'commands/dskmaint/bootsect.bin'),
+            '--loader', str(ROOT / 'commands/dskmaint/loader.bin'), cwd=MEDIA)
         run('cpmcp', '-f', 'ccpm86-320', str(logical),
             str(ROOT / 'kernel/sysgen/ccpm.sys'), str(COMMAND / 'chkdosfs.cmd'),
             '0:', cwd=MEDIA)

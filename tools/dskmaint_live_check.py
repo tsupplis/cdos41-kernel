@@ -45,7 +45,7 @@ def format_floppy(folder, capacity=360):
     commands = ['c f000000']
     for ch in list('dskmaint')+['Space','f','Return']:
         commands.extend(['key '+ch,'c 200000'])
-    for label, key in [('type',{360:'F5',720:'F6',1200:'F7',1440:'F8'}[capacity]),('drive','F4'),('confirm','y')]:
+    for label, key in [('family','F3'),('type',{360:'F5',720:'F6',1200:'F7',1440:'F8'}[capacity]),('drive','F4'),('confirm','y')]:
         commands.extend(['c 4000000', f'save "{label}.bin" bin b800:0000 fa0','key '+key])
     commands.extend(['c 40000000','save "formatted.bin" bin b800:0000 fa0'])
     session(folder,'maint.img','formatted.img',commands)

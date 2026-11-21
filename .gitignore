@@ -71,3 +71,7 @@
 /commands/dskmaint/dosbootx.inc
 
 /kernel/con/.xios/
+
+# Generated CP/M boot stages embedded by DSKMAINT.
+/commands/dskmaint/bootsect.inc
+/commands/dskmaint/loader.inc
