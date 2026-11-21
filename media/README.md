@@ -1,10 +1,10 @@
 # Concurrent DOS 4.1 media
 
-Eight physical-CHS 320 KB images are built locally. The layout follows the
-CCP/M media workflow: the checked-in base.img template, source-built boot track in
-cdos86base.img, then untwist / populate / twist for each distribution disk.
-All disks include the rebuilt PIP4 as PIP.CMD. Only the system and maintenance
-disks contain CCPM.SYS; the remaining disks are data-only.
+Eight 320 KB images and one consolidated 1.44MB image are built locally.
+The 320K recipes generate an empty filesystem with mk320.py, populate it,
+then twist to physical track order. The 1.44MB recipe uses mkfs.cpm and the
+same source-built boot sector/loader, without the 320K twist.
+All disks include PIP.CMD. System, maintenance and consolidated disks boot.
 
 | Image | Bootable | Contents |
 | --- | --- | --- |
@@ -16,6 +16,7 @@ disks contain CCPM.SYS; the remaining disks are data-only.
 | cdosdos.img | No | SETENV.CMD, COPY.EXE, DATE.EXE, ERASE.EXE, PATH.CMD, TIME.EXE, REN.EXE, LOADCCPM.COM and REDOS.COM, plus PIP. |
 | cdosextras.img | No | BACKREST commands, CARDFILE, DRTALK and their support files, plus PIP. |
 | cdosadmin.img | No | FUNCTION, DCOPY/DCOMP, SETPORT, SETUP, STOP, CHKCPMFS, N with NATIONAL.MSG, FM with FM.CFG and TERM.DAT, plus PIP. |
+| `cdos86-1440.img` | Yes | 1.44MB consolidated system, tools, development, maintenance, DOS and administration contents; EDITMENU and legacy extras remain on their 320K disks |
 
 Rebuilt command outputs are used wherever available. Remaining original
 binaries and data are explicit base/ prerequisites in the Makefile; there
@@ -28,13 +29,18 @@ swallow Esc and turn the following key release into an emulator command.
 
 `make check` (or `make check-media`) extracts every selected payload and
 compares all source bytes, allowing only CP/M record padding. It also checks
-327680-byte image sizes and all eight boot tracks. `make test` runs the same
+image sizes, boot code and loader contents for all nine disks. `make test` runs the same
 PCE launcher/configuration convention as CCP/M, with system/tools on A:/B:.
 The default adapter is VGA; `./cdos86 cga` selects CGA. `make check-pce` uses
 disposable system/tools copies for the shell and keyboard regression.
 
-From the project root, `make dist` copies the eight images to the root and
+From the project root, `make dist` copies the nine images to the root and
 creates disks.zip with both license files and the project/command/patch notes.
 `make check-dist` checks that disk archive. Source distribution stays in Git.
 `make clean` removes generated media/releases, including the locally generated
 base images; source and OEM inputs remain.
+
+The consolidated 1.44MB images are included in `disks.zip` by root `make dist`.
+They use the native FEAT-compatible CP/M layout (`cpm86-1440` in diskdefs),
+not FAT. Use cpmtools with `-T raw -f cpm86-1440` directly; do not apply
+`cpm86twist.py`. All files are in user 0, with BATCH marked SYS.
