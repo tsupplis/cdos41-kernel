@@ -463,7 +463,7 @@ system and the live regression checks.
 
 | Command | Result |
 | --- | --- |
-| `make` | Commands, kernel/RSPs, boot sources and eight images |
+| `make` | Commands, kernel/RSPs, boot sources and ten images |
 | `make check` | Command headers, DATE parser, system layout, cursor, boot track and every packaged file/size |
 | `make check-tree` | TREE statistics and private FAT directory traversal |
 | `make check-batch-strings` | Case-sensitive IF equality, quotes, empty operands and variable concatenation |

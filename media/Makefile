@@ -1,4 +1,4 @@
-# Build the nine distribution disks from local components and reference files.
+# Build the ten distribution disks from local components and reference files.
 # check validates image contents; test starts the configured PCE machine.
 
 PYTHON ?= python3
@@ -238,7 +238,9 @@ check-large: $(LARGE_IMAGES)
 	        $(PYTHON) -c "from pathlib import Path; a=Path('$$source').read_bytes(); b=Path('$$image.file.tmp').read_bytes(); assert b[:len(a)]==a and all(c in (0,26) for c in b[len(a):]), '$$image: $$name differs'"; \
 	    done; \
 	    if test $$image = cdosdev-1440.img; then \
-	        test -z "$$(cpmls -T raw -f cpm86-1440 $$image '0:mbasic.*' '0:ccpm.sys')"; \
+	        cpmls -T raw -f cpm86-1440 $$image > $$image.list.tmp; \
+	        $(PYTHON) -c "from pathlib import Path; names=Path('$$image.list.tmp').read_text().lower().split(); assert not set(names) & {'mbasic.cmd','mbasic.com','ccpm.sys'}, 'Unexpected MBASIC or kernel'"; \
+	        $(RM) $$image.list.tmp; \
 	    else \
 	        cpmls -T raw -A -f cpm86-1440 $$image 0:batch.cmd | grep -q '^....s.... batch.cmd$$'; \
 	    fi; \
