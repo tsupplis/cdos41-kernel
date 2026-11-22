@@ -403,6 +403,11 @@ update_phys()
 	WM_PK(0, vc_number, VS_TOP_LEFT, &cx);
 	WM_PK(0, vc_number, VS_BOT_RIGHT, &bx);
 
+	/* PC-MODE keyboard setup can expand a full-screen console to 25 rows.
+	   DREDIX uses 24 rows. Leave the bottom row to the system status line. */
+	if (cx == 0 && bx == 0x184f)
+		bx = 0x174f;
+
 	ax = IO_NEW_WINDOW;
 	dx = vc_number;
 	IO_CALL(&ax, &bx, &cx, &dx);	/* set up new window		*/
