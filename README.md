@@ -18,7 +18,7 @@ The assembly is based on partial 4.1 OEM sources corrected to align with Europea
 | Additional tools | ASM80, HEXCOM, Legacy CCP/M tools and floppy copy/compare commands |
 | Storage | Native CP/M **720K/1.2M/1.44M** support (compatible with **144FEAT2**, no format-specific bootloader needed) alongside 160/320K, using the shared CP/M/CCP/M bootloader; DOS FAT12 floppies and CP/M/DOS hard-disk partitions below **32 MiB** |
 | Graphics | CGA plus EGA 0Dh/0Eh/10h, monochrome 0Fh on EGA monochrome/VGA, and VGA 11h/12h/13h, with graphics drawing and palette services |
-| DOS compatibility | 100% Coverage of DOS 2.10, Extended DOS APIs, CON raw/cooked handle I/O, inherited standard handles and PUT/GET/RDR redirection for native CMD and DOS programs, Full DOS Batch Language |
+| DOS compatibility | DOS 2.x application API coverage for COM and EXE programs, including handles, redirection and EXEC. See the [function table](api.md) for supported calls and limits. |
 | Date fixes | Patched native date/reporting utilities and corrected short-year input in DATE.EXE |
 
 
@@ -168,7 +168,7 @@ Stock DOS Plus 1.2 versus this CDOS rebuild.
 | Environment variables | SET and `%NAME%` expansion | SETENV and BATCH `%NAME%` expansion; no interactive expansion |
 | Search-path commands | PATH built-in | PATH built-in and PATH.CMD for the DOS environment; SYSDISK and ORDER for native shell searching |
 | DOS program memory | ADDMEM and COMSIZE | Same-named PCTMP/BATCH built-ins: extra allocation and minimum DOS-program memory |
-| File attributes (ATTRIB role) | FSET on the reference 1.2 disk | SET changes read-only/system/archive attributes; SDIR inspects them. Different syntax; no exposed HIDDEN toggle |
+| File attributes (ATTRIB role) | FSET on the reference 1.2 disk | SET changes read-only/system/archive attributes; SDIR inspects them. SET also supports HIDDEN on FAT |
 | Volume labels (LABEL role) | DOS volume-label utility on some system disks | SET [NAME=...] and SHOW LABEL support CP/M directory labels and FAT volume names; blank FAT NAME deletes |
 | Native resident extensions | RSX loading; GENRSX supplied on some system disks | Resident System Processes (RSPs); no compatible RSX loader or GENRSX equivalent |
 | Input/output redirection and append | DOS pattern: `<`, `>`, `>>` | CP/M-Plus pattern: GET/PUT/RDR, extended to both native and DOS programs |

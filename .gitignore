@@ -1,4 +1,5 @@
 /private
+/local
 /media/rom
 **/__pycache__/
 **/*.obj

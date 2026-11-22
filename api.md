@@ -95,7 +95,7 @@ describe this kernel’s implementation. See Microsoft’s
 | 3F / 40 | Read / write handle | Implemented | Byte counts and shared position; EOF reads stop at the logical byte length, including size-plus-one requests | NEW (EOF boundary fix) |
 | 41 | Delete pathname | Implemented | Path parsing followed by native file deletion | — |
 | 42 | Seek handle | Implemented | Origins 0/1/2: beginning/current/end | — |
-| 43 | Get / set file attributes | Partial | RO/SYSTEM/ARCHIVE translation; HIDDEN writes are not yet adapted to native BDOS 230 | — |
+| 43 | Get / set file attributes | Partial | Ordinary FAT files: GET and masked SET of RO/HIDDEN/SYSTEM/ARCHIVE via BDOS 230. CP/M retains RO/SYSTEM/ARCHIVE translation | — |
 | 44 | IOCTL | Partial | AL=0 returns device/file information; AL=1 sets CON raw/cooked mode via DL bit 5 (DH must be zero). AH=3Fh/40h honor the mode; DUP/EXEC share it. AL=6/7 queries readiness. Other selectors/devices for AL=1 return AX=1 | NEW |
 | 45 / 46 | Duplicate / force duplicate handle | Implemented | Shared position and counted ownership; checked targets, self/alias duplication and close failures. Standard handles can be rebound | NEW (ownership and validation) |
 | 47 | Get current directory | Implemented | Reconstructs FAT path using the temporary P: directory mapping | — |

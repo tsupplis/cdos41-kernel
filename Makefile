@@ -291,6 +291,7 @@ check-fat-attributes: all
 
 .PHONY: check-hidden-files
 check-hidden-files: all
+	python3 tools/hidden_files_check.py dos-attr
 	python3 tools/fat_delete_unit_check.py
 	python3 tools/hidden_files_check.py delete
 	python3 tools/hidden_files_check.py list

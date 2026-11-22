@@ -133,6 +133,21 @@ def session(d, cases):
     return screens
 
 
+def dos_attributes():
+    d = fixture("cdos-dos-attr-")
+    try:
+        run(d, "nasm", "-f", "bin", str(R / "kernel/rsp3/tests/attr43.asm"),
+            "-o", "attr43.com")
+        run(d, "mcopy", "-i", "fat.img", "attr43.com", "::ATTR43.COM")
+        screen = session(d, [("b:attr43", "attr", "")])["attr"]
+        assert "ATTR43 PASS" in screen, screen
+        assert entries(d / "fat.img")[b"N       TXT"][11] == 0x24
+        print("PASS: AH=43h FAT set, clear, readback and on-disk attributes")
+    finally:
+        import shutil
+        shutil.rmtree(d)
+
+
 def deletion():
     d = fixture("cdos-hidden-delete-")
     before = entries(d / "fat.img")
@@ -266,6 +281,7 @@ if __name__ == "__main__":
         deletion()
     elif sys.argv[1] == "cpm":
         cpm_listing()
+    elif sys.argv[1] == "dos-attr": dos_attributes()
     elif sys.argv[1] == "list": listings()
     elif sys.argv[1] == "ls-rm": ls_rm()
 

@@ -676,6 +676,14 @@ ms2_ret_ax	equ	word ptr ms2_ret_al
 
 ;	Temporary data blocks, used by numerous local functions
 
+; BDOS 230 packet in the per-console PCTMP data segment.
+fat_packet	dw	16,1
+fat_operation	dw	0
+fat_fcb		dw	0,0
+fat_mask	dw	0
+fat_values	dw	0
+			dw	0
+
 temp_fcb_ext	db	0FFh,0,0,0,0,0	; temporary extended fcb
 temp_fcb_attr	db	0
 temp_fcb	rb	hfcb_size	; temporary normal fcb
@@ -1982,6 +1990,8 @@ ms2_f_chgmode:
 	jnz	ms2_chgmode_error	;   then return an error
 
 ms2_chgmode_get:
+	call	fat_chgmode
+	jc	ms2_chgmode_complete
 	mov	ah,ms_s_first
 	call	ms1_func		; search for file
 	test	al,al			; check for success
@@ -1993,6 +2003,8 @@ ms2_chgmode_get:
 	ret				; successfully
 
 ms2_chgmode_set:
+	call	fat_chgmode
+	jc	ms2_chgmode_complete
 	mov	cx,ms2_cx		; get attributes to set
 	mov	al,80h			; msb to or with fcb bytes
 	add	bx,offset fcb_ext	; advance to first type byte
@@ -2022,11 +2034,78 @@ ms2_chgmode_set3:
 	jnz	ms2_chgmode_nofile	; skip if file not found
 	ret				; else return success
 
+ms2_chgmode_complete:
+	ret
+
 ms2_chgmode_nofile:
 	mov	al,no_file		; file not found code
 ms2_chgmode_error:
 	jmp	ms2_error_ret
 
+
+; CF set when the FAT service supplied the DOS result. Restore the FCB
+; registers for the historical path on CP/M media or an older kernel.
+fat_chgmode:
+	push	bx
+	push	dx
+	mov	fat_fcb,dx
+	mov	fat_fcb+2,ds
+	mov	fat_operation,0
+	mov	fat_mask,0
+	call	fat_attribute_call
+	or	ax,ax
+	jnz	fat_use_legacy
+	cmp	fat_values,4146h
+	jne	fat_use_legacy
+	and	fat_mask,27h
+	cmp	fat_mask,27h
+	jne	fat_use_legacy
+	mov	ax,ms2_ax
+	xor	ah,ah
+	inc	ax			; DOS GET/SET 0/1 -> BDOS 1/2
+	mov	fat_operation,ax
+	mov	ax,ms2_cx
+	and	ax,27h
+	mov	fat_values,ax
+	call	fat_attribute_call
+	or	ax,ax
+	jnz	fat_attribute_error
+	cmp	fat_operation,1
+	jne	fat_handled
+	mov	ax,fat_values
+	mov	ms2_cx,ax
+fat_handled:
+	pop	dx
+	pop	bx
+	stc
+	ret
+
+fat_attribute_error:
+	cmp	cx,81h			; CP/M media
+	je	fat_use_legacy
+	cmp	cx,84h			; preserve directory queries
+	jne	fat_file_error
+	cmp	fat_operation,1
+	je	fat_use_legacy
+fat_file_error:
+	mov	al,no_file
+	cmp	cx,82h
+	je	fat_report_error
+	mov	al,no_access
+fat_report_error:
+	call	ms2_error_ret
+	jmp	fat_handled
+
+fat_use_legacy:
+	pop	dx
+	pop	bx
+	clc
+	ret
+
+fat_attribute_call:
+	mov	dx,offset fat_packet
+	mov	cx,230
+	jmp	ccpm
 
 ;	*****************************
 ;	***    DOS Function 45    ***
