@@ -736,7 +736,7 @@ sldisplay:
                         mov     si,offset statusmsg
                         call    sldispprep                       ; get the reg's ready
 sldisp1:
-                        mov     ah,0Fh                           ; normal attribute
+                        mov     ah,0Eh                           ; bright yellow on black
                         cmp     cl,stoprev                       ; are we past it?
                         ja      sldisp2                          ; if so, skip
                         cmp     cl,startrev                      ; time to start?
