@@ -1097,6 +1097,19 @@ pckbd:
                         ret                                      ;   then deny pc-mode
 
 pckbdgood:
+                        test    cl,80h                           ; keyboard only?
+                        jz      pckbdlegacy
+                        call    pointvs
+                        mov     vspcshifts,0
+                        and     vsmode,not pcmodebit
+                        test    cl,1
+                        jz      pckbdkeydone
+                        or      vsmode,pcmodebit
+pckbdkeydone:
+                        xor     ax,ax
+                        ret
+
+pckbdlegacy:
                         push    cx                               ; save enable/disable
                         push    dx                               ; save the vc number
                         call    pointvs                          ; bx -> virtual con structure

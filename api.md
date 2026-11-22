@@ -470,6 +470,23 @@ Packet at DS:DX: byte selector, word CX argument, word DX argument.
 | 15 | List status | XIOS list status | — |
 | All others | Disk, video and other direct BIOS functions | Rejected; error 2 | — |
 
+## Private XIOS function 32 (20h) — PC-MODE keyboard
+
+Call the private far XIOS entry with AL=20h and DL set to the virtual
+console number. AX returns 0 on success or FFFFh for an unsupported console.
+
+| CL | Operation |
+| --- | --- |
+| 01h | Enable PC-MODE keyboard and the legacy 25-row display mode |
+| 00h or 02h | Disable PC-MODE keyboard and restore the legacy native display mode |
+| 81h | Enable raw PC-MODE keyboard input while preserving display geometry and the status line |
+| 80h or 82h | Disable raw PC-MODE keyboard input while preserving display geometry and the status line |
+
+Use bit 7 on both enable and disable for a keyboard-only session. Older CDOS
+kernels ignore bit 7 and apply the legacy display transitions. DREDIX retains
+its 24-row window fallback for those kernels. This is a private XIOS selector,
+separate from the native BDOS direct BIOS gateway and INT E6h.
+
 ## PCTMP private far-call interface
 
 This is the OEM shell/loader interface in `ms1.a86`, not an INT E0h function
