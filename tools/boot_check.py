@@ -67,7 +67,7 @@ def check(video):
 
         def key(chord):
             names = {'ctrl': 'Ctrl', 'alt': 'Alt', 'backspace': 'Backspace',
-                     'left': 'Left', 'right': 'Right', 'up': 'Up',
+                     'left': 'Left', 'right': 'Right', 'up': 'Up', 'down': 'Down',
                      'home': 'Home', 'end': 'End', 'delete': 'Delete', 'tab': 'Tab'}
             parts = chord.split('-')
             modifiers = [names[p] for p in parts[:-1]]

@@ -66,9 +66,12 @@ def check_recall(type_command, key, current, shortcut):
 
 
 def check_editor(type_command, key, current, shortcut):
+    key('down')
+    current('')
     type_command(';abcd')
     key('ctrl-a')
     key('ctrl-a')
+    key('down')
     type_command('x')
     current(';abxcd')
     key('ctrl-f')
