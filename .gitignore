@@ -73,6 +73,10 @@
 
 /kernel/con/.xios/
 
+
+!/dev/*.exe
+!/dev/*.com
+!/dev/*.cmd
 # Generated CP/M boot stages embedded by DSKMAINT.
 /commands/dskmaint/bootsect.inc
 /commands/dskmaint/loader.inc
