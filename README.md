@@ -38,8 +38,8 @@ The assembly is based on partial 4.1 OEM sources corrected to align with Europea
 
 <p align="center">
 <img src="images/menu.png" alt="Concurrent DOS startup menu" width="48%">
-<img src="images/basic.png" alt="Microsoft BASIC 5.50A" width="48%">
-<br><sub>Startup menu &nbsp;·&nbsp; Microsoft BASIC 5.50A</sub><br>
+<img src="images/basic.png" alt="Microsoft BASIC 5.50" width="48%">
+<br><sub>Startup menu &nbsp;·&nbsp; Microsoft BASIC 5.50</sub><br>
 <img src="images/turbocpm.png" alt="Turbo Pascal running as a native CP/M-86 application" width="48%">
 <img src="images/turbodos.png" alt="Turbo Pascal running as a DOS application" width="48%">
 <br><sub>Turbo Pascal for CP/M-86 &nbsp;·&nbsp; Turbo Pascal for DOS</sub><br>
